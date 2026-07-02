@@ -1,0 +1,315 @@
+schemaVersion: "0.1"
+status: draft
+transport: streamable-http
+endpoint: /mcp
+authentication:
+  type: oauth2.1
+  tenantSource: validated-token
+defaults:
+  additionalProperties: false
+  writesRequireIdempotencyKey: true
+  auditRequired: true
+  policyRequired: true
+tools:
+  - name: context.get
+    effect: read
+    scope: context:read
+    description: Obtener tenant activo, permisos, limites y kill switch.
+    inputSchema:
+      type: object
+      additionalProperties: false
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/TenantContext
+  - name: parties.search
+    effect: read
+    scope: parties:read
+    description: Buscar clientes y proveedores del tenant activo.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+          minLength: 2
+        role:
+          type: string
+          enum: [CUSTOMER, SUPPLIER]
+    outputSchema:
+      type: array
+      items:
+        $ref: openapi.yaml#/components/schemas/Party
+  - name: parties.upsert
+    effect: write
+    scope: parties:write
+    description: Crear o actualizar un contacto por identificacion.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [party, idempotencyKey]
+      properties:
+        party:
+          $ref: openapi.yaml#/components/schemas/PartyInput
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/Party
+  - name: products.search
+    effect: read
+    scope: products:read
+    description: Buscar productos del tenant activo.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+    outputSchema:
+      type: array
+      items:
+        $ref: openapi.yaml#/components/schemas/Product
+  - name: products.upsert
+    effect: write
+    scope: products:write
+    description: Crear o actualizar un producto por codigo.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [product, idempotencyKey]
+      properties:
+        product:
+          $ref: openapi.yaml#/components/schemas/ProductInput
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/Product
+  - name: invoices.get
+    effect: read
+    scope: invoices:read
+    description: Consultar factura, artefactos y estado SRI.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [invoiceId]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/SalesDocument
+  - name: invoices.create_draft
+    effect: write
+    scope: invoices:write
+    description: Crear borrador y recalcular totales.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [invoice, idempotencyKey]
+      properties:
+        invoice:
+          $ref: openapi.yaml#/components/schemas/InvoiceInput
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/SalesDocument
+  - name: invoices.issue
+    effect: external-write
+    scope: invoices:issue
+    description: Validar, firmar y encolar emision SRI.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [invoiceId, idempotencyKey]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/Operation
+  - name: credit_notes.create_and_issue
+    effect: external-write
+    scope: credit-notes:issue
+    description: Crear y encolar nota de credito para factura autorizada.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [creditNote, idempotencyKey]
+      properties:
+        creditNote:
+          $ref: openapi.yaml#/components/schemas/CreditNoteInput
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/Operation
+  - name: receivables.list
+    effect: read
+    scope: receivables:read
+    description: Consultar cartera por estado y vencimiento.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [OPEN, PARTIAL, OVERDUE, SETTLED]
+        dueBefore:
+          type: string
+          format: date
+    outputSchema:
+      type: array
+      items:
+        $ref: openapi.yaml#/components/schemas/AccountItem
+  - name: receivables.record_payment
+    effect: write
+    scope: receivables:write
+    description: Registrar y aplicar un cobro, retencion o descuento.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [receivableId, payment, idempotencyKey]
+      properties:
+        receivableId:
+          type: string
+          format: uuid
+        payment:
+          $ref: openapi.yaml#/components/schemas/PaymentInput
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/AccountItem
+  - name: receivables.send_reminder
+    effect: external-write
+    scope: receivables:notify
+    description: Encolar recordatorio por email o WhatsApp.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [receivableId, reminder, idempotencyKey]
+      properties:
+        receivableId:
+          type: string
+          format: uuid
+        reminder:
+          $ref: openapi.yaml#/components/schemas/ReminderInput
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/Operation
+  - name: payables.list
+    effect: read
+    scope: payables:read
+    description: Consultar obligaciones y proximos pagos.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        dueBefore:
+          type: string
+          format: date
+    outputSchema:
+      type: array
+      items:
+        $ref: openapi.yaml#/components/schemas/AccountItem
+  - name: payables.create
+    effect: write
+    scope: payables:write
+    description: Crear obligacion manual.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [payable, idempotencyKey]
+      properties:
+        payable:
+          $ref: openapi.yaml#/components/schemas/PayableInput
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/AccountItem
+  - name: payables.create_from_document
+    effect: write
+    scope: payables:extract
+    description: Validar y extraer una obligacion desde XML/PDF.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [documentId, idempotencyKey]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/Operation
+  - name: payables.schedule_payment
+    effect: write
+    scope: payables:write
+    description: Programar pago sin iniciar transferencia.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [payableId, schedule, idempotencyKey]
+      properties:
+        payableId:
+          type: string
+          format: uuid
+        schedule:
+          $ref: openapi.yaml#/components/schemas/PaymentScheduleInput
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/Operation
+  - name: payables.record_payment
+    effect: write
+    scope: payables:write
+    description: Registrar un pago ya realizado, sin mover dinero.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [payableId, payment, idempotencyKey]
+      properties:
+        payableId:
+          type: string
+          format: uuid
+        payment:
+          $ref: openapi.yaml#/components/schemas/PaymentInput
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/AccountItem
+  - name: finance.summary
+    effect: read
+    scope: finance:read
+    description: Resumir ventas, cobros, pagos y flujo previsto.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+    outputSchema:
+      type: object
+      additionalProperties: false
+      required: [invoiced, collected, paid, receivableOpen, payableOpen]
+      properties:
+        invoiced:
+          $ref: openapi.yaml#/components/schemas/Decimal
+        collected:
+          $ref: openapi.yaml#/components/schemas/Decimal
+        paid:
+          $ref: openapi.yaml#/components/schemas/Decimal
+        receivableOpen:
+          $ref: openapi.yaml#/components/schemas/Decimal
+        payableOpen:
+          $ref: openapi.yaml#/components/schemas/Decimal
+$defs:
+  idempotencyKey:
+    type: string
+    minLength: 16
+    maxLength: 128
