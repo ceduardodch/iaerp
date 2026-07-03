@@ -69,9 +69,6 @@ async def test_mcp_transport_scopes_kill_switch_and_idempotency(client):
             assert {tool.name for tool in tools.tools} == {
                 "context.get",
                 "parties.search",
-                "parties.create",
-                "products.search",
-                "products.create",
             }
 
             context_result = await session.call_tool("context.get", {})
@@ -94,6 +91,12 @@ async def test_mcp_transport_scopes_kill_switch_and_idempotency(client):
             assert "missing scope parties:write" in forbidden.content[0].text
 
         async with mcp_session(write_token) as session:
+            tools = await session.list_tools()
+            assert {tool.name for tool in tools.tools} == {
+                "context.get",
+                "parties.search",
+                "parties.create",
+            }
             disabled = await session.call_tool(
                 "parties.create",
                 {
@@ -137,6 +140,4 @@ async def test_mcp_transport_scopes_kill_switch_and_idempotency(client):
                 {"query": "Cliente MCP", "role": "CUSTOMER"},
             )
             assert search.isError is False
-            assert [item["name"] for item in search.structuredContent["result"]] == [
-                "Cliente MCP"
-            ]
+            assert [item["name"] for item in search.structuredContent["result"]] == ["Cliente MCP"]

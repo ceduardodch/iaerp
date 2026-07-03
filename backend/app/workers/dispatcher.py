@@ -1,7 +1,12 @@
 import asyncio
 
+from redis.asyncio import Redis
+
+from app.core.config import get_settings
 from app.workers.celery_app import celery_app
 from app.workers.outbox import OutboxMessage, run_dispatcher
+
+settings = get_settings()
 
 
 class CeleryPublisher:
@@ -23,8 +28,28 @@ class CeleryPublisher:
         )
 
 
+async def publish_heartbeat() -> None:
+    client = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+    try:
+        while True:
+            await client.set(
+                settings.DISPATCHER_HEARTBEAT_KEY,
+                "ok",
+                ex=settings.DISPATCHER_HEARTBEAT_TTL_SECONDS,
+            )
+            await asyncio.sleep(settings.DISPATCHER_HEARTBEAT_TTL_SECONDS / 3)
+    finally:
+        await client.aclose()
+
+
+async def serve() -> None:
+    async with asyncio.TaskGroup() as group:
+        group.create_task(run_dispatcher(CeleryPublisher()))
+        group.create_task(publish_heartbeat())
+
+
 def main() -> None:
-    asyncio.run(run_dispatcher(CeleryPublisher()))
+    asyncio.run(serve())
 
 
 if __name__ == "__main__":

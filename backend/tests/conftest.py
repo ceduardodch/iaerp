@@ -5,10 +5,14 @@ from datetime import date
 from decimal import Decimal
 
 import pytest_asyncio
+from sqlalchemy.engine import make_url
 
 os.environ["APP_ENV"] = "test"
 os.environ["AUTH_MODE"] = "dev"
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_iaerp.db"
+test_database_url = os.environ.get("TEST_DATABASE_URL")
+if test_database_url and not (make_url(test_database_url).database or "").endswith("_test"):
+    raise RuntimeError("TEST_DATABASE_URL database name must end in '_test'.")
+os.environ["DATABASE_URL"] = test_database_url or "sqlite+aiosqlite:///./test_iaerp.db"
 os.environ["DEV_JWT_SECRET"] = "test-secret-that-is-longer-than-thirty-two-characters"
 
 from app.db.base import Base  # noqa: E402
@@ -97,6 +101,7 @@ async def database() -> AsyncIterator[None]:
             ]
         )
     yield
+    await engine.dispose()
 
 
 @pytest_asyncio.fixture

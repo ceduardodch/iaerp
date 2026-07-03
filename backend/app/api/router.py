@@ -183,6 +183,32 @@ async def post_service_account(
     )
 
 
+@router.delete("/service-accounts/{account_id}", response_model=ServiceAccountRead)
+async def delete_service_account(
+    account_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("service-accounts:write"))],
+) -> dict[str, object]:
+    async def revoke() -> tuple[str, dict[str, object]]:
+        entity = await masters.revoke_service_account(session, context, account_id)
+        return (
+            str(entity.id),
+            ServiceAccountRead.model_validate(entity).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="service_accounts.revoke",
+        idempotency_key=idempotency_key,
+        request_payload={"account_id": str(account_id)},
+        action="service_account.revoked",
+        entity_type="service_account",
+        callback=revoke,
+    )
+
+
 @router.get("/establishments", response_model=list[EstablishmentRead])
 async def get_establishments(
     session: Session,
@@ -341,6 +367,33 @@ async def post_party(
     )
 
 
+@router.put("/parties/{party_id}", response_model=PartyRead)
+async def put_party(
+    party_id: uuid.UUID,
+    data: PartyCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("parties:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        entity = await masters.update_party(session, context, party_id, data)
+        return (
+            str(entity.id),
+            PartyRead.model_validate(entity).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="parties.update",
+        idempotency_key=idempotency_key,
+        request_payload={"party_id": str(party_id), **data.model_dump(mode="json")},
+        action="party.updated",
+        entity_type="party",
+        callback=update,
+    )
+
+
 @router.get("/products", response_model=list[ProductRead])
 async def get_products(
     session: Session,
@@ -376,6 +429,33 @@ async def post_product(
         action="product.created",
         entity_type="product",
         callback=create,
+    )
+
+
+@router.put("/products/{product_id}", response_model=ProductRead)
+async def put_product(
+    product_id: uuid.UUID,
+    data: ProductCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("products:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        entity = await masters.update_product(session, context, product_id, data)
+        return (
+            str(entity.id),
+            ProductRead.model_validate(entity).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="products.update",
+        idempotency_key=idempotency_key,
+        request_payload={"product_id": str(product_id), **data.model_dump(mode="json")},
+        action="product.updated",
+        entity_type="product",
+        callback=update,
     )
 
 

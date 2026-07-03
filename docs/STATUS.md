@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Fecha: 2026-07-03 09:13 `America/Guayaquil`.
+- Fecha: 2026-07-03 17:51 `America/Guayaquil`.
 - Rama de trabajo: `release`.
 - Commit del corte: consultar `git log -1 --oneline`; este archivo forma parte
   del mismo corte y no mantiene un hash autorreferencial.
@@ -43,6 +43,66 @@ alcance y las decisiones.
 - Seed local repetible, realm de Keycloak importable y Dockerfiles de API/web.
 - Pruebas de aislamiento, scopes, idempotencia, auditoria, outbox/inbox/dead
   letter, MCP y accesibilidad.
+- PoC automatizado de service accounts contra el stack real
+  (`backend/tests/test_service_account_poc.py`): client credentials con claims
+  y lifespan <= 300 s, alta/revocacion via API con provisioning en Keycloak,
+  rechazo inmediato de un token todavia vigente tras revocar, bloqueo de nueva
+  emision con el cliente deshabilitado y rechazo de tokens expirados. Se ejecuta
+  con `IAERP_POC=1 uv run pytest tests/test_service_account_poc.py` y el stack
+  levantado con `AUTH_MODE=oidc`; sin esa variable la suite se omite.
+- Cambio de tenant OIDC multi-tenant probado de extremo a extremo. A nivel API
+  (`backend/tests/test_tenant_switch_poc.py`, misma puerta `IAERP_POC=1`):
+  `owner` obtiene contexto Norte (roles owner/admin) o Sur (viewer) segun la
+  `organization:<alias>` autorizada, un token con `organization:*` (dos
+  organizaciones) se rechaza con 403 y un usuario sin membresia en la
+  organizacion recibe token sin claim `organization` que la API rechaza con
+  403. A nivel UI (`frontend/tests/oidc.spec.ts`, puerta `E2E_OIDC=1` con
+  `E2E_USE_RUNNING_APP=1 PLAYWRIGHT_BASE_URL=http://localhost:8088`): login
+  PKCE en Norte, datos de Norte visibles, logout, login en Sur y verificacion
+  de que los datos de Norte no aparecen; aprobado en escritorio y movil.
+- MCP validado con el Inspector oficial en modo CLI contra el stack real:
+  Protected Resource Metadata, 401 con `resource_metadata`, catalogo de tools
+  filtrado por scopes por tenant y aislamiento de datos. Evidencia sanitizada
+  en `docs/evidence/sprint-01-mcp-inspector.md`.
+- Dataset `sprint-01-v1` verificado: el seed (`app/initial_data.py`) crea dos
+  tenants, usuario multi-tenant, usuarios exclusivos, usuario sin membresia,
+  cinco roles, una service account por tenant y maestros distinguibles; se
+  ejecuto dos veces seguidas contra PostgreSQL sin errores (idempotente).
+- E2E funcionales (`frontend/tests/functional.spec.ts`) aprobados con la API
+  en modo dev: alta/edicion de contacto y producto contra la API real,
+  aislamiento al cambiar de tenant y error de autorizacion accesible para un
+  token restringido. Junto con `a11y.spec.ts` y `oidc.spec.ts` cubren los
+  cuatro recorridos E2E del plan en escritorio y movil (12 pruebas).
+- Suite de migraciones Alembic validada contra PostgreSQL 17
+  (`backend/scripts/validate_migrations.py`): creacion desde cero, downgrade a
+  base sin tablas remanentes, upgrade nuevamente y `alembic check` sin drift.
+  Se ejecuta local con `DATABASE_URL=...iaerp_migrations` y en el job
+  `migrations` del CI.
+- CI configurado en `.github/workflows/ci.yml` sin deploy: jobs de backend
+  (Ruff, mypy, pytest con PostgreSQL/Redis y reporte JUnit), migraciones,
+  contratos (OpenAPI y referencias MCP), frontend (lint, build, Playwright con
+  API real), stack OIDC completo (keycloak_poc, validate_oidc_runtime, suites
+  PoC de service account y cambio de tenant, PKCE E2E) y seguridad
+  (detect-secrets, pip-audit, bandit, npm audit). Todos los pasos reproducibles
+  en local fueron ejecutados y aprobados el 2026-07-03; el backend tambien pasa
+  contra PostgreSQL (16 pruebas con la de concurrencia incluida).
+- Worker Celery saneado: el contenedor corre como usuario `iaerp` (sin
+  advertencia de superusuario), worker/scheduler/web tienen healthcheck y
+  reportan `healthy`, y se corrigio en `app/workers/tasks.py` un bug de
+  event loop (asyncio.run por task ataba el pool asyncpg a un loop cerrado y
+  producia fallos intermitentes "attached to a different loop"); tras el fix,
+  cero errores en logs con trafico real de outbox.
+- ADR 0009 aceptado el 2026-07-03: los siete puntos del PoC bloqueante quedaron
+  demostrados y automatizados, incluida la revocacion de membresia con token
+  vigente y el rechazo cruzado de audiences API/MCP
+  (`backend/tests/test_tenant_switch_poc.py`, 5 pruebas en vivo). Perfil
+  adoptado: `fixed-audience-with-resource-server-validation`.
+- Revision independiente de arquitectura sobre los cambios OAuth/worker:
+  aprobada con observaciones; se aplicaron el hook `worker_process_shutdown`
+  (cierre del loop y dispose del engine) y la aclaracion de unicidad de
+  `client_id` en `auth.py`. Observacion abierta: si el job `oidc` de CI muestra
+  flakiness por el `sleep(3)` del test de expiracion, subir el margen o usar
+  retry acotado.
 
 ## Validacion del corte
 
@@ -63,10 +123,17 @@ npm run test:e2e
 Resultados:
 
 - Backend y migraciones: Ruff aprobado.
-- Backend: mypy estricto aprobado sobre 28 archivos.
-- Backend: 8 pruebas aprobadas.
+- Backend: mypy estricto aprobado sobre 31 archivos.
+- Backend: 15 pruebas aprobadas en SQLite y 16 contra PostgreSQL (incluye la
+  de concurrencia). Las 8 del PoC en vivo pasan con `IAERP_POC=1` y el stack
+  OIDC arriba (3 de service account + 5 de cambio de tenant/audiences).
+- Se corrigio en `app/core/auth.py` la comparacion de `expires_at` de service
+  accounts: SQLite devuelve datetimes sin zona y rompia la validacion de
+  expiracion en pruebas.
 - Frontend: lint y build aprobados.
-- Frontend: 6 pruebas Playwright aprobadas en escritorio y movil.
+- Frontend: 14 pruebas Playwright aprobadas en escritorio y movil (a11y con
+  reflow a 320 CSS px y 200% zoom, y funcionales con API dev), mas el recorrido
+  OIDC PKCE con el stack completo en ambos viewports (`npm run test:e2e:oidc`).
 - `http://localhost:8000/health/ready`: HTTP 200.
 - `http://localhost:8088`: HTTP 200.
 - Discovery OIDC de Keycloak: HTTP 200.
@@ -79,20 +146,17 @@ debe mantener validacion estricta de audience/resource en API y MCP.
 
 ## Pendiente para cerrar Sprint 1
 
-- Completar y automatizar el PoC de service account: client credentials,
-  expiracion, revocacion y rechazo inmediato con token vigente.
-- Probar el cambio de tenant OIDC con un usuario multi-tenant de extremo a
-  extremo.
-- Validar MCP con un cliente/Inspector real y guardar evidencia sanitizada.
-- Implementar el dataset versionado `sprint-01-v1` descrito en el plan de
-  pruebas y ampliar E2E desde accesibilidad hacia flujos funcionales.
-- Ejecutar Alembic contra PostgreSQL desde cero, downgrade/upgrade y
-  `alembic check` como suite automatizada.
-- Agregar CI solo para lint, tipos, pruebas, migraciones, contratos y build. No
-  agregar deploy; Coolify desplegara exclusivamente desde `main`.
-- Corregir la advertencia del worker Celery sobre usuario/grupo del contenedor y
-  agregar healthchecks para worker, scheduler y web.
-- Revisar y aceptar o sustituir ADR 0009 cuando se complete la matriz OAuth.
+- Los ocho pendientes tecnicos del corte anterior quedaron cerrados el
+  2026-07-03 (ver "Implementado en Sprint 1" y la matriz del ADR 0009).
+- QA Reliability ejecuto la revision independiente el 2026-07-03: NO-GO
+  condicional con dos brechas, ambas atendidas en la misma sesion: (a) se
+  agrego la prueba de reflow a 320 CSS px y 200% zoom en `a11y.spec.ts`
+  (aprobada en escritorio y movil) y (b) `test:e2e:oidc` ahora corre en ambos
+  viewports. La unica evidencia restante para el GO es un run verde del CI en
+  GitHub con artefactos publicados, que requiere push autorizado por un humano.
+- Observaciones menores del QA sin bloquear: los specs de a11y usan API
+  mockeada; `pytest-randomly` valido la independencia de orden pero no esta en
+  la configuracion permanente del proyecto.
 
 ## Ejecucion local
 
@@ -119,12 +183,11 @@ El modo de desarrollo de Vite puede usar `owner@iaerp.local` y el tenant
 
 ## Siguiente trabajo recomendado
 
-1. Convertir el PoC OAuth pendiente en pruebas automatizadas.
-2. Implementar `sprint-01-v1` con dos tenants y roles diferenciados.
-3. Automatizar migraciones PostgreSQL y E2E funcionales.
-4. Cerrar la deuda de lint/healthchecks y configurar CI.
-5. Ejecutar la revision independiente de QA y actualizar Sprint 1 a `Done` solo
+1. Ejecutar la revision independiente de QA y actualizar Sprint 1 a `Done` solo
    si todos sus criterios de aceptacion tienen evidencia.
+2. Con autorizacion humana, commitear el estado de esta sesion en `release`
+   para que el corte publicado coincida con este archivo.
+3. Iniciar la planificacion de Sprint 2 (facturacion, nota de credito y SRI).
 
 ## Regla de relevo
 

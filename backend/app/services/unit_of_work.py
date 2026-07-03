@@ -34,11 +34,6 @@ async def _append_audit(
     idempotency_key: str,
     details: dict[str, Any],
 ) -> None:
-    # Serializes the tenant audit chain in PostgreSQL. SQLite serializes writes
-    # at database level for local tests.
-    await session.scalar(
-        select(Tenant.id).where(Tenant.id == context.tenant_id).with_for_update()
-    )
     previous = await session.scalar(
         select(AuditEvent)
         .where(AuditEvent.tenant_id == context.tenant_id)
@@ -98,6 +93,11 @@ async def execute_idempotent(
         await session.rollback()
 
     async with session.begin():
+        # Lock before inserting any tenant child row. Acquiring this later can
+        # deadlock with concurrent foreign-key key-share locks in PostgreSQL.
+        await session.scalar(
+            select(Tenant.id).where(Tenant.id == context.tenant_id).with_for_update()
+        )
         existing = await session.scalar(
             select(IdempotencyRecord)
             .where(

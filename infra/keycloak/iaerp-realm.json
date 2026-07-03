@@ -26,13 +26,72 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "username": "operator.norte",
+      "email": "operator.norte@iaerp.local",
+      "firstName": "Operador",
+      "lastName": "Norte",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "LocalPass123!",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "55555555-5555-4555-8555-555555555555",
+      "username": "accountant.sur",
+      "email": "accountant.sur@iaerp.local",
+      "firstName": "Contabilidad",
+      "lastName": "Sur",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "LocalPass123!",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "66666666-6666-4666-8666-666666666666",
+      "username": "without.membership",
+      "email": "without.membership@external.local",
+      "firstName": "Sin",
+      "lastName": "Membresia",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "LocalPass123!",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "service-account-iaerp-provisioner",
+      "enabled": true,
+      "serviceAccountClientId": "iaerp-provisioner",
+      "clientRoles": {
+        "realm-management": [
+          "manage-clients",
+          "view-clients"
+        ]
+      }
     }
   ],
   "organizations": [
     {
       "id": "33333333-3333-4333-8333-333333333333",
-      "name": "IAERP Demo",
-      "alias": "iaerp-demo",
+      "name": "IAERP Demo Norte",
+      "alias": "iaerp-norte",
       "enabled": true,
       "domains": [
         {
@@ -45,6 +104,38 @@
           "id": "22222222-2222-4222-8222-222222222222",
           "username": "owner",
           "email": "owner@iaerp.local",
+          "enabled": true
+        },
+        {
+          "id": "44444444-4444-4444-8444-444444444444",
+          "username": "operator.norte",
+          "email": "operator.norte@iaerp.local",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "abababab-abab-4bab-8bab-abababababab",
+      "name": "IAERP Demo Sur",
+      "alias": "iaerp-sur",
+      "enabled": true,
+      "domains": [
+        {
+          "name": "sur.iaerp.local",
+          "verified": true
+        }
+      ],
+      "members": [
+        {
+          "id": "22222222-2222-4222-8222-222222222222",
+          "username": "owner",
+          "email": "owner@iaerp.local",
+          "enabled": true
+        },
+        {
+          "id": "55555555-5555-4555-8555-555555555555",
+          "username": "accountant.sur",
+          "email": "accountant.sur@iaerp.local",
           "enabled": true
         }
       ]
@@ -124,6 +215,78 @@
         "include.in.token.scope": "true",
         "display.on.consent.screen": "false"
       }
+    },
+    {
+      "name": "memberships:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "service-accounts:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "service-accounts:write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "organization:write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "tags:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "tags:write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "automation:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "automation:write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "operations:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
     }
   ],
   "clients": [
@@ -133,7 +296,7 @@
       "enabled": true,
       "publicClient": true,
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "redirectUris": [
         "http://localhost:5173/*",
         "http://127.0.0.1:5173/*",
@@ -146,7 +309,16 @@
       ],
       "defaultClientScopes": [
         "context:read",
+        "memberships:read",
+        "service-accounts:read",
+        "service-accounts:write",
         "organization:read",
+        "organization:write",
+        "tags:read",
+        "tags:write",
+        "automation:read",
+        "automation:write",
+        "operations:read",
         "parties:read",
         "parties:write",
         "products:read",
@@ -219,6 +391,112 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "iaerp-integration-cli",
+      "name": "IAERP local integration tests",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": [],
+      "defaultClientScopes": [
+        "context:read",
+        "service-accounts:read",
+        "service-accounts:write"
+      ],
+      "optionalClientScopes": [
+        "organization"
+      ],
+      "protocolMappers": [
+        {
+          "name": "subject",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "iaerp-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "iaerp-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "iaerp-agent-norte",
+      "name": "IAERP Agent Norte local",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "local-only-agent-norte-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [
+        "context:read",
+        "parties:read",
+        "products:read"
+      ],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "iaerp-mcp-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "http://localhost:8000/mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "iaerp-agent-sur",
+      "name": "IAERP Agent Sur local",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "local-only-agent-sur-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [
+        "context:read",
+        "parties:read"
+      ],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "iaerp-mcp-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "http://localhost:8000/mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "iaerp-provisioner",
+      "name": "IAERP Service Account Provisioner local",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "local-only-provisioner-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
     }
   ]
 }

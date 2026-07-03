@@ -7,6 +7,7 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import Tool as MCPTool
 from pydantic import Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,13 @@ MCP_SCOPES = [
     "products:read",
     "products:write",
 ]
+TOOL_REQUIRED_SCOPES = {
+    "context.get": "context:read",
+    "parties.search": "parties:read",
+    "parties.create": "parties:write",
+    "products.search": "products:read",
+    "products.create": "products:write",
+}
 
 
 class IAERPTokenVerifier:
@@ -63,6 +71,22 @@ class IAERPTokenVerifier:
         )
 
 
+class ScopedFastMCP(FastMCP):
+    async def list_tools(self) -> list[MCPTool]:
+        token = get_access_token()
+        if token is None or token.claims is None:
+            return []
+        session = SessionFactory()
+        try:
+            context = await resolve_auth_context(token.claims, session)
+        except HTTPException as exc:
+            raise ToolError(f"Authorization failed: {exc.detail}") from exc
+        finally:
+            await session.close()
+        tools = await super().list_tools()
+        return [tool for tool in tools if TOOL_REQUIRED_SCOPES.get(tool.name) in context.scopes]
+
+
 def _require_scope(context: AuthContext, required: str) -> None:
     if required not in context.scopes:
         raise ToolError(f"Forbidden: missing scope {required}")
@@ -94,7 +118,7 @@ async def _require_automation_writes(
         raise ToolError("Automation writes are disabled for this tenant")
 
 
-mcp = FastMCP(
+mcp = ScopedFastMCP(
     "IAERP",
     instructions=(
         "Herramientas ERP limitadas al tenant y scopes del token. "

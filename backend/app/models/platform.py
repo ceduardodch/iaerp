@@ -135,9 +135,7 @@ class AuditEvent(UUIDPrimaryKeyMixin, Base):
 
 class OutboxEvent(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "outbox_events"
-    __table_args__ = (
-        Index("ix_outbox_pending", "published_at", "available_at"),
-    )
+    __table_args__ = (Index("ix_outbox_pending", "published_at", "available_at"),)
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     event_type: Mapped[str] = mapped_column(String(120))

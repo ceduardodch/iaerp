@@ -17,7 +17,9 @@ COPY migrations ./migrations
 COPY app ./app
 RUN uv sync --frozen --no-dev
 RUN rm -rf /tmp/uv-cache
+RUN groupadd --gid 65532 iaerp \
+    && useradd --uid 65532 --gid iaerp --create-home --home-dir /home/iaerp iaerp
 
-USER 65532:65532
+USER iaerp:iaerp
 EXPOSE 8000
 CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

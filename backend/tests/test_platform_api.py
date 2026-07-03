@@ -1,8 +1,12 @@
+import asyncio
 import uuid
 
+import pytest
+from fastapi import HTTPException
 from sqlalchemy import func, select
 
-from app.db.session import SessionFactory
+from app.core.auth import resolve_auth_context
+from app.db.session import SessionFactory, engine
 from app.models.platform import AuditEvent, IdempotencyRecord, OutboxEvent
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
@@ -122,12 +126,76 @@ async def test_idempotency_audit_and_outbox_are_atomic(client):
         assert len(events) == 1
         assert events[0].sequence == 1
         assert events[0].previous_hash is None
-        assert await session.scalar(
-            select(func.count()).select_from(OutboxEvent)
-        ) == 1
-        assert await session.scalar(
-            select(func.count()).select_from(IdempotencyRecord)
-        ) == 1
+        assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+        assert await session.scalar(select(func.count()).select_from(IdempotencyRecord)) == 1
+
+
+async def test_master_updates_are_tenant_scoped_and_audited(client):
+    token_a = await token_for(client, "a@iaerp.local", TENANT_A)
+    token_b = await token_for(client, "b@iaerp.local", TENANT_B)
+    party_payload = {
+        "name": "Cliente original",
+        "identificationType": "RUC",
+        "identificationNumber": "1797654321001",
+        "roles": ["CUSTOMER"],
+    }
+    created_party = await client.post(
+        "/api/v1/parties",
+        headers=auth(token_a, "party-edit-create-0001"),
+        json=party_payload,
+    )
+    party_id = created_party.json()["id"]
+
+    updated_party = await client.put(
+        f"/api/v1/parties/{party_id}",
+        headers=auth(token_a, "party-edit-save-0001"),
+        json={**party_payload, "name": "Cliente editado"},
+    )
+    assert updated_party.status_code == 200
+    assert updated_party.json()["name"] == "Cliente editado"
+
+    foreign_party = await client.put(
+        f"/api/v1/parties/{party_id}",
+        headers=auth(token_b, "party-edit-foreign-0001"),
+        json={**party_payload, "name": "No permitido"},
+    )
+    assert foreign_party.status_code == 404
+
+    taxes = await client.get("/api/v1/tax-categories", headers=auth(token_a))
+    product_payload = {
+        "name": "Producto original",
+        "code": "EDIT-001",
+        "unitPrice": "8.500000",
+        "taxCategoryId": taxes.json()[0]["id"],
+    }
+    created_product = await client.post(
+        "/api/v1/products",
+        headers=auth(token_a, "product-edit-create-0001"),
+        json=product_payload,
+    )
+    product_id = created_product.json()["id"]
+    updated_product = await client.put(
+        f"/api/v1/products/{product_id}",
+        headers=auth(token_a, "product-edit-save-0001"),
+        json={**product_payload, "name": "Producto editado"},
+    )
+    assert updated_product.status_code == 200
+    assert updated_product.json()["name"] == "Producto editado"
+
+    async with SessionFactory() as session:
+        actions = list(
+            await session.scalars(
+                select(AuditEvent.action)
+                .where(AuditEvent.tenant_id == TENANT_A)
+                .order_by(AuditEvent.sequence)
+            )
+        )
+        assert actions == [
+            "party.created",
+            "party.updated",
+            "product.created",
+            "product.updated",
+        ]
 
 
 async def test_automation_settings_and_service_account(client):
@@ -153,3 +221,55 @@ async def test_automation_settings_and_service_account(client):
     body = account_response.json()
     assert body["clientSecret"]
     assert body["account"]["scopes"] == ["context:read", "parties:read"]
+
+    revoke_response = await client.delete(
+        f"/api/v1/service-accounts/{body['account']['id']}",
+        headers=auth(token, "service-account-revoke-0001"),
+    )
+    assert revoke_response.status_code == 200
+    assert revoke_response.json()["active"] is False
+
+    async with SessionFactory() as session:
+        with pytest.raises(HTTPException) as exc:
+            await resolve_auth_context(
+                {
+                    "sub": "keycloak-service-account-id",
+                    "azp": body["account"]["clientId"],
+                    "scope": "context:read parties:read",
+                },
+                session,
+            )
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.skipif(
+    engine.dialect.name != "postgresql",
+    reason="PostgreSQL row locks are required for this concurrency test",
+)
+async def test_concurrent_tenant_writes_serialize_without_deadlock(client):
+    token = await token_for(client, "a@iaerp.local", TENANT_A)
+
+    async def create_party(index: int):
+        return await client.post(
+            "/api/v1/parties",
+            headers=auth(token, f"concurrent-party-{index:04d}"),
+            json={
+                "name": f"Concurrent {index}",
+                "identificationType": "RUC",
+                "identificationNumber": f"17900000000{index}",
+                "roles": ["CUSTOMER"],
+            },
+        )
+
+    responses = await asyncio.gather(create_party(1), create_party(2))
+    assert [response.status_code for response in responses] == [201, 201]
+
+    async with SessionFactory() as session:
+        sequences = list(
+            await session.scalars(
+                select(AuditEvent.sequence)
+                .where(AuditEvent.tenant_id == TENANT_A)
+                .order_by(AuditEvent.sequence)
+            )
+        )
+        assert sequences == [1, 2]

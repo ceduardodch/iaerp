@@ -2,7 +2,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +11,7 @@ from starlette.responses import Response
 
 from app.api.router import router
 from app.core.config import get_settings
+from app.health import readiness, startup_readiness
 from app.mcp.server import mcp, mcp_http_app
 
 settings = get_settings()
@@ -70,7 +71,20 @@ async def live() -> dict[str, str]:
 
 @app.get("/health/ready", tags=["health"])
 async def ready() -> dict[str, str]:
-    return {"status": "ok"}
+    try:
+        dependencies = await readiness()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Dependencies are not ready") from exc
+    return {"status": "ok", **dependencies}
+
+
+@app.get("/health/startup", tags=["health"])
+async def startup() -> dict[str, str]:
+    try:
+        checks = await startup_readiness()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Application startup is not ready") from exc
+    return {"status": "ok", **checks}
 
 
 if settings.MCP_ENABLED:

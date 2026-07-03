@@ -1,0 +1,417 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, release, main]
+  push:
+    branches: [develop, release, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12.12"
+  UV_VERSION: "0.11.26"
+  NODE_VERSION: "24.13.0"
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.5-alpine
+        env:
+          POSTGRES_DB: iaerp_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iaerp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7.4.5-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      AUTH_MODE: dev
+      DEV_JWT_SECRET: ci-only-secret-that-is-longer-than-thirty-two-characters
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/iaerp_test
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/iaerp_test
+      REDIS_URL: redis://127.0.0.1:6379/0
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies
+        run: uv sync --frozen
+
+      - name: Check PostgreSQL and Redis
+        run: uv run --frozen python scripts/check_ci_services.py
+
+      - name: Ruff
+        run: uv run --frozen ruff check .
+
+      - name: mypy
+        run: uv run --frozen mypy app
+
+      - name: pytest
+        run: uv run --frozen pytest -q --junitxml=test-results/pytest.xml
+
+      - name: Upload backend reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: backend-reports
+          path: backend/test-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+  migrations:
+    name: PostgreSQL migrations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.5-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      AUTH_MODE: dev
+      DEV_JWT_SECRET: ci-only-secret-that-is-longer-than-thirty-two-characters
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/iaerp_migrations
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies
+        run: uv sync --frozen
+
+      - name: Validate upgrade, downgrade and schema drift
+        run: uv run --frozen python scripts/validate_migrations.py
+
+  contracts:
+    name: YAML contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Validate OpenAPI
+        run: >-
+          uvx --from openapi-spec-validator==0.7.2
+          openapi-spec-validator contracts/openapi.yaml
+
+      - name: Validate YAML and MCP references
+        run: uv run --no-project --with PyYAML==6.0.2 python scripts/validate_contracts.py
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17.5-alpine
+        env:
+          POSTGRES_DB: iaerp_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iaerp_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7.4.5-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      AUTH_MODE: dev
+      DEV_JWT_SECRET: ci-only-secret-that-is-longer-than-thirty-two-characters
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/iaerp_e2e
+      REDIS_URL: redis://127.0.0.1:6379/0
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Set up Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen
+
+      - name: Prepare E2E database
+        working-directory: backend
+        run: |
+          uv run --frozen alembic upgrade head
+          uv run --frozen python -m app.initial_data
+
+      - name: Start API
+        working-directory: backend
+        run: uv run --frozen uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/iaerp-api.log 2>&1 &
+
+      - name: Wait for API
+        run: curl --fail --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:8000/health/ready
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright
+        env:
+          PLAYWRIGHT_JUNIT_OUTPUT_NAME: results.xml
+        run: npx playwright test --reporter=list,junit,html
+
+      - name: Print API log on failure
+        if: ${{ failure() }}
+        working-directory: .
+        run: cat /tmp/iaerp-api.log
+
+      - name: Upload Playwright reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: playwright-reports
+          path: |
+            frontend/results.xml
+            frontend/playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+  oidc:
+    name: OIDC and full stack
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.ref == 'refs/heads/release' ||
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Set up Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install test dependencies
+        run: |
+          cd backend
+          uv sync --frozen
+          cd ../frontend
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Start OIDC stack
+        env:
+          AUTH_MODE: oidc
+          VITE_AUTH_MODE: oidc
+        run: docker compose up -d --build
+
+      - name: Wait for startup readiness
+        run: >-
+          curl --fail --retry 60 --retry-delay 2 --retry-connrefused
+          http://127.0.0.1:8000/health/startup
+
+      - name: Validate Keycloak compatibility profile
+        working-directory: backend
+        run: uv run --frozen python ../scripts/keycloak_poc.py
+
+      - name: Validate dynamic service-account lifecycle
+        working-directory: backend
+        run: uv run --frozen python scripts/validate_oidc_runtime.py
+
+      - name: Validate service-account and tenant-switch PoC suites
+        working-directory: backend
+        env:
+          IAERP_POC: "1"
+        run: >-
+          uv run --frozen pytest -q
+          tests/test_service_account_poc.py
+          tests/test_tenant_switch_poc.py
+
+      - name: Validate PKCE tenant switch
+        working-directory: frontend
+        run: npm run test:e2e:oidc
+
+      - name: Verify all services are healthy
+        run: docker compose ps
+
+      - name: Print stack logs on failure
+        if: ${{ failure() }}
+        run: docker compose logs --no-color
+
+      - name: Stop OIDC stack
+        if: ${{ always() }}
+        run: docker compose down --volumes --remove-orphans
+
+  security:
+    name: Security checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Set up Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Secret baseline check
+        run: >-
+          git ls-files -z |
+          xargs -0 uvx --python 3.12 --from detect-secrets==1.5.0
+          detect-secrets-hook --baseline .secrets.baseline
+
+      - name: Python dependency audit
+        working-directory: backend
+        run: |
+          uv export --frozen --no-dev --no-hashes --output-file /tmp/iaerp-requirements.txt
+          uvx --python 3.12 --from pip-audit==2.9.0 pip-audit \
+            --requirement /tmp/iaerp-requirements.txt \
+            --progress-spinner off
+
+      - name: Python SAST
+        working-directory: backend
+        run: >-
+          uvx --python 3.12 --from bandit==1.8.6
+          bandit -q -ll -r app scripts
+
+      - name: JavaScript dependency audit
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high

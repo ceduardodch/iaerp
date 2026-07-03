@@ -8,16 +8,19 @@ import {
 } from 'react'
 
 type AuthState = {
+  mode: 'dev' | 'oidc'
   loading: boolean
   authenticated: boolean
   displayName: string
   getToken: () => Promise<string>
   loginDev: (email: string, tenantId: string) => Promise<void>
+  loginOidc: (organizationAlias: string) => Promise<void>
   logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthState | null>(null)
-const authMode = import.meta.env.VITE_AUTH_MODE ?? 'dev'
+const authMode: 'dev' | 'oidc' =
+  import.meta.env.VITE_AUTH_MODE === 'oidc' ? 'oidc' : 'dev'
 const apiUrl = import.meta.env.VITE_API_URL ?? '/api/v1'
 const storageKey = 'iaerp.auth.v1'
 
@@ -54,9 +57,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     void keycloak
       .init({
-        onLoad: 'login-required',
+        onLoad: 'check-sso',
         pkceMethod: 'S256',
-        scope: 'openid organization',
         checkLoginIframe: false,
       })
       .then((authenticated) => {
@@ -88,6 +90,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return keycloak.token
   }
 
+  async function loginOidc(organizationAlias: string) {
+    const alias = organizationAlias.trim().toLowerCase()
+    if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(alias)) {
+      throw new Error('El alias de empresa no es válido')
+    }
+    await keycloak.login({
+      redirectUri: window.location.origin,
+      scope: `openid organization:${alias}`,
+    })
+  }
+
   async function logout() {
     if (authMode === 'dev') {
       sessionStorage.removeItem(storageKey)
@@ -106,11 +119,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   return (
     <AuthContext.Provider
       value={{
+        mode: authMode,
         loading,
         authenticated: authMode === 'dev' ? Boolean(stored) : keycloakReady,
         displayName,
         getToken,
         loginDev,
+        loginOidc,
         logout,
       }}
     >

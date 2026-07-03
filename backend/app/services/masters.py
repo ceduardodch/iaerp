@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 from hashlib import scrypt
 
 from fastapi import HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import cast, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
@@ -18,6 +20,11 @@ from app.schemas.masters import (
     TagCreate,
 )
 from app.schemas.platform import AutomationSettingsUpdate, ServiceAccountCreate
+from app.services.identity import (
+    delete_service_account,
+    disable_service_account,
+    provision_service_account,
+)
 
 
 async def get_active_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> Tenant:
@@ -152,7 +159,13 @@ async def search_parties(
             )
         )
     if role:
-        statement = statement.where(Party.roles.contains([role]))
+        bind = session.get_bind()
+        role_filter = (
+            cast(Party.roles, JSONB).contains([role])
+            if bind.dialect.name == "postgresql"
+            else Party.roles.contains([role])
+        )
+        statement = statement.where(role_filter)
     return list((await session.scalars(statement.order_by(Party.name).limit(100))).all())
 
 
@@ -163,6 +176,27 @@ async def create_party(
 ) -> Party:
     entity = Party(tenant_id=context.tenant_id, **data.model_dump(by_alias=False))
     session.add(entity)
+    await session.flush()
+    return entity
+
+
+async def update_party(
+    session: AsyncSession,
+    context: AuthContext,
+    party_id: uuid.UUID,
+    data: PartyCreate,
+) -> Party:
+    entity = await session.scalar(
+        select(Party).where(
+            Party.id == party_id,
+            Party.tenant_id == context.tenant_id,
+            Party.active.is_(True),
+        )
+    )
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Party not found")
+    for field, value in data.model_dump(by_alias=False).items():
+        setattr(entity, field, value)
     await session.flush()
     return entity
 
@@ -178,9 +212,7 @@ async def search_products(
     )
     if query:
         pattern = f"%{query}%"
-        statement = statement.where(
-            or_(Product.name.ilike(pattern), Product.code.ilike(pattern))
-        )
+        statement = statement.where(or_(Product.name.ilike(pattern), Product.code.ilike(pattern)))
     return list((await session.scalars(statement.order_by(Product.name).limit(100))).all())
 
 
@@ -200,6 +232,36 @@ async def create_product(
         raise HTTPException(status_code=404, detail="Tax category not found")
     entity = Product(tenant_id=context.tenant_id, **data.model_dump(by_alias=False))
     session.add(entity)
+    await session.flush()
+    return entity
+
+
+async def update_product(
+    session: AsyncSession,
+    context: AuthContext,
+    product_id: uuid.UUID,
+    data: ProductCreate,
+) -> Product:
+    entity = await session.scalar(
+        select(Product).where(
+            Product.id == product_id,
+            Product.tenant_id == context.tenant_id,
+            Product.active.is_(True),
+        )
+    )
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    tax_category = await session.scalar(
+        select(TaxCategory.id).where(
+            TaxCategory.id == data.tax_category_id,
+            TaxCategory.tenant_id == context.tenant_id,
+            TaxCategory.active.is_(True),
+        )
+    )
+    if tax_category is None:
+        raise HTTPException(status_code=404, detail="Tax category not found")
+    for field, value in data.model_dump(by_alias=False).items():
+        setattr(entity, field, value)
     await session.flush()
     return entity
 
@@ -258,14 +320,45 @@ async def create_service_account(
     if data.expires_at <= datetime.now(UTC):
         raise HTTPException(status_code=422, detail="expiresAt must be in the future")
     client_secret = secrets.token_urlsafe(36)
+    client_id = f"iaerp-{context.tenant_id.hex[:8]}-{secrets.token_hex(6)}"
+    await provision_service_account(
+        client_id=client_id,
+        client_secret=client_secret,
+        name=data.name,
+        scopes=data.scopes,
+    )
     entity = ServiceAccount(
         tenant_id=context.tenant_id,
-        client_id=f"iaerp-{context.tenant_id.hex[:8]}-{secrets.token_hex(6)}",
+        client_id=client_id,
         name=data.name,
         scopes=sorted(set(data.scopes)),
         secret_hash=_hash_secret(client_secret),
         expires_at=data.expires_at,
     )
     session.add(entity)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        await delete_service_account(client_id)
+        raise
     return entity, client_secret
+
+
+async def revoke_service_account(
+    session: AsyncSession,
+    context: AuthContext,
+    account_id: uuid.UUID,
+) -> ServiceAccount:
+    entity = await session.scalar(
+        select(ServiceAccount).where(
+            ServiceAccount.id == account_id,
+            ServiceAccount.tenant_id == context.tenant_id,
+        )
+    )
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Service account not found")
+    if entity.active:
+        await disable_service_account(entity.client_id)
+        entity.active = False
+        await session.flush()
+    return entity

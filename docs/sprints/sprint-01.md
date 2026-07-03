@@ -10,8 +10,12 @@ Corte del 3 de julio de 2026:
   idempotencia, outbox/inbox/dead letter, Keycloak y UI implementados.
 - Backend mantenido pasa Ruff, mypy y 8 pruebas.
 - Frontend pasa lint, build y 6 pruebas Playwright de accesibilidad.
-- ADR 0009 sigue propuesto: organization/audience estan comprobados, pero faltan
-  client credentials, revocacion, MCP Inspector y cierre de la matriz OAuth.
+- ADR 0009 aceptado el 2026-07-03: la matriz OAuth completa (organization,
+  audiences no intercambiables, PKCE, client credentials, PRM + MCP Inspector,
+  RFC 8707 y revocaciones con token vigente) esta demostrada y automatizada
+  (`backend/tests/test_service_account_poc.py`,
+  `backend/tests/test_tenant_switch_poc.py`, `frontend/tests/oidc.spec.ts`,
+  `docs/evidence/sprint-01-mcp-inspector.md`).
 - El detalle operativo y los pendientes se mantienen en `docs/STATUS.md`.
 
 ## Objetivo

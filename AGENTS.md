@@ -49,6 +49,15 @@
 - Una historia no se considera terminada si sus criterios de aceptacion no estan
   automatizados.
 
+## Interfaz
+
+- Toda pantalla nueva o modificada debe usar las plantillas y componentes de
+  `docs/12-frontend-design-system.md`.
+- No duplicar botones, encabezados, toolbars, paneles o barras de formulario
+  cuando exista un componente en `frontend/src/components/erp/`.
+- Mantener las posiciones y textos estandar de `Nuevo`, `Editar`, `Guardar` y
+  `Cancelar`; una excepcion requiere actualizar la documentacion.
+
 ## Seguridad
 
 - No versionar `.env`, certificados, claves privadas, contrasenas, XML/PDF

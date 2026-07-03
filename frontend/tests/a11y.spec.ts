@@ -48,6 +48,14 @@ async function expectNoA11yViolations(page: Page) {
   expect(results.violations).toEqual([])
 }
 
+async function expectNoHorizontalOverflow(page: Page) {
+  const overflow = await page.evaluate(() => {
+    const root = document.scrollingElement ?? document.documentElement
+    return root.scrollWidth - root.clientWidth
+  })
+  expect(overflow).toBeLessThanOrEqual(1)
+}
+
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.addInitScript(() => sessionStorage.clear())
@@ -84,6 +92,33 @@ test('primary sections are keyboard reachable and labelled', async ({ page }) =>
   const contacts = page.getByRole('button', { name: '02 Contactos' })
   await contacts.focus()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('heading', { name: 'Contactos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Contactos', exact: true })).toBeVisible()
   await expect(page.getByLabel('Buscar contacto')).toBeVisible()
+})
+
+test('layout reflows at 320 CSS px and at 200% zoom without horizontal scroll', async ({
+  page,
+}) => {
+  // WCAG 1.4.10 (reflow): contenido usable a 320 CSS px sin scroll horizontal.
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto('/')
+  await expectNoHorizontalOverflow(page)
+
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await expectNoA11yViolations(page)
+
+  await page.getByRole('button', { name: '02 Contactos' }).click()
+  await expect(page.getByRole('heading', { name: 'Contactos', exact: true })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+
+  // WCAG 1.4.4 (resize text): 200% de zoom en un viewport de 640 px equivale
+  // a 320 CSS px efectivos y no debe introducir scroll horizontal.
+  await page.setViewportSize({ width: 640, height: 900 })
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = '200%'
+  })
+  await expect(page.getByRole('heading', { name: 'Contactos', exact: true })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
 })

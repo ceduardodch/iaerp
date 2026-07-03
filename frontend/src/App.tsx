@@ -16,6 +16,16 @@ import {
   type TenantContext,
 } from './api'
 import { useAuth } from './auth'
+import {
+  ErpActionCell,
+  ErpButton,
+  ErpEmptyState,
+  ErpFormPanel,
+  ErpPageHeader,
+  ErpPanel,
+  ErpStatusBadge,
+  ErpToolbar,
+} from './components/erp'
 
 type Section = 'overview' | 'parties' | 'products' | 'organization'
 
@@ -83,6 +93,62 @@ function DevLogin() {
   )
 }
 
+function OidcLogin() {
+  const { loginOidc } = useAuth()
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    setError('')
+    const data = new FormData(event.currentTarget)
+    try {
+      await loginOidc(String(data.get('organizationAlias')))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo iniciar sesión')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-story" aria-labelledby="login-title">
+        <div className="brand-mark" aria-hidden="true">IA</div>
+        <p className="kicker">IAERP / Acceso seguro</p>
+        <h1 id="login-title">Una empresa activa. Ningún dato cruzado.</h1>
+        <p className="login-copy">
+          Selecciona el alias de la empresa antes de autenticarte. El token
+          quedará ligado únicamente a esa organización.
+        </p>
+      </section>
+      <section className="login-panel" aria-labelledby="access-title">
+        <p className="section-number">OAuth 2.1 + PKCE</p>
+        <h2 id="access-title">Elegir empresa</h2>
+        <form onSubmit={submit}>
+          <label>
+            Alias de empresa
+            <input
+              name="organizationAlias"
+              defaultValue="iaerp-norte"
+              pattern="[a-z0-9][a-z0-9-]{1,62}"
+              autoComplete="organization"
+              required
+            />
+          </label>
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+          <button className="primary-button" type="submit" disabled={submitting}>
+            {submitting ? 'Redirigiendo…' : 'Continuar con Keycloak'}
+          </button>
+        </form>
+        <p className="fine-print">
+          Usa `iaerp-norte` o `iaerp-sur` para el entorno local.
+        </p>
+      </section>
+    </main>
+  )
+}
+
 function LoadingScreen() {
   return (
     <main className="loading-screen" aria-busy="true">
@@ -105,13 +171,12 @@ function Overview({
   const suppliers = parties.filter((party) => party.roles.includes('SUPPLIER')).length
   return (
     <>
-      <header className="page-heading">
-        <div>
-          <p className="kicker">Pulso operativo</p>
-          <h1>{context.name}</h1>
-        </div>
-        <p className="date-chip">RUC {context.ruc}</p>
-      </header>
+      <ErpPageHeader
+        eyebrow="Pulso operativo"
+        title={context.name}
+        subtitle="Resumen de preparación y datos maestros del tenant activo."
+        meta={<span className="date-chip">RUC {context.ruc}</span>}
+      />
       <section className="metric-grid" aria-label="Indicadores de datos maestros">
         <article className="metric-card metric-feature">
           <span className="metric-label">Preparación</span>
@@ -158,77 +223,129 @@ function PartiesPage({
 }) {
   const queryClient = useQueryClient()
   const [query, setQuery] = useState('')
+  const [editor, setEditor] = useState<Party | null | undefined>(undefined)
   const deferredQuery = useDeferredValue(query.toLocaleLowerCase())
   const filtered = parties.filter((party) =>
     `${party.name} ${party.identificationNumber}`.toLocaleLowerCase().includes(deferredQuery),
   )
   const createParty = useMutation({
-    mutationFn: async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault()
-      const form = event.currentTarget
-      const data = new FormData(form)
-      const result = await apiRequest<Party>(token, '/parties', {
-        method: 'POST',
+    mutationFn: (data: {
+      id?: string
+      name: FormDataEntryValue | null
+      identificationType: FormDataEntryValue | null
+      identificationNumber: FormDataEntryValue | null
+      role: FormDataEntryValue | null
+      email: FormDataEntryValue | null
+    }) =>
+      apiRequest<Party>(token, data.id ? `/parties/${data.id}` : '/parties', {
+        method: data.id ? 'PUT' : 'POST',
         headers: { 'Idempotency-Key': idempotencyKey('web-party') },
         body: JSON.stringify({
-          name: data.get('name'),
-          identificationType: data.get('identificationType'),
-          identificationNumber: data.get('identificationNumber'),
-          roles: [data.get('role')],
-          email: data.get('email') || null,
+          name: data.name,
+          identificationType: data.identificationType,
+          identificationNumber: data.identificationNumber,
+          roles: [data.role],
+          email: data.email || null,
         }),
-      })
-      form.reset()
-      return result
+      }),
+    onSuccess: () => {
+      setEditor(undefined)
+      return queryClient.invalidateQueries({ queryKey: ['parties'] })
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['parties'] }),
   })
+
+  function submitParty(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    createParty.mutate(
+      {
+        id: editor?.id,
+        name: data.get('name'),
+        identificationType: data.get('identificationType'),
+        identificationNumber: data.get('identificationNumber'),
+        role: data.get('role'),
+        email: data.get('email'),
+      },
+    )
+  }
 
   return (
     <>
-      <header className="page-heading">
-        <div><p className="kicker">Datos maestros</p><h1>Contactos</h1></div>
+      <ErpPageHeader
+        eyebrow="Datos maestros"
+        title="Contactos"
+        subtitle="Clientes y proveedores compartidos por facturación y cartera."
+        actions={
+          <ErpButton variant="primary" onClick={() => setEditor(null)}>
+            Nuevo contacto
+          </ErpButton>
+        }
+      />
+      <ErpToolbar>
         <label className="search-field">
           <span>Buscar contacto</span>
           <input value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
-      </header>
-      <section className="split-layout">
-        <div className="data-panel">
-          <div className="panel-heading">
-            <h2>Clientes y proveedores</h2>
-            <span>{filtered.length} registros</span>
-          </div>
+      </ErpToolbar>
+      <section className={`split-layout ${editor === undefined ? 'erp-list-only' : ''}`}>
+        <ErpPanel title="Clientes y proveedores" count={filtered.length}>
           <div className="table-wrap">
-            <table>
-              <thead><tr><th>Nombre</th><th>Identificación</th><th>Rol</th></tr></thead>
+            <table className="erp-responsive-table">
+              <thead><tr><th>Nombre</th><th>Identificación</th><th>Rol</th><th>Acciones</th></tr></thead>
               <tbody>
                 {filtered.map((party) => (
                   <tr key={party.id}>
                     <td><strong>{party.name}</strong><small>{party.email ?? 'Sin correo'}</small></td>
                     <td>{party.identificationNumber}</td>
                     <td><span className="tag">{party.roles.join(' / ')}</span></td>
+                    <td>
+                      <ErpActionCell>
+                        <ErpButton
+                          variant="ghost"
+                          aria-label={`Editar ${party.name}`}
+                          onClick={() => setEditor(party)}
+                        >
+                          Editar
+                        </ErpButton>
+                      </ErpActionCell>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {filtered.length === 0 ? (
+              <ErpEmptyState
+                title="No hay contactos"
+                description="Crea el primer cliente o proveedor para comenzar."
+                action={
+                  <ErpButton variant="primary" onClick={() => setEditor(null)}>
+                    Nuevo contacto
+                  </ErpButton>
+                }
+              />
+            ) : null}
           </div>
-        </div>
-        <aside className="form-panel" aria-labelledby="new-party-title">
-          <p className="section-number">Nuevo registro</p>
-          <h2 id="new-party-title">Agregar contacto</h2>
-          <form onSubmit={(event) => createParty.mutate(event)}>
-            <label>Nombre o razón social<input name="name" required /></label>
+        </ErpPanel>
+        {editor !== undefined ? (
+          <ErpFormPanel
+            key={editor?.id ?? 'new-party'}
+            eyebrow={editor ? 'Edición' : 'Nuevo registro'}
+            title={editor ? 'Editar contacto' : 'Nuevo contacto'}
+            pending={createParty.isPending}
+            error={createParty.error?.message}
+            onSubmit={submitParty}
+            onCancel={() => setEditor(undefined)}
+          >
+            <label>Nombre o razón social<input name="name" defaultValue={editor?.name} required /></label>
             <div className="field-row">
-              <label>Tipo<select name="identificationType"><option>RUC</option><option>CEDULA</option><option>PASSPORT</option></select></label>
-              <label>Número<input name="identificationNumber" required /></label>
+              <label>Tipo<select name="identificationType" defaultValue={editor?.identificationType ?? 'RUC'}><option>RUC</option><option>CEDULA</option><option>PASSPORT</option></select></label>
+              <label>Número<input name="identificationNumber" defaultValue={editor?.identificationNumber} required /></label>
             </div>
-            <label>Rol<select name="role"><option value="CUSTOMER">Cliente</option><option value="SUPPLIER">Proveedor</option></select></label>
-            <label>Correo<input name="email" type="email" /></label>
-            {createParty.error ? <p className="form-error" role="alert">{createParty.error.message}</p> : null}
-            <button className="primary-button" disabled={createParty.isPending}>Guardar contacto</button>
-          </form>
-        </aside>
+            <label>Rol<select name="role" defaultValue={editor?.roles[0] ?? 'CUSTOMER'}><option value="CUSTOMER">Cliente</option><option value="SUPPLIER">Proveedor</option></select></label>
+            <label>Correo<input name="email" type="email" defaultValue={editor?.email ?? ''} /></label>
+          </ErpFormPanel>
+        ) : null}
       </section>
     </>
   )
@@ -244,56 +361,117 @@ function ProductsPage({
   token: string
 }) {
   const queryClient = useQueryClient()
+  const [query, setQuery] = useState('')
+  const [editor, setEditor] = useState<Product | null | undefined>(undefined)
+  const deferredQuery = useDeferredValue(query.toLocaleLowerCase())
+  const filtered = products.filter((product) =>
+    `${product.name} ${product.code ?? ''}`.toLocaleLowerCase().includes(deferredQuery),
+  )
   const createProduct = useMutation({
-    mutationFn: async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault()
-      const form = event.currentTarget
-      const data = new FormData(form)
-      const result = await apiRequest<Product>(token, '/products', {
-        method: 'POST',
+    mutationFn: (data: {
+      id?: string
+      name: FormDataEntryValue | null
+      code: FormDataEntryValue | null
+      unitPrice: FormDataEntryValue | null
+      taxCategoryId: FormDataEntryValue | null
+    }) =>
+      apiRequest<Product>(token, data.id ? `/products/${data.id}` : '/products', {
+        method: data.id ? 'PUT' : 'POST',
         headers: { 'Idempotency-Key': idempotencyKey('web-product') },
         body: JSON.stringify({
-          name: data.get('name'),
-          code: data.get('code') || null,
-          unitPrice: data.get('unitPrice'),
-          taxCategoryId: data.get('taxCategoryId'),
+          name: data.name,
+          code: data.code || null,
+          unitPrice: data.unitPrice,
+          taxCategoryId: data.taxCategoryId,
         }),
-      })
-      form.reset()
-      return result
+      }),
+    onSuccess: () => {
+      setEditor(undefined)
+      return queryClient.invalidateQueries({ queryKey: ['products'] })
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
   })
+
+  function submitProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    createProduct.mutate(
+      {
+        id: editor?.id,
+        name: data.get('name'),
+        code: data.get('code'),
+        unitPrice: data.get('unitPrice'),
+        taxCategoryId: data.get('taxCategoryId'),
+      },
+    )
+  }
+
   return (
     <>
-      <header className="page-heading">
-        <div><p className="kicker">Catálogo comercial</p><h1>Productos</h1></div>
-        <p className="date-chip">{products.length} ítems activos</p>
-      </header>
-      <section className="split-layout">
-        <div className="product-grid" aria-label="Productos">
-          {products.map((product, index) => (
-            <article className="product-card" key={product.id}>
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <h2>{product.name}</h2>
-              <p>{product.code ?? 'Sin código interno'}</p>
-              <strong>${Number(product.unitPrice).toFixed(2)}</strong>
-            </article>
-          ))}
-          {products.length === 0 ? <p className="empty-state">El catálogo todavía está vacío.</p> : null}
-        </div>
-        <aside className="form-panel" aria-labelledby="new-product-title">
-          <p className="section-number">Nuevo ítem</p>
-          <h2 id="new-product-title">Agregar producto</h2>
-          <form onSubmit={(event) => createProduct.mutate(event)}>
-            <label>Nombre<input name="name" required /></label>
-            <label>Código interno<input name="code" /></label>
-            <label>Precio unitario<input name="unitPrice" type="number" min="0" step="0.000001" required /></label>
-            <label>Categoría tributaria<select name="taxCategoryId" required>{taxes.map((tax) => <option key={tax.id} value={tax.id}>{tax.name} · {tax.rate}%</option>)}</select></label>
-            {createProduct.error ? <p className="form-error" role="alert">{createProduct.error.message}</p> : null}
-            <button className="primary-button" disabled={createProduct.isPending}>Guardar producto</button>
-          </form>
-        </aside>
+      <ErpPageHeader
+        eyebrow="Catálogo comercial"
+        title="Productos"
+        subtitle="Productos y servicios con precio e impuestos vigentes."
+        actions={
+          <ErpButton variant="primary" onClick={() => setEditor(null)}>
+            Nuevo producto
+          </ErpButton>
+        }
+      />
+      <ErpToolbar>
+        <label className="search-field">
+          <span>Buscar producto</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+        <ErpStatusBadge>{products.length} activos</ErpStatusBadge>
+      </ErpToolbar>
+      <section className={`split-layout ${editor === undefined ? 'erp-list-only' : ''}`}>
+        <ErpPanel title="Catálogo" count={filtered.length}>
+          <div className="product-grid" aria-label="Productos">
+            {filtered.map((product, index) => (
+              <article className="product-card" key={product.id}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <h2>{product.name}</h2>
+                <p>{product.code ?? 'Sin código interno'}</p>
+                <strong>${Number(product.unitPrice).toFixed(2)}</strong>
+                <ErpButton
+                  variant="ghost"
+                  aria-label={`Editar ${product.name}`}
+                  onClick={() => setEditor(product)}
+                >
+                  Editar
+                </ErpButton>
+              </article>
+            ))}
+            {filtered.length === 0 ? (
+              <ErpEmptyState
+                title="No hay productos"
+                description="Crea el primer producto o servicio del catálogo."
+                action={
+                  <ErpButton variant="primary" onClick={() => setEditor(null)}>
+                    Nuevo producto
+                  </ErpButton>
+                }
+              />
+            ) : null}
+          </div>
+        </ErpPanel>
+        {editor !== undefined ? (
+          <ErpFormPanel
+            key={editor?.id ?? 'new-product'}
+            eyebrow={editor ? 'Edición' : 'Nuevo registro'}
+            title={editor ? 'Editar producto' : 'Nuevo producto'}
+            pending={createProduct.isPending}
+            error={createProduct.error?.message}
+            onSubmit={submitProduct}
+            onCancel={() => setEditor(undefined)}
+          >
+            <label>Nombre<input name="name" defaultValue={editor?.name} required /></label>
+            <label>Código interno<input name="code" defaultValue={editor?.code ?? ''} /></label>
+            <label>Precio unitario<input name="unitPrice" type="number" min="0" step="0.000001" defaultValue={editor?.unitPrice} required /></label>
+            <label>Categoría tributaria<select name="taxCategoryId" defaultValue={editor?.taxCategoryId ?? taxes[0]?.id} required>{taxes.map((tax) => <option key={tax.id} value={tax.id}>{tax.name} · {tax.rate}%</option>)}</select></label>
+          </ErpFormPanel>
+        ) : null}
       </section>
     </>
   )
@@ -308,22 +486,23 @@ function OrganizationPage({
 }) {
   return (
     <>
-      <header className="page-heading">
-        <div><p className="kicker">Configuración fiscal</p><h1>Empresa</h1></div>
-        <span className="status-dot">Tenant activo</span>
-      </header>
+      <ErpPageHeader
+        eyebrow="Configuración fiscal"
+        title="Empresa"
+        subtitle="Datos del contribuyente y estructura de emisión."
+        meta={<ErpStatusBadge tone="success">Tenant activo</ErpStatusBadge>}
+      />
       <section className="company-grid">
         <article className="company-identity">
           <p className="section-number">Contribuyente</p>
           <h2>{context.name}</h2>
           <dl><div><dt>RUC</dt><dd>{context.ruc}</dd></div><div><dt>Roles</dt><dd>{context.roles.join(', ')}</dd></div></dl>
         </article>
-        <div className="data-panel">
-          <div className="panel-heading"><h2>Establecimientos</h2><span>{establishments.length}</span></div>
+        <ErpPanel title="Establecimientos" count={establishments.length}>
           <ul className="establishment-list">
             {establishments.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.address}</small></div></li>)}
           </ul>
-        </div>
+        </ErpPanel>
       </section>
     </>
   )
@@ -396,5 +575,6 @@ function Workspace() {
 export default function App() {
   const auth = useAuth()
   if (auth.loading) return <LoadingScreen />
-  return auth.authenticated ? <Workspace /> : <DevLogin />
+  if (auth.authenticated) return <Workspace />
+  return auth.mode === 'dev' ? <DevLogin /> : <OidcLogin />
 }

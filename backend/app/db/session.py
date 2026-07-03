@@ -11,6 +11,7 @@ engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
 
 
 if settings.DATABASE_URL.startswith("sqlite"):
+
     @event.listens_for(engine.sync_engine, "connect")
     def enable_sqlite_foreign_keys(
         dbapi_connection: Any,

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     OIDC_API_AUDIENCE: str = "iaerp-api"
     OIDC_MCP_AUDIENCE: str = "http://localhost:8000/mcp"
     MCP_SERVER_URL: str = "http://localhost:8000/mcp"
+    OIDC_ADMIN_URL: str | None = None
+    OIDC_ADMIN_REALM: str = "iaerp"
+    OIDC_ADMIN_CLIENT_ID: str | None = None
+    OIDC_ADMIN_CLIENT_SECRET: SecretStr | None = None
 
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -31,6 +35,8 @@ class Settings(BaseSettings):
     OUTBOX_BATCH_SIZE: int = 50
     OUTBOX_LEASE_SECONDS: int = 60
     OUTBOX_MAX_ATTEMPTS: int = 8
+    DISPATCHER_HEARTBEAT_KEY: str = "iaerp:dispatcher:heartbeat"
+    DISPATCHER_HEARTBEAT_TTL_SECONDS: int = 15
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":

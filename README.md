@@ -43,6 +43,7 @@ nomina ni modulos propios de franquicias.
 14. [Contratos REST y MCP](contracts/README.md)
 15. [Modelo operativo de agentes](docs/11-agent-operating-model.md)
 16. [Estado actual y relevo](docs/STATUS.md)
+17. [Sistema de interfaz ERP](docs/12-frontend-design-system.md)
 
 Las decisiones tecnicas vinculantes se registran en [ADR](docs/adrs/).
 Los perfiles expertos y skills locales se registran en [.agents](.agents/README.md).

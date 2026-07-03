@@ -90,6 +90,33 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /service-accounts/{serviceAccountId}:
+    delete:
+      operationId: revokeServiceAccount
+      summary: Revocar un service account del tenant activo
+      security:
+        - oauth2: ["service-accounts:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: serviceAccountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Service account revocado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceAccount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /establishments:
     get:
       operationId: listEstablishments
@@ -360,6 +387,41 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /parties/{partyId}:
+    put:
+      operationId: updateParty
+      summary: Editar cliente/proveedor
+      security:
+        - oauth2: ["parties:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: partyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartyInput"
+      responses:
+        "200":
+          description: Contacto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Party"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /products:
     get:
       operationId: searchProducts
@@ -408,6 +470,41 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /products/{productId}:
+    put:
+      operationId: updateProduct
+      summary: Editar producto
+      security:
+        - oauth2: ["products:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "200":
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /invoices:
     post:
       operationId: createInvoiceDraft

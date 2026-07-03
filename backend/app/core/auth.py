@@ -111,8 +111,31 @@ async def resolve_auth_context(
 ) -> AuthContext:
     token_id = str(payload.get("jti") or "")
     scopes = frozenset(str(payload.get("scope") or "").split())
+    subject = payload.get("sub")
+    client_id = payload.get("client_id") or payload.get("azp")
 
-    tenant_id: uuid.UUID
+    if isinstance(client_id, str):
+        # client_id es unico globalmente (unique=True en service_accounts), por
+        # lo que basta para ligar el token a su tenant sin filtro adicional.
+        service_account = await session.scalar(
+            select(ServiceAccount).where(ServiceAccount.client_id == client_id)
+        )
+        if service_account is not None:
+            # SQLite returns naive datetimes even for DateTime(timezone=True) columns.
+            expires_at = service_account.expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            if not service_account.active or expires_at <= datetime.now(UTC):
+                raise HTTPException(status_code=404, detail="Service account not found")
+            return AuthContext(
+                actor_id=str(service_account.id),
+                actor_type="SERVICE_ACCOUNT",
+                tenant_id=service_account.tenant_id,
+                roles=frozenset({"agent"}),
+                scopes=frozenset(scopes.intersection(service_account.scopes)),
+                token_id=token_id,
+            )
+
     if settings.AUTH_MODE == "dev":
         tenant_value = payload.get("tenant_id")
         if not isinstance(tenant_value, str):
@@ -130,8 +153,6 @@ async def resolve_auth_context(
             raise HTTPException(status_code=404, detail="Tenant not found")
         tenant_id = resolved_tenant_id
 
-    subject = payload.get("sub")
-    client_id = payload.get("client_id") or payload.get("azp")
     if isinstance(subject, str) and not subject.startswith("service-account-"):
         row = await session.execute(
             select(User, Membership)
@@ -156,27 +177,7 @@ async def resolve_auth_context(
             token_id=token_id,
         )
 
-    if not isinstance(client_id, str):
-        raise HTTPException(status_code=403, detail="Client identity is missing")
-    service_account = await session.scalar(
-        select(ServiceAccount).where(
-            ServiceAccount.client_id == client_id,
-            ServiceAccount.tenant_id == tenant_id,
-            ServiceAccount.active.is_(True),
-            ServiceAccount.expires_at > datetime.now(UTC),
-        )
-    )
-    if service_account is None:
-        raise HTTPException(status_code=404, detail="Service account not found")
-    effective_scopes = scopes.intersection(service_account.scopes)
-    return AuthContext(
-        actor_id=str(service_account.id),
-        actor_type="SERVICE_ACCOUNT",
-        tenant_id=tenant_id,
-        roles=frozenset({"agent"}),
-        scopes=frozenset(effective_scopes),
-        token_id=token_id,
-    )
+    raise HTTPException(status_code=404, detail="Service account or user not found")
 
 
 async def get_auth_context(
