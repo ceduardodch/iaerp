@@ -2,7 +2,17 @@
 
 ## Estado
 
-Ready, blocked by ADR 0009 PoC.
+In progress.
+
+Corte del 3 de julio de 2026:
+
+- Plataforma local, maestros REST/MCP, aislamiento base, auditoria,
+  idempotencia, outbox/inbox/dead letter, Keycloak y UI implementados.
+- Backend mantenido pasa Ruff, mypy y 8 pruebas.
+- Frontend pasa lint, build y 6 pruebas Playwright de accesibilidad.
+- ADR 0009 sigue propuesto: organization/audience estan comprobados, pero faltan
+  client credentials, revocacion, MCP Inspector y cierre de la matriz OAuth.
+- El detalle operativo y los pendientes se mantienen en `docs/STATUS.md`.
 
 ## Objetivo
 
@@ -22,6 +32,7 @@ gestionar maestros y usar consultas REST/MCP sin fuga de datos.
 | 7 | E3-03, E3-04, E3-05 | Parties, productos, impuestos y tags | Product ERP + Backend |
 | 8 | E7-01, E7-02 | MCP OAuth, contexto y busquedas | MCP AI Security |
 | 9 | E1-06 | Matriz de aislamiento REST/MCP/worker | QA Reliability |
+| 10 | E9-01 a E9-07 | Datos sinteticos y automatizacion de pruebas | QA Reliability |
 
 ## Secuencia tecnica
 
@@ -33,6 +44,38 @@ gestionar maestros y usar consultas REST/MCP sin fuga de datos.
 6. Implementar maestros con REST.
 7. Exponer `context.get`, `parties.search` y `products.search` por MCP.
 8. Agregar UI minima y pruebas de aislamiento/accesibilidad.
+
+## Plan de pruebas y datos
+
+El seed `sprint-01-v1` debe crear dos tenants ficticios, un usuario multi-tenant,
+un usuario exclusivo por tenant, un usuario sin membresia, cuatro roles, una
+service account por tenant y maestros distinguibles entre ambos tenants.
+
+Pruebas unitarias:
+
+- validacion de RUC, codigos fiscales y valores Decimal;
+- resolucion de membresias, permisos, politicas y kill switch;
+- idempotencia, estados de outbox y filtros tenant-scoped;
+- validacion y serializacion de comandos REST/MCP.
+
+Pruebas de integracion:
+
+- migracion Alembic desde cero y downgrade/upgrade;
+- login OIDC, cambio autorizado de tenant y revocacion de service account;
+- CRUD de maestros con PostgreSQL y auditoria real;
+- publicacion, reintento y dead letter del outbox con Redis;
+- equivalencia de permisos y resultados entre REST y MCP;
+- intentos de acceso cruzado por ID, busqueda y worker.
+
+Pruebas E2E:
+
+- login, seleccion de tenant, consulta y alta de un maestro;
+- cambio al segundo tenant sin mostrar datos del primero;
+- acceso denegado visible y accesible para un rol sin permiso;
+- recorrido por teclado, axe-core y viewport movil.
+
+La evidencia minima es reporte JUnit, cobertura, log sanitizado del stack y
+traza/captura de cada fallo E2E.
 
 ## Criterios de aceptacion
 
@@ -49,6 +92,10 @@ gestionar maestros y usar consultas REST/MCP sin fuga de datos.
 - UI tiene foco visible/restaurado, errores anunciados, contraste AA y reflow a
   320 CSS px/200% zoom.
 - Outbox preserva tenant y supera crash entre claim, publicacion y confirmacion.
+- Dataset `sprint-01-v1` se recrea desde cero de forma idempotente.
+- Suites unitarias e integracion pasan sin depender del orden de ejecucion.
+- Los cuatro recorridos E2E pasan en escritorio y viewport movil.
+- CI publica evidencia de pruebas sin secretos ni datos personales.
 
 ## Revisiones obligatorias
 

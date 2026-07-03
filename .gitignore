@@ -26,11 +26,15 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+*.db
+*.db-journal
 
 # Node
 node_modules/
 dist/
 coverage/
+playwright-report/
+test-results/
 *.tsbuildinfo
 
 # IDE and OS

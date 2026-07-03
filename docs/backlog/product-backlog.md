@@ -115,6 +115,22 @@ Prioridades:
 | E8-06 | P0 | Migrar delta final | Cero operaciones perdidas entre snapshot y corte |
 | E8-07 | P0 | Inicializar secuencias | Siguiente valor mayor que todo importado |
 
+## Epic E9 - Calidad y datos de prueba
+
+Esta epica es transversal: sus historias se planifican junto con la funcionalidad
+del sprint y no se difieren a una fase final.
+
+| ID | Pri | Historia | Aceptacion |
+| --- | --- | --- | --- |
+| E9-01 | P0 | Versionar dataset sintetico | Dos tenants y roles cubren casos positivos, negativos y aislamiento |
+| E9-02 | P0 | Automatizar factories/builders | Unitarias no dependen de red, reloj real ni orden de ejecucion |
+| E9-03 | P0 | Probar integraciones reales | PostgreSQL, Redis, Keycloak, MinIO y workers se validan en entorno efimero |
+| E9-04 | P0 | Mantener contratos | OpenAPI, MCP, eventos y adaptadores externos detectan breaking changes |
+| E9-05 | P0 | Automatizar E2E | Cada flujo principal del sprint se valida en escritorio y viewport movil |
+| E9-06 | P0 | Publicar evidencia CI | JUnit, cobertura, trazas y capturas disponibles sin secretos ni PII |
+| E9-07 | P0 | Probar seguridad negativa | Tenant escape, scopes, idempotencia y documentos maliciosos quedan cubiertos |
+| E9-08 | P1 | Medir rendimiento | Umbrales y dataset de carga reproducibles por flujo critico |
+
 ## Post-MVP
 
 - Plan de cuentas y asientos.

@@ -21,6 +21,8 @@
 
 - Sprint 0 y sus ADR fueron aprobados el 2 de julio de 2026.
 - Sprint 1 puede iniciar respetando los ADR aceptados y el backlog aprobado.
+- Antes de trabajar, leer `docs/STATUS.md`; al cerrar una sesion, actualizar su
+  corte, evidencia y pendientes si el estado cambio.
 - Todo cambio de alcance o arquitectura debe actualizar el documento correspondiente
   y, cuando sea una decision durable, agregar o sustituir un ADR.
 - La API REST, MCP y los procesos asincronos deben invocar los mismos casos de uso.
@@ -36,6 +38,16 @@
 - Toda escritura automatizada requiere permiso, politica, idempotency key y
   auditoria.
 - No exponer herramientas MCP de SQL libre o acceso directo a tablas.
+
+## Pruebas
+
+- Cada historia debe incluir datos sinteticos reproducibles, pruebas unitarias y
+  las pruebas de integracion/contrato/E2E que correspondan segun
+  `docs/09-testing-quality.md`.
+- No usar datos productivos ni datos personales en fixtures, seeds, capturas o
+  artefactos de CI.
+- Una historia no se considera terminada si sus criterios de aceptacion no estan
+  automatizados.
 
 ## Seguridad
 

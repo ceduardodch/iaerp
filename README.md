@@ -5,8 +5,13 @@ Model Context Protocol (MCP).
 
 ## Estado
 
-Sprint 0 fue aprobado el 2 de julio de 2026. El proyecto esta listo para iniciar
-Sprint 1: plataforma, identidad, aislamiento y datos maestros.
+Sprint 0 fue aprobado el 2 de julio de 2026. Sprint 1 esta en progreso con una
+plataforma local ejecutable, REST/MCP tenant-scoped, Keycloak, maestros, outbox
+y frontend base.
+
+El detalle verificable para retomar el trabajo esta en
+[Estado actual y relevo](docs/STATUS.md). Ese documento distingue lo
+implementado, lo probado y lo pendiente.
 
 ## Alcance inicial
 
@@ -37,6 +42,7 @@ nomina ni modulos propios de franquicias.
 13. [Sprint 0](docs/sprints/sprint-00.md)
 14. [Contratos REST y MCP](contracts/README.md)
 15. [Modelo operativo de agentes](docs/11-agent-operating-model.md)
+16. [Estado actual y relevo](docs/STATUS.md)
 
 Las decisiones tecnicas vinculantes se registran en [ADR](docs/adrs/).
 Los perfiles expertos y skills locales se registran en [.agents](.agents/README.md).
