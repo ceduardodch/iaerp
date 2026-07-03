@@ -19,6 +19,10 @@ especificos de franquicias.
 | `invoices` | sales_documents | Preservar secuencial, clave, XML, estado y fechas |
 | `invoice_items` | sales_document_lines | Recalcular y comparar totales |
 | `payments` | customer_payments/allocations | Conservar retenciones y descuentos |
+| notas de credito | credit_notes/credit_allocations | Migrar si existen; si no, inventariar en legado |
+| gastos/obligaciones | payables | Clasificar cada fuente como migrada, reconstruida o excluida |
+| pagos a proveedores | supplier_payments/allocations | Migrar solo cuando exista trazabilidad suficiente |
+| saldos iniciales | receivables/payables | Reconstruir desde documentos y movimientos, no copiar totales |
 
 Nomina, empleados, contratos, ventas de farmacia, email sync, metas, proyecciones,
 campanas y configuracion de franquicias no se importan en el MVP.
@@ -32,6 +36,9 @@ campanas y configuracion de franquicias no se importan en el MVP.
 5. Para estados pendientes con clave, consultar autorizacion antes de decidir.
 6. Nunca retransmitir automaticamente durante migracion.
 7. Registrar diferencias entre estado local y SRI para revision.
+8. Inicializar cada secuencia en `max(secuencial importado) + 1` por tenant,
+   tipo documental, establecimiento y punto.
+9. Bloquear emision hasta conciliar la secuencia inicial.
 
 ## Certificados
 
@@ -49,6 +56,17 @@ un canal cifrado y verificar fingerprint/fecha. No se imprime la contrasena.
 - Transform es determinista y versionado.
 - Load usa claves de migracion e idempotencia.
 - Reconcile compara conteos, montos, claves y saldos.
+
+## Cutover y delta
+
+1. Registrar timestamp y snapshot inicial.
+2. Ejecutar migracion de ensayo y resolver errores.
+3. Definir una ventana de freeze para facturacion/cobros o capturar un delta por
+   `updated_at` y claves de negocio.
+4. Ejecutar delta final idempotente.
+5. Conciliar documentos y movimientos creados entre snapshot y corte.
+6. Abrir IAERP solo cuando conteos, saldos y siguiente secuencial esten aprobados.
+7. Mantener el origen en solo lectura durante la ventana de validacion.
 
 ## Reporte obligatorio
 
@@ -76,3 +94,5 @@ migraciones compensatorias, no edicion manual.
 - Usuarios sin acceso a tenants no asignados.
 - Al menos una restauracion ensayada.
 - El sistema origen permanece disponible en solo lectura durante validacion.
+- Ningun registro posterior al snapshot queda fuera del delta o freeze documentado.
+- El siguiente secuencial de cada serie es mayor que todo valor importado.

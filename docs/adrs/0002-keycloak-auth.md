@@ -1,6 +1,6 @@
 # ADR 0002: Keycloak para identidad OAuth/OIDC
 
-- Estado: Proposed
+- Estado: Accepted
 - Fecha: 2026-07-02
 
 ## Contexto

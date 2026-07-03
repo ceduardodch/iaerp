@@ -1,5 +1,8 @@
 # Pruebas y calidad
 
+Este documento es la unica fuente canonica de Definition of Done. Otros archivos
+deben enlazarla y no copiar una version parcial.
+
 ## Piramide
 
 - Unitarias: calculos, estados, politicas, secuencias y parsers.
@@ -24,6 +27,7 @@
 - Clave existente consulta SRI antes de retransmitir.
 - Autorizacion tardia actualiza el documento sin duplicarlo.
 - Nota de credito referencia factura autorizada y respeta limite.
+- Nota de credito sobre factura cobrada crea saldo a favor, no cartera negativa.
 - PDF/XML corresponden a los datos persistidos.
 
 ### Dinero
@@ -32,7 +36,10 @@
 - Pago parcial y varias aplicaciones.
 - Retencion y descuento no producen saldo negativo.
 - Reversion conserva trazabilidad.
+- Reversion de pago, retencion o descuento crea movimiento compensatorio; no
+  edita ni elimina el original.
 - Aging usa fecha de vencimiento y zona correcta.
+- `OVERDUE` se deriva correctamente al cruzar medianoche local.
 
 ### IA/MCP
 

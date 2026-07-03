@@ -61,6 +61,7 @@ Prioridades:
 | E4-06 | P0 | Generar XML/PDF | Artefactos con checksum y datos consistentes |
 | E4-07 | P0 | Emitir nota de credito | Relacion y limite contra factura autorizada |
 | E4-08 | P1 | Reintentar fallos tecnicos | Backoff, limite y dead letter |
+| E4-09 | P0 | Versionar calculo fiscal | Algoritmo/redondeo aprobado con vectores SRI |
 
 ## Epic E5 - Cuentas por cobrar
 
@@ -73,6 +74,8 @@ Prioridades:
 | E5-05 | P0 | Ver aging | Rangos reproducibles por fecha local |
 | E5-06 | P1 | Enviar recordatorio email | Plantilla, entrega y opt-out |
 | E5-07 | P1 | Enviar recordatorio WhatsApp | Consentimiento, plantilla y estado |
+| E5-08 | P0 | Aplicar nota de credito | Cartera o saldo a favor sin valor negativo |
+| E5-09 | P1 | Revertir movimiento | Compensacion auditada sin editar original |
 
 ## Epic E6 - Cuentas por pagar
 
@@ -84,6 +87,8 @@ Prioridades:
 | E6-04 | P0 | Programar pago | Fecha/prioridad sin transferencia |
 | E6-05 | P0 | Registrar pago parcial | Aplicaciones y saldo correctos |
 | E6-06 | P1 | Alertar vencimientos | Regla configurable y trazable |
+| E6-07 | P0 | Detectar obligacion duplicada | Identidad canonica o excepcion auditada |
+| E6-08 | P1 | Revertir pago/ajuste | Movimiento compensatorio y saldo reconciliado |
 
 ## Epic E7 - IA y MCP
 
@@ -96,6 +101,7 @@ Prioridades:
 | E7-05 | P1 | Agente interno | OpenAI via interfaz reemplazable |
 | E7-06 | P0 | Medir consumo/costo | Modelo, tokens, latencia y costo por tenant |
 | E7-07 | P0 | Resistir prompt injection | Fixtures maliciosos no ejecutan tools |
+| E7-08 | P1 | Resumen operativo | Metricas no contables con definicion y ventana |
 
 ## Epic E8 - Migracion y produccion
 
@@ -106,6 +112,8 @@ Prioridades:
 | E8-03 | P0 | Restaurar backup | RTO/RPO medidos con evidencia |
 | E8-04 | P0 | Observar operacion | Dashboards, alertas y runbooks |
 | E8-05 | P0 | Cutover controlado | Checklist, rollback y responsables |
+| E8-06 | P0 | Migrar delta final | Cero operaciones perdidas entre snapshot y corte |
+| E8-07 | P0 | Inicializar secuencias | Siguiente valor mayor que todo importado |
 
 ## Post-MVP
 

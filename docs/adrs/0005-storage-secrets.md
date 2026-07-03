@@ -1,6 +1,6 @@
 # ADR 0005: Objetos privados y secretos fuera de Git
 
-- Estado: Proposed
+- Estado: Accepted
 - Fecha: 2026-07-02
 
 ## Contexto

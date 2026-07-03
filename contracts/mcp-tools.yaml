@@ -38,10 +38,10 @@ tools:
       type: array
       items:
         $ref: openapi.yaml#/components/schemas/Party
-  - name: parties.upsert
+  - name: parties.create
     effect: write
     scope: parties:write
-    description: Crear o actualizar un contacto por identificacion.
+    description: Crear un contacto; identificaciones duplicadas producen conflicto.
     inputSchema:
       type: object
       additionalProperties: false
@@ -67,10 +67,10 @@ tools:
       type: array
       items:
         $ref: openapi.yaml#/components/schemas/Product
-  - name: products.upsert
+  - name: products.create
     effect: write
     scope: products:write
-    description: Crear o actualizar un producto por codigo.
+    description: Crear un producto; codigos duplicados producen conflicto.
     inputSchema:
       type: object
       additionalProperties: false
@@ -278,10 +278,10 @@ tools:
           $ref: "#/$defs/idempotencyKey"
     outputSchema:
       $ref: openapi.yaml#/components/schemas/AccountItem
-  - name: finance.summary
+  - name: finance.operational_summary
     effect: read
     scope: finance:read
-    description: Resumir ventas, cobros, pagos y flujo previsto.
+    description: Resumir documentos emitidos y movimientos de caja; no es un estado contable.
     inputSchema:
       type: object
       additionalProperties: false
@@ -294,20 +294,7 @@ tools:
           type: string
           format: date
     outputSchema:
-      type: object
-      additionalProperties: false
-      required: [invoiced, collected, paid, receivableOpen, payableOpen]
-      properties:
-        invoiced:
-          $ref: openapi.yaml#/components/schemas/Decimal
-        collected:
-          $ref: openapi.yaml#/components/schemas/Decimal
-        paid:
-          $ref: openapi.yaml#/components/schemas/Decimal
-        receivableOpen:
-          $ref: openapi.yaml#/components/schemas/Decimal
-        payableOpen:
-          $ref: openapi.yaml#/components/schemas/Decimal
+      $ref: openapi.yaml#/components/schemas/OperationalSummary
 $defs:
   idempotencyKey:
     type: string

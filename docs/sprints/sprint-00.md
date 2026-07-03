@@ -2,7 +2,9 @@
 
 ## Estado
 
-Ready for review.
+Approved.
+
+Aprobado por el owner el 2 de julio de 2026.
 
 ## Duracion y objetivo
 
@@ -26,7 +28,7 @@ arquitectura, seguridad o contratos durante la implementacion.
 - [x] Estrategia de pruebas y operaciones.
 - [x] ADR iniciales.
 - [x] Contratos preliminares OpenAPI/MCP.
-- [ ] Revision y aprobacion del owner.
+- [x] Revision y aprobacion del owner.
 
 ## Riesgos a resolver antes de Sprint 1
 
@@ -40,6 +42,13 @@ arquitectura, seguridad o contratos durante la implementacion.
 | Certificados heredados | No copiar Git; recarga/traslado cifrado | Owner/DevOps |
 | TAM demasiado amplio | Entrevistas y segmentacion SRI reproducible | Producto |
 
+Estado al cierre:
+
+- Riesgos aceptados como trabajo de Sprint 1, no declarados resueltos.
+- Keycloak/MCP queda bloqueado por el PoC del ADR 0009.
+- Aislamiento requiere FK compuestas, contexto inmutable y decision RLS.
+- SDK MCP permanece fijado por hash/version y se revisa antes de instalar.
+
 ## Criterios de aceptacion
 
 - No hay terminos ambiguos entre tenant, RUC, establecimiento y punto.
@@ -51,5 +60,7 @@ arquitectura, seguridad o contratos durante la implementacion.
 
 ## Decision de cierre
 
-El owner debe marcar este sprint como `Approved` antes de introducir backend,
-frontend, infraestructura ejecutable o integraciones reales.
+Sprint 1 queda habilitado para preparacion. La implementacion de identidad/MCP
+permanece bloqueada hasta resolver el PoC del ADR 0009. Backend, frontend e
+infraestructura deben respetar los ADR aceptados y sus cambios requieren un
+nuevo ADR.

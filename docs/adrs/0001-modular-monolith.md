@@ -1,6 +1,6 @@
 # ADR 0001: Monolito modular
 
-- Estado: Proposed
+- Estado: Accepted
 - Fecha: 2026-07-02
 
 ## Contexto

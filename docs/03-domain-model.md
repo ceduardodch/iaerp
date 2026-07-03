@@ -68,12 +68,19 @@ documento autorizado y no puede exceder su saldo acreditable.
 - `ReceivableInstallment`: fecha, monto y estado de cada vencimiento.
 - `CustomerPayment`: ingreso registrado con referencia y medio.
 - `ReceivableAllocation`: aplicacion de pago, retencion o descuento.
+- `CreditAllocation`: aplicacion idempotente de una nota de credito autorizada.
+- `CustomerCredit`: saldo a favor cuando el credito supera la cuenta abierta.
 - `CollectionReminder`: destinatario, canal, plantilla y resultado.
 
-`saldo = monto original - pagos aplicados - retenciones - descuentos - creditos`
+`saldo = max(0, monto original - pagos - retenciones - descuentos - creditos)`
 
 Nunca se guarda un saldo como unica fuente de verdad. Se calcula desde movimientos
 y se puede materializar para lectura con reconciliacion.
+
+Al autorizar una nota de credito, se aplica hasta el saldo abierto de la factura.
+El excedente de una factura ya cobrada se convierte en `CustomerCredit`; nunca
+produce cartera negativa. La suma de notas de credito relacionadas no puede
+superar el total acreditable de la factura.
 
 ### Cuentas por pagar
 
@@ -106,12 +113,18 @@ y se puede materializar para lectura con reconciliacion.
 8. La idempotency key es unica por tenant, actor, operacion y ventana definida.
 9. Los hashes de archivos se validan al cargar y descargar.
 10. Una accion de otro tenant se responde como no encontrada, evitando filtracion.
+11. Cuotas de cobro o pago suman exactamente el monto original.
+12. Pagos, retenciones, descuentos y creditos son montos no negativos y no
+    sobreaplican un documento.
+13. `OVERDUE` es un estado derivado del saldo, vencimiento y fecha local; no es
+    una transicion persistida.
 
 ## Eventos de dominio iniciales
 
 - `invoice.created`, `invoice.ready`, `invoice.signed`
 - `invoice.received_by_sri`, `invoice.authorized`, `invoice.rejected`
 - `credit_note.authorized`
+- `credit_note.applied`, `customer_credit.created`
 - `receivable.created`, `payment.recorded`, `receivable.settled`
 - `payable.created`, `payable.due_soon`, `supplier_payment.recorded`
 - `reminder.requested`, `reminder.delivered`, `reminder.failed`

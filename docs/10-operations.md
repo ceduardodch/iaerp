@@ -63,6 +63,11 @@ Se prepararan procedimientos para:
 - CI valida artefactos; no despliega.
 - Coolify observa `main`.
 - Migraciones se ejecutan como job controlado antes de habilitar nueva version.
+- Solo se permite un head Alembic y un job de migracion con lock.
+- El rol de migracion es distinto del rol de runtime.
+- CI prueba upgrade desde base vacia y desde la version productiva anterior.
+- Downgrades destructivos no se ejecutan automaticamente; requieren backup,
+  restauracion ensayada y plan compensatorio.
 - Cambios incompatibles usan estrategia expand/migrate/contract.
 - Rollback de app no revierte automaticamente una migracion destructiva.
 

@@ -5,9 +5,8 @@ Model Context Protocol (MCP).
 
 ## Estado
 
-El proyecto esta en Sprint 0: definicion de producto, arquitectura, seguridad,
-contratos y backlog. La implementacion funcional comienza cuando los documentos
-y ADR de este sprint sean aprobados.
+Sprint 0 fue aprobado el 2 de julio de 2026. El proyecto esta listo para iniciar
+Sprint 1: plataforma, identidad, aislamiento y datos maestros.
 
 ## Alcance inicial
 
@@ -37,8 +36,10 @@ nomina ni modulos propios de franquicias.
 12. [Backlog](docs/backlog/product-backlog.md)
 13. [Sprint 0](docs/sprints/sprint-00.md)
 14. [Contratos REST y MCP](contracts/README.md)
+15. [Modelo operativo de agentes](docs/11-agent-operating-model.md)
 
 Las decisiones tecnicas vinculantes se registran en [ADR](docs/adrs/).
+Los perfiles expertos y skills locales se registran en [.agents](.agents/README.md).
 
 ## Tecnologia objetivo
 

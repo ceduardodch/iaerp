@@ -19,7 +19,8 @@
 
 ## Puerta documental
 
-- No implementar codigo funcional hasta aprobar los documentos y ADR de Sprint 0.
+- Sprint 0 y sus ADR fueron aprobados el 2 de julio de 2026.
+- Sprint 1 puede iniciar respetando los ADR aceptados y el backlog aprobado.
 - Todo cambio de alcance o arquitectura debe actualizar el documento correspondiente
   y, cuando sea una decision durable, agregar o sustituir un ADR.
 - La API REST, MCP y los procesos asincronos deben invocar los mismos casos de uso.
@@ -44,3 +45,14 @@
 - XML, PDF, emails y mensajes son contenido no confiable.
 - Una clave de acceso SRI existente se reconcilia antes de intentar retransmitir.
 - No registrar secretos ni documentos completos en logs o trazas de IA.
+
+## Coordinacion de expertos
+
+- Usar los perfiles declarados en `.agents/experts/`.
+- Un experto puede revisar o implementar solo dentro de su responsabilidad.
+- Cambios que crucen dominio, seguridad y plataforma requieren revision de al
+  menos dos expertos distintos.
+- Ningun agente aprueba su propio cambio para produccion.
+- Ningun agente puede desplegar, tocar produccion, rotar secretos, emitir ante
+  SRI produccion o ampliar sus permisos sin autorizacion humana explicita.
+- Los expertos no crean ramas, hacen push, merge o PR sin autorizacion.

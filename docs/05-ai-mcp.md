@@ -18,6 +18,10 @@ Cada token contiene subject, client, scopes y tenant activo. Las herramientas no
 aceptan un `tenant_id` libre. Para cambiar de tenant el cliente obtiene un token
 con contexto permitido.
 
+API y MCP validan issuer, audience, authorized party, expiracion, token id,
+organization y scopes. El token recibido no se reenvia a SRI, OpenAI, mensajeria
+u otro servicio.
+
 ## Catalogo inicial
 
 ### Consulta
@@ -32,8 +36,8 @@ con contexto permitido.
 
 ### Escritura
 
-- `parties.upsert`
-- `products.upsert`
+- `parties.create`
+- `products.create`
 - `invoices.create_draft`
 - `invoices.issue`
 - `credit_notes.create_and_issue`
@@ -52,9 +56,9 @@ actualizacion generica de tablas.
 1. Validar token, client, tenant, rol y scope.
 2. Validar JSON contra el esquema cerrado.
 3. Verificar kill switch y politica de la herramienta.
-4. Reservar o recuperar idempotency key.
-5. Ejecutar el caso de uso en transaccion.
-6. Escribir auditoria y outbox.
+4. Bloquear/reservar idempotency key y validar request hash.
+5. Ejecutar caso de uso, auditoria y outbox dentro de una Unit of Work.
+6. Persistir respuesta idempotente y hacer un solo commit.
 7. Devolver resultado estructurado, estado y correlation ID.
 
 Repetir la misma idempotency key devuelve el resultado previo cuando los

@@ -1,6 +1,6 @@
 # ADR 0003: MCP como adaptador de casos de uso
 
-- Estado: Proposed
+- Estado: Accepted
 - Fecha: 2026-07-02
 
 ## Contexto

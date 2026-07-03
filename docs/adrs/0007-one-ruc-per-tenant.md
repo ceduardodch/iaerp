@@ -1,6 +1,6 @@
 # ADR 0007: Un RUC por tenant
 
-- Estado: Proposed
+- Estado: Accepted
 - Fecha: 2026-07-02
 
 ## Contexto

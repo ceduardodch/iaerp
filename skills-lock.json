@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "ERP Domain Knowledge": {
+      "source": "danhvb/my-ba-skills",
+      "sourceType": "github",
+      "skillPath": "multi-agent-ba/.agent/skills/domain-knowledge/erp/SKILL.md",
+      "computedHash": "68c6f4a1ea2e36df22e54ef72c66b6298f017c94e920fb10978ac7dc31143356"
+    },
+    "a11y-playwright-testing": {
+      "source": "fugazi/test-automation-skills-agents",
+      "sourceType": "github",
+      "skillPath": "skills/a11y-playwright-testing/SKILL.md",
+      "computedHash": "ed96439edae915cf9cfb7c646d22c6314547ae61a1bd0c84b00bf4ab264ec30f"
+    },
+    "fba": {
+      "source": "fastapi-practices/skills",
+      "sourceType": "github",
+      "skillPath": "skills/fastapi-best-architecture/SKILL.md",
+      "computedHash": "0eb630deb5f15ae6521946e3a71c4d6eaa4c0660b2a4900760284c202533e554"
+    },
+    "mcp-patterns": {
+      "source": "yonatangross/orchestkit",
+      "sourceType": "github",
+      "skillPath": "plugins/ork/skills/mcp-patterns/SKILL.md",
+      "computedHash": "f90ac0ddfa84cb0dc3dfd0d0d1b4b42c57d0b4c89d8fa532344399f8b6e38bf5"
+    }
+  }
+}

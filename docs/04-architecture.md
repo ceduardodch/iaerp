@@ -94,17 +94,23 @@ Resource Servers.
 - Authorization Code + PKCE para web.
 - Client Credentials para service accounts controladas.
 - Tokens cortos; refresh token rotado.
-- `tenant_id`, roles y scopes se validan contra membresia activa.
-- Cambiar de tenant obtiene un contexto autorizado; el modelo no envia tenant
+- El token contiene una sola Keycloak Organization seleccionada; su id se mapea
+  al tenant.
+- `tenant_id`, roles y scopes se validan tambien contra membresia activa en la
+  base en cada request.
+- Cambiar de tenant requiere nueva autorizacion OIDC; el modelo no envia tenant
   arbitrario.
+- La compatibilidad RFC 8707 para MCP se resuelve en el PoC del ADR 0009.
 
 ## Persistencia
 
 - PostgreSQL con una base y esquema inicial.
 - Todas las tablas de negocio incluyen `tenant_id` e indices compuestos.
-- Repository layer aplica tenant obligatorio.
-- Defense in depth: Row Level Security se evaluara en Sprint 1 y se habilitara
-  si las migraciones y jobs pueden conservar contexto de forma verificable.
+- Relaciones de negocio usan claves y foreign keys compuestas `(tenant_id, id)`
+  para impedir referencias cruzadas incluso ante un bug de aplicacion.
+- Repository layer y `AsyncSession` reciben un contexto de tenant inmutable.
+- Row Level Security se decide y prueba antes de cerrar la migracion inicial; si
+  se difiere, el ADR debe documentar controles compensatorios.
 - Backups y restauraciones se prueban; tener backup sin restauracion no cuenta.
 
 ## Archivos y secretos
@@ -118,11 +124,16 @@ Resource Servers.
 ## Asincronia e idempotencia
 
 - La transaccion de negocio inserta evento outbox.
+- Una sola Unit of Work persiste idempotencia, request hash, mutacion, auditoria,
+  outbox y respuesta antes de un unico commit.
+- Repositories no hacen commit y no ejecutan efectos externos.
 - Un dispatcher publica a Celery.
 - Workers registran intento, resultado y siguiente reintento.
 - Efectos externos usan idempotency key estable.
 - SRI se consulta por clave antes de retransmitir un documento conocido.
 - Dead-letter queue visible para operacion.
+- Dispatcher usa lease recuperable y `FOR UPDATE SKIP LOCKED`; consumidores
+  deduplican por `event_id` estable.
 
 ## Despliegue
 

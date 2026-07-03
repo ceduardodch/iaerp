@@ -15,6 +15,8 @@ paths:
     get:
       operationId: getContext
       summary: Obtener tenant, permisos, limites y kill switch
+      security:
+        - oauth2: ["context:read"]
       responses:
         "200":
           description: Contexto activo
@@ -24,10 +26,291 @@ paths:
                 $ref: "#/components/schemas/TenantContext"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /memberships:
+    get:
+      operationId: listOwnMemberships
+      summary: Listar membresias activas del usuario
+      security:
+        - oauth2: ["memberships:read"]
+      responses:
+        "200":
+          description: Membresias visibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Membership"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /service-accounts:
+    get:
+      operationId: listServiceAccounts
+      summary: Listar service accounts del tenant activo
+      security:
+        - oauth2: ["service-accounts:read"]
+      responses:
+        "200":
+          description: Service accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceAccount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createServiceAccount
+      summary: Crear service account ligado al tenant activo
+      security:
+        - oauth2: ["service-accounts:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceAccountInput"
+      responses:
+        "201":
+          description: Service account creado; el secreto solo se entrega una vez
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceAccountCreated"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /establishments:
+    get:
+      operationId: listEstablishments
+      summary: Listar establecimientos del tenant
+      security:
+        - oauth2: ["organization:read"]
+      responses:
+        "200":
+          description: Establecimientos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Establishment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createEstablishment
+      summary: Crear establecimiento
+      security:
+        - oauth2: ["organization:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EstablishmentInput"
+      responses:
+        "201":
+          description: Establecimiento creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Establishment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /emission-points:
+    get:
+      operationId: listEmissionPoints
+      summary: Listar puntos de emision
+      security:
+        - oauth2: ["organization:read"]
+      responses:
+        "200":
+          description: Puntos de emision
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmissionPoint"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createEmissionPoint
+      summary: Crear punto de emision
+      security:
+        - oauth2: ["organization:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmissionPointInput"
+      responses:
+        "201":
+          description: Punto creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmissionPoint"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /tax-categories:
+    get:
+      operationId: listTaxCategories
+      summary: Listar categorias tributarias vigentes
+      security:
+        - oauth2: ["organization:read"]
+      responses:
+        "200":
+          description: Categorias tributarias
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaxCategory"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /tags:
+    get:
+      operationId: listTags
+      summary: Listar etiquetas
+      security:
+        - oauth2: ["tags:read"]
+      responses:
+        "200":
+          description: Etiquetas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createTag
+      summary: Crear etiqueta
+      security:
+        - oauth2: ["tags:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagInput"
+      responses:
+        "201":
+          description: Etiqueta creada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /automation/settings:
+    get:
+      operationId: getAutomationSettings
+      summary: Consultar politicas y kill switch
+      security:
+        - oauth2: ["automation:read"]
+      responses:
+        "200":
+          description: Configuracion efectiva
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: updateAutomationSettings
+      summary: Actualizar politicas y kill switch
+      security:
+        - oauth2: ["automation:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationSettingsInput"
+      responses:
+        "200":
+          description: Configuracion actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /operations/{operationId}:
+    get:
+      operationId: getOperation
+      summary: Consultar estado de operacion asincrona
+      security:
+        - oauth2: ["operations:read"]
+      parameters:
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Estado y resultado normalizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /parties:
     get:
       operationId: searchParties
       summary: Buscar clientes y proveedores
+      security:
+        - oauth2: ["parties:read"]
       parameters:
         - name: q
           in: query
@@ -49,9 +332,13 @@ paths:
                   $ref: "#/components/schemas/Party"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       operationId: createParty
       summary: Crear cliente/proveedor
+      security:
+        - oauth2: ["parties:write"]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -69,10 +356,16 @@ paths:
                 $ref: "#/components/schemas/Party"
         "409":
           $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /products:
     get:
       operationId: searchProducts
       summary: Buscar productos
+      security:
+        - oauth2: ["products:read"]
       parameters:
         - name: q
           in: query
@@ -89,9 +382,13 @@ paths:
                   $ref: "#/components/schemas/Product"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       operationId: createProduct
       summary: Crear producto
+      security:
+        - oauth2: ["products:write"]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -109,10 +406,14 @@ paths:
                 $ref: "#/components/schemas/Product"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /invoices:
     post:
       operationId: createInvoiceDraft
       summary: Crear borrador de factura
+      security:
+        - oauth2: ["invoices:write"]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -130,10 +431,16 @@ paths:
                 $ref: "#/components/schemas/SalesDocument"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /invoices/{invoiceId}:
     get:
       operationId: getInvoice
       summary: Consultar factura y estado SRI
+      security:
+        - oauth2: ["invoices:read"]
       parameters:
         - $ref: "#/components/parameters/InvoiceId"
       responses:
@@ -145,10 +452,16 @@ paths:
                 $ref: "#/components/schemas/SalesDocument"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /invoices/{invoiceId}/issue:
     post:
       operationId: issueInvoice
       summary: Validar, firmar y encolar emision
+      security:
+        - oauth2: ["invoices:issue"]
       parameters:
         - $ref: "#/components/parameters/InvoiceId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -159,14 +472,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Operation"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
         "409":
           $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /credit-notes:
     post:
       operationId: createAndIssueCreditNote
       summary: Crear y encolar nota de credito relacionada
+      security:
+        - oauth2: ["credit-notes:issue"]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -184,10 +501,14 @@ paths:
                 $ref: "#/components/schemas/Operation"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /receivables:
     get:
       operationId: listReceivables
       summary: Consultar cartera
+      security:
+        - oauth2: ["receivables:read"]
       parameters:
         - name: status
           in: query
@@ -210,10 +531,14 @@ paths:
                   $ref: "#/components/schemas/AccountItem"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /receivables/{receivableId}/payments:
     post:
       operationId: recordCustomerPayment
       summary: Registrar y aplicar un cobro
+      security:
+        - oauth2: ["receivables:write"]
       parameters:
         - $ref: "#/components/parameters/ReceivableId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -232,10 +557,14 @@ paths:
                 $ref: "#/components/schemas/AccountItem"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /receivables/{receivableId}/reminders:
     post:
       operationId: sendCollectionReminder
       summary: Enviar recordatorio
+      security:
+        - oauth2: ["receivables:notify"]
       parameters:
         - $ref: "#/components/parameters/ReceivableId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -254,10 +583,20 @@ paths:
                 $ref: "#/components/schemas/Operation"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /payables:
     get:
       operationId: listPayables
       summary: Consultar obligaciones
+      security:
+        - oauth2: ["payables:read"]
+      parameters:
+        - name: dueBefore
+          in: query
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: Obligaciones
@@ -269,9 +608,13 @@ paths:
                   $ref: "#/components/schemas/AccountItem"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       operationId: createPayable
       summary: Crear obligacion manual
+      security:
+        - oauth2: ["payables:write"]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -289,10 +632,44 @@ paths:
                 $ref: "#/components/schemas/AccountItem"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /finance/operational-summary:
+    get:
+      operationId: getOperationalFinancialSummary
+      summary: Resumir facturacion y movimientos de caja; no es estado contable
+      security:
+        - oauth2: ["finance:read"]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Resumen operativo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /payables/from-document:
     post:
       operationId: createPayableFromDocument
       summary: Crear obligacion desde un objeto cargado
+      security:
+        - oauth2: ["payables:extract"]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -316,10 +693,14 @@ paths:
                 $ref: "#/components/schemas/Operation"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /payables/{payableId}/schedule:
     post:
       operationId: scheduleSupplierPayment
       summary: Programar pago sin mover dinero
+      security:
+        - oauth2: ["payables:write"]
       parameters:
         - $ref: "#/components/parameters/PayableId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -338,10 +719,14 @@ paths:
                 $ref: "#/components/schemas/Operation"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /payables/{payableId}/payments:
     post:
       operationId: recordSupplierPayment
       summary: Registrar pago ya realizado
+      security:
+        - oauth2: ["payables:write"]
       parameters:
         - $ref: "#/components/parameters/PayableId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -360,6 +745,8 @@ paths:
                 $ref: "#/components/schemas/AccountItem"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 components:
   securitySchemes:
     oauth2:
@@ -385,6 +772,35 @@ components:
             payables:write: Crear y pagar obligaciones
             payables:extract: Extraer obligaciones desde documentos
             finance:read: Leer resumen financiero
+            memberships:read: Leer membresias propias
+            service-accounts:read: Leer service accounts
+            service-accounts:write: Gestionar service accounts
+            organization:read: Leer configuracion de empresa
+            organization:write: Gestionar configuracion de empresa
+            tags:read: Leer etiquetas
+            tags:write: Gestionar etiquetas
+            automation:read: Leer politicas de automatizacion
+            automation:write: Gestionar politicas y kill switch
+            operations:read: Consultar operaciones asincronas
+        clientCredentials:
+          tokenUrl: https://auth.example.invalid/token
+          scopes:
+            context:read: Leer contexto
+            parties:read: Leer contactos
+            parties:write: Gestionar contactos
+            products:read: Leer productos
+            products:write: Gestionar productos
+            invoices:read: Leer facturas
+            invoices:write: Crear documentos
+            invoices:issue: Emitir facturas
+            credit-notes:issue: Emitir notas de credito
+            receivables:read: Leer cartera
+            receivables:write: Registrar cobros
+            receivables:notify: Enviar recordatorios
+            payables:read: Leer obligaciones
+            payables:write: Gestionar obligaciones y pagos
+            payables:extract: Extraer obligaciones
+            finance:read: Leer resumen operativo
   parameters:
     IdempotencyKey:
       name: Idempotency-Key
@@ -416,10 +832,218 @@ components:
         type: string
         format: uuid
   schemas:
-    Decimal:
+    NonNegativeDecimal:
       type: string
-      pattern: "^-?[0-9]+(\\.[0-9]{1,6})?$"
-      examples: ["125.50"]
+      pattern: "^[0-9]{1,16}(\\.[0-9]{1,2})?$"
+      examples: ["0.00", "125.50"]
+    PositiveDecimal:
+      type: string
+      pattern: "^(?!0+(?:\\.0+)?$)[0-9]{1,16}(?:\\.[0-9]{1,2})?$"
+      examples: ["0.01", "125.50"]
+    QuantityDecimal:
+      type: string
+      pattern: "^(?!0+(?:\\.0+)?$)[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+      examples: ["1", "0.500000"]
+    UnitPriceDecimal:
+      type: string
+      pattern: "^[0-9]{1,12}(\\.[0-9]{1,6})?$"
+      examples: ["10.123456"]
+    Membership:
+      type: object
+      additionalProperties: false
+      required: [tenantId, organizationId, ruc, tenantName, roles, active]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+        ruc:
+          type: string
+          pattern: "^[0-9]{13}$"
+        tenantName:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+    ServiceAccountInput:
+      type: object
+      additionalProperties: false
+      required: [name, scopes, expiresAt]
+      properties:
+        name:
+          type: string
+          minLength: 3
+        scopes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+    ServiceAccount:
+      type: object
+      additionalProperties: false
+      required: [id, clientId, name, scopes, active, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientId:
+          type: string
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+    ServiceAccountCreated:
+      type: object
+      additionalProperties: false
+      required: [account, clientSecret]
+      properties:
+        account:
+          $ref: "#/components/schemas/ServiceAccount"
+        clientSecret:
+          type: string
+          description: Se entrega una sola vez y nunca se registra en logs.
+    EstablishmentInput:
+      type: object
+      additionalProperties: false
+      required: [code, name, address]
+      properties:
+        code:
+          type: string
+          pattern: "^[0-9]{3}$"
+        name:
+          type: string
+        address:
+          type: string
+    Establishment:
+      type: object
+      additionalProperties: false
+      required: [id, code, name, address, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          pattern: "^[0-9]{3}$"
+        name:
+          type: string
+        address:
+          type: string
+        active:
+          type: boolean
+    EmissionPointInput:
+      type: object
+      additionalProperties: false
+      required: [establishmentId, code]
+      properties:
+        establishmentId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          pattern: "^[0-9]{3}$"
+    EmissionPoint:
+      type: object
+      additionalProperties: false
+      required: [id, establishmentId, code, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+        establishmentId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          pattern: "^[0-9]{3}$"
+        active:
+          type: boolean
+    TaxCategory:
+      type: object
+      additionalProperties: false
+      required: [id, sriCode, name, rate, validFrom, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sriCode:
+          type: string
+        name:
+          type: string
+        rate:
+          type: string
+          pattern: "^[0-9]{1,3}(\\.[0-9]{1,6})?$"
+        validFrom:
+          type: string
+          format: date
+        validTo:
+          type: [string, "null"]
+          format: date
+        active:
+          type: boolean
+    TagInput:
+      type: object
+      additionalProperties: false
+      required: [name, color]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+    Tag:
+      type: object
+      additionalProperties: false
+      required: [id, name, color, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        active:
+          type: boolean
+    AutomationSettingsInput:
+      type: object
+      additionalProperties: false
+      required: [writesEnabled, dailyAmountLimit]
+      properties:
+        writesEnabled:
+          type: boolean
+        dailyAmountLimit:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+    AutomationSettings:
+      type: object
+      additionalProperties: false
+      required: [writesEnabled, dailyAmountLimit, updatedAt]
+      properties:
+        writesEnabled:
+          type: boolean
+        dailyAmountLimit:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        updatedAt:
+          type: string
+          format: date-time
     PartyRole:
       type: string
       enum: [CUSTOMER, SUPPLIER]
@@ -473,14 +1097,31 @@ components:
         address:
           type: [string, "null"]
     Party:
-      allOf:
-        - $ref: "#/components/schemas/PartyInput"
-        - type: object
-          required: [id]
-          properties:
-            id:
-              type: string
-              format: uuid
+      type: object
+      additionalProperties: false
+      required: [id, name, identificationType, identificationNumber, roles]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        identificationType:
+          type: string
+          enum: [RUC, CEDULA, PASSPORT, FINAL_CONSUMER]
+        identificationNumber:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartyRole"
+        email:
+          type: [string, "null"]
+          format: email
+        phone:
+          type: [string, "null"]
+        address:
+          type: [string, "null"]
     ProductInput:
       type: object
       additionalProperties: false
@@ -491,18 +1132,25 @@ components:
         code:
           type: [string, "null"]
         unitPrice:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/UnitPriceDecimal"
         taxCode:
           type: string
     Product:
-      allOf:
-        - $ref: "#/components/schemas/ProductInput"
-        - type: object
-          required: [id]
-          properties:
-            id:
-              type: string
-              format: uuid
+      type: object
+      additionalProperties: false
+      required: [id, name, unitPrice, taxCode]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: [string, "null"]
+        unitPrice:
+          $ref: "#/components/schemas/UnitPriceDecimal"
+        taxCode:
+          type: string
     InvoiceLineInput:
       type: object
       additionalProperties: false
@@ -514,17 +1162,17 @@ components:
         description:
           type: string
         quantity:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/QuantityDecimal"
         unitPrice:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/UnitPriceDecimal"
         discount:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/NonNegativeDecimal"
         taxCode:
           type: string
     InvoiceInput:
       type: object
       additionalProperties: false
-      required: [customerId, establishmentId, emissionPointId, issueDate, lines]
+      required: [customerId, establishmentId, emissionPointId, issueDate, installments, lines]
       properties:
         customerId:
           type: string
@@ -538,9 +1186,11 @@ components:
         issueDate:
           type: string
           format: date
-        dueDate:
-          type: [string, "null"]
-          format: date
+        installments:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/InstallmentInput"
         lines:
           type: array
           minItems: 1
@@ -586,11 +1236,11 @@ components:
           type: [string, "null"]
           pattern: "^[0-9]{49}$"
         subtotal:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/NonNegativeDecimal"
         tax:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/NonNegativeDecimal"
         total:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/NonNegativeDecimal"
     AccountItem:
       type: object
       additionalProperties: false
@@ -606,9 +1256,9 @@ components:
           type: string
           enum: [OPEN, PARTIAL, OVERDUE, SETTLED, VOIDED]
         originalAmount:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/NonNegativeDecimal"
         openAmount:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/NonNegativeDecimal"
         currency:
           type: string
           const: USD
@@ -618,22 +1268,62 @@ components:
     PaymentInput:
       type: object
       additionalProperties: false
-      required: [amount, paymentDate, method]
+      description: La suma de cashAmount, retentions y discounts debe ser mayor que cero y no superar el saldo.
+      required: [cashAmount, paymentDate, retentions, discounts]
       properties:
-        amount:
-          $ref: "#/components/schemas/Decimal"
+        cashAmount:
+          $ref: "#/components/schemas/NonNegativeDecimal"
         paymentDate:
           type: string
           format: date
         method:
-          type: string
-          enum: [TRANSFER, CHECK, CASH, CARD, RETENTION, OTHER]
+          type: [string, "null"]
+          enum: [TRANSFER, CHECK, CASH, CARD, OTHER, null]
         reference:
           type: [string, "null"]
-        retentionAmount:
-          $ref: "#/components/schemas/Decimal"
-        discountAmount:
-          $ref: "#/components/schemas/Decimal"
+        retentions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetentionInput"
+        discounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscountInput"
+    RetentionInput:
+      type: object
+      additionalProperties: false
+      required: [kind, amount, reason]
+      properties:
+        kind:
+          type: string
+          enum: [RETENTION_IVA, RETENTION_RENTA, OTHER]
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        reason:
+          type: string
+          minLength: 3
+        documentReference:
+          type: [string, "null"]
+    DiscountInput:
+      type: object
+      additionalProperties: false
+      required: [amount, reason]
+      properties:
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        reason:
+          type: string
+          minLength: 3
+    InstallmentInput:
+      type: object
+      additionalProperties: false
+      required: [dueDate, amount]
+      properties:
+        dueDate:
+          type: string
+          format: date
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
     ReminderInput:
       type: object
       additionalProperties: false
@@ -648,24 +1338,36 @@ components:
     PayableInput:
       type: object
       additionalProperties: false
-      required: [supplierId, documentNumber, issueDate, dueDate, total]
+      required: [supplierId, documentType, establishment, emissionPoint, sequential, issueDate, installments, total]
       properties:
         supplierId:
           type: string
           format: uuid
-        documentNumber:
+        documentType:
           type: string
+          enum: [INVOICE, LIQUIDATION, DEBIT_NOTE, OTHER]
+        establishment:
+          type: string
+          pattern: "^[0-9]{3}$"
+        emissionPoint:
+          type: string
+          pattern: "^[0-9]{3}$"
+        sequential:
+          type: string
+          pattern: "^[0-9]{9}$"
         accessKey:
           type: [string, "null"]
           pattern: "^[0-9]{49}$"
         issueDate:
           type: string
           format: date
-        dueDate:
-          type: string
-          format: date
+        installments:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/InstallmentInput"
         total:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/PositiveDecimal"
     PaymentScheduleInput:
       type: object
       additionalProperties: false
@@ -675,14 +1377,14 @@ components:
           type: string
           format: date
         amount:
-          $ref: "#/components/schemas/Decimal"
+          $ref: "#/components/schemas/PositiveDecimal"
         priority:
           type: string
           enum: [LOW, NORMAL, HIGH, CRITICAL]
     Operation:
       type: object
       additionalProperties: false
-      required: [operationId, status, correlationId]
+      required: [operationId, status, correlationId, createdAt, expiresAt]
       properties:
         operationId:
           type: string
@@ -692,6 +1394,43 @@ components:
           enum: [ACCEPTED, RUNNING, SUCCEEDED, FAILED, BLOCKED]
         correlationId:
           type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        result:
+          type: [object, "null"]
+          additionalProperties: true
+        error:
+          anyOf:
+            - $ref: "#/components/schemas/Error"
+            - type: "null"
+    OperationalSummary:
+      type: object
+      additionalProperties: false
+      description: Metricas operativas por fechas de emision y movimiento; no aplica devengo contable.
+      required: [from, to, invoiced, credited, collected, paid, receivableOpen, payableOpen]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        invoiced:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        credited:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        collected:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        paid:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        receivableOpen:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        payableOpen:
+          $ref: "#/components/schemas/NonNegativeDecimal"
     Error:
       type: object
       additionalProperties: false
@@ -706,6 +1445,17 @@ components:
   responses:
     Unauthorized:
       description: Token ausente, invalido o sin contexto autorizado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Scope, rol, politica o membresia insuficiente
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: Bearer error con scope requerido cuando aplique
       content:
         application/json:
           schema:

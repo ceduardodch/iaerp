@@ -12,11 +12,7 @@ No se crean ramas adicionales ni se hace push, merge o PR sin autorizacion.
 
 ## Definition of Done
 
-- Criterios de aceptacion comprobados.
-- Aislamiento de tenant verificado.
-- Pruebas unitarias, integracion y contrato relevantes en verde.
-- Migraciones con upgrade y downgrade probados.
-- Escrituras idempotentes y auditadas.
-- Sin secretos o datos personales en codigo, fixtures, logs o artefactos.
-- Documentacion y contratos actualizados.
-- Observabilidad minima: logs estructurados, metricas y correlacion.
+La fuente canonica es `docs/09-testing-quality.md`. Este archivo no mantiene una
+segunda lista para evitar criterios divergentes. Ningun cambio se considera Done
+si omite aislamiento, casos negativos, contratos/migraciones, seguridad,
+observabilidad, documentacion o demostracion en `release` segun esa fuente.
