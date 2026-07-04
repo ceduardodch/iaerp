@@ -20,8 +20,8 @@ alcance y las decisiones.
 | Fase | Estado | Evidencia o siguiente puerta |
 | --- | --- | --- |
 | Sprint 0 | Aprobado | Documentos, ADR, contratos y backlog inicial |
-| Sprint 1 | En progreso | Plataforma ejecutable; faltan cierres indicados abajo |
-| Sprint 2 | No iniciado | Facturacion, nota de credito y SRI |
+| Sprint 1 | Done | CI verde run 28705977016; criterios con evidencia |
+| Sprint 2 | En progreso | Facturacion, nota de credito y SRI |
 | Sprint 3 | No iniciado | Cuentas por cobrar |
 | Sprint 4 | No iniciado | Cuentas por pagar |
 | Sprint 5 | No iniciado | Agente, dashboard y migracion piloto |
@@ -152,8 +152,11 @@ debe mantener validacion estricta de audience/resource en API y MCP.
   condicional con dos brechas, ambas atendidas en la misma sesion: (a) se
   agrego la prueba de reflow a 320 CSS px y 200% zoom en `a11y.spec.ts`
   (aprobada en escritorio y movil) y (b) `test:e2e:oidc` ahora corre en ambos
-  viewports. La unica evidencia restante para el GO es un run verde del CI en
-  GitHub con artefactos publicados, que requiere push autorizado por un humano.
+  viewports. La condicion final quedo cumplida el 2026-07-04 con el push
+  autorizado a `release` y el primer run verde del CI (run 28705977016, seis
+  jobs incluidos OIDC full stack y seguridad, artefactos publicados):
+  https://github.com/ceduardodch/iaerp/actions/runs/28705977016
+  Sprint 1 queda marcado como Done.
 - Observaciones menores del QA sin bloquear: los specs de a11y usan API
   mockeada; `pytest-randomly` valido la independencia de orden pero no esta en
   la configuracion permanente del proyecto.

@@ -2,7 +2,10 @@
 
 ## Estado
 
-In progress.
+Done (2026-07-04). Todos los criterios de aceptacion tienen evidencia; QA
+Reliability levanto su condicion final con el primer run verde del CI en
+GitHub (run 28705977016, seis jobs aprobados incluido el stack OIDC completo):
+https://github.com/ceduardodch/iaerp/actions/runs/28705977016
 
 Corte del 3 de julio de 2026:
 
