@@ -610,7 +610,10 @@ function NewInvoiceForm({
           establishmentId: payload.establishmentId,
           emissionPointId: payload.emissionPointId,
           issueDate: payload.issueDate,
-          installments: [{ dueDate: payload.issueDate, amount: '0.01' }],
+          // Sin plan de pago: el backend crea una sola cuota al contado por el
+          // total. La UI nunca calcula el total, asi que no puede declarar
+          // cuotas que cuadren; las omite y deja que el backend las derive.
+          installments: [],
           lines: payload.lines,
         }),
       }),

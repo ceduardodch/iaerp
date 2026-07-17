@@ -54,7 +54,13 @@ class InvoiceInput(APIModel):
     establishment_id: uuid.UUID
     emission_point_id: uuid.UUID
     issue_date: date
-    installments: list[InstallmentInput] = Field(min_length=1)
+    # Plan de pago opcional. Si se omite (o llega vacio), el backend crea una
+    # sola cuota al contado por el total con vencimiento en la fecha de
+    # emision. Si se declara, la suma debe cuadrar exactamente con el total
+    # recalculado por el backend. Esto permite que un cliente simple (la UI,
+    # que nunca calcula el total) emita sin declarar cuotas, y que un plan de
+    # pago multiple siga siendo posible.
+    installments: list[InstallmentInput] = Field(default_factory=list)
     lines: list[InvoiceLineInput] = Field(min_length=1)
 
 

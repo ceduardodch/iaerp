@@ -273,17 +273,27 @@ async def create_invoice_draft(
 
     calculation = policy.calculate_document(line_inputs)
 
-    installment_total = sum(
-        (installment.amount for installment in data.installments), Decimal("0.00")
-    )
-    if installment_total != calculation.total:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "installments must sum exactly to the invoice total: "
-                f"expected {calculation.total}, got {installment_total}"
-            ),
+    # Plan de pago: si el cliente declara cuotas, deben sumar exactamente el
+    # total recalculado por el backend. Si no declara ninguna, se asume una
+    # sola cuota al contado por el total con vencimiento en la fecha de emision
+    # (el cliente no necesita conocer el total de antemano).
+    if data.installments:
+        installment_total = sum(
+            (installment.amount for installment in data.installments), Decimal("0.00")
         )
+        if installment_total != calculation.total:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "installments must sum exactly to the invoice total: "
+                    f"expected {calculation.total}, got {installment_total}"
+                ),
+            )
+        installments_to_persist = [
+            (installment.due_date, installment.amount) for installment in data.installments
+        ]
+    else:
+        installments_to_persist = [(data.issue_date, calculation.total)]
 
     sequential = await _reserve_sequential(
         session,
@@ -333,14 +343,14 @@ async def create_invoice_draft(
             )
         )
 
-    for sequence, installment in enumerate(data.installments, start=1):
+    for sequence, (due_date, amount) in enumerate(installments_to_persist, start=1):
         session.add(
             SalesDocumentInstallment(
                 tenant_id=context.tenant_id,
                 sales_document_id=document.id,
                 sequence=sequence,
-                due_date=installment.due_date,
-                amount=installment.amount,
+                due_date=due_date,
+                amount=amount,
             )
         )
 

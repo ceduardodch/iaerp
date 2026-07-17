@@ -22,7 +22,7 @@ alcance y las decisiones.
 | Sprint 0 | Aprobado | Documentos, ADR, contratos y backlog inicial |
 | Sprint 1 | Done | CI verde run 28705977016; criterios con evidencia |
 | Sprint 2 | Done | Ciclo SRI simulado completo verificado en vivo 2026-07-04 |
-| Sprint 3 | En progreso | Cartera E5 + E7 MCP completos; falta dataset y QA en vivo |
+| Sprint 3 | En progreso | Cartera E5 + E7 MCP; commiteado en release (ef1c427); falta dataset, QA en vivo y deploy staging |
 | Sprint 4 | No iniciado | Cuentas por pagar |
 | Sprint 5 | No iniciado | Agente, dashboard y migracion piloto |
 | Sprint 6 | No iniciado | Estabilizacion y produccion |

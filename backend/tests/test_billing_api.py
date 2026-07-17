@@ -235,6 +235,49 @@ async def test_create_invoice_draft_persists_installments(client):
     assert rows[1].due_date.isoformat() == "2026-09-04"
 
 
+async def test_create_invoice_draft_without_installments_defaults_to_single_contado(client):
+    """Sin plan de pago, el backend crea una sola cuota al contado = total.
+
+    La UI nunca calcula el total, asi que emite sin declarar cuotas; el backend
+    deriva una unica cuota por el total con vencimiento en la fecha de emision.
+    """
+
+    from app.models.billing import SalesDocumentInstallment
+
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(client, token, key_prefix="draft-no-installments")
+    token_invoices = await token_for(client, "a@iaerp.local", TENANT_A, ["invoices:write"])
+
+    payload = _invoice_payload(masters, installments=[])
+    response = await client.post(
+        "/api/v1/invoices",
+        headers=auth(token_invoices, "invoice-draft-no-installments-0001"),
+        json=payload,
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    document_id = body["id"]
+
+    async with SessionFactory() as session:
+        rows = list(
+            (
+                await session.scalars(
+                    select(SalesDocumentInstallment).where(
+                        SalesDocumentInstallment.sales_document_id == uuid.UUID(document_id)
+                    )
+                )
+            ).all()
+        )
+    assert len(rows) == 1
+    assert rows[0].amount == Decimal(body["total"])
+    assert rows[0].due_date.isoformat() == "2026-07-04"
+
+
 async def test_create_invoice_draft_rejects_installments_not_summing_to_total(client):
     token = await token_for(
         client,
