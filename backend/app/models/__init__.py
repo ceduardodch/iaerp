@@ -1,3 +1,12 @@
+from app.models.billing import (
+    DocumentArtifact,
+    DocumentRelation,
+    SalesDocument,
+    SalesDocumentInstallment,
+    SalesDocumentLine,
+    Sequence,
+    SRITransmission,
+)
 from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag, TaxCategory
 from app.models.platform import (
     AuditEvent,
@@ -10,18 +19,35 @@ from app.models.platform import (
     Tenant,
     User,
 )
+from app.models.receivables import (
+    CustomerCredit,
+    Movement,
+    Receivable,
+    ReceivableInstallment,
+)
 
 __all__ = [
     "AuditEvent",
     "AutomationSettings",
+    "CustomerCredit",
+    "DocumentArtifact",
+    "DocumentRelation",
     "EmissionPoint",
     "Establishment",
     "IdempotencyRecord",
     "Membership",
+    "Movement",
     "OperationRecord",
     "OutboxEvent",
     "Party",
     "Product",
+    "Receivable",
+    "ReceivableInstallment",
+    "SRITransmission",
+    "SalesDocument",
+    "SalesDocumentInstallment",
+    "SalesDocumentLine",
+    "Sequence",
     "ServiceAccount",
     "Tag",
     "TaxCategory",

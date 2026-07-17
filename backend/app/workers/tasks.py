@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 
 from celery.signals import worker_process_shutdown
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import engine
 from app.workers.celery_app import celery_app
 from app.workers.outbox import OutboxMessage, consume_once
+from app.workers.receivables import CONSUMER_NAME as RECEIVABLES_CONSUMER
+from app.workers.receivables import handle_credit_note_authorized, handle_invoice_authorized
+from app.workers.sri_transmission import CONSUMER_NAME as SRI_TRANSMISSION_CONSUMER
+from app.workers.sri_transmission import CREDIT_NOTE_AUTHORIZED_EVENT, handle_invoice_signed
 
 # Un event loop por proceso del worker: asyncio.run crearia un loop nuevo por
 # task y las conexiones del pool asyncpg quedarian atadas a un loop cerrado
@@ -38,6 +42,27 @@ async def _acknowledge_event(
     return None
 
 
+Handler = Callable[[AsyncSession, OutboxMessage], Awaitable[None]]
+
+# Ruteo por event_type: cada entrada declara el consumer_name (para el
+# aislamiento at-least-once de InboxEvent, ver workers/outbox.consume_once) y
+# el handler a invocar. Eventos sin entrada aqui caen al no-op historico
+# (_acknowledge_event bajo "iaerp.default"), preservando compatibilidad con
+# los eventos ya emitidos por otros modulos (parties.created, etc.) que no
+# tienen un consumidor dedicado todavia.
+_HANDLERS_BY_EVENT_TYPE: dict[str, tuple[str, Handler]] = {
+    "invoice.signed": (SRI_TRANSMISSION_CONSUMER, handle_invoice_signed),
+    "invoice.authorized": (RECEIVABLES_CONSUMER, handle_invoice_authorized),
+    CREDIT_NOTE_AUTHORIZED_EVENT: (RECEIVABLES_CONSUMER, handle_credit_note_authorized),
+}
+
+_DEFAULT_CONSUMER_NAME = "iaerp.default"
+
+
+def _resolve_consumer(event_type: str) -> tuple[str, Handler]:
+    return _HANDLERS_BY_EVENT_TYPE.get(event_type, (_DEFAULT_CONSUMER_NAME, _acknowledge_event))
+
+
 @celery_app.task(name="iaerp.consume_event")  # type: ignore[untyped-decorator]
 def consume_event(
     *,
@@ -60,10 +85,11 @@ def consume_event(
         correlation_id=correlation_id,
         attempts=attempts,
     )
+    consumer_name, handler = _resolve_consumer(event_type)
     return _run(
         consume_once(
-            consumer_name="iaerp.default",
+            consumer_name=consumer_name,
             message=message,
-            handler=_acknowledge_event,
+            handler=handler,
         )
     )

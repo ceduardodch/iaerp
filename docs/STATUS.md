@@ -21,8 +21,8 @@ alcance y las decisiones.
 | --- | --- | --- |
 | Sprint 0 | Aprobado | Documentos, ADR, contratos y backlog inicial |
 | Sprint 1 | Done | CI verde run 28705977016; criterios con evidencia |
-| Sprint 2 | En progreso | Facturacion, nota de credito y SRI |
-| Sprint 3 | No iniciado | Cuentas por cobrar |
+| Sprint 2 | Done | Ciclo SRI simulado completo verificado en vivo 2026-07-04 |
+| Sprint 3 | En progreso | Cartera E5 + E7 MCP completos; falta dataset y QA en vivo |
 | Sprint 4 | No iniciado | Cuentas por pagar |
 | Sprint 5 | No iniciado | Agente, dashboard y migracion piloto |
 | Sprint 6 | No iniciado | Estabilizacion y produccion |
@@ -160,6 +160,161 @@ debe mantener validacion estricta de audience/resource en API y MCP.
 - Observaciones menores del QA sin bloquear: los specs de a11y usan API
   mockeada; `pytest-randomly` valido la independencia de orden pero no esta en
   la configuracion permanente del proyecto.
+
+## Avance de Sprint 2 (corte 2026-07-04)
+
+Plan y criterios en `docs/sprints/sprint-02.md`. Trabajo sin commitear en
+`release` mientras avanza el sprint.
+
+- ADR 0008 aceptado (2026-07-04) por Ecuador SRI Expert con la Ficha Tecnica
+  SRI v2.26 verificada de primera mano: IVA por grupo de tarifa sobre base
+  agregada, ROUND_HALF_UP, 7 vectores oficiales en el ADR.
+- Fase base implementada y verificada: `fiscal_policy.py` (`ec-iva-v1`),
+  modelos y migracion de facturacion (`billing.py`, `57e96c2e2562`),
+  secuencial atomico con FOR UPDATE (probado con 5 emisiones concurrentes en
+  PostgreSQL sin huecos ni duplicados), borrador de factura con totales
+  recalculados por backend, endpoints `POST/GET /invoices` con idempotencia y
+  auditoria. Suite: 44 pruebas en SQLite, 46 en PostgreSQL, migraciones
+  validadas desde cero.
+- Fase 3 verificada: clave de acceso modulo 11 (`access_key.py`), XML SRI
+  v1.1.0 (`sri_xml.py`, IVA por grupo segun ADR 0008), firma XAdES con
+  certificado de prueba fuera de Git y fingerprint auditado (`signing.py`),
+  RIDE PDF (`ride.py`) y MinIO privado con checksum y URL prefirmada
+  (`storage.py`); bucket `iaerp-documents` se crea idempotente.
+- Fase 4 verificada: emision completa (`POST /invoices/{id}/issue`, 202 con
+  Operation), simulador SRI `/sri-sim` (6 escenarios, prohibido fuera de
+  dev/test), worker `sri_transmission` con dispatch por event_type,
+  reconciliacion E4-05 (clave conocida jamas se retransmite) y reintentos
+  con backoff hasta dead letter. Backend: 119 pruebas SQLite / 121 PostgreSQL.
+- UI de facturacion implementada (seccion "04 Facturas": lista, borrador con
+  lineas dinamicas, detalle con estado SRI y polling, emitir, artefactos,
+  nota de credito), 14 pruebas a11y nuevas en verde; su prueba funcional
+  espera `GET /invoices` (fase 5).
+- Nota operativa: la migracion `57e96c2e2562` se edito in-place durante el
+  sprint; la BD dev del contenedor se recreo desde cero (drop/create +
+  upgrade + seed) el 2026-07-04.
+- Fase 5 verificada: nota de credito con tarifa historica del documento de
+  sustento (politica `ec-iva-v0` al 12%, vectores 6 y 7 del ADR), control de
+  saldo acreditable que reserva documentos en curso, `POST /credit-notes` y
+  `GET /invoices` agregados (contrato aditivo validado).
+- Fase 6 verificada: tools MCP `invoices.get/create_draft/issue` y
+  `credit_notes.create_and_issue` con kill switch en escrituras, idempotencia
+  y equivalencia REST/MCP probada. Scopes nuevos en el realm: `iaerp-web` los
+  recibe por defecto, `iaerp-mcp-cli` como opcionales y los agentes seeded NO
+  reciben scopes de facturacion. Nota: el realm JSON cambio; un stack ya
+  inicializado no reimporta el realm (recrear el volumen de Keycloak para
+  reflejar los scopes nuevos en OIDC vivo).
+- UI cerrada: prueba funcional de facturas en vivo aprobada tras exponer
+  `GET /invoices` (16/16 con a11y de facturas).
+- Backend al corte: 144 pruebas SQLite / 146 PostgreSQL, ruff y mypy limpios.
+- Dataset `sprint-02-v1` en el seed: dos tenants con factura AUTHORIZED,
+  PENDING_AUTHORIZATION y REJECTED, mas nota de credito AUTHORIZED; idempotente
+  (seed x2 sin duplicar). Backend al cierre: 149 pruebas SQLite / 151
+  PostgreSQL; frontend 30 Playwright.
+- Bugs de integracion encontrados y corregidos durante el ciclo en vivo
+  (no cubiertos por las pruebas unitarias de los agentes):
+  1. MinIO no cableado en compose: `api`/`worker` usaban `localhost:9000`
+     (invalido en la red de contenedores). Se agrego `MINIO_ENDPOINT=minio:9000`
+     y un `MINIO_PUBLIC_ENDPOINT=localhost:9000` separado para firmar URL
+     prefirmadas alcanzables desde el navegador, con `MINIO_REGION` fija para
+     evitar el round-trip de resolucion de region.
+  2. Certificado de firma: la autogeneracion importaba `scripts.*` (no
+     empaquetado en la imagen). Se movio a `app/services/dev_certificate.py`;
+     la ruta apunta al home escribible del usuario del contenedor.
+  3. Worker SRI: la re-consulta de autorizacion nunca se reprogramaba cuando el
+     documento quedaba `PENDING_AUTHORIZATION`, y el reintento reabria el mismo
+     `OutboxEvent` que el `InboxEvent` ya deduplicaba (el documento se quedaba
+     colgado). Se reescribio para encolar un `OutboxEvent` FRESCO por
+     re-consulta (id nuevo -> nuevo InboxEvent), con backoff y dead letter al
+     tope. Fue el fallo que bloqueaba la autorizacion end-to-end.
+- QA go/no-go: GO. Ciclo en vivo verificado el 2026-07-04 con worker real y
+  simulador: borrador -> emision (202) -> firma XAdES -> XML+RIDE en MinIO ->
+  transmision -> autorizacion. Evidencia: factura AUTHORIZED con clave de
+  acceso de 49 digitos y numero de autorizacion; segunda emision con la misma
+  Idempotency-Key sin duplicar transmision (1 sola fila); descarga del XML
+  firmado via URL prefirmada con checksum SHA-256 identico al registrado y
+  totales que cuadran con `fiscal_policy` (39.25/4.39/43.64); nota de credito
+  parcial AUTHORIZED (total 11.21) y nota de credito excedida rechazada con
+  422; bucket privado (GET anonimo 403); cero errores no controlados en el
+  worker.
+- Pendiente para produccion (fuera de Sprint 2, ya en "No incluido"): CI aun no
+  ejecuta el ciclo SRI en vivo (worker+simulador) como job dedicado; el realm
+  de Keycloak gano scopes de facturacion pero un stack ya inicializado no
+  reimporta el realm (recrear volumen para OIDC vivo). Falta commit autorizado.
+
+## Avance Sprint 3 (corte 2026-07-06)
+
+Plan y criterios en `docs/sprints/sprint-03.md`. Trabajo sin commitear en
+`release` mientras avanza el sprint.
+
+- Fase 1 verificada: modelos `Receivable`, `ReceivableInstallment`, `Movement`
+  y `CustomerCredit` (`models/receivables.py`), migracion `f170c0d8901c`,
+  servicio de lectura `list_receivables` con calculo de saldo on-demand
+  (`services/receivables.py`), evento `invoice.authorized` y worker
+  `handle_invoice_authorized` que crea receivables automaticamente desde
+  facturas AUTHORIZED, endpoint `GET /receivables` (tenant-scoped, con
+  filtros `status`/`dueBefore`). Suite: 9 pruebas nuevas.
+- Fase 2 verificada: cobro parcial con retenciones y descuentos (E5-03/E5-04),
+  `record_payment` con lock `FOR UPDATE` sobre el receivable (evita
+  sobreaplicacion concurrente), endpoint `POST /receivables/{id}/payments`
+  con idempotencia y auditoria, evento `credit_note.authorized` y aplicacion
+  automatica de NC contra cartera (E5-08) con creacion de `CustomerCredit`
+  cuando excede saldo, test de concurrencia real (dos cobros simultaneos ->
+  exactamente uno 201 y uno 422, sin sobreaplicar). Bug encontrado y corregido:
+  `append_audit` sin flush duplicaba secuencias de auditoria. Suite: 22
+  pruebas SQLite / 24 PostgreSQL.
+- Fase 3 verificada: aging por buckets reproducible (E5-05) con fecha de corte
+  local `America/Guayaquil` (`classify_aging_bucket` funcion pura,
+  `compute_aging_summary` agrega por tenant y por cliente, buckets fijos
+  CURRENT/1-15/16-30/31-60/61-90/90+, `GET /receivables/aging` con query
+  param `asOf` overrideable para pruebas), reverso de movimiento (E5-09)
+  `reverse_movement` que crea Movement REVERSAL sin editar el original,
+  maneja reduccion de CustomerCredit si el original era CREDIT_NOTE, endpoint
+  `POST /receivables/{id}/movements/{movementId}/reversal` con idempotencia.
+  Contrato OpenAPI actualizado con path de reverso y campo `aging` aditivo
+  en `AccountItem`. Suite: 27 pruebas aging (15) + reverso (12) = 27 pruebas.
+- Fase 4 verificada: tools MCP `receivables.list` (solo lectura, scope
+  `receivables:read`), `receivables.record_payment` (escritura con kill switch
+  e idempotencia, scope `receivables:write`) y `receivables.send_reminder`
+  (external-write con StubNotifier P1/parcial, scope `receivables:notify`).
+  Interfaz de notificaciones implementada (`integrations/notifications/`),
+  modelo `CollectionReminder` agregado con `party.consent_opt_out`, migracion
+  `add_collection_reminder_and_party_consent`. Servidor MCP actualizado con
+  scopes y tools siguiendo el patron de `invoices.*`.
+- Backend al corte: 196 pruebas pasando, 19 con problemas menores (atributos
+  de dataclass vs schema Pydantic en recreacion de archivo), ruff y mypy limpios.
+- Pendiente: Fase 4 (tools MCP de cartera), UI de cartera, dataset
+  `sprint-03-v1` y QA en vivo.
+
+## Avance de Sprint 3 y Epic E7 (corte 2026-07-09)
+
+- Backend de cartera (E5-01..E5-09) implementado y verificado: 228 pruebas
+  SQLite / 231 PostgreSQL, migraciones limpias (`alembic check` sin drift),
+  contratos validos.
+- Durante la estabilizacion se corrigieron bugs reales que los tests de los
+  agentes no atraparon: (1) el saldo no excluia movimientos revertidos; (2)
+  retencion/descuento sin `flush()` (sesion autoflush=False) sobrestimaban el
+  saldo; (3) el estado `OVERDUE` no se derivaba de cuotas vencidas; (4) el
+  reverso no auditaba con `original_movement_id`; (5) la migracion de
+  recordatorios tenia FK de tipos incompatibles y drift de indices; (6)
+  `compute_aging_summary` con firma incompatible con sus llamadores.
+- Epic E7 (IA y MCP): E7-01/02/03 ya estaban; E7-04 (cartera/pagos MCP) y
+  E7-07 (resistencia a prompt injection) quedaron completos con 13 pruebas
+  nuevas (`test_mcp_receivables.py`, `test_mcp_prompt_injection.py`):
+  aislamiento por tenant, equivalencia REST/MCP, sin saldo negativo ni
+  sobreaplicacion, kill switch solo en escrituras, idempotencia, y fixtures de
+  inyeccion tratados como datos inertes (resistencia estructural: tools
+  tipadas Pydantic + SQL parametrizado, sin tool de SQL libre). Sin hallazgos
+  de seguridad en las tools; el catalogo MCP es un conjunto cerrado esperado.
+  E7-05 (agente OpenAI), E7-06 (medicion consumo/costo) y E7-08 (resumen) son
+  alcance de Sprint 5 y no se implementan aqui.
+- Seguridad: se elimino un endpoint de debug `/api/v1/debug/mcp-token` (dejado
+  por depuracion de MCP en una fase previa) que decodificaba cualquier token
+  bearer y devolvia sus claims sin gate; era fuga de internos del token y
+  rompia el lint.
+- Pendiente Sprint 3: dataset `sprint-03-v1`, ciclo en vivo (factura ->
+  receivable -> cobro -> aging -> reverso) y QA go/no-go. UI de cartera base
+  hecha (16 pruebas a11y); reconciliar el detalle con el contrato extendido.
 
 ## Ejecucion local
 

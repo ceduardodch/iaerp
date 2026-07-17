@@ -23,7 +23,7 @@ def canonical_hash(value: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-async def _append_audit(
+async def append_audit(
     session: AsyncSession,
     *,
     context: AuthContext,
@@ -83,6 +83,7 @@ async def execute_idempotent(
     action: str,
     entity_type: str,
     callback: Callable[[], Awaitable[tuple[str, dict[str, Any]]]],
+    event_type: str | None = None,
 ) -> dict[str, Any]:
     request_hash = canonical_hash(request_payload)
     correlation_id = str(uuid.uuid4())
@@ -131,7 +132,7 @@ async def execute_idempotent(
         await session.flush()
 
         entity_id, response = await callback()
-        await _append_audit(
+        await append_audit(
             session,
             context=context,
             action=action,
@@ -144,7 +145,7 @@ async def execute_idempotent(
         session.add(
             OutboxEvent(
                 tenant_id=context.tenant_id,
-                event_type=action,
+                event_type=event_type or action,
                 aggregate_type=entity_type,
                 aggregate_id=entity_id,
                 payload={"entity_id": entity_id, "action": action},

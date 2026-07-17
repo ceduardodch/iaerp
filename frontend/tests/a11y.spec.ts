@@ -39,6 +39,9 @@ async function mockApi(page: Page) {
   await page.route('**/api/v1/establishments', (route) =>
     route.fulfill({ json: [] }),
   )
+  await page.route('**/api/v1/emission-points', (route) =>
+    route.fulfill({ json: [] }),
+  )
 }
 
 async function expectNoA11yViolations(page: Page) {

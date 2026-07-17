@@ -36,6 +36,11 @@ app.add_middleware(
 )
 app.include_router(router, prefix=settings.API_PREFIX)
 
+if settings.SRI_SIMULATOR_ENABLED:
+    from app.integrations.sri.simulator import router as sri_simulator_router
+
+    app.include_router(sri_simulator_router)
+
 
 @app.middleware("http")
 async def correlation_middleware(

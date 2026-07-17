@@ -42,6 +42,152 @@ export type Establishment = {
   active: boolean
 }
 
+export type EmissionPoint = {
+  id: string
+  establishmentId: string
+  code: string
+  active: boolean
+}
+
+export type SalesDocumentStatus =
+  | 'DRAFT'
+  | 'READY'
+  | 'SIGNED'
+  | 'RECEIVED'
+  | 'PENDING_AUTHORIZATION'
+  | 'AUTHORIZED'
+  | 'REJECTED'
+  | 'FAILED'
+  | 'VOIDED'
+
+export type SalesDocumentLine = {
+  id: string
+  lineNumber: number
+  productId: string | null
+  description: string
+  quantity: string
+  unitPrice: string
+  discount: string
+  baseAmount: string
+  taxCode: string
+  taxRate: string
+  taxAmount: string
+}
+
+export type SriTransmission = {
+  status: string
+  message?: string | null
+  authorizationNumber?: string | null
+  lastAttemptAt?: string | null
+}
+
+export type SalesDocument = {
+  id: string
+  type: 'INVOICE' | 'CREDIT_NOTE'
+  status: SalesDocumentStatus
+  sequential: string
+  issueDate: string
+  accessKey: string | null
+  subtotal: string
+  tax: string
+  total: string
+  currency: string
+  partyId: string
+  establishmentId: string
+  emissionPointId: string
+  establishmentCode?: string
+  emissionPointCode?: string
+  reason: string | null
+  lines: SalesDocumentLine[]
+  sriTransmission?: SriTransmission | null
+}
+
+export type InvoiceLineInput = {
+  productId?: string | null
+  description: string
+  quantity: string
+  unitPrice: string
+  discount?: string
+  taxCode: string
+}
+
+export type InvoiceInput = {
+  customerId: string
+  establishmentId: string
+  emissionPointId: string
+  issueDate: string
+  installments: Array<{ dueDate: string; amount: string }>
+  lines: InvoiceLineInput[]
+}
+
+export type CreditNoteInput = {
+  invoiceId: string
+  reason: string
+  lines: InvoiceLineInput[]
+}
+
+export type Operation = {
+  operationId: string
+  status: 'ACCEPTED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'BLOCKED'
+  correlationId: string
+  createdAt: string
+  expiresAt: string
+  result?: Record<string, unknown> | null
+}
+
+export type DocumentArtifact = {
+  id: string
+  artifactType: 'xml-signed' | 'ride-pdf'
+  sha256: string
+  version: number
+  createdAt: string
+}
+
+export type ArtifactDownload = {
+  downloadUrl: string
+  expiresInSeconds: number
+}
+
+export type AccountItemStatus = 'OPEN' | 'PARTIAL' | 'OVERDUE' | 'SETTLED' | 'VOIDED'
+
+export type AccountItem = {
+  id: string
+  partyId: string
+  status: AccountItemStatus
+  originalAmount: string
+  openAmount: string
+  currency: string
+  dueDate?: string | null
+}
+
+export type PaymentMethod = 'TRANSFER' | 'CHECK' | 'CASH' | 'CARD' | 'OTHER'
+
+export type RetentionInput = {
+  kind: 'RETENTION_IVA' | 'RETENTION_RENTA' | 'OTHER'
+  amount: string
+  reason: string
+  documentReference?: string | null
+}
+
+export type DiscountInput = {
+  amount: string
+  reason: string
+}
+
+export type PaymentInput = {
+  cashAmount: string
+  paymentDate: string
+  method?: PaymentMethod | null
+  reference?: string | null
+  retentions: RetentionInput[]
+  discounts: DiscountInput[]
+}
+
+export type ReminderInput = {
+  channel: 'EMAIL' | 'WHATSAPP'
+  templateId: string
+}
+
 export class ApiError extends Error {
   readonly status: number
 

@@ -109,6 +109,7 @@ class Party(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     email: Mapped[str | None] = mapped_column(String(320))
     phone: Mapped[str | None] = mapped_column(String(40))
     address: Mapped[str | None] = mapped_column(String(500))
+    consent_opt_out: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 

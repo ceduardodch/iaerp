@@ -506,6 +506,36 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
   /invoices:
+    get:
+      operationId: listInvoices
+      summary: Listar facturas y notas de credito del tenant
+      security:
+        - oauth2: ["invoices:read"]
+      parameters:
+        - name: q
+          in: query
+          description: Coincidencia parcial de secuencial o clave de acceso.
+          schema:
+            type: string
+            minLength: 2
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, READY, SIGNED, RECEIVED, PENDING_AUTHORIZATION, AUTHORIZED, NOT_AUTHORIZED, REJECTED, FAILED, VOIDED]
+      responses:
+        "200":
+          description: Resultados (maximo 100)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalesDocument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       operationId: createInvoiceDraft
       summary: Crear borrador de factura
@@ -630,6 +660,107 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /receivables/aging:
+    get:
+      operationId: getReceivablesAging
+      summary: Resumen de aging de cartera por bucket de vencimiento (E5-05)
+      description: >-
+        Aditivo (Sprint 3 Fase 3). Clasifica el saldo abierto de cada cuota
+        por bucket de vencimiento respecto a una fecha de corte local
+        (America/Guayaquil). Reproducible: mismos datos + mismo asOf =>
+        mismo resultado.
+      security:
+        - oauth2: ["receivables:read"]
+      parameters:
+        - name: asOf
+          in: query
+          description: >-
+            Fecha de corte local para el calculo de aging. Por defecto hoy
+            en America/Guayaquil; se puede fijar para reproducibilidad en
+            pruebas.
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Resumen de aging
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgingSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /receivables/{receivableId}:
+    get:
+      operationId: getReceivable
+      summary: Consultar el detalle de un receivable
+      security:
+        - oauth2: ["receivables:read"]
+      parameters:
+        - $ref: "#/components/parameters/ReceivableId"
+        - name: asOf
+          in: query
+          description: >-
+            Aditivo (Sprint 3 Fase 3). Fecha de corte local para el bucket de
+            aging y el status OVERDUE derivado; por defecto hoy en
+            America/Guayaquil.
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Receivable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Receivable no encontrado
+  /receivables/{receivableId}/movements/{movementId}/reversal:
+    post:
+      operationId: reverseReceivableMovement
+      summary: Revertir un movimiento como compensacion auditada (E5-09)
+      description: >-
+        Aditivo (Sprint 3 Fase 3). Crea un Movement tipo REVERSAL que
+        referencia el original via reversedMovementId; el original nunca se
+        edita ni se borra. No se puede revertir un REVERSAL ni un movimiento
+        ya revertido. No expuesto como tool MCP en este sprint (solo
+        REST/UI humana).
+      security:
+        - oauth2: ["receivables:write"]
+      parameters:
+        - $ref: "#/components/parameters/ReceivableId"
+        - $ref: "#/components/parameters/MovementId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReversalInput"
+      responses:
+        "201":
+          description: Movimiento revertido, saldo actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Receivable o movimiento no encontrado
+        "422":
+          description: >-
+            El movimiento ya fue revertido, o el movimiento es en si mismo
+            un REVERSAL
   /receivables/{receivableId}/payments:
     post:
       operationId: recordCustomerPayment
@@ -656,6 +787,29 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /receivables/{receivableId}/movements:
+    get:
+      operationId: listReceivableMovements
+      summary: Listar el historial de movimientos de un receivable
+      security:
+        - oauth2: ["receivables:read"]
+      parameters:
+        - $ref: "#/components/parameters/ReceivableId"
+      responses:
+        "200":
+          description: Movimientos (cobros, retenciones, descuentos, notas de credito, reversos)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Movement"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Receivable no encontrado
   /receivables/{receivableId}/reminders:
     post:
       operationId: sendCollectionReminder
@@ -916,6 +1070,13 @@ components:
         format: uuid
     ReceivableId:
       name: receivableId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MovementId:
+      name: movementId
       in: path
       required: true
       schema:
@@ -1322,7 +1483,7 @@ components:
           enum: [INVOICE, CREDIT_NOTE]
         status:
           type: string
-          enum: [DRAFT, READY, SIGNED, RECEIVED, PENDING_AUTHORIZATION, AUTHORIZED, REJECTED, FAILED, VOIDED]
+          enum: [DRAFT, READY, SIGNED, RECEIVED, PENDING_AUTHORIZATION, AUTHORIZED, NOT_AUTHORIZED, REJECTED, FAILED, VOIDED]
         sequential:
           type: string
           pattern: "^[0-9]{9}$"
@@ -1337,6 +1498,79 @@ components:
         tax:
           $ref: "#/components/schemas/NonNegativeDecimal"
         total:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        currency:
+          type: string
+          const: USD
+        partyId:
+          type: string
+          format: uuid
+        establishmentId:
+          type: string
+          format: uuid
+        emissionPointId:
+          type: string
+          format: uuid
+        fiscalPolicyVersion:
+          type: string
+        reason:
+          type: [string, "null"]
+        authorizationNumber:
+          type: [string, "null"]
+        authorizedAt:
+          type: [string, "null"]
+          format: date-time
+        sriTransmission:
+          anyOf:
+            - $ref: "#/components/schemas/SRITransmission"
+            - type: "null"
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/SalesDocumentLine"
+    SRITransmission:
+      type: object
+      additionalProperties: false
+      required: [status, lastAttemptAt]
+      properties:
+        status:
+          type: string
+          enum: [PENDING, RECEIVED, PENDING_AUTHORIZATION, AUTHORIZED, NOT_AUTHORIZED, REJECTED, FAILED]
+        message:
+          type: [string, "null"]
+        lastAttemptAt:
+          type: string
+          format: date-time
+        authorizationNumber:
+          type: [string, "null"]
+    SalesDocumentLine:
+      type: object
+      additionalProperties: false
+      required: [id, lineNumber, description, quantity, unitPrice, discount, baseAmount, taxCode, taxRate, taxAmount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        lineNumber:
+          type: integer
+        productId:
+          type: [string, "null"]
+          format: uuid
+        description:
+          type: string
+        quantity:
+          $ref: "#/components/schemas/QuantityDecimal"
+        unitPrice:
+          $ref: "#/components/schemas/UnitPriceDecimal"
+        discount:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        baseAmount:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        taxCode:
+          type: string
+        taxRate:
+          type: string
+        taxAmount:
           $ref: "#/components/schemas/NonNegativeDecimal"
     AccountItem:
       type: object
@@ -1362,6 +1596,14 @@ components:
         dueDate:
           type: [string, "null"]
           format: date
+        aging:
+          description: >-
+            Aditivo (Sprint 3 Fase 3, E5-05). Bucket de mora del receivable
+            (el peor entre sus cuotas abiertas); null/omitido si no hay
+            cuotas abiertas en mora.
+          oneOf:
+            - $ref: "#/components/schemas/Aging"
+            - type: "null"
     PaymentInput:
       type: object
       additionalProperties: false
@@ -1411,6 +1653,110 @@ components:
         reason:
           type: string
           minLength: 3
+    Movement:
+      type: object
+      additionalProperties: false
+      description: Aplicacion sobre una cuota de un receivable (cobro, retencion, descuento, nota de credito o reverso).
+      required: [id, receivableId, installmentId, movementType, amount, actorId, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        receivableId:
+          type: string
+          format: uuid
+        installmentId:
+          type: string
+          format: uuid
+        movementType:
+          type: string
+          enum: [PAYMENT, RETENTION, DISCOUNT, CREDIT_NOTE, REVERSAL]
+        amount:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        supportReference:
+          type: [string, "null"]
+        reversedMovementId:
+          type: [string, "null"]
+          format: uuid
+        actorId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ReversalInput:
+      type: object
+      additionalProperties: false
+      description: >-
+        Aditivo (Sprint 3 Fase 3, E5-09). El motivo es obligatorio y queda
+        auditado junto con el movimiento original revertido.
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+    Aging:
+      type: object
+      additionalProperties: false
+      description: >-
+        Aditivo (Sprint 3 Fase 3, E5-05). Bucket de mora fijo y determinista
+        respecto a una fecha de corte local (America/Guayaquil).
+      required: [bucket, daysOverdue]
+      properties:
+        bucket:
+          type: string
+          enum: [CURRENT, "1-15", "16-30", "31-60", "61-90", "90+"]
+        daysOverdue:
+          type: integer
+          minimum: 0
+    AgingBucketTotal:
+      type: object
+      additionalProperties: false
+      required: [bucket, total, installmentCount]
+      properties:
+        bucket:
+          type: string
+          enum: [CURRENT, "1-15", "16-30", "31-60", "61-90", "90+"]
+        total:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        installmentCount:
+          type: integer
+          minimum: 0
+    PartyAgingBucketTotal:
+      type: object
+      additionalProperties: false
+      required: [partyId, bucket, total, installmentCount]
+      properties:
+        partyId:
+          type: string
+          format: uuid
+        bucket:
+          type: string
+          enum: [CURRENT, "1-15", "16-30", "31-60", "61-90", "90+"]
+        total:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        installmentCount:
+          type: integer
+          minimum: 0
+    AgingSummary:
+      type: object
+      additionalProperties: false
+      description: >-
+        Aditivo (Sprint 3 Fase 3, E5-05). Resumen de aging por tenant,
+        calculado on-demand sobre las cuotas abiertas; reproducible con la
+        misma fecha de corte (asOf).
+      required: [asOf, buckets, byParty]
+      properties:
+        asOf:
+          type: string
+          format: date
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgingBucketTotal"
+        byParty:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartyAgingBucketTotal"
     InstallmentInput:
       type: object
       additionalProperties: false

@@ -43,8 +43,19 @@ def _redact_error(exc: BaseException) -> str:
     return value[:1000]
 
 
-def _retry_delay(attempts: int) -> timedelta:
+def retry_delay(attempts: int) -> timedelta:
+    """Backoff exponencial (base 2, tope 300s) segun el numero de intentos.
+
+    Publica (sin guion bajo) porque ``workers/sri_transmission.py`` la
+    reutiliza para reprogramar su propio ``OutboxEvent`` ante un fallo tecnico
+    (TIMEOUT del simulador/SRI), en vez de duplicar la formula de backoff.
+    """
+
     return timedelta(seconds=min(2 ** max(attempts - 1, 0), 300))
+
+
+# Alias retrocompatible: el resto de este modulo ya usaba el nombre privado.
+_retry_delay = retry_delay
 
 
 async def claim_outbox_batch(

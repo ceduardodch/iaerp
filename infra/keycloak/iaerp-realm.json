@@ -287,6 +287,38 @@
         "include.in.token.scope": "true",
         "display.on.consent.screen": "false"
       }
+    },
+    {
+      "name": "invoices:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "invoices:write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "invoices:issue",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "credit-notes:issue",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
     }
   ],
   "clients": [
@@ -322,7 +354,11 @@
         "parties:read",
         "parties:write",
         "products:read",
-        "products:write"
+        "products:write",
+        "invoices:read",
+        "invoices:write",
+        "invoices:issue",
+        "credit-notes:issue"
       ],
       "optionalClientScopes": [
         "organization"
@@ -363,12 +399,16 @@
       "defaultClientScopes": [
         "context:read",
         "parties:read",
-        "products:read"
+        "products:read",
+        "invoices:read"
       ],
       "optionalClientScopes": [
         "organization",
         "parties:write",
-        "products:write"
+        "products:write",
+        "invoices:write",
+        "invoices:issue",
+        "credit-notes:issue"
       ],
       "protocolMappers": [
         {

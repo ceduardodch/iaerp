@@ -7,6 +7,7 @@
 *.p12
 *.pfx
 secrets/
+backend/certs/
 
 # Production and personal data
 uploads/

@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -14,6 +15,13 @@ from app.models.platform import (
     OperationRecord,
     Tenant,
     User,
+)
+from app.schemas.billing import (
+    ArtifactDownloadRead,
+    CreditNoteInput,
+    DocumentArtifactRead,
+    InvoiceInput,
+    SalesDocumentRead,
 )
 from app.schemas.masters import (
     EmissionPointCreate,
@@ -40,8 +48,17 @@ from app.schemas.platform import (
     TenantContextRead,
     TokenResponse,
 )
-from app.services import masters
-from app.services.unit_of_work import execute_idempotent
+from app.schemas.receivables import (
+    AccountItemRead,
+    AgingBucketTotalRead,
+    AgingSummaryRead,
+    MovementRead,
+    PartyAgingBucketTotalRead,
+    PaymentInput,
+    ReversalInput,
+)
+from app.services import billing, masters, receivables
+from app.services.unit_of_work import append_audit, execute_idempotent
 
 router = APIRouter()
 settings = get_settings()
@@ -62,6 +79,13 @@ ALL_DEV_SCOPES = {
     "parties:write",
     "products:read",
     "products:write",
+    "invoices:read",
+    "invoices:write",
+    "invoices:issue",
+    "credit-notes:issue",
+    "receivables:read",
+    "receivables:write",
+    "receivables:notify",
 }
 
 IdempotencyKey = Annotated[
@@ -494,6 +518,474 @@ async def put_automation(
         action="automation_settings.updated",
         entity_type="automation_settings",
         callback=update,
+    )
+
+
+@router.post("/invoices", response_model=SalesDocumentRead, status_code=201)
+async def post_invoice(
+    data: InvoiceInput,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:write"))],
+) -> dict[str, object]:
+    async def create() -> tuple[str, dict[str, object]]:
+        entity = await billing.create_invoice_draft(session, context, data)
+        response_model = await billing.to_sales_document_read(session, context, entity)
+        return (
+            str(entity.id),
+            response_model.model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="invoices.create_draft",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="invoice.draft_created",
+        entity_type="sales_document",
+        callback=create,
+    )
+
+
+@router.get("/invoices", response_model=list[SalesDocumentRead])
+async def get_invoices(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+    q: Annotated[str | None, Query(min_length=2)] = None,
+    status: str | None = None,
+) -> list[SalesDocumentRead]:
+    """Lista facturas y notas de credito del tenant activo.
+
+    Cambio aditivo al contrato (Fase 5): ``q`` filtra por coincidencia parcial
+    de secuencial o clave de acceso, ``status`` por estado exacto. Siempre
+    tenant-scoped y acotado a 100 resultados (``billing.list_sales_documents``),
+    igual que el resto de listados del backend.
+    """
+
+    entities = await billing.list_sales_documents(session, context, query=q, status=status)
+    return [
+        await billing.to_sales_document_read(session, context, entity) for entity in entities
+    ]
+
+
+@router.get("/invoices/{invoice_id}", response_model=SalesDocumentRead)
+async def get_invoice(
+    invoice_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+) -> SalesDocumentRead:
+    entity = await billing.get_sales_document(session, context, invoice_id)
+    return await billing.to_sales_document_read(session, context, entity)
+
+
+@router.get("/invoices/{invoice_id}/artifacts", response_model=list[DocumentArtifactRead])
+async def get_invoice_artifacts(
+    invoice_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+) -> list[DocumentArtifactRead]:
+    return await billing.list_document_artifacts(session, context, invoice_id)
+
+
+@router.get(
+    "/invoices/{invoice_id}/artifacts/{artifact_id}/download",
+    response_model=ArtifactDownloadRead,
+)
+async def get_invoice_artifact_download(
+    invoice_id: uuid.UUID,
+    artifact_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+) -> ArtifactDownloadRead:
+    return await billing.create_artifact_download(session, context, invoice_id, artifact_id)
+
+
+@router.post("/invoices/{invoice_id}/issue", response_model=OperationRead, status_code=202)
+async def post_invoice_issue(
+    invoice_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:write"))],
+) -> dict[str, object]:
+    """Emite una factura: firma sincrona + transmision SRI asincrona (202).
+
+    La firma XAdES-BES, el XML, el RIDE y la subida a MinIO ocurren de forma
+    sincrona dentro de esta llamada (``billing.issue_document``); el
+    ``OperationRecord`` devuelto queda en ``PROCESSING`` porque la
+    transmision/autorizacion SRI las completa
+    ``workers/sri_transmission.py`` de forma asincrona a partir del evento
+    outbox ``invoice.signed`` (ver decision 8 de ``docs/sprints/sprint-02.md``).
+    Repetir la misma ``Idempotency-Key`` devuelve el mismo ``Operation`` sin
+    crear una segunda transmision ni un segundo evento outbox.
+    """
+
+    async def issue() -> tuple[str, dict[str, object]]:
+        correlation_id = str(uuid.uuid4())
+        document = await billing.issue_document(
+            session,
+            context,
+            invoice_id,
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id,
+        )
+        operation = OperationRecord(
+            tenant_id=context.tenant_id,
+            actor_id=context.actor_id,
+            operation_type="invoices.issue",
+            status="PROCESSING",
+            correlation_id=correlation_id,
+            result={"sales_document_id": str(document.id), "status": document.status},
+            expires_at=datetime.now(UTC) + timedelta(hours=24),
+        )
+        session.add(operation)
+        await session.flush()
+        response = OperationRead(
+            operation_id=operation.id,
+            status=operation.status,
+            correlation_id=operation.correlation_id,
+            created_at=operation.created_at,
+            expires_at=operation.expires_at,
+            result=operation.result,
+            error=operation.error,
+        ).model_dump(mode="json", by_alias=True)
+        return str(document.id), response
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="invoices.issue",
+        idempotency_key=idempotency_key,
+        request_payload={"invoice_id": str(invoice_id)},
+        action="invoice.issued",
+        entity_type="sales_document",
+        callback=issue,
+        event_type="invoice.signed",
+    )
+
+
+@router.post("/credit-notes", response_model=OperationRead, status_code=202)
+async def post_credit_note(
+    data: CreditNoteInput,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("credit-notes:issue"))],
+) -> dict[str, object]:
+    """Crea y emite una nota de credito relacionada a una factura AUTHORIZED (202).
+
+    Un unico endpoint cubre creacion + emision (``createAndIssueCreditNote``
+    en ``contracts/openapi.yaml``): valida la factura de sustento y el saldo
+    acreditable (``billing.create_credit_note``), y reutiliza el mismo
+    pipeline sincrono de firma/XML/RIDE/MinIO que una factura
+    (``billing.issue_document``) antes de encolar la transmision SRI via el
+    evento outbox ``invoice.signed``. Se audita ``credit_note.created`` (la
+    creacion y validacion del saldo acreditable) ademas de
+    ``credit_note.issued`` (que ``execute_idempotent`` agrega automaticamente
+    a partir de ``action``). Repetir la misma ``Idempotency-Key`` devuelve el
+    mismo ``Operation`` sin crear una segunda nota de credito, transmision ni
+    evento outbox.
+    """
+
+    async def create_and_issue() -> tuple[str, dict[str, object]]:
+        correlation_id = str(uuid.uuid4())
+        draft = await billing.create_credit_note(session, context, data)
+        await append_audit(
+            session,
+            context=context,
+            action="credit_note.created",
+            entity_type="sales_document",
+            entity_id=str(draft.id),
+            correlation_id=correlation_id,
+            idempotency_key=idempotency_key,
+            details={"related_invoice_id": str(data.invoice_id), "total": str(draft.total)},
+        )
+        document = await billing.issue_document(
+            session,
+            context,
+            draft.id,
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id,
+        )
+        operation = OperationRecord(
+            tenant_id=context.tenant_id,
+            actor_id=context.actor_id,
+            operation_type="credit_notes.create_and_issue",
+            status="PROCESSING",
+            correlation_id=correlation_id,
+            result={"sales_document_id": str(document.id), "status": document.status},
+            expires_at=datetime.now(UTC) + timedelta(hours=24),
+        )
+        session.add(operation)
+        await session.flush()
+        response = OperationRead(
+            operation_id=operation.id,
+            status=operation.status,
+            correlation_id=operation.correlation_id,
+            created_at=operation.created_at,
+            expires_at=operation.expires_at,
+            result=operation.result,
+            error=operation.error,
+        ).model_dump(mode="json", by_alias=True)
+        return str(document.id), response
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="credit_notes.create_and_issue",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="credit_note.issued",
+        entity_type="sales_document",
+        callback=create_and_issue,
+        event_type="invoice.signed",
+    )
+
+
+def _account_item_response(item: AccountItemRead) -> dict[str, object]:
+    return item.model_dump(mode="json", by_alias=True)
+
+
+def _summary_to_account_item(summary: receivables.ReceivableSummary) -> AccountItemRead:
+    return AccountItemRead(
+        id=summary.id,
+        party_id=summary.party_id,
+        status=summary.status,
+        original_amount=summary.original_amount,
+        open_amount=summary.open_amount,
+        currency=summary.currency,
+        due_date=summary.due_date,
+        aging=(
+            {"bucket": summary.aging_bucket, "days_overdue": summary.aging_days_overdue}
+            if summary.aging_bucket is not None
+            else None
+        ),
+    )
+
+
+@router.get("/receivables", response_model=list[AccountItemRead])
+async def get_receivables(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+    status: str | None = None,
+    due_before: Annotated[date | None, Query(alias="dueBefore")] = None,
+) -> list[dict[str, object]]:
+    """Consulta la cartera del tenant activo (Sprint 3, Fase 1: solo lectura).
+
+    ``status``/``dueBefore`` siguen el contrato ya publicado
+    (``contracts/openapi.yaml``); el ``Receivable`` solo existe si fue creado
+    por ``workers/receivables.py::handle_invoice_authorized`` -- no hay
+    endpoint de creacion manual. ``dueBefore`` presente activa el calculo de
+    aging (misma fecha se usa como ``as_of``), igual que en ``receivables.list``
+    (MCP).
+    """
+
+    as_of = due_before if due_before is not None else None
+    items = await receivables.list_receivables(
+        session, tenant_id=context.tenant_id, status=status, as_of=as_of
+    )
+    return [_account_item_response(item) for item in items]
+
+
+@router.get("/receivables/aging", response_model=AgingSummaryRead)
+async def get_receivables_aging(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+    as_of: Annotated[date | None, Query(alias="asOf")] = None,
+) -> dict[str, object]:
+    """Resumen de aging por tenant (Sprint 3 Fase 3: E5-05).
+
+    Declarado ANTES de ``GET /receivables/{receivable_id}`` para que FastAPI
+    no interprete ``aging`` como un ``receivable_id`` invalido: las rutas
+    estaticas deben registrarse antes que las dinamicas con el mismo prefijo.
+    ``asOf`` permite fijar la fecha de corte local (``America/Guayaquil``)
+    para pruebas reproducibles; por defecto es hoy. La logica de
+    clasificacion vive integramente en
+    ``services/receivables.py::compute_aging_summary`` (funcion pura sobre
+    ``classify_aging_bucket``), nunca duplicada aqui.
+    """
+
+    summary = await receivables.compute_aging_summary(session, context=context, as_of=as_of)
+    return AgingSummaryRead(
+        as_of=summary.as_of,
+        buckets=[
+            AgingBucketTotalRead(
+                bucket=bucket.bucket,
+                total=bucket.total,
+                installment_count=bucket.installment_count,
+            )
+            for bucket in summary.buckets
+        ],
+        by_party=[
+            PartyAgingBucketTotalRead(
+                party_id=party_bucket.party_id,
+                bucket=party_bucket.bucket,
+                total=party_bucket.total,
+                installment_count=party_bucket.installment_count,
+            )
+            for party_bucket in summary.by_party
+        ],
+    ).model_dump(mode="json", by_alias=True)
+
+
+@router.get("/receivables/{receivable_id}", response_model=AccountItemRead)
+async def get_receivable(
+    receivable_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+    as_of: Annotated[date | None, Query(alias="asOf")] = None,
+) -> dict[str, object]:
+    """Consulta el detalle de un receivable, incluyendo su bucket de aging.
+
+    ``asOf`` (Sprint 3 Fase 3, aditivo) fija la fecha de corte local usada
+    para derivar ``AccountItem.aging``/``status`` (``OVERDUE``); por defecto
+    hoy en ``America/Guayaquil``. Permite reproducibilidad en pruebas sin
+    depender del reloj real, igual que ``GET /receivables/aging``.
+    """
+
+    entity = await receivables.get_receivable(
+        session, tenant_id=context.tenant_id, receivable_id=receivable_id
+    )
+    summary = await receivables.to_receivable_summary(
+        session, tenant_id=context.tenant_id, receivable=entity, as_of=as_of
+    )
+    return _account_item_response(_summary_to_account_item(summary))
+
+
+@router.get("/receivables/{receivable_id}/movements", response_model=list[MovementRead])
+async def get_receivable_movements(
+    receivable_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+) -> list[dict[str, object]]:
+    """Historial de movimientos de un receivable (cobros, retenciones,
+    descuentos, NC, reversos).
+
+    Necesario para que la UI muestre el drawer de historial
+    (``docs/sprints/sprint-03.md`` decision 10); no declarado en Sprint 0
+    porque ``Movement`` no existia todavia. Aditivo sobre el contrato ya
+    publicado.
+    """
+
+    movements = await receivables.list_movements(
+        session, tenant_id=context.tenant_id, receivable_id=receivable_id
+    )
+    return [
+        MovementRead(
+            id=movement.id,
+            receivable_id=movement.receivable_id,
+            installment_id=movement.installment_id,
+            movement_type=movement.movement_type,
+            amount=movement.amount,
+            support_reference=movement.support_reference,
+            reversed_movement_id=movement.reversed_movement_id,
+            actor_id=movement.actor_id,
+            created_at=movement.created_at,
+        ).model_dump(mode="json", by_alias=True)
+        for movement in movements
+    ]
+
+
+@router.post(
+    "/receivables/{receivable_id}/payments",
+    response_model=AccountItemRead,
+    status_code=201,
+)
+async def post_receivable_payment(
+    receivable_id: uuid.UUID,
+    data: PaymentInput,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:write"))],
+) -> dict[str, object]:
+    """Registra un cobro parcial o total con retenciones y descuentos (E5-03/E5-04).
+
+    Idempotente por ``Idempotency-Key`` (``execute_idempotent``): repetir la
+    misma clave devuelve el mismo ``AccountItem`` sin crear un segundo
+    ``Movement``. La logica de asignacion a cuotas, validacion de saldo y
+    actualizacion de estado vive integramente en
+    ``services/receivables.py::record_payment`` (bajo ``lock_receivable``,
+    ``SELECT ... FOR UPDATE``), nunca duplicada aqui.
+    """
+
+    async def apply_payment() -> tuple[str, dict[str, object]]:
+        correlation_id = str(uuid.uuid4())
+        summary = await receivables.record_payment(
+            session,
+            context,
+            receivable_id,
+            data,
+            correlation_id=correlation_id,
+            idempotency_key=idempotency_key,
+        )
+        return str(receivable_id), _account_item_response(_summary_to_account_item(summary))
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.record_payment",
+        idempotency_key=idempotency_key,
+        request_payload={"receivable_id": str(receivable_id), **data.model_dump(mode="json")},
+        action="receivable.payment_registered",
+        entity_type="receivable",
+        callback=apply_payment,
+    )
+
+
+@router.post(
+    "/receivables/{receivable_id}/movements/{movement_id}/reversal",
+    response_model=AccountItemRead,
+    status_code=201,
+)
+async def post_movement_reversal(
+    receivable_id: uuid.UUID,
+    movement_id: uuid.UUID,
+    data: ReversalInput,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:write"))],
+) -> dict[str, object]:
+    """Revierte un movimiento como compensacion auditada (E5-09).
+
+    Aditivo sobre el contrato publicado (decision 7 del sprint). Idempotente
+    por ``Idempotency-Key`` (``execute_idempotent``): repetir la misma clave
+    devuelve el mismo ``AccountItem`` sin crear un segundo ``REVERSAL``. La
+    logica (validar que el original no sea ya un ``REVERSAL``, que no haya
+    sido revertido antes, el efecto sobre ``CustomerCredit`` si aplica, y el
+    recalculo de saldo) vive integramente en
+    ``services/receivables.py::reverse_movement``, bajo ``lock_receivable``,
+    nunca duplicada aqui. No expuesto como tool MCP en este sprint (decision
+    9: revertir es sensible, se mantiene solo en REST/UI humana).
+    """
+
+    async def apply_reversal() -> tuple[str, dict[str, object]]:
+        correlation_id = str(uuid.uuid4())
+        summary = await receivables.reverse_movement(
+            session,
+            context,
+            receivable_id=receivable_id,
+            movement_id=movement_id,
+            reason=data.reason,
+            correlation_id=correlation_id,
+            idempotency_key=idempotency_key,
+        )
+        return str(receivable_id), _account_item_response(_summary_to_account_item(summary))
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.reverse_movement",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "receivable_id": str(receivable_id),
+            "movement_id": str(movement_id),
+            **data.model_dump(mode="json"),
+        },
+        # La auditoria de dominio ``movement.reversed`` (con original_movement_id)
+        # la escribe el servicio; execute_idempotent audita la operacion con una
+        # accion distinta para no duplicar el mismo evento en el hash-chain.
+        action="receivable.reversal_operation",
+        entity_type="receivable",
+        callback=apply_reversal,
     )
 
 
