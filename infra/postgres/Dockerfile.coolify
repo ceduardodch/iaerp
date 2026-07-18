@@ -1,0 +1,3 @@
+FROM postgres:17.5-alpine
+
+COPY --chmod=755 init-coolify/ /docker-entrypoint-initdb.d/

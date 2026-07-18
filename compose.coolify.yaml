@@ -26,7 +26,9 @@ x-backend-environment: &backend-environment
 
 services:
   postgres:
-    image: postgres:17.5-alpine
+    build:
+      context: ./infra/postgres
+      dockerfile: Dockerfile.coolify
     restart: unless-stopped
     environment:
       POSTGRES_DB: iaerp
@@ -35,7 +37,6 @@ services:
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
     volumes:
       - iaerp-postgres-data:/var/lib/postgresql/data
-      - ./infra/postgres/init-coolify:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U iaerp -d iaerp"]
       interval: 5s
@@ -73,7 +74,9 @@ services:
       retries: 30
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.6.4
+    build:
+      context: ./infra/keycloak
+      dockerfile: Dockerfile.coolify
     restart: unless-stopped
     command: start --import-realm
     environment:
@@ -87,8 +90,6 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME: https://auth.iaerp.b2b.com.ec
       KC_PROXY_HEADERS: xforwarded
-    volumes:
-      - ./infra/keycloak/iaerp-realm.json:/opt/keycloak/data/import/iaerp-realm.json:ro
     ports:
       - "127.0.0.1:18218:8080"
     depends_on:
@@ -106,7 +107,9 @@ services:
       start_period: 20s
 
   keycloak-config:
-    image: quay.io/keycloak/keycloak:26.6.4
+    build:
+      context: ./infra/keycloak
+      dockerfile: Dockerfile.coolify
     restart: "no"
     entrypoint: ["/bin/bash", "/opt/iaerp/configure-staging.sh"]
     environment:
@@ -119,8 +122,6 @@ services:
       IAERP_OWNER_PASSWORD: ${IAERP_OWNER_PASSWORD}
       IAERP_OPERATOR_NORTE_PASSWORD: ${IAERP_OPERATOR_NORTE_PASSWORD}
       IAERP_ACCOUNTANT_SUR_PASSWORD: ${IAERP_ACCOUNTANT_SUR_PASSWORD}
-    volumes:
-      - ./infra/keycloak/configure-staging.sh:/opt/iaerp/configure-staging.sh:ro
     depends_on:
       keycloak:
         condition: service_healthy
