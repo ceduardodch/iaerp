@@ -38,7 +38,11 @@ services:
     volumes:
       - iaerp-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U iaerp -d iaerp"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U iaerp -d iaerp && PGPASSWORD=\"$$KEYCLOAK_DB_PASSWORD\" psql -U keycloak -d keycloak -c 'SELECT 1' >/dev/null"
+        ]
       interval: 5s
       timeout: 3s
       retries: 30
