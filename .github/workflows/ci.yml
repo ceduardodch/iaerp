@@ -425,21 +425,25 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Validate staging Compose
-        env:
-          POSTGRES_PASSWORD: ci-placeholder-postgres
-          KEYCLOAK_DB_PASSWORD: ci-placeholder-keycloak
-          KC_BOOTSTRAP_ADMIN_USERNAME: ci-admin
-          KC_BOOTSTRAP_ADMIN_PASSWORD: ci-placeholder-admin
-          OIDC_ADMIN_CLIENT_SECRET: ci-placeholder-provisioner
-          IAERP_AGENT_NORTE_SECRET: ci-placeholder-agent-norte
-          IAERP_AGENT_SUR_SECRET: ci-placeholder-agent-sur
-          IAERP_OWNER_PASSWORD: ci-placeholder-owner
-          IAERP_OPERATOR_NORTE_PASSWORD: ci-placeholder-operator
-          IAERP_ACCOUNTANT_SUR_PASSWORD: ci-placeholder-accountant
-          MINIO_ACCESS_KEY: ci-minio
-          MINIO_SECRET_KEY: ci-placeholder-minio
-          IAERP_SIGNING_CERT_PASSWORD: ci-placeholder-certificate
-        run: docker compose -f compose.coolify.yaml config --quiet
+        run: |
+          while read -r variable; do
+            export "$variable=ci-placeholder"
+          done <<'EOF'
+          POSTGRES_PASSWORD
+          KEYCLOAK_DB_PASSWORD
+          KC_BOOTSTRAP_ADMIN_USERNAME
+          KC_BOOTSTRAP_ADMIN_PASSWORD
+          OIDC_ADMIN_CLIENT_SECRET
+          IAERP_AGENT_NORTE_SECRET
+          IAERP_AGENT_SUR_SECRET
+          IAERP_OWNER_PASSWORD
+          IAERP_OPERATOR_NORTE_PASSWORD
+          IAERP_ACCOUNTANT_SUR_PASSWORD
+          MINIO_ACCESS_KEY
+          MINIO_SECRET_KEY
+          IAERP_SIGNING_CERT_PASSWORD
+          EOF
+          docker compose -f compose.coolify.yaml config --quiet
 
   deploy-staging:
     name: Deploy staging to Coolify
