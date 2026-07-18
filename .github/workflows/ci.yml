@@ -415,3 +415,70 @@ jobs:
         run: |
           npm ci
           npm audit --audit-level=high
+
+  deployment-config:
+    name: Coolify deployment config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate staging Compose
+        env:
+          POSTGRES_PASSWORD: ci-placeholder-postgres
+          KEYCLOAK_DB_PASSWORD: ci-placeholder-keycloak
+          KC_BOOTSTRAP_ADMIN_USERNAME: ci-admin
+          KC_BOOTSTRAP_ADMIN_PASSWORD: ci-placeholder-admin
+          OIDC_ADMIN_CLIENT_SECRET: ci-placeholder-provisioner
+          IAERP_AGENT_NORTE_SECRET: ci-placeholder-agent-norte
+          IAERP_AGENT_SUR_SECRET: ci-placeholder-agent-sur
+          IAERP_OWNER_PASSWORD: ci-placeholder-owner
+          IAERP_OPERATOR_NORTE_PASSWORD: ci-placeholder-operator
+          IAERP_ACCOUNTANT_SUR_PASSWORD: ci-placeholder-accountant
+          MINIO_ACCESS_KEY: ci-minio
+          MINIO_SECRET_KEY: ci-placeholder-minio
+          IAERP_SIGNING_CERT_PASSWORD: ci-placeholder-certificate
+        run: docker compose -f compose.coolify.yaml config --quiet
+
+  deploy-staging:
+    name: Deploy staging to Coolify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release'
+    needs: [backend, migrations, contracts, frontend, oidc, security, deployment-config]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - name: Trigger gated Coolify deployment
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+          COOLIFY_APP_UUID: ${{ vars.COOLIFY_IAERP_APP_UUID }}
+        run: |
+          test -n "$COOLIFY_TOKEN"
+          test -n "$COOLIFY_APP_UUID"
+          response=$(curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $COOLIFY_TOKEN" \
+            "https://coolify.fractalsoft.io/api/v1/deploy?uuid=$COOLIFY_APP_UUID&force=false")
+          deployment_uuid=$(jq -r '.deployments[0].deployment_uuid // .deployment_uuid // empty' <<<"$response")
+          test -n "$deployment_uuid"
+          echo "deployment_uuid=$deployment_uuid" >> "$GITHUB_ENV"
+
+      - name: Wait for Coolify
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+        run: |
+          for attempt in $(seq 1 90); do
+            response=$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer $COOLIFY_TOKEN" \
+              "https://coolify.fractalsoft.io/api/v1/deployments/$deployment_uuid")
+            status=$(jq -r '.status // empty' <<<"$response")
+            echo "Coolify deployment status: ${status:-unknown}"
+            case "$status" in
+              finished) exit 0 ;;
+              failed|cancelled) exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "Timed out waiting for Coolify deployment" >&2
+          exit 1

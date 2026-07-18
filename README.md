@@ -61,7 +61,9 @@ Los perfiles expertos y skills locales se registran en [.agents](.agents/README.
 ## Entrega
 
 - `develop`: desarrollo continuo.
-- `release`: validacion y rama de trabajo por defecto.
+- `release`: validacion y rama de trabajo por defecto; CI verde despliega el
+  staging `https://iaerp.b2b.com.ec` mediante Coolify.
 - `main`: produccion; Coolify despliega exclusivamente desde esta rama.
 
-GitHub Actions se usara solo para CI. No se desplegara desde GitHub Actions.
+GitHub Actions actua como puerta de CI/CD: no ejecuta contenedores en el host,
+sino que solicita el despliegue a Coolify una vez superadas las validaciones.

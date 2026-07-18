@@ -60,8 +60,10 @@ Se prepararan procedimientos para:
 
 ## Despliegue
 
-- CI valida artefactos; no despliega.
-- Coolify observa `main`.
+- CI valida artefactos. Para staging, CD solicita el despliegue a Coolify solo
+  despues de que todos los jobs pasan; Coolify no hace auto-deploy al recibir
+  directamente el push de `release`.
+- `main` queda como unica fuente de produccion cuando ese ambiente sea creado.
 - Migraciones se ejecutan como job controlado antes de habilitar nueva version.
 - Solo se permite un head Alembic y un job de migracion con lock.
 - El rol de migracion es distinto del rol de runtime.

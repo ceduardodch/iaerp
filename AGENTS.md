@@ -13,8 +13,10 @@
 
 - El flujo preferido es `release -> PR -> main`.
 - Coolify despliega produccion exclusivamente desde `main`.
-- GitHub Actions queda limitado a lint, pruebas, build y validaciones de PR.
-- No agregar deploys por GitHub Actions, SSH o Docker manual.
+- GitHub Actions ejecuta lint, pruebas y build. En `release`, el job de CD
+  llama a la API de Coolify solo despues de que todos los jobs de CI pasan.
+- No desplegar por SSH ni ejecutar Docker manualmente para sustituir el flujo
+  CI/CD. Coolify sigue siendo el unico ejecutor del despliegue.
 - No hacer push, merge ni abrir PR sin autorizacion explicita.
 
 ## Puerta documental

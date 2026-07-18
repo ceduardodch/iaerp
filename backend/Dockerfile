@@ -18,7 +18,9 @@ COPY app ./app
 RUN uv sync --frozen --no-dev
 RUN rm -rf /tmp/uv-cache
 RUN groupadd --gid 65532 iaerp \
-    && useradd --uid 65532 --gid iaerp --create-home --home-dir /home/iaerp iaerp
+    && useradd --uid 65532 --gid iaerp --create-home --home-dir /home/iaerp iaerp \
+    && mkdir -p /home/iaerp/certs \
+    && chown -R iaerp:iaerp /home/iaerp
 
 USER iaerp:iaerp
 EXPOSE 8000

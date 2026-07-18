@@ -4,6 +4,12 @@ Objetivo: publicar una version ONLINE para probar el ciclo de facturacion con
 login real (Keycloak/OIDC) y el simulador SRI, sin exponer nada inseguro.
 NO es produccion: usa el simulador SRI, no emite ante el SRI real.
 
+Dominios de SERVER.12:
+
+- App y API: `https://iaerp.b2b.com.ec`
+- Identidad: `https://auth.iaerp.b2b.com.ec`
+- Documentos privados: `https://files.iaerp.b2b.com.ec`
+
 ## Postura de seguridad (obligatoria)
 
 `APP_ENV=staging` fuerza en el backend (ver `app/core/config.py`):
@@ -20,10 +26,12 @@ niega a iniciar. Esto es intencional.
 
 ## Rama y flujo
 
-- Coolify en .12 esta conectado al repo. Configura el servicio de staging para
-  desplegar desde `release` (rama de validacion/preproduccion, AGENTS.md).
-  `main` queda reservada para produccion real (SRI real), que NO es esto.
-- Un push a `release` dispara el redeploy automatico en Coolify.
+- Coolify en .12 esta conectado al repo y lee `compose.coolify.yaml` desde
+  `release` (rama de validacion/preproduccion, AGENTS.md).
+- `main` queda reservada para produccion real (SRI real), que NO es esto.
+- El auto-deploy directo de Coolify esta desactivado. Un push a `release`
+  ejecuta CI completo y el job `deploy-staging` llama a Coolify solamente si
+  todas las validaciones terminaron correctamente.
 
 ## Servicios a desplegar
 
