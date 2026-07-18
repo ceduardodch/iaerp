@@ -543,6 +543,17 @@ function emptyDraftLine(): DraftLine {
   }
 }
 
+function todayInFiscalTimezone(): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Guayaquil',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
 type InvoicePanel =
   | { view: 'new' }
   | { view: 'detail'; id: string }
@@ -573,7 +584,7 @@ function NewInvoiceForm({
   const [emissionPointId, setEmissionPointId] = useState(
     emissionPoints.find((point) => point.establishmentId === establishments[0]?.id)?.id ?? '',
   )
-  const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [issueDate, setIssueDate] = useState(todayInFiscalTimezone)
   const [lines, setLines] = useState<DraftLine[]>([emptyDraftLine()])
 
   const availableEmissionPoints = emissionPoints.filter(
