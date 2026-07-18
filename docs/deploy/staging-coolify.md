@@ -7,8 +7,8 @@ NO es produccion: usa el simulador SRI, no emite ante el SRI real.
 Dominios de SERVER.12:
 
 - App y API: `https://iaerp.b2b.com.ec`
-- Identidad: `https://auth.iaerp.b2b.com.ec`
-- Documentos privados: `https://files.iaerp.b2b.com.ec`
+- Identidad: `https://iaerp-auth.b2b.com.ec`
+- Documentos privados: `https://iaerp-files.b2b.com.ec`
 
 ## Postura de seguridad (obligatoria)
 
