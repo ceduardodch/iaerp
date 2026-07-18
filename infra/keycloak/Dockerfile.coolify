@@ -1,6 +1,7 @@
 FROM quay.io/keycloak/keycloak:26.6.4
 
 USER root
-COPY --chmod=644 iaerp-realm.json /opt/keycloak/data/import/iaerp-realm.json
-COPY --chmod=755 configure-staging.sh /opt/iaerp/configure-staging.sh
+RUN install -d -o 1000 -g 0 -m 755 /opt/keycloak/data/import /opt/iaerp
+COPY --chown=1000:0 --chmod=0644 iaerp-realm.json /opt/keycloak/data/import/iaerp-realm.json
+COPY --chown=1000:0 --chmod=0755 configure-staging.sh /opt/iaerp/configure-staging.sh
 USER 1000
