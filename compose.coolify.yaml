@@ -5,19 +5,19 @@ x-backend-environment: &backend-environment
   AUTH_MODE: oidc
   DATABASE_URL: postgresql+asyncpg://iaerp:${POSTGRES_PASSWORD}@iaerp-staging-postgres:5432/iaerp
   OIDC_ISSUER_URL: https://auth.iaerp.b2b.com.ec/realms/iaerp
-  OIDC_JWKS_URL: http://keycloak:8080/realms/iaerp/protocol/openid-connect/certs
+  OIDC_JWKS_URL: http://iaerp-staging-keycloak:8080/realms/iaerp/protocol/openid-connect/certs
   OIDC_API_AUDIENCE: iaerp-api
   OIDC_MCP_AUDIENCE: http://localhost:8000/mcp
   MCP_SERVER_URL: https://iaerp.b2b.com.ec/mcp
-  OIDC_ADMIN_URL: http://keycloak:8080
+  OIDC_ADMIN_URL: http://iaerp-staging-keycloak:8080
   OIDC_ADMIN_REALM: iaerp
   OIDC_ADMIN_CLIENT_ID: iaerp-provisioner
   OIDC_ADMIN_CLIENT_SECRET: ${OIDC_ADMIN_CLIENT_SECRET}
-  REDIS_URL: redis://redis:6379/0
+  REDIS_URL: redis://iaerp-staging-redis:6379/0
   CORS_ORIGINS: https://iaerp.b2b.com.ec
   SRI_SIMULATOR_ENABLED: "true"
   SYNTHETIC_SEED_ENABLED: "true"
-  MINIO_ENDPOINT: minio:9000
+  MINIO_ENDPOINT: iaerp-staging-minio:9000
   MINIO_PUBLIC_ENDPOINT: files.iaerp.b2b.com.ec
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
@@ -60,7 +60,9 @@ services:
     volumes:
       - iaerp-redis-data:/data
     networks:
-      - default
+      default:
+        aliases:
+          - iaerp-staging-redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -80,7 +82,9 @@ services:
     ports:
       - "127.0.0.1:18219:9000"
     networks:
-      - default
+      default:
+        aliases:
+          - iaerp-staging-minio
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -107,7 +111,9 @@ services:
     ports:
       - "127.0.0.1:18218:8080"
     networks:
-      - default
+      default:
+        aliases:
+          - iaerp-staging-keycloak
     depends_on:
       postgres:
         condition: service_healthy
@@ -131,6 +137,7 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      KEYCLOAK_INTERNAL_URL: http://iaerp-staging-keycloak:8080
       PUBLIC_APP_URL: https://iaerp.b2b.com.ec
       OIDC_ADMIN_CLIENT_SECRET: ${OIDC_ADMIN_CLIENT_SECRET}
       IAERP_AGENT_NORTE_SECRET: ${IAERP_AGENT_NORTE_SECRET}
@@ -247,7 +254,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
       interval: 10s
       timeout: 5s
       retries: 10

@@ -10,11 +10,12 @@ set -euo pipefail
 : "${IAERP_OWNER_PASSWORD:?IAERP_OWNER_PASSWORD is required}"
 : "${IAERP_OPERATOR_NORTE_PASSWORD:?IAERP_OPERATOR_NORTE_PASSWORD is required}"
 : "${IAERP_ACCOUNTANT_SUR_PASSWORD:?IAERP_ACCOUNTANT_SUR_PASSWORD is required}"
+KEYCLOAK_INTERNAL_URL=${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080}
 
 KCADM=/opt/keycloak/bin/kcadm.sh
 
 "$KCADM" config credentials \
-  --server http://keycloak:8080 \
+  --server "$KEYCLOAK_INTERNAL_URL" \
   --realm master \
   --user "$KC_BOOTSTRAP_ADMIN_USERNAME" \
   --password "$KC_BOOTSTRAP_ADMIN_PASSWORD"
