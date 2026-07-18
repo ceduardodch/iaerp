@@ -39,6 +39,10 @@ services:
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
     volumes:
       - iaerp-postgres-data:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases:
+          - iaerp-staging-postgres
     healthcheck:
       test:
         [
@@ -237,3 +241,6 @@ volumes:
   iaerp-redis-data:
   iaerp-minio-data:
   iaerp-signing-certs:
+
+networks:
+  default: {}
