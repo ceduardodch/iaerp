@@ -59,6 +59,8 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - iaerp-redis-data:/data
+    networks:
+      - default
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -77,6 +79,8 @@ services:
       - iaerp-minio-data:/data
     ports:
       - "127.0.0.1:18219:9000"
+    networks:
+      - default
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -102,6 +106,8 @@ services:
       KC_PROXY_HEADERS: xforwarded
     ports:
       - "127.0.0.1:18218:8080"
+    networks:
+      - default
     depends_on:
       postgres:
         condition: service_healthy
@@ -132,6 +138,8 @@ services:
       IAERP_OWNER_PASSWORD: ${IAERP_OWNER_PASSWORD}
       IAERP_OPERATOR_NORTE_PASSWORD: ${IAERP_OPERATOR_NORTE_PASSWORD}
       IAERP_ACCOUNTANT_SUR_PASSWORD: ${IAERP_ACCOUNTANT_SUR_PASSWORD}
+    networks:
+      - default
     depends_on:
       keycloak:
         condition: service_healthy
@@ -149,6 +157,8 @@ services:
     environment: *backend-environment
     volumes:
       - iaerp-signing-certs:/home/iaerp/certs
+    networks:
+      - default
     depends_on:
       postgres:
         condition: service_healthy
@@ -189,6 +199,8 @@ services:
     environment: *backend-environment
     volumes:
       - iaerp-signing-certs:/home/iaerp/certs
+    networks:
+      - default
     depends_on:
       api:
         condition: service_healthy
@@ -205,6 +217,8 @@ services:
     restart: unless-stopped
     command: ["uv", "run", "--no-sync", "python", "-m", "app.workers.dispatcher"]
     environment: *backend-environment
+    networks:
+      - default
     depends_on:
       api:
         condition: service_healthy
@@ -227,6 +241,8 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:18217:8080"
+    networks:
+      - default
     depends_on:
       api:
         condition: service_healthy
