@@ -84,12 +84,8 @@ TENANT_A_CREDIT_NOTE_AUTHORIZED_ID = uuid.UUID("36363636-3636-4363-8363-36363636
 TENANT_B_CREDIT_NOTE_AUTHORIZED_ID = uuid.UUID("37373737-3737-4373-8373-373737373737")
 
 # IDs fijos de SRITransmission (una fila por documento emitido en el seed).
-TENANT_A_INVOICE_AUTHORIZED_TRANSMISSION_ID = uuid.UUID(
-    "38383838-3838-4383-8383-383838383838"
-)
-TENANT_B_INVOICE_AUTHORIZED_TRANSMISSION_ID = uuid.UUID(
-    "39393939-3939-4393-8393-393939393939"
-)
+TENANT_A_INVOICE_AUTHORIZED_TRANSMISSION_ID = uuid.UUID("38383838-3838-4383-8383-383838383838")
+TENANT_B_INVOICE_AUTHORIZED_TRANSMISSION_ID = uuid.UUID("39393939-3939-4393-8393-393939393939")
 TENANT_A_INVOICE_PENDING_TRANSMISSION_ID = uuid.UUID("40404040-4040-4404-8404-404040404040")
 TENANT_B_INVOICE_PENDING_TRANSMISSION_ID = uuid.UUID("41414141-4141-4414-8414-414141414141")
 TENANT_A_INVOICE_REJECTED_TRANSMISSION_ID = uuid.UUID("42424242-4242-4424-8424-424242424242")
@@ -1101,8 +1097,10 @@ async def _seed_billing(session: AsyncSession, masters_result: MastersSeedResult
 
 async def seed() -> None:
     settings = get_settings()
-    if settings.APP_ENV not in {"development", "test"}:
-        raise RuntimeError("Synthetic seed is disabled outside development/test")
+    if settings.APP_ENV not in {"development", "test"} and not settings.SYNTHETIC_SEED_ENABLED:
+        raise RuntimeError(
+            "Synthetic seed requires SYNTHETIC_SEED_ENABLED outside development/test"
+        )
 
     async with SessionFactory() as session, session.begin():
         await _seed_platform(session)

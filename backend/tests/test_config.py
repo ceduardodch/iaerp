@@ -60,6 +60,28 @@ def test_staging_allows_oidc_with_sri_simulator() -> None:
     assert settings.SRI_SIMULATOR_ENABLED is True
 
 
+def test_staging_allows_explicit_synthetic_seed() -> None:
+    settings = Settings(
+        APP_ENV="staging",
+        AUTH_MODE="oidc",
+        DATABASE_URL="postgresql+asyncpg://user:pass@localhost/db",  # pragma: allowlist secret
+        SRI_SIMULATOR_ENABLED=True,
+        SYNTHETIC_SEED_ENABLED=True,
+    )
+    assert settings.SYNTHETIC_SEED_ENABLED is True
+
+
+def test_synthetic_seed_is_forbidden_in_production() -> None:
+    with pytest.raises(ValueError, match="SYNTHETIC_SEED_ENABLED"):
+        Settings(
+            APP_ENV="production",
+            AUTH_MODE="oidc",
+            DATABASE_URL="postgresql+asyncpg://user:pass@localhost/db",  # pragma: allowlist secret
+            SRI_SIMULATOR_ENABLED=False,
+            SYNTHETIC_SEED_ENABLED=True,
+        )
+
+
 def test_staging_forbids_dev_auth() -> None:
     """staging es accesible online: nunca `/dev/token` abierto (AUTH_MODE=dev)."""
     with pytest.raises(ValueError, match="AUTH_MODE=dev"):

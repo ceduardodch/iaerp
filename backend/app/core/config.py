@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # router `/sri-sim` si esta habilitado; NUNCA puede habilitarse fuera de
     # development/test (docs/sprints/sprint-02.md, decision 7).
     SRI_SIMULATOR_ENABLED: bool = True
+    # Dataset sintetico para ambientes de prueba compartidos. Debe habilitarse
+    # de forma explicita y nunca puede ejecutarse en release/production.
+    SYNTHETIC_SEED_ENABLED: bool = False
 
     # Almacenamiento privado de artefactos (XML firmado, RIDE PDF) en MinIO,
     # ver ADR 0005 y app/services/storage.py. Defaults del compose local.
@@ -86,6 +89,8 @@ class Settings(BaseSettings):
                 raise ValueError("SQLite is forbidden outside development/test")
         if self.APP_ENV in simulator_forbidden_envs and self.SRI_SIMULATOR_ENABLED:
             raise ValueError("SRI_SIMULATOR_ENABLED is forbidden in release/production")
+        if self.APP_ENV in simulator_forbidden_envs and self.SYNTHETIC_SEED_ENABLED:
+            raise ValueError("SYNTHETIC_SEED_ENABLED is forbidden in release/production")
         if self.AUTH_MODE == "dev" and len(self.DEV_JWT_SECRET) < 32:
             raise ValueError("DEV_JWT_SECRET must have at least 32 characters")
         return self
