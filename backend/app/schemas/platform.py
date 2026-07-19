@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import Field
 
@@ -26,6 +27,23 @@ class TenantContextRead(APIModel):
     roles: list[str]
     scopes: list[str]
     automation_writes_enabled: bool
+
+
+class FiscalSettingsUpdate(APIModel):
+    sri_environment: Literal["1", "2"]
+
+
+class FiscalSettingsRead(FiscalSettingsUpdate):
+    certificate_configured: bool
+    certificate_fingerprint_sha256: str | None = None
+    certificate_subject: str | None = None
+    certificate_valid_from: datetime | None = None
+    certificate_valid_to: datetime | None = None
+    certificate_uploaded_at: datetime | None = None
+
+
+class SigningCertificateRead(FiscalSettingsRead):
+    message: str
 
 
 class MembershipRead(APIModel):

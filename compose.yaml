@@ -107,6 +107,7 @@ services:
       MINIO_ACCESS_KEY: iaerp-local
       MINIO_SECRET_KEY: iaerp-local-password
       IAERP_SIGNING_CERT_PATH: /home/iaerp/certs/test-signing.p12
+      IAERP_SECRETS_ENCRYPTION_KEY: Chnh0BTHcgiUZgxx1SuuQRDd38NpYzxT8R0nMTLlh3M=
     ports:
       - "8000:8000"
     depends_on:

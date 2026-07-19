@@ -63,6 +63,7 @@ const updatedAfterPayment = {
 }
 
 async function mockApi(page: Page) {
+  let currentReceivables = [overdueReceivable, partialReceivable, settledReceivable]
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
@@ -75,11 +76,14 @@ async function mockApi(page: Page) {
   await page.route('**/api/v1/receivables**', (route) => {
     if (route.request().method() !== 'GET') return route.fallback()
     return route.fulfill({
-      json: [overdueReceivable, partialReceivable, settledReceivable],
+      json: currentReceivables,
     })
   })
   await page.route(`**/api/v1/receivables/${overdueReceivable.id}/payments`, (route) => {
     if (route.request().method() === 'POST') {
+      currentReceivables = currentReceivables.map((item) =>
+        item.id === updatedAfterPayment.id ? updatedAfterPayment : item,
+      )
       return route.fulfill({ status: 201, json: updatedAfterPayment })
     }
     return route.fallback()
@@ -147,20 +151,20 @@ test('receivables status badges and aging are visible per account', async ({ pag
 test('settled receivable disables collection actions', async ({ page }) => {
   await loginAndOpenReceivables(page)
   const settledRow = page.getByRole('row', {
-    name: new RegExp(settledReceivable.originalAmount.replace('.', '\\.')),
+    name: /\$80,00/,
   })
   await expect(settledRow.getByRole('button', { name: /Registrar cobro/ })).toBeDisabled()
   await expect(settledRow.getByRole('button', { name: /recordatorio/i })).toBeDisabled()
 })
 
-test('register payment drawer is keyboard reachable, labelled and passes axe', async ({ page }) => {
+test('register payment full-page view is keyboard reachable, labelled and passes axe', async ({ page }) => {
   await loginAndOpenReceivables(page)
 
   const paymentButton = page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first()
   await paymentButton.focus()
   await page.keyboard.press('Enter')
 
-  await expect(page.getByRole('heading', { name: 'Registrar cobro' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Registrar cobro', level: 1 })).toBeVisible()
   await expect(page.getByLabel('Monto en efectivo')).toBeVisible()
   await expect(page.getByLabel('Fecha de cobro')).toBeVisible()
   await expect(page.getByLabel('Método')).toBeVisible()
@@ -176,7 +180,7 @@ test('register payment drawer is keyboard reachable, labelled and passes axe', a
 
   await page.getByRole('button', { name: 'Cancelar' }).click()
   await expect(page.getByRole('heading', { name: 'Registrar cobro' })).toHaveCount(0)
-  await expect(paymentButton).toBeFocused()
+  await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
 })
 
 test('registering a payment shows the backend-computed balance, never client math', async ({ page }) => {
@@ -189,19 +193,20 @@ test('registering a payment shows the backend-computed balance, never client mat
   await page.getByLabel('Monto en efectivo').fill('100.00')
   await page.getByRole('button', { name: 'Guardar' }).click()
 
-  await expect(page.getByRole('heading', { name: 'Registrar cobro' })).toBeVisible()
-  await expect(page.getByText(`Saldo actual $${updatedAfterPayment.openAmount}`)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+  const updatedRow = page.getByRole('row', { name: /\$50,00/ })
+  await expect(updatedRow).toBeVisible()
   await expectNoA11yViolations(page)
 })
 
-test('send reminder drawer is keyboard reachable, labelled and passes axe', async ({ page }) => {
+test('send reminder full-page view is keyboard reachable, labelled and passes axe', async ({ page }) => {
   await loginAndOpenReceivables(page)
 
   const reminderButton = page.getByRole('button', { name: `Enviar recordatorio para ${customer.name}` }).first()
   await reminderButton.focus()
   await page.keyboard.press('Enter')
 
-  await expect(page.getByRole('heading', { name: 'Enviar recordatorio' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Enviar recordatorio', level: 1 })).toBeVisible()
   await expect(page.getByLabel('Canal')).toBeVisible()
   await expect(page.getByLabel('Plantilla')).toBeVisible()
   await expectNoA11yViolations(page)
@@ -210,7 +215,7 @@ test('send reminder drawer is keyboard reachable, labelled and passes axe', asyn
   await page.getByRole('button', { name: 'Enviar', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: 'Enviar recordatorio' })).toHaveCount(0)
-  await expect(reminderButton).toBeFocused()
+  await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
 })
 
 test('status filter narrows the receivables list', async ({ page }) => {
@@ -230,13 +235,13 @@ test('receivables screens reflow at 320 CSS px and at 200% zoom without horizont
     .getByRole('button', { name: `Registrar cobro para ${customer.name}` })
     .first()
     .click()
-  await expect(page.getByRole('heading', { name: 'Registrar cobro' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Registrar cobro', level: 1 })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
   await page.setViewportSize({ width: 640, height: 900 })
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%'
   })
-  await expect(page.getByRole('heading', { name: 'Registrar cobro' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Registrar cobro', level: 1 })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })

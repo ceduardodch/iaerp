@@ -146,6 +146,17 @@ export type DocumentArtifact = {
 export type ArtifactDownload = {
   downloadUrl: string
   expiresInSeconds: number
+  fileName: string
+}
+
+export type FiscalSettings = {
+  sriEnvironment: '1' | '2'
+  certificateConfigured: boolean
+  certificateFingerprintSha256?: string | null
+  certificateSubject?: string | null
+  certificateValidFrom?: string | null
+  certificateValidTo?: string | null
+  certificateUploadedAt?: string | null
 }
 
 export type AccountItemStatus = 'OPEN' | 'PARTIAL' | 'OVERDUE' | 'SETTLED' | 'VOIDED'
@@ -299,13 +310,14 @@ export async function apiRequest<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const headers = new Headers(init?.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  if (!(init?.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   const response = await fetch(`${apiUrl}${path}`, {
     ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
+    headers,
   })
 
   if (!response.ok) {

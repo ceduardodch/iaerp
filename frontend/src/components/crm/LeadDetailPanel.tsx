@@ -1,9 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
-import { apiRequest, idempotencyKey, type Lead, type LeadActivity, type LeadActivityCreate } from '../api'
-import { useAuth } from '../auth'
-import { ErpButton, ErpEmptyState, ErpFormPanel, ErpStatusBadge, ErpToolbar } from '../components/erp'
+import { apiRequest, idempotencyKey, type Lead, type LeadActivity, type LeadActivityCreate } from '../../api'
+import { ErpButton, ErpEmptyState, ErpFormPanel, ErpStatusBadge, ErpToolbar } from '../erp'
 
 const ACTIVITY_TYPE_LABELS: Record<LeadActivity['activityType'], string> = {
   CALL: 'Llamada',
@@ -29,11 +28,11 @@ const OUTCOME_TONES: Record<LeadActivity['outcome'], 'neutral' | 'success' | 'wa
 
 interface LeadDetailPanelProps {
   lead: Lead | null
+  token: string
   onClose: () => void
 }
 
-export function LeadDetailPanel({ lead, onClose }: LeadDetailPanelProps) {
-  const { token } = useAuth()
+export function LeadDetailPanel({ lead, token, onClose }: LeadDetailPanelProps) {
   const queryClient = useQueryClient()
   const [showActivityForm, setShowActivityForm] = useState(false)
 

@@ -190,14 +190,48 @@ async def upload_artifact(
     )
 
 
+async def upload_private_object(
+    *,
+    object_key: str,
+    data: bytes,
+    content_type: str = "application/octet-stream",
+    bucket_name: str | None = None,
+) -> UploadResult:
+    """Store tenant-scoped configuration bytes in the existing private bucket."""
+
+    settings = get_settings()
+    resolved_bucket = bucket_name or settings.MINIO_DOCUMENTS_BUCKET
+    return await asyncio.to_thread(
+        _upload_sync,
+        _client(),
+        bucket_name=resolved_bucket,
+        object_key=object_key,
+        data=data,
+        content_type=content_type,
+    )
+
+
 def _presigned_download_url_sync(
     client: Minio,
     *,
     bucket_name: str,
     object_key: str,
     expiry: timedelta,
+    file_name: str | None,
+    content_type: str | None,
 ) -> str:
-    return client.presigned_get_object(bucket_name, object_key, expires=expiry)
+    response_headers: dict[str, str | list[str] | tuple[str]] | None = None
+    if file_name and content_type:
+        response_headers = {
+            "response-content-disposition": f'attachment; filename="{file_name}"',
+            "response-content-type": content_type,
+        }
+    return client.presigned_get_object(
+        bucket_name,
+        object_key,
+        expires=expiry,
+        response_headers=response_headers,
+    )
 
 
 async def generate_presigned_download_url(
@@ -205,6 +239,8 @@ async def generate_presigned_download_url(
     object_key: str,
     bucket_name: str | None = None,
     expiry: timedelta = PRESIGNED_URL_EXPIRY,
+    file_name: str | None = None,
+    content_type: str | None = None,
 ) -> str:
     """Genera una URL prefirmada de corta duracion para descargar un objeto.
 
@@ -222,6 +258,8 @@ async def generate_presigned_download_url(
         bucket_name=resolved_bucket,
         object_key=object_key,
         expiry=expiry,
+        file_name=file_name,
+        content_type=content_type,
     )
 
 
@@ -280,4 +318,5 @@ __all__ = [
     "object_exists",
     "object_key_for_artifact",
     "upload_artifact",
+    "upload_private_object",
 ]

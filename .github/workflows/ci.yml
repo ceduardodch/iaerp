@@ -442,15 +442,17 @@ jobs:
           MINIO_ACCESS_KEY
           MINIO_SECRET_KEY
           IAERP_SIGNING_CERT_PASSWORD
+          IAERP_SECRETS_ENCRYPTION_KEY
           EOF
           docker compose -f compose.coolify.yaml config --quiet
 
-  deploy-staging:
-    name: Deploy staging to Coolify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/release'
+  deploy-production:
+    name: Deploy production to Coolify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [backend, migrations, contracts, frontend, oidc, security, deployment-config]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # Legacy secret scope; this job deploys the production app from main only.
     environment: staging
     steps:
       - name: Trigger gated Coolify deployment

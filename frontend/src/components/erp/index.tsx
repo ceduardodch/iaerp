@@ -114,7 +114,7 @@ export function ErpFormPanel({
   onCancel: () => void
 }>) {
   return (
-    <aside className="form-panel erp-form-panel" aria-labelledby="erp-form-title">
+    <section className="form-panel erp-form-panel erp-full-page-form" aria-labelledby="erp-form-title">
       <p className="section-number">{eyebrow}</p>
       <h2 id="erp-form-title">{title}</h2>
       <form onSubmit={onSubmit}>
@@ -129,7 +129,7 @@ export function ErpFormPanel({
           </ErpButton>
         </div>
       </form>
-    </aside>
+    </section>
   )
 }
 

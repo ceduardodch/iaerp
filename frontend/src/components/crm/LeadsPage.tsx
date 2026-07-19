@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useDeferredValue, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 
-import { apiRequest, idempotencyKey, type Lead, type LeadCreate, type LeadStatus } from '../api'
-import { useAuth } from '../auth'
+import { apiRequest, idempotencyKey, type Lead, type LeadCreate, type LeadStatus } from '../../api'
 import {
   ErpActionCell,
   ErpButton,
@@ -12,7 +11,7 @@ import {
   ErpPanel,
   ErpStatusBadge,
   ErpToolbar,
-} from '../components/erp'
+} from '../erp'
 
 const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   NEW: 'Nuevo',
@@ -60,8 +59,7 @@ function HotnessBadge({ hotness }: { hotness: 'COLD' | 'WARM' | 'HOT' }) {
   )
 }
 
-export function LeadsPage() {
-  const { token } = useAuth()
+export function LeadsPage({ token }: { token: string }) {
   const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<LeadStatus | ''>('')
   const [editor, setEditor] = useState<Lead | null | undefined>(undefined)
@@ -148,7 +146,7 @@ export function LeadsPage() {
               }
             />
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} aria-label="Listado de prospectos">
               <table className="erp-responsive-table">
                 <thead>
                   <tr>

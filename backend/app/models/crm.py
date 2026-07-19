@@ -6,8 +6,10 @@ from typing import Literal
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Numeric,
     String,
@@ -36,12 +38,25 @@ class Lead(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     """Prospecto principal del CRM."""
     __tablename__ = "crm_leads"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "id", name="uq_leads_tenant_id"),
-        Index("ix_leads_tenant_status", "tenant_id", "status"),
-        Index("ix_leads_tenant_owner", "tenant_id", "owner_user_id"),
+        ForeignKeyConstraint(
+            ["tenant_id", "party_id"],
+            ["parties.tenant_id", "parties.id"],
+            name="fk_crm_leads_tenant_party",
+        ),
+        CheckConstraint("hotness IN ('COLD', 'WARM', 'HOT')", name="hotness_valid"),
+        CheckConstraint("score >= 0", name="score_non_negative"),
+        CheckConstraint("score <= 100", name="score_max_100"),
+        CheckConstraint(
+            "status IN ('NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', "
+            "'NEGOTIATION', 'WON', 'LOST')",
+            name="status_valid",
+        ),
+        UniqueConstraint("tenant_id", "id", name="uq_crm_leads_tenant_id"),
+        Index("ix_crm_leads_tenant_status", "tenant_id", "status"),
+        Index("ix_crm_leads_tenant_owner", "tenant_id", "owner_user_id"),
     )
 
-    party_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("parties.id"))
+    party_id: Mapped[uuid.UUID]
     status: Mapped[LeadStatus] = mapped_column(String(20), default=LeadStatus.NEW)
     source: Mapped[str | None] = mapped_column(String(50))
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
@@ -62,12 +77,25 @@ class LeadActivity(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base)
     """Actividades y seguimientos realizados sobre un lead."""
     __tablename__ = "crm_activities"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "id", name="uq_activities_tenant_id"),
-        Index("ix_activities_tenant_lead", "tenant_id", "lead_id"),
-        Index("ix_activities_tenant_date", "tenant_id", "created_at"),
+        ForeignKeyConstraint(
+            ["tenant_id", "lead_id"],
+            ["crm_leads.tenant_id", "crm_leads.id"],
+            name="fk_crm_activities_tenant_lead",
+        ),
+        CheckConstraint(
+            "activity_type IN ('CALL', 'EMAIL', 'MEETING', 'NOTE', 'TASK')",
+            name="activity_type_valid",
+        ),
+        CheckConstraint(
+            "outcome IN ('POSITIVE', 'NEUTRAL', 'NEGATIVE', 'PENDING')",
+            name="outcome_valid",
+        ),
+        UniqueConstraint("tenant_id", "id", name="uq_crm_activities_tenant_id"),
+        Index("ix_crm_activities_tenant_lead", "tenant_id", "lead_id"),
+        Index("ix_crm_activities_tenant_date", "tenant_id", "created_at"),
     )
 
-    lead_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_leads.id"))
+    lead_id: Mapped[uuid.UUID]
     activity_type: Mapped[Literal["CALL", "EMAIL", "MEETING", "NOTE", "TASK"]] = mapped_column(
         String(20)
     )
@@ -93,10 +121,10 @@ class GmailIntegration(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, B
     """Configuración de integración Gmail por tenant y usuario."""
     __tablename__ = "crm_gmail_integrations"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "user_id", name="uq_gmail_tenant_user"),
+        UniqueConstraint("tenant_id", "user_id", name="uq_crm_gmail_tenant_user"),
     )
 
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     access_token: Mapped[str] = mapped_column(Text)
     refresh_token: Mapped[str] = mapped_column(Text)
     token_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

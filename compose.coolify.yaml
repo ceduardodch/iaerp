@@ -24,6 +24,7 @@ x-backend-environment: &backend-environment
   MINIO_SECURE: "true"
   IAERP_SIGNING_CERT_PATH: /home/iaerp/certs/test-signing.p12
   IAERP_SIGNING_CERT_PASSWORD: ${IAERP_SIGNING_CERT_PASSWORD}
+  IAERP_SECRETS_ENCRYPTION_KEY: ${IAERP_SECRETS_ENCRYPTION_KEY}
 
 services:
   postgres:

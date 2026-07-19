@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import cast
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -250,12 +251,15 @@ async def get_gmail_integration(
     user_id: uuid.UUID,
 ) -> GmailIntegration | None:
     """Obtiene la integración Gmail de un usuario."""
-    return await session.scalar(
-        select(GmailIntegration).where(
-            GmailIntegration.tenant_id == tenant_id,
-            GmailIntegration.user_id == user_id,
-            GmailIntegration.active.is_(True),
-        )
+    return cast(
+        GmailIntegration | None,
+        await session.scalar(
+            select(GmailIntegration).where(
+                GmailIntegration.tenant_id == tenant_id,
+                GmailIntegration.user_id == user_id,
+                GmailIntegration.active.is_(True),
+            )
+        ),
     )
 
 
@@ -312,9 +316,12 @@ async def find_lead_by_email(
         return None
 
     # Buscar el lead asociado
-    return await session.scalar(
-        select(Lead).where(
-            Lead.tenant_id == tenant_id,
-            Lead.party_id == party.id,
-        )
+    return cast(
+        Lead | None,
+        await session.scalar(
+            select(Lead).where(
+                Lead.tenant_id == tenant_id,
+                Lead.party_id == party.id,
+            )
+        ),
     )

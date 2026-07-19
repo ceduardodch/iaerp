@@ -205,14 +205,14 @@ test('invoice status badges are visible and labelled per document', async ({ pag
   await expect(page.getByText('RECHAZADA', { exact: true })).toBeVisible()
 })
 
-test('new invoice drawer is keyboard reachable, labelled and passes axe', async ({ page }) => {
+test('new invoice full-page view is keyboard reachable, labelled and passes axe', async ({ page }) => {
   await loginAndOpenInvoices(page)
 
   const newInvoiceButton = page.getByRole('button', { name: 'Nueva factura' })
   await newInvoiceButton.focus()
   await page.keyboard.press('Enter')
 
-  await expect(page.getByRole('heading', { name: 'Nueva factura' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Nueva factura', level: 1 })).toBeVisible()
   await expect(page.getByLabel('Cliente')).toBeVisible()
   await expect(page.getByLabel('Establecimiento')).toBeVisible()
   await expect(page.getByLabel('Punto de emisión')).toBeVisible()
@@ -226,7 +226,7 @@ test('new invoice drawer is keyboard reachable, labelled and passes axe', async 
 
   await page.getByRole('button', { name: 'Cancelar' }).click()
   await expect(page.getByRole('heading', { name: 'Nueva factura' })).toHaveCount(0)
-  await expect(newInvoiceButton).toBeFocused()
+  await expect(page.getByRole('heading', { name: 'Facturas', exact: true })).toBeVisible()
 })
 
 test('creating a draft shows backend totals and opens detail with SRI status', async ({ page }) => {
@@ -238,7 +238,7 @@ test('creating a draft shows backend totals and opens detail with SRI status', a
 
   const detail = page.getByLabel(`Factura ${draftInvoice.sequential}`, { exact: true })
   await expect(page.getByRole('heading', { name: `Factura ${draftInvoice.sequential}` })).toBeVisible()
-  await expect(detail.getByText(`$${draftInvoice.total}`)).toBeVisible()
+  await expect(detail.getByTestId('invoice-total')).toContainText('$22,43')
   await expect(detail.getByText('Sin intentos de transmisión todavía.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Emitir' })).toBeEnabled()
   await expect(page.getByRole('button', { name: 'Nota de crédito' })).toHaveCount(0)
@@ -259,13 +259,15 @@ test('authorized invoice detail shows SRI transmission, artifacts and credit not
   await expect(detail.getByText('AUTORIZADA', { exact: true })).toBeVisible()
   await expect(detail.getByText('Comprobante autorizado')).toBeVisible()
   await expect(detail.getByText(authorizedInvoice.sriTransmission.authorizationNumber)).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Descargar' }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Descargar XML firmado' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Descargar RIDE PDF' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Volver al listado' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Emitir' })).toBeDisabled()
 
   const creditNoteButton = page.getByRole('button', { name: 'Nota de crédito' })
   await creditNoteButton.focus()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('heading', { name: 'Nota de crédito' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Nueva nota de crédito', level: 1 })).toBeVisible()
   await expectNoA11yViolations(page)
 })
 
@@ -289,13 +291,13 @@ test('invoices screens reflow at 320 CSS px and at 200% zoom without horizontal 
   await expectNoHorizontalOverflow(page)
 
   await page.getByRole('button', { name: 'Nueva factura' }).click()
-  await expect(page.getByRole('heading', { name: 'Nueva factura' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Nueva factura', level: 1 })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
   await page.setViewportSize({ width: 640, height: 900 })
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%'
   })
-  await expect(page.getByRole('heading', { name: 'Nueva factura' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Nueva factura', level: 1 })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })

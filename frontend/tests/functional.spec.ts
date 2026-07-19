@@ -76,13 +76,13 @@ test('creates a product through the real API and refreshes the catalog', async (
     .getByRole('article')
     .filter({ has: page.getByRole('heading', { name: productName }) })
   await expect(productCard).toBeVisible()
-  await expect(productCard.getByText('$12.35')).toBeVisible()
+  await expect(productCard.getByText('$12,35')).toBeVisible()
 
   await page.getByRole('button', { name: `Editar ${productName}` }).click()
   await expect(page.getByRole('heading', { name: 'Editar producto' })).toBeVisible()
   await page.getByLabel('Precio unitario').fill('14.500000')
   await page.getByRole('button', { name: 'Guardar' }).click()
-  await expect(productCard.getByText('$14.50')).toBeVisible()
+  await expect(productCard.getByText('$14,50')).toBeVisible()
 })
 
 test('restricted token shows an accessible authorization error', async ({

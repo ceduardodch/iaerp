@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -27,6 +28,29 @@ class Tenant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200))
     organization_id: Mapped[str | None] = mapped_column(String(100), unique=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class TenantFiscalSettings(TimestampMixin, Base):
+    __tablename__ = "tenant_fiscal_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "sri_environment IN ('1', '2')",
+            name="sri_environment_valid",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    sri_environment: Mapped[str] = mapped_column(String(1), default="1")
+    certificate_object_key: Mapped[str | None] = mapped_column(String(500))
+    certificate_password_encrypted: Mapped[str | None] = mapped_column(Text)
+    certificate_fingerprint_sha256: Mapped[str | None] = mapped_column(String(64))
+    certificate_subject: Mapped[str | None] = mapped_column(String(500))
+    certificate_valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    certificate_valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    certificate_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -76,7 +76,7 @@ def upgrade() -> None:
             name="fk_crm_leads_tenant_id",
         ),
         sa.ForeignKeyConstraint(
-            ["user_id"],
+            ["owner_user_id"],
             ["users.id"],
             name="fk_crm_leads_owner_user_id",
         ),

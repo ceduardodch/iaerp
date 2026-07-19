@@ -17,6 +17,7 @@ import {
   type DocumentArtifact,
   type EmissionPoint,
   type Establishment,
+  type FiscalSettings,
   type InvoiceLineInput,
   type Operation,
   type Party,
@@ -53,6 +54,20 @@ const sections: Array<{ id: Section; label: string; eyebrow: string }> = [
   { id: 'receivables', label: 'Cartera', eyebrow: '06' },
   { id: 'crm', label: 'CRM', eyebrow: '07' },
 ]
+
+const amountFormatter = new Intl.NumberFormat('es-EC', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+function formatAmount(value: string | number): string {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amountFormatter.format(amount) : '0,00'
+}
+
+function formatPercent(value: string | number): string {
+  return `${formatAmount(value)} %`
+}
 
 function DevLogin() {
   const { loginDev } = useAuth()
@@ -254,6 +269,8 @@ function PartiesPage({
       identificationNumber: FormDataEntryValue | null
       role: FormDataEntryValue | null
       email: FormDataEntryValue | null
+      phone: FormDataEntryValue | null
+      address: FormDataEntryValue | null
     }) =>
       apiRequest<Party>(token, data.id ? `/parties/${data.id}` : '/parties', {
         method: data.id ? 'PUT' : 'POST',
@@ -264,6 +281,8 @@ function PartiesPage({
           identificationNumber: data.identificationNumber,
           roles: [data.role],
           email: data.email || null,
+          phone: data.phone || null,
+          address: data.address || null,
         }),
       }),
     onSuccess: () => {
@@ -284,7 +303,42 @@ function PartiesPage({
         identificationNumber: data.get('identificationNumber'),
         role: data.get('role'),
         email: data.get('email'),
+        phone: data.get('phone'),
+        address: data.get('address'),
       },
+    )
+  }
+
+  if (editor !== undefined) {
+    return (
+      <>
+        <ErpPageHeader
+          eyebrow={editor ? 'Edición de contacto' : 'Nuevo contacto'}
+          title={editor ? editor.name : 'Nuevo contacto'}
+          subtitle="Completa los datos tributarios y de contacto usados por facturación y cartera."
+        />
+        <ErpFormPanel
+          key={editor?.id ?? 'new-party'}
+          eyebrow={editor ? 'Edición' : 'Nuevo registro'}
+          title={editor ? 'Editar contacto' : 'Nuevo contacto'}
+          pending={createParty.isPending}
+          error={createParty.error?.message}
+          onSubmit={submitParty}
+          onCancel={() => setEditor(undefined)}
+        >
+          <label>Nombre o razón social<input name="name" defaultValue={editor?.name} required /></label>
+          <div className="field-row">
+            <label>Tipo<select name="identificationType" defaultValue={editor?.identificationType ?? 'RUC'}><option>RUC</option><option>CEDULA</option><option>PASSPORT</option><option>FINAL_CONSUMER</option></select></label>
+            <label>Número<input name="identificationNumber" defaultValue={editor?.identificationNumber} required /></label>
+          </div>
+          <label>Rol<select name="role" defaultValue={editor?.roles[0] ?? 'CUSTOMER'}><option value="CUSTOMER">Cliente</option><option value="SUPPLIER">Proveedor</option></select></label>
+          <div className="field-row">
+            <label>Correo<input name="email" type="email" defaultValue={editor?.email ?? ''} /></label>
+            <label>Teléfono<input name="phone" type="tel" defaultValue={editor?.phone ?? ''} /></label>
+          </div>
+          <label>Dirección<textarea name="address" rows={3} defaultValue={editor?.address ?? ''} /></label>
+        </ErpFormPanel>
+      </>
     )
   }
 
@@ -306,16 +360,18 @@ function PartiesPage({
           <input value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
       </ErpToolbar>
-      <section className={`split-layout ${editor === undefined ? 'erp-list-only' : ''}`}>
+      <section className="split-layout erp-list-only">
         <ErpPanel title="Clientes y proveedores" count={filtered.length}>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} aria-label="Listado de contactos">
             <table className="erp-responsive-table">
-              <thead><tr><th>Nombre</th><th>Identificación</th><th>Rol</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Nombre</th><th>Identificación</th><th>Contacto</th><th>Dirección</th><th>Rol</th><th>Acciones</th></tr></thead>
               <tbody>
                 {filtered.map((party) => (
                   <tr key={party.id}>
                     <td><strong>{party.name}</strong><small>{party.email ?? 'Sin correo'}</small></td>
                     <td>{party.identificationNumber}</td>
+                    <td>{party.phone ?? 'Sin teléfono'}</td>
+                    <td>{party.address ?? 'Sin dirección'}</td>
                     <td><span className="tag">{party.roles.join(' / ')}</span></td>
                     <td>
                       <ErpActionCell>
@@ -345,25 +401,6 @@ function PartiesPage({
             ) : null}
           </div>
         </ErpPanel>
-        {editor !== undefined ? (
-          <ErpFormPanel
-            key={editor?.id ?? 'new-party'}
-            eyebrow={editor ? 'Edición' : 'Nuevo registro'}
-            title={editor ? 'Editar contacto' : 'Nuevo contacto'}
-            pending={createParty.isPending}
-            error={createParty.error?.message}
-            onSubmit={submitParty}
-            onCancel={() => setEditor(undefined)}
-          >
-            <label>Nombre o razón social<input name="name" defaultValue={editor?.name} required /></label>
-            <div className="field-row">
-              <label>Tipo<select name="identificationType" defaultValue={editor?.identificationType ?? 'RUC'}><option>RUC</option><option>CEDULA</option><option>PASSPORT</option></select></label>
-              <label>Número<input name="identificationNumber" defaultValue={editor?.identificationNumber} required /></label>
-            </div>
-            <label>Rol<select name="role" defaultValue={editor?.roles[0] ?? 'CUSTOMER'}><option value="CUSTOMER">Cliente</option><option value="SUPPLIER">Proveedor</option></select></label>
-            <label>Correo<input name="email" type="email" defaultValue={editor?.email ?? ''} /></label>
-          </ErpFormPanel>
-        ) : null}
       </section>
     </>
   )
@@ -424,6 +461,32 @@ function ProductsPage({
     )
   }
 
+  if (editor !== undefined) {
+    return (
+      <>
+        <ErpPageHeader
+          eyebrow={editor ? 'Edición de producto' : 'Nuevo producto'}
+          title={editor ? editor.name : 'Nuevo producto'}
+          subtitle="Define precio e impuesto; el servidor conservará la precisión para los cálculos fiscales."
+        />
+        <ErpFormPanel
+          key={editor?.id ?? 'new-product'}
+          eyebrow={editor ? 'Edición' : 'Nuevo registro'}
+          title={editor ? 'Editar producto' : 'Nuevo producto'}
+          pending={createProduct.isPending}
+          error={createProduct.error?.message}
+          onSubmit={submitProduct}
+          onCancel={() => setEditor(undefined)}
+        >
+          <label>Nombre<input name="name" defaultValue={editor?.name} required /></label>
+          <label>Código interno<input name="code" defaultValue={editor?.code ?? ''} /></label>
+          <label>Precio unitario<input name="unitPrice" type="number" min="0" step="0.000001" defaultValue={editor?.unitPrice} required /></label>
+          <label>Categoría tributaria<select name="taxCategoryId" defaultValue={editor?.taxCategoryId ?? taxes[0]?.id} required>{taxes.map((tax) => <option key={tax.id} value={tax.id}>{tax.name} · {formatPercent(tax.rate)}</option>)}</select></label>
+        </ErpFormPanel>
+      </>
+    )
+  }
+
   return (
     <>
       <ErpPageHeader
@@ -443,7 +506,7 @@ function ProductsPage({
         </label>
         <ErpStatusBadge>{products.length} activos</ErpStatusBadge>
       </ErpToolbar>
-      <section className={`split-layout ${editor === undefined ? 'erp-list-only' : ''}`}>
+      <section className="split-layout erp-list-only">
         <ErpPanel title="Catálogo" count={filtered.length}>
           <div className="product-grid" aria-label="Productos">
             {filtered.map((product, index) => (
@@ -451,7 +514,7 @@ function ProductsPage({
                 <span>{String(index + 1).padStart(2, '0')}</span>
                 <h2>{product.name}</h2>
                 <p>{product.code ?? 'Sin código interno'}</p>
-                <strong>${Number(product.unitPrice).toFixed(2)}</strong>
+                <strong>${formatAmount(product.unitPrice)}</strong>
                 <ErpButton
                   variant="ghost"
                   aria-label={`Editar ${product.name}`}
@@ -474,22 +537,6 @@ function ProductsPage({
             ) : null}
           </div>
         </ErpPanel>
-        {editor !== undefined ? (
-          <ErpFormPanel
-            key={editor?.id ?? 'new-product'}
-            eyebrow={editor ? 'Edición' : 'Nuevo registro'}
-            title={editor ? 'Editar producto' : 'Nuevo producto'}
-            pending={createProduct.isPending}
-            error={createProduct.error?.message}
-            onSubmit={submitProduct}
-            onCancel={() => setEditor(undefined)}
-          >
-            <label>Nombre<input name="name" defaultValue={editor?.name} required /></label>
-            <label>Código interno<input name="code" defaultValue={editor?.code ?? ''} /></label>
-            <label>Precio unitario<input name="unitPrice" type="number" min="0" step="0.000001" defaultValue={editor?.unitPrice} required /></label>
-            <label>Categoría tributaria<select name="taxCategoryId" defaultValue={editor?.taxCategoryId ?? taxes[0]?.id} required>{taxes.map((tax) => <option key={tax.id} value={tax.id}>{tax.name} · {tax.rate}%</option>)}</select></label>
-          </ErpFormPanel>
-        ) : null}
       </section>
     </>
   )
@@ -714,9 +761,10 @@ function NewInvoiceForm({
                 required
               >
                 <option value="" disabled>Seleccionar…</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>{product.name}</option>
-                ))}
+                {products.map((product) => {
+                  const tax = taxes.find((item) => item.id === product.taxCategoryId)
+                  return <option key={product.id} value={product.id}>{product.name}{tax ? ` · IVA ${formatPercent(tax.rate)}` : ''}</option>
+                })}
               </select>
             </label>
             <div className="field-row">
@@ -829,7 +877,7 @@ function CreditNoteForm({
       onSubmit={submit}
       onCancel={onCancel}
     >
-      <p className="fine-print">Factura {invoice.sequential} · Total acreditable ${invoice.total}</p>
+      <p className="fine-print">Factura {invoice.sequential} · Total acreditable ${formatAmount(invoice.total)}</p>
       <label>
         Motivo
         <input value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} required />
@@ -909,20 +957,20 @@ function InvoiceDetail({
 
   if (invoiceQuery.isPending) {
     return (
-      <aside className="form-panel erp-form-panel" aria-busy="true">
+      <section className="form-panel erp-form-panel erp-full-page-form" aria-busy="true">
         <p>Cargando factura…</p>
-      </aside>
+      </section>
     )
   }
 
   if (invoiceQuery.error || !invoiceQuery.data) {
     return (
-      <aside className="form-panel erp-form-panel">
+      <section className="form-panel erp-form-panel erp-full-page-form">
         <p className="form-error" role="alert">
           {invoiceQuery.error?.message ?? 'No se pudo cargar la factura'}
         </p>
         <ErpButton variant="secondary" onClick={onClose}>Cancelar</ErpButton>
-      </aside>
+      </section>
     )
   }
 
@@ -930,19 +978,61 @@ function InvoiceDetail({
   const transmission = invoice.sriTransmission
   const canIssue = invoice.status === 'DRAFT'
   const canCreditNote = invoice.type === 'INVOICE' && invoice.status === 'AUTHORIZED'
+  const taxBreakdown = Array.from(
+    invoice.lines.reduce((groups, line) => {
+      const current = groups.get(line.taxRate) ?? { base: 0, tax: 0 }
+      current.base += Number(line.baseAmount)
+      current.tax += Number(line.taxAmount)
+      groups.set(line.taxRate, current)
+      return groups
+    }, new Map<string, { base: number; tax: number }>()),
+  ).sort(([left], [right]) => Number(right) - Number(left))
 
   return (
-    <aside className="form-panel erp-form-panel invoice-detail" aria-labelledby="invoice-detail-title">
+    <section className="form-panel erp-form-panel erp-full-page-form invoice-detail" aria-labelledby="invoice-detail-title">
       <p className="section-number">Detalle</p>
       <h2 id="invoice-detail-title">Factura {invoice.sequential}</h2>
       <InvoiceStatusBadge status={invoice.status} />
-      <dl className="invoice-summary">
+      <dl className="invoice-summary invoice-metadata">
         <div><dt>Fecha</dt><dd>{invoice.issueDate}</dd></div>
-        <div><dt>Subtotal</dt><dd>${invoice.subtotal}</dd></div>
-        <div><dt>Impuesto</dt><dd>${invoice.tax}</dd></div>
-        <div><dt>Total</dt><dd>${invoice.total}</dd></div>
         {invoice.accessKey ? <div><dt>Clave de acceso</dt><dd>{invoice.accessKey}</dd></div> : null}
       </dl>
+
+      <section aria-labelledby="invoice-lines-title">
+        <p className="section-number" id="invoice-lines-title">Detalle de productos y servicios</p>
+        <div className="table-wrap" tabIndex={0} aria-label="Líneas de la factura">
+          <table className="invoice-detail-table">
+            <thead>
+              <tr><th>Cant.</th><th>Descripción</th><th>P. unitario</th><th>Descuento</th><th>Base</th><th>IVA</th><th>Valor IVA</th><th>Total</th></tr>
+            </thead>
+            <tbody>
+              {invoice.lines.map((line) => (
+                <tr key={line.id}>
+                  <td>{formatAmount(line.quantity)}</td>
+                  <td><strong>{line.description}</strong></td>
+                  <td>${formatAmount(line.unitPrice)}</td>
+                  <td>${formatAmount(line.discount)}</td>
+                  <td>${formatAmount(line.baseAmount)}</td>
+                  <td>{formatPercent(line.taxRate)}</td>
+                  <td>${formatAmount(line.taxAmount)}</td>
+                  <td>${formatAmount(Number(line.baseAmount) + Number(line.taxAmount))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <dl className="invoice-totals">
+          {taxBreakdown.map(([rate, values]) => (
+            <div key={`subtotal-${rate}`}><dt>Subtotal IVA {formatPercent(rate)}</dt><dd>${formatAmount(values.base)}</dd></div>
+          ))}
+          <div data-testid="invoice-subtotal"><dt>Subtotal</dt><dd>${formatAmount(invoice.subtotal)}</dd></div>
+          {taxBreakdown.filter(([, values]) => values.tax > 0).map(([rate, values]) => (
+            <div key={`tax-${rate}`}><dt>IVA {formatPercent(rate)}</dt><dd>${formatAmount(values.tax)}</dd></div>
+          ))}
+          <div data-testid="invoice-tax"><dt>IVA total</dt><dd>${formatAmount(invoice.tax)}</dd></div>
+          <div className="invoice-grand-total" data-testid="invoice-total"><dt>Total</dt><dd>${formatAmount(invoice.total)}</dd></div>
+        </dl>
+      </section>
 
       <section aria-labelledby="sri-status-title">
         <p className="section-number" id="sri-status-title">Estado SRI</p>
@@ -971,21 +1061,21 @@ function InvoiceDetail({
               <li key={artifact.id}>
                 <span>{artifact.artifactType === 'xml-signed' ? 'XML' : 'RIDE'}</span>
                 <div>
-                  <strong>Versión {artifact.version}</strong>
+                  <strong>{artifact.artifactType === 'xml-signed' ? 'XML firmado' : 'RIDE PDF'} · Versión {artifact.version}</strong>
                   <ErpButton variant="ghost" onClick={() => void downloadArtifact(artifact.id)}>
-                    Descargar
+                    {artifact.artifactType === 'xml-signed' ? 'Descargar XML firmado' : 'Descargar RIDE PDF'}
                   </ErpButton>
                 </div>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="fine-print">Sin artefactos generados todavía.</p>
+          <p className="fine-print">Los archivos estarán disponibles después de firmar la factura.</p>
         )}
       </section>
 
       <div className="erp-form-actions">
-        <ErpButton variant="secondary" onClick={onClose}>Cancelar</ErpButton>
+        <ErpButton variant="secondary" onClick={onClose}>Volver al listado</ErpButton>
         {canCreditNote ? (
           <ErpButton variant="secondary" onClick={() => onOpenCreditNote(invoice)}>
             Nota de crédito
@@ -999,7 +1089,7 @@ function InvoiceDetail({
           {issueInvoice.isPending ? 'Emitiendo…' : 'Emitir'}
         </ErpButton>
       </div>
-    </aside>
+    </section>
   )
 }
 
@@ -1037,6 +1127,26 @@ function InvoicesPage({
     lastTriggerRef.current?.focus()
   }
 
+  if (panel?.view === 'new') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Facturación electrónica" title="Nueva factura" subtitle="Crea el borrador; los totales serán calculados y validados por el servidor." />
+        <NewInvoiceForm token={token} customers={customers} products={products} taxes={taxes} establishments={establishments} emissionPoints={emissionPoints} onCreated={(invoiceId) => setPanel({ view: 'detail', id: invoiceId })} onCancel={closePanel} />
+      </>
+    )
+  }
+  if (panel?.view === 'detail') {
+    return <InvoiceDetail key={panel.id} token={token} invoiceId={panel.id} onClose={closePanel} onOpenCreditNote={(invoice) => setPanel({ view: 'credit-note', invoice })} />
+  }
+  if (panel?.view === 'credit-note') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Facturación electrónica" title="Nueva nota de crédito" subtitle={`Documento relacionado con la factura ${panel.invoice.sequential}.`} />
+        <CreditNoteForm token={token} invoice={panel.invoice} onCreated={() => setPanel({ view: 'detail', id: panel.invoice.id })} onCancel={() => setPanel({ view: 'detail', id: panel.invoice.id })} />
+      </>
+    )
+  }
+
   return (
     <>
       <ErpPageHeader
@@ -1052,9 +1162,9 @@ function InvoicesPage({
           </ErpButton>
         }
       />
-      <section className={`split-layout ${panel === undefined ? 'erp-list-only' : ''}`}>
+      <section className="split-layout erp-list-only">
         <ErpPanel title="Documentos" count={invoices.length}>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} aria-label="Listado de facturas">
             <table className="erp-responsive-table">
               <thead>
                 <tr>
@@ -1073,7 +1183,7 @@ function InvoicesPage({
                     <td>{partiesById.get(invoice.partyId)?.name ?? '—'}</td>
                     <td>{invoice.issueDate}</td>
                     <td><InvoiceStatusBadge status={invoice.status} /></td>
-                    <td>${invoice.total}</td>
+                    <td>${formatAmount(invoice.total)}</td>
                     <td>
                       <ErpActionCell>
                         <ErpButton
@@ -1107,35 +1217,6 @@ function InvoicesPage({
             ) : null}
           </div>
         </ErpPanel>
-        {panel?.view === 'new' ? (
-          <NewInvoiceForm
-            token={token}
-            customers={customers}
-            products={products}
-            taxes={taxes}
-            establishments={establishments}
-            emissionPoints={emissionPoints}
-            onCreated={(invoiceId) => setPanel({ view: 'detail', id: invoiceId })}
-            onCancel={closePanel}
-          />
-        ) : null}
-        {panel?.view === 'detail' ? (
-          <InvoiceDetail
-            key={panel.id}
-            token={token}
-            invoiceId={panel.id}
-            onClose={closePanel}
-            onOpenCreditNote={(invoice) => setPanel({ view: 'credit-note', invoice })}
-          />
-        ) : null}
-        {panel?.view === 'credit-note' ? (
-          <CreditNoteForm
-            token={token}
-            invoice={panel.invoice}
-            onCreated={() => setPanel({ view: 'detail', id: panel.invoice.id })}
-            onCancel={() => setPanel({ view: 'detail', id: panel.invoice.id })}
-          />
-        ) : null}
       </section>
     </>
   )
@@ -1253,7 +1334,7 @@ function RegisterPaymentForm({
       onSubmit={submit}
       onCancel={onCancel}
     >
-      <p className="fine-print">Saldo actual ${receivable.openAmount}. El saldo final lo calcula el servidor.</p>
+      <p className="fine-print">Saldo actual ${formatAmount(receivable.openAmount)}. El saldo final lo calcula el servidor.</p>
       <div className="field-row">
         <label>
           Monto en efectivo
@@ -1460,7 +1541,7 @@ function SendReminderForm({
       onSubmit={submit}
       onCancel={onCancel}
     >
-      <p className="fine-print">Saldo pendiente ${receivable.openAmount}.</p>
+      <p className="fine-print">Saldo pendiente ${formatAmount(receivable.openAmount)}.</p>
       <label>
         Canal
         <select value={channel} onChange={(event) => setChannel(event.target.value as ReminderInput['channel'])} required>
@@ -1519,7 +1600,24 @@ function ReceivablesPage({
       current?.map((item) => (item.id === updated.id ? updated : item)) ?? current,
     )
     void queryClient.invalidateQueries({ queryKey: ['receivables'] })
-    setPanel({ view: 'payment', receivable: updated })
+    closePanel()
+  }
+
+  if (panel?.view === 'payment') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Registrar cobro" subtitle={`Saldo actual: $${formatAmount(panel.receivable.openAmount)}`} />
+        <RegisterPaymentForm key={panel.receivable.id} token={token} receivable={panel.receivable} onSaved={applyUpdatedReceivable} onCancel={closePanel} />
+      </>
+    )
+  }
+  if (panel?.view === 'reminder') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Enviar recordatorio" subtitle={`Saldo pendiente: $${formatAmount(panel.receivable.openAmount)}`} />
+        <SendReminderForm key={panel.receivable.id} token={token} receivable={panel.receivable} onSent={closePanel} onCancel={closePanel} />
+      </>
+    )
   }
 
   return (
@@ -1545,9 +1643,9 @@ function ReceivablesPage({
           </select>
         </label>
       </ErpToolbar>
-      <section className={`split-layout ${panel === undefined ? 'erp-list-only' : ''}`}>
+      <section className="split-layout erp-list-only">
         <ErpPanel title="Cuentas por cobrar" count={receivables.length}>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} aria-label="Listado de cuentas por cobrar">
             <table className="erp-responsive-table">
               <thead>
                 <tr>
@@ -1563,8 +1661,8 @@ function ReceivablesPage({
                 {receivables.map((receivable) => (
                   <tr key={receivable.id}>
                     <td><strong>{partiesById.get(receivable.partyId)?.name ?? receivable.partyId}</strong></td>
-                    <td>${receivable.originalAmount}</td>
-                    <td>${receivable.openAmount}</td>
+                    <td>${formatAmount(receivable.originalAmount)}</td>
+                    <td>${formatAmount(receivable.openAmount)}</td>
                     <td><ReceivableStatusBadge status={receivable.status} /></td>
                     <td><AgingChip dueDate={receivable.dueDate} /></td>
                     <td>
@@ -1599,24 +1697,6 @@ function ReceivablesPage({
             ) : null}
           </div>
         </ErpPanel>
-        {panel?.view === 'payment' ? (
-          <RegisterPaymentForm
-            key={panel.receivable.id}
-            token={token}
-            receivable={panel.receivable}
-            onSaved={applyUpdatedReceivable}
-            onCancel={closePanel}
-          />
-        ) : null}
-        {panel?.view === 'reminder' ? (
-          <SendReminderForm
-            key={panel.receivable.id}
-            token={token}
-            receivable={panel.receivable}
-            onSent={closePanel}
-            onCancel={closePanel}
-          />
-        ) : null}
       </section>
     </>
   )
@@ -1625,10 +1705,46 @@ function ReceivablesPage({
 function OrganizationPage({
   context,
   establishments,
+  token,
 }: {
   context: TenantContext
   establishments: Establishment[]
+  token: string
 }) {
+  const queryClient = useQueryClient()
+  const fiscalQuery = useQuery({
+    queryKey: ['organization', 'fiscal-settings'],
+    queryFn: () => apiRequest<FiscalSettings>(token, '/organization/fiscal-settings'),
+  })
+  const updateEnvironment = useMutation({
+    mutationFn: (sriEnvironment: '1' | '2') =>
+      apiRequest<FiscalSettings>(token, '/organization/fiscal-settings', {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('web-fiscal-environment') },
+        body: JSON.stringify({ sriEnvironment }),
+      }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['organization', 'fiscal-settings'], settings)
+    },
+  })
+  const uploadCertificate = useMutation({
+    mutationFn: (formData: FormData) =>
+      apiRequest<FiscalSettings>(token, '/organization/signing-certificate', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-signing-certificate') },
+        body: formData,
+      }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['organization', 'fiscal-settings'], settings)
+    },
+  })
+
+  function submitCertificate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    uploadCertificate.mutate(new FormData(event.currentTarget))
+  }
+
+  const fiscal = fiscalQuery.data
   return (
     <>
       <ErpPageHeader
@@ -1637,7 +1753,7 @@ function OrganizationPage({
         subtitle="Datos del contribuyente y estructura de emisión."
         meta={<ErpStatusBadge tone="success">Tenant activo</ErpStatusBadge>}
       />
-      <section className="company-grid">
+      <section className="company-grid company-grid-expanded">
         <article className="company-identity">
           <p className="section-number">Contribuyente</p>
           <h2>{context.name}</h2>
@@ -1647,6 +1763,58 @@ function OrganizationPage({
           <ul className="establishment-list">
             {establishments.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.address}</small></div></li>)}
           </ul>
+        </ErpPanel>
+        <ErpPanel
+          title="Ambiente SRI"
+          actions={fiscal ? <ErpStatusBadge tone={fiscal.sriEnvironment === '2' ? 'warning' : 'neutral'}>{fiscal.sriEnvironment === '2' ? 'Producción' : 'Pruebas'}</ErpStatusBadge> : null}
+          className="fiscal-settings-panel"
+        >
+          {fiscalQuery.isPending ? <p className="fiscal-panel-copy">Cargando configuración fiscal…</p> : null}
+          {fiscalQuery.error ? <p className="form-error" role="alert">{fiscalQuery.error.message}</p> : null}
+          {fiscal ? (
+            <div className="fiscal-panel-body">
+              <label>
+                Ambiente de emisión
+                <select
+                  value={fiscal.sriEnvironment}
+                  disabled={updateEnvironment.isPending}
+                  onChange={(event) => updateEnvironment.mutate(event.target.value as '1' | '2')}
+                >
+                  <option value="1">1 · Pruebas</option>
+                  <option value="2">2 · Producción</option>
+                </select>
+              </label>
+              {fiscal.sriEnvironment === '2' ? (
+                <p className="environment-warning">La empresa queda preparada para producción. Este entorno de staging bloqueará cualquier envío fiscal real.</p>
+              ) : null}
+              {updateEnvironment.error ? <p className="form-error" role="alert">{updateEnvironment.error.message}</p> : null}
+            </div>
+          ) : null}
+        </ErpPanel>
+        <ErpPanel
+          title="Firma electrónica"
+          actions={fiscal?.certificateConfigured ? <ErpStatusBadge tone="success">Configurada</ErpStatusBadge> : <ErpStatusBadge tone="warning">Pendiente</ErpStatusBadge>}
+          className="fiscal-settings-panel"
+        >
+          <div className="fiscal-panel-body">
+            {fiscal?.certificateConfigured ? (
+              <dl className="certificate-details">
+                <div><dt>Titular</dt><dd>{fiscal.certificateSubject ?? 'No disponible'}</dd></div>
+                <div><dt>Vigencia</dt><dd>{fiscal.certificateValidTo ? new Date(fiscal.certificateValidTo).toLocaleDateString('es-EC') : 'No disponible'}</dd></div>
+                <div><dt>Fingerprint SHA-256</dt><dd>{fiscal.certificateFingerprintSha256}</dd></div>
+              </dl>
+            ) : (
+              <p className="fiscal-panel-copy">Carga el certificado PKCS#12 de esta empresa. La contraseña se cifra y nunca vuelve al navegador.</p>
+            )}
+            <form className="certificate-form" onSubmit={submitCertificate}>
+              <label>Certificado (.p12 o .pfx)<input name="file" type="file" accept=".p12,.pfx,application/x-pkcs12" required /></label>
+              <label>Contraseña del certificado<input name="password" type="password" autoComplete="new-password" required /></label>
+              {uploadCertificate.error ? <p className="form-error" role="alert">{uploadCertificate.error.message}</p> : null}
+              <ErpButton variant="primary" type="submit" disabled={uploadCertificate.isPending}>
+                {uploadCertificate.isPending ? 'Validando y guardando…' : fiscal?.certificateConfigured ? 'Reemplazar certificado' : 'Guardar certificado'}
+              </ErpButton>
+            </form>
+          </div>
         </ErpPanel>
       </section>
     </>
@@ -1722,9 +1890,9 @@ function Workspace() {
             emissionPoints={emissionPointsQuery.data ?? []}
           />
         ) : null}
-        {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} /> : null}
+        {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
-        {section === 'crm' ? <LeadsPage /> : null}
+        {section === 'crm' ? <LeadsPage token={token} /> : null}
       </main>
     </div>
   )

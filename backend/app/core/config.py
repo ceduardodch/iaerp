@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # scripts/generate_test_certificate.py.
     IAERP_SIGNING_CERT_PATH: str | None = None
     IAERP_SIGNING_CERT_PASSWORD: SecretStr | None = None
+    IAERP_SECRETS_ENCRYPTION_KEY: SecretStr | None = None
 
     # Simulador SRI (ver app/integrations/sri/simulator.py). Solo se monta el
     # router `/sri-sim` si esta habilitado; NUNCA puede habilitarse fuera de

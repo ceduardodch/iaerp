@@ -160,6 +160,83 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /organization/fiscal-settings:
+    get:
+      operationId: getFiscalSettings
+      summary: Consultar ambiente SRI y metadatos seguros de la firma del tenant
+      security:
+        - oauth2: ["organization:read"]
+      responses:
+        "200":
+          description: Configuracion fiscal sin secretos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FiscalSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: updateFiscalSettings
+      summary: Cambiar el ambiente SRI del tenant
+      security:
+        - oauth2: ["organization:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FiscalSettingsInput"
+      responses:
+        "200":
+          description: Configuracion actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FiscalSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /organization/signing-certificate:
+    post:
+      operationId: uploadSigningCertificate
+      summary: Validar y guardar el certificado PKCS12 privado del tenant
+      security:
+        - oauth2: ["organization:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file, password]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                password:
+                  type: string
+                  format: password
+      responses:
+        "200":
+          description: Certificado validado y almacenado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FiscalSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
   /emission-points:
     get:
       operationId: listEmissionPoints
@@ -605,6 +682,56 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /invoices/{invoiceId}/artifacts:
+    get:
+      operationId: listInvoiceArtifacts
+      summary: Listar XML firmado y RIDE PDF del comprobante
+      security:
+        - oauth2: ["invoices:read"]
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+      responses:
+        "200":
+          description: Artefactos privados disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentArtifact"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /invoices/{invoiceId}/artifacts/{artifactId}/download:
+    get:
+      operationId: createInvoiceArtifactDownload
+      summary: Crear una descarga privada de corta duracion
+      security:
+        - oauth2: ["invoices:read"]
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+        - name: artifactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: URL prefirmada con nombre y formato de descarga
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactDownload"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /credit-notes:
     post:
       operationId: createAndIssueCreditNote
@@ -1187,6 +1314,37 @@ components:
           type: string
         address:
           type: string
+    FiscalSettingsInput:
+      type: object
+      additionalProperties: false
+      required: [sriEnvironment]
+      properties:
+        sriEnvironment:
+          type: string
+          enum: ["1", "2"]
+    FiscalSettings:
+      allOf:
+        - $ref: "#/components/schemas/FiscalSettingsInput"
+        - type: object
+          additionalProperties: false
+          required: [certificateConfigured]
+          properties:
+            certificateConfigured:
+              type: boolean
+            certificateFingerprintSha256:
+              type: [string, "null"]
+              pattern: "^[0-9A-F]{64}$"
+            certificateSubject:
+              type: [string, "null"]
+            certificateValidFrom:
+              type: [string, "null"]
+              format: date-time
+            certificateValidTo:
+              type: [string, "null"]
+              format: date-time
+            certificateUploadedAt:
+              type: [string, "null"]
+              format: date-time
     Establishment:
       type: object
       additionalProperties: false
@@ -1572,6 +1730,39 @@ components:
           type: string
         taxAmount:
           $ref: "#/components/schemas/NonNegativeDecimal"
+    DocumentArtifact:
+      type: object
+      additionalProperties: false
+      required: [id, artifactType, sha256, version, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        artifactType:
+          type: string
+          enum: [xml-signed, ride-pdf]
+        sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+    ArtifactDownload:
+      type: object
+      additionalProperties: false
+      required: [downloadUrl, expiresInSeconds, fileName]
+      properties:
+        downloadUrl:
+          type: string
+          format: uri
+        expiresInSeconds:
+          type: integer
+          minimum: 1
+        fileName:
+          type: string
     AccountItem:
       type: object
       additionalProperties: false

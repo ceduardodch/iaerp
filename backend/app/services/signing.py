@@ -84,6 +84,7 @@ def load_signing_credentials(
     *,
     cert_path: Path | None = None,
     password: bytes | None = None,
+    p12_bytes: bytes | None = None,
 ) -> tuple[bytes, bytes, bytes]:
     """Carga la clave privada, certificado y bytes DER del certificado desde el .p12.
 
@@ -95,13 +96,14 @@ def load_signing_credentials(
     resolved_path = cert_path or _resolve_cert_path()
     resolved_password = password if password is not None else _resolve_cert_password()
 
-    _ensure_dev_certificate_exists(resolved_path)
+    if p12_bytes is None:
+        _ensure_dev_certificate_exists(resolved_path)
 
     from cryptography.hazmat.primitives import serialization
 
-    p12_bytes = resolved_path.read_bytes()
+    certificate_bytes = p12_bytes if p12_bytes is not None else resolved_path.read_bytes()
     private_key, certificate, _additional_certs = pkcs12.load_key_and_certificates(
-        p12_bytes, resolved_password
+        certificate_bytes, resolved_password
     )
     if private_key is None or certificate is None:
         raise ValueError(f"PKCS#12 file at {resolved_path} is missing a key or certificate")
@@ -127,6 +129,7 @@ def sign_xml(
     *,
     cert_path: Path | None = None,
     password: bytes | None = None,
+    p12_bytes: bytes | None = None,
 ) -> SigningResult:
     """Firma ``xml_bytes`` (enveloped XML-DSig, base de XAdES-BES) y retorna resultado.
 
@@ -137,7 +140,7 @@ def sign_xml(
     """
 
     private_key_pem, certificate_pem, certificate_der = load_signing_credentials(
-        cert_path=cert_path, password=password
+        cert_path=cert_path, password=password, p12_bytes=p12_bytes
     )
 
     root = etree.fromstring(xml_bytes)

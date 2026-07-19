@@ -156,3 +156,4 @@ class DocumentArtifactRead(APIModel):
 class ArtifactDownloadRead(APIModel):
     download_url: str
     expires_in_seconds: int
+    file_name: str

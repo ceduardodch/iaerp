@@ -19,6 +19,13 @@ type SalesDocument = {
   total: string
 }
 
+function formatAmount(value: string) {
+  return new Intl.NumberFormat('es-EC', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value))
+}
+
 test.describe.configure({ mode: 'serial' })
 
 test('creates an invoice draft with two lines and a discount; UI shows exactly the backend totals', async ({
@@ -44,12 +51,20 @@ test('creates an invoice draft with two lines and a discount; UI shows exactly t
   await page.getByRole('button', { name: 'Nueva factura' }).first().click()
 
   await page.getByLabel('Cliente').selectOption({ label: 'Cliente Sintetico Norte' })
-  await page.getByLabel('Producto 1').selectOption({ label: productName })
+  const firstProductId = await page
+    .getByLabel('Producto 1')
+    .locator('option', { hasText: productName })
+    .getAttribute('value')
+  await page.getByLabel('Producto 1').selectOption(firstProductId ?? '')
   await page.getByLabel('Cantidad').fill('2')
   await page.getByLabel('Descuento').fill('1.50')
 
   await page.getByRole('button', { name: 'Agregar línea' }).click()
-  await page.getByLabel('Producto 2').selectOption({ label: 'Servicio Norte' })
+  const secondProductId = await page
+    .getByLabel('Producto 2')
+    .locator('option', { hasText: /^Servicio Norte · IVA 15,00 %$/ })
+    .getAttribute('value')
+  await page.getByLabel('Producto 2').selectOption(secondProductId ?? '')
   await page.getByLabel('Cantidad').nth(1).fill('1')
 
   const draftResponse = page.waitForResponse(
@@ -65,15 +80,15 @@ test('creates an invoice draft with two lines and a discount; UI shows exactly t
   // impuestos ni totales, solo los muestra (regla del sprint).
   const detail = page.getByLabel(`Factura ${invoice.sequential}`, { exact: true })
   await expect(page.getByRole('heading', { name: `Factura ${invoice.sequential}` })).toBeVisible()
-  await expect(detail.getByText(`$${invoice.subtotal}`)).toBeVisible()
-  await expect(detail.getByText(`$${invoice.tax}`)).toBeVisible()
-  await expect(detail.getByText(`$${invoice.total}`)).toBeVisible()
+  await expect(detail.getByTestId('invoice-subtotal')).toContainText(`$${formatAmount(invoice.subtotal)}`)
+  await expect(detail.getByTestId('invoice-tax')).toContainText(`$${formatAmount(invoice.tax)}`)
+  await expect(detail.getByTestId('invoice-total')).toContainText(`$${formatAmount(invoice.total)}`)
   await expect(detail.getByText('BORRADOR', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Cancelar' }).click()
+  await page.getByRole('button', { name: 'Volver al listado' }).click()
   await expect(page.getByRole('cell', { name: invoice.sequential, exact: true })).toBeVisible()
   await expect(
-    page.getByRole('row', { name: new RegExp(invoice.sequential) }).getByText(`$${invoice.total}`),
+    page.getByRole('row', { name: new RegExp(invoice.sequential) }).getByText(`$${formatAmount(invoice.total)}`),
   ).toBeVisible()
 
   await page

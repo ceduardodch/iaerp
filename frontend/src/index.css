@@ -23,7 +23,7 @@
 * { box-sizing: border-box; }
 html { min-width: 320px; background: var(--canvas); }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .6; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
@@ -85,6 +85,7 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 .erp-panel-heading-side { display: flex; align-items: center; gap: .75rem; }
 .erp-list-only { grid-template-columns: minmax(0, 1fr); }
 .erp-form-panel form { gap: 0; }
+.erp-full-page-form { width: 100%; max-width: 1180px; }
 .erp-form-fields { display: grid; gap: 1rem; }
 .erp-form-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: .6rem; margin: 1.5rem -1.5rem -1.5rem; padding: 1rem 1.5rem; border-top: 1px solid var(--line); background: rgba(251,250,245,.96); backdrop-filter: blur(10px); }
 .erp-action-cell { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; }
@@ -123,7 +124,8 @@ td small { margin-top: .25rem; color: var(--muted); }
 .form-panel { padding: 1.5rem; border-top: 4px solid var(--clay); }
 .form-panel form, .login-panel form { display: grid; gap: 1rem; }
 label { display: grid; gap: .4rem; color: var(--muted); font-size: .7rem; font-weight: 650; }
-input, select { min-width: 0; width: 100%; padding: .75rem; border: 1px solid #c8c5ba; border-radius: .25rem; color: var(--ink); background: white; }
+input, select, textarea { min-width: 0; width: 100%; padding: .75rem; border: 1px solid #c8c5ba; border-radius: .25rem; color: var(--ink); background: white; }
+textarea { resize: vertical; }
 .field-row { display: grid; grid-template-columns: .65fr 1fr; gap: .7rem; }
 .primary-button { min-height: 44px; padding: .8rem 1rem; border: 0; border-radius: .25rem; color: white; background: var(--forest); font-weight: 700; }
 .primary-button:hover { background: #235b4c; }
@@ -138,6 +140,7 @@ input, select { min-width: 0; width: 100%; padding: .75rem; border: 1px solid #c
 .erp-panel .product-grid { border: 0; }
 .empty-state { padding: 2rem; background: var(--paper); }
 .company-grid { display: grid; grid-template-columns: .75fr 1.25fr; gap: 1.5rem; }
+.company-grid-expanded { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .company-identity { padding: 2rem; color: white; background: var(--forest); }
 .company-identity .section-number { color: var(--lime); }
 .company-identity h2 { margin: 5rem 0 2rem; font-size: 2.7rem; }
@@ -159,6 +162,20 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .invoice-summary dt { color: var(--muted); font-size: .68rem; }
 .invoice-summary dd { margin: 0; font-size: .78rem; text-align: right; word-break: break-all; }
 .invoice-detail section { margin-top: 1.5rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }
+.invoice-detail-table { min-width: 900px; }
+.invoice-totals { width: min(100%, 460px); margin: 1.5rem 0 0 auto; }
+.invoice-totals div { display: flex; justify-content: space-between; gap: 1rem; padding: .6rem 0; border-top: 1px solid var(--line); }
+.invoice-totals dt, .invoice-totals dd { color: var(--ink); font-size: .75rem; }
+.invoice-grand-total { margin-top: .35rem; padding-top: 1rem !important; border-top: 2px solid var(--forest) !important; }
+.invoice-grand-total dt, .invoice-grand-total dd { font-size: 1.15rem; font-weight: 800; }
+.fiscal-settings-panel { min-width: 0; }
+.fiscal-panel-body { display: grid; gap: 1rem; padding: 1.5rem; }
+.fiscal-panel-copy { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.6; }
+.environment-warning { margin: 0; padding: .85rem; color: #745513; background: #f4e9c5; border-left: 4px solid #c18b1d; font-size: .72rem; line-height: 1.5; }
+.certificate-form { display: grid; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.certificate-form .erp-button { justify-self: start; }
+.certificate-details div { display: grid; grid-template-columns: 120px 1fr; }
+.certificate-details dd { overflow-wrap: anywhere; }
 
 .login-shell { min-height: 100vh; display: grid; grid-template-columns: 1.4fr .6fr; background: var(--forest); }
 .login-story { position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: clamp(2rem, 7vw, 7rem); color: white; overflow: hidden; }
@@ -174,7 +191,7 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 
 @media (max-width: 1050px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .split-layout, .company-grid { grid-template-columns: 1fr; }
+  .split-layout, .company-grid, .company-grid-expanded { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {

@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
+from app.core.config import get_settings
 from app.core.timezones import today_in_fiscal_timezone
 from app.models.billing import (
     DocumentArtifact,
@@ -38,7 +39,7 @@ from app.schemas.billing import (
     SRITransmissionRead,
 )
 from app.services import access_key as access_key_service
-from app.services import masters, ride, signing, sri_xml, storage
+from app.services import fiscal_settings, masters, ride, signing, sri_xml, storage
 from app.services.fiscal_policy import FiscalCalculationPolicy, LineInput, resolve_fiscal_policy
 from app.services.unit_of_work import append_audit
 
@@ -69,12 +70,6 @@ _CREDIT_NOTE_STATUSES_RESERVING_BALANCE = frozenset(
 # Evento outbox que dispara el worker de transmision SRI (workers/tasks.py
 # rutea por event_type; workers/sri_transmission.py es el handler).
 INVOICE_SIGNED_EVENT = "invoice.signed"
-
-# Ambiente SRI: 1=pruebas. IAERP no tiene credenciales de produccion en este
-# entorno (docs/sprints/sprint-02.md); todo documento se firma y transmite
-# como ambiente de pruebas hasta que exista un sprint con credenciales reales.
-_SRI_ENVIRONMENT_TEST = access_key_service.ENVIRONMENT_TEST
-
 
 async def _get_tenant_scoped_establishment(
     session: AsyncSession,
@@ -952,6 +947,25 @@ async def issue_document(
     establishment, emission_point, party = await _load_issue_context(session, context, document)
     lines = await list_sales_document_lines(session, context, document.id)
     tenant = await masters.get_active_tenant(session, context.tenant_id)
+    fiscal = await fiscal_settings.get_or_create(session, context.tenant_id)
+    runtime_settings = get_settings()
+    if fiscal.sri_environment == "2" and runtime_settings.APP_ENV not in {
+        "release",
+        "production",
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail="Production SRI emission is blocked outside release/production",
+        )
+
+    p12_bytes: bytes | None = None
+    certificate_password: bytes | None = None
+    if fiscal.certificate_object_key and fiscal.certificate_password_encrypted:
+        p12_bytes, certificate_password, _fiscal = (
+            await fiscal_settings.load_tenant_signing_credentials(session, context.tenant_id)
+        )
+    elif runtime_settings.APP_ENV not in {"development", "test"}:
+        raise HTTPException(status_code=409, detail="Signing certificate is not configured")
 
     document_code = (
         access_key_service.INVOICE_DOCUMENT_CODE
@@ -963,7 +977,7 @@ async def issue_document(
             issue_date=document.issue_date,
             document_code=document_code,
             ruc=tenant.ruc,
-            environment=_SRI_ENVIRONMENT_TEST,
+            environment=fiscal.sri_environment,
             establishment_code=establishment.code,
             emission_point_code=emission_point.code,
             sequential=document.sequential,
@@ -1006,7 +1020,11 @@ async def issue_document(
             reason=document.reason or "",
         )
 
-    signing_result = signing.sign_xml(xml_result.xml_bytes)
+    signing_result = signing.sign_xml(
+        xml_result.xml_bytes,
+        p12_bytes=p12_bytes,
+        password=certificate_password,
+    )
 
     await append_audit(
         session,
@@ -1139,9 +1157,19 @@ async def create_artifact_download(
     permanente (ADR 0005).
     """
 
+    document = await get_sales_document(session, context, document_id)
     artifact = await get_document_artifact(session, context, document_id, artifact_id)
-    download_url = await storage.generate_presigned_download_url(object_key=artifact.object_key)
+    extension = "xml" if artifact.artifact_type == "xml-signed" else "pdf"
+    prefix = "FACTURA" if document.document_type == "INVOICE" else "NOTA-CREDITO"
+    file_name = f"{prefix}-{document.sequential}.{extension}"
+    content_type = "application/xml" if extension == "xml" else "application/pdf"
+    download_url = await storage.generate_presigned_download_url(
+        object_key=artifact.object_key,
+        file_name=file_name,
+        content_type=content_type,
+    )
     return ArtifactDownloadRead(
         download_url=download_url,
         expires_in_seconds=int(storage.PRESIGNED_URL_EXPIRY.total_seconds()),
+        file_name=file_name,
     )

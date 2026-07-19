@@ -31,6 +31,9 @@ No se reutilizan bases, buckets, clients OAuth ni credenciales entre ambientes.
 - MinIO: versionado y replicacion/backup independiente.
 - Keycloak: export/configuracion y base respaldada.
 - Redis no es fuente de verdad.
+- La firma PKCS#12 vive en el bucket privado bajo el prefijo del tenant. Su
+  contraseña se cifra con `IAERP_SECRETS_ENCRYPTION_KEY`; rotar esa clave
+  exige descifrar y volver a cifrar los secretos antes del cambio.
 - RPO objetivo inicial: 24 horas; RTO objetivo: 4 horas.
 - Restauracion trimestral en ambiente aislado con evidencia.
 
@@ -60,10 +63,13 @@ Se prepararan procedimientos para:
 
 ## Despliegue
 
-- CI valida artefactos. Para staging, CD solicita el despliegue a Coolify solo
-  despues de que todos los jobs pasan; Coolify no hace auto-deploy al recibir
-  directamente el push de `release`.
-- `main` queda como unica fuente de produccion cuando ese ambiente sea creado.
+- CI valida `release` sin desplegarla. Coolify no hace auto-deploy al recibir
+  pushes directos; el unico despliegue automatico se solicita desde el job
+  protegido de GitHub Actions.
+- `main` es la fuente de produccion y dispara el despliegue Coolify una vez que
+  todos los jobs de CI terminan correctamente.
+- El Environment de GitHub que contiene el token conserva temporalmente el
+  nombre historico `staging`; es solo el scope del secreto y no el destino.
 - Migraciones se ejecutan como job controlado antes de habilitar nueva version.
 - Solo se permite un head Alembic y un job de migracion con lock.
 - El rol de migracion es distinto del rol de runtime.
