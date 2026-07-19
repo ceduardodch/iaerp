@@ -1,32 +1,20 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type CSSProperties, type DragEvent, type FormEvent } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, type FormEvent } from 'react'
 
 import {
   apiRequest,
   idempotencyKey,
   type Lead,
   type LeadCreate,
-  type LeadStatus,
   type LeadWithPartyCreate,
   type Party,
   type Product,
 } from '../../api'
-import { ErpButton, ErpEmptyState, ErpFormPanel, ErpPageHeader, ErpStatusBadge, ErpToolbar } from '../erp'
+import { ErpButton, ErpEmptyState, ErpFormPanel, ErpPageHeader, ErpToolbar } from '../erp'
+import { CrmKanban } from './CrmKanban'
+import { LeadCard } from './LeadCard'
 import { LeadDetailPanel } from './LeadDetailPanel'
-
-const PIPELINE: Array<{ id: LeadStatus; label: string }> = [
-  { id: 'NEW', label: 'Nuevo' },
-  { id: 'CONTACTED', label: 'Contactado' },
-  { id: 'QUALIFIED', label: 'Calificado' },
-  { id: 'PROPOSAL', label: 'Propuesta' },
-  { id: 'NEGOTIATION', label: 'Negociación' },
-  { id: 'WON', label: 'Ganado' },
-  { id: 'LOST', label: 'Perdido' },
-]
-
-const ACTIVE_STAGES = new Set<LeadStatus>([
-  'NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION',
-])
+import { useKanban } from '../../hooks/useKanban'
 
 type View = { kind: 'board' } | { kind: 'new' } | { kind: 'detail'; lead: Lead }
 
@@ -42,13 +30,16 @@ export function LeadsPage({
   const queryClient = useQueryClient()
   const [view, setView] = useState<View>({ kind: 'board' })
   const [contactMode, setContactMode] = useState<'existing' | 'new'>('existing')
-  const [query, setQuery] = useState('')
-  const [draggedId, setDraggedId] = useState<string | null>(null)
 
-  const leadsQuery = useQuery({
-    queryKey: ['crm-leads'],
-    queryFn: () => apiRequest<Lead[]>(token, '/crm/leads'),
-  })
+  // Hook custom para gestión del Kanban con drag & drop
+  const {
+    filteredLeads,
+    draggedLeadId,
+    leadsQuery,
+    selectLead,
+    setSearchQuery,
+    kanbanProviders,
+  } = useKanban({ token })
 
   const createLead = useMutation({
     mutationFn: ({ path, data }: { path: string; data: LeadCreate | LeadWithPartyCreate }) =>
@@ -61,23 +52,6 @@ export function LeadsPage({
       void queryClient.invalidateQueries({ queryKey: ['crm-leads'] })
       void queryClient.invalidateQueries({ queryKey: ['parties'] })
       setView({ kind: 'detail', lead })
-    },
-  })
-
-  const moveLead = useMutation({
-    mutationFn: ({ leadId, status }: { leadId: string; status: LeadStatus }) =>
-      apiRequest<Lead>(token, `/crm/leads/${leadId}/status`, {
-        method: 'PUT',
-        headers: { 'Idempotency-Key': idempotencyKey('crm-stage') },
-        body: JSON.stringify({ newStatus: status }),
-      }),
-    onSuccess: (updated) => {
-      queryClient.setQueryData<Lead[]>(['crm-leads'], (current) =>
-        current?.map((lead) => lead.id === updated.id ? updated : lead),
-      )
-      if (view.kind === 'detail' && view.lead.id === updated.id) {
-        setView({ kind: 'detail', lead: updated })
-      }
     },
   })
 
@@ -114,16 +88,6 @@ export function LeadsPage({
     })
   }
 
-  function dropLead(event: DragEvent, status: LeadStatus) {
-    event.preventDefault()
-    const leadId = event.dataTransfer.getData('text/lead-id') || draggedId
-    const lead = leadsQuery.data?.find((item) => item.id === leadId)
-    setDraggedId(null)
-    if (lead && lead.status !== status && ACTIVE_STAGES.has(status)) {
-      moveLead.mutate({ leadId: lead.id, status })
-    }
-  }
-
   if (view.kind === 'new') {
     return (
       <>
@@ -157,23 +121,28 @@ export function LeadsPage({
     return <LeadDetailPanel lead={view.lead} token={token} products={products} onClose={() => setView({ kind: 'board' })} onUpdated={(lead) => { queryClient.setQueryData<Lead[]>(['crm-leads'], (current) => current?.map((item) => item.id === lead.id ? lead : item)); setView((current) => current.kind === 'detail' ? { kind: 'detail', lead } : current) }} />
   }
 
-  const normalizedQuery = query.trim().toLocaleLowerCase('es')
-  const leads = (leadsQuery.data ?? []).filter((lead) =>
-    !normalizedQuery || `${lead.title} ${lead.party.name} ${lead.product?.name ?? ''}`.toLocaleLowerCase('es').includes(normalizedQuery),
-  )
+  const KanbanWithProviders = kanbanProviders
 
   return (
     <>
       <ErpPageHeader eyebrow="Gestión comercial" title="Pipeline" subtitle="Oportunidades ordenadas por etapa, valor y próxima acción." actions={<ErpButton variant="primary" onClick={() => setView({ kind: 'new' })}>Nueva oportunidad</ErpButton>} />
-      <ErpToolbar><label className="search-field"><span>Buscar</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Oportunidad, contacto o producto" /></label>{moveLead.error ? <p className="form-error" role="alert">{moveLead.error.message}</p> : null}</ErpToolbar>
-      {leadsQuery.isPending ? <p>Cargando pipeline…</p> : leads.length === 0 ? <ErpEmptyState title="No hay oportunidades" description="Crea el primer lead para comenzar el pipeline." action={<ErpButton variant="primary" onClick={() => setView({ kind: 'new' })}>Nueva oportunidad</ErpButton>} /> : (
-        <section className="crm-kanban" aria-label="Pipeline de ventas">
-          {PIPELINE.map((stage) => {
-            const stageLeads = leads.filter((lead) => lead.status === stage.id)
-            const total = stageLeads.reduce((sum, lead) => sum + Number(lead.estimatedValue ?? 0), 0)
-            return <section key={stage.id} className={`kanban-column kanban-${stage.id.toLowerCase()}`} onDragOver={(event) => ACTIVE_STAGES.has(stage.id) && event.preventDefault()} onDrop={(event) => dropLead(event, stage.id)}><header><div><h2>{stage.label}</h2><span>{stageLeads.length}</span></div><small>${total.toLocaleString('es-EC', { minimumFractionDigits: 2 })}</small></header><div className="kanban-stack">{stageLeads.map((lead, index) => <article key={lead.id} className="kanban-card" draggable={ACTIVE_STAGES.has(lead.status)} style={{ '--card-index': index } as CSSProperties} onDragStart={(event) => { setDraggedId(lead.id); event.dataTransfer.setData('text/lead-id', lead.id) }} onDragEnd={() => setDraggedId(null)}><button type="button" onClick={() => setView({ kind: 'detail', lead })}><span className="kanban-card-kicker">{lead.product?.name ?? lead.source ?? 'Oportunidad'}</span><strong>{lead.title}</strong><span>{lead.party.name}</span><small>{lead.owner?.displayName ?? 'Sin responsable'}</small><footer><ErpStatusBadge tone={lead.hotness === 'HOT' ? 'danger' : lead.hotness === 'WARM' ? 'warning' : 'neutral'}>{lead.hotness === 'HOT' ? 'Caliente' : lead.hotness === 'WARM' ? 'Tibio' : 'Frío'}</ErpStatusBadge><b>${Number(lead.estimatedValue ?? 0).toLocaleString('es-EC', { minimumFractionDigits: 2 })}</b></footer></button></article>)}</div></section>
-          })}
-        </section>
+      <ErpToolbar><label className="search-field"><span>Buscar</span><input value="" onChange={(event) => setSearchQuery(event.target.value)} placeholder="Oportunidad, contacto o producto" /></label></ErpToolbar>
+      {leadsQuery.isPending ? <p>Cargando pipeline…</p> : filteredLeads.length === 0 ? <ErpEmptyState title="No hay oportunidades" description="Crea el primer lead para comenzar el pipeline." action={<ErpButton variant="primary" onClick={() => setView({ kind: 'new' })}>Nueva oportunidad</ErpButton>} /> : (
+        <KanbanWithProviders>
+          <CrmKanban
+            leads={filteredLeads}
+            draggedLeadId={draggedLeadId}
+            renderLeadCard={(lead, index) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                index={index}
+                onClick={() => selectLead(lead.id)}
+                isDragging={draggedLeadId === lead.id}
+              />
+            )}
+          />
+        </KanbanWithProviders>
       )}
     </>
   )

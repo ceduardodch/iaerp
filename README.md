@@ -5,13 +5,23 @@ Model Context Protocol (MCP).
 
 ## Estado
 
-Sprint 0 fue aprobado el 2 de julio de 2026. Sprint 1 esta en progreso con una
-plataforma local ejecutable, REST/MCP tenant-scoped, Keycloak, maestros, outbox
-y frontend base.
+**Última actualización:** 2026-07-19
 
-El detalle verificable para retomar el trabajo esta en
-[Estado actual y relevo](docs/STATUS.md). Ese documento distingue lo
-implementado, lo probado y lo pendiente.
+**Sprints Completados:**
+- ✅ Sprint 0: Aprobación (2026-07-02)
+- ✅ Sprint 1: Plataforma base (2026-07-03)
+- ✅ Sprint 2: Facturación SRI (2026-07-04)
+- ✅ Sprint 3: Cartera + MCP (2026-07-06)
+- ✅ CRM MVP: Prospectos y pipeline básico (2026-07-19)
+
+**Sprints Actuales:**
+- 🔄 UI/UX Improvements: Plan 12 semanas para modernizar interfaces
+- 📋 Sprint 1: CRM Kanban Foundation (pipeline visual arrastrable)
+
+**El detalle verificable para retomar el trabajo está en:**
+- [Estado actual y relevo](docs/STATUS.md) - Fuente de verdad del proyecto
+- [Quick Start](QUICK_START.md) - Guía rápida 20 segundos
+- [Issue Tracking](ISSUE_TRACKING.md) - Tareas 1x1 del sprint actual
 
 ## Alcance inicial
 
@@ -27,7 +37,18 @@ nomina ni modulos propios de franquicias.
 
 ## Documentacion
 
-1. [Vision de producto](docs/00-product-vision.md)
+### Guías Rápidas:
+1. **[QUICK_START.md](QUICK_START.md)** - 🚀 Guía 20 segundos para retomar trabajo
+2. **[CLAUDE.md](CLAUDE.md)** - 🤖 Configuración del proyecto para agentes AI
+3. **[docs/STATUS.md](docs/STATUS.md)** - 🏠 Fuente de verdad del proyecto
+
+### Planificación y Alcance:
+4. **[BACKLOG.md](BACKLOG.md)** - 📋 Alcance completo (12 semanas de UI/UX improvements)
+5. **[SPRINT_STATUS.md](SPRINT_STATUS.md)** - 📊 Status detallado de sprints y decisiones técnicas
+6. **[ISSUE_TRACKING.md](ISSUE_TRACKING.md)** - ✅ Tareas 1x1 (trabajo sesión por sesión)
+
+### Documentos de Producto:
+7. [Vision de producto](docs/00-product-vision.md)
 2. [TAM, SAM y SOM](docs/01-tam-sam-som.md)
 3. [Alcance y restricciones](docs/02-scope-and-restrictions.md)
 4. [Modelo de dominio](docs/03-domain-model.md)

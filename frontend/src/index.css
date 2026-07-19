@@ -182,6 +182,14 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .kanban-column h2 { margin: 0; font-family: var(--sans); font-size: .77rem; letter-spacing: .04em; text-transform: uppercase; }
 .kanban-column header span { display: grid; place-items: center; width: 1.45rem; height: 1.45rem; border-radius: 50%; background: white; font-size: .67rem; }
 .kanban-column header small { color: var(--muted); font-size: .65rem; }
+.kanban-column-header { display: grid; gap: .35rem; padding: 1rem; border-bottom: 1px solid #cfcbc0; }
+.kanban-column-title { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.kanban-column-count { display: grid; place-items: center; min-width: 1.45rem; height: 1.45rem; padding: 0 .35rem; border-radius: 99px; background: white; font-size: .67rem; font-weight: 700; }
+.kanban-column-total { color: var(--muted); font-size: .65rem; }
+.kanban-drop-indicator { display: grid; place-items: center; min-height: 44px; margin: .5rem; border: 2px dashed var(--forest); border-radius: .35rem; color: var(--forest); background: #e5edce; font-size: .7rem; font-weight: 700; text-align: center; }
+.kanban-column-drag-over { background: #e5edce; }
+.kanban-column-drag-over .kanban-drop-indicator { animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
 .kanban-new { border-color: #839c95; }
 .kanban-contacted { border-color: #4d8173; }
 .kanban-qualified { border-color: #d29e43; }
@@ -201,6 +209,28 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .kanban-card-kicker { color: var(--forest); font-size: .58rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .kanban-card footer { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .35rem; }
 .kanban-card footer b { font-size: .72rem; }
+
+/* LeadCard component styles */
+.lead-card-button { display: grid; gap: .6rem; width: 100%; padding: 0; border: 0; color: var(--ink); background: transparent; text-align: left; cursor: grab; }
+.lead-card-button:active { cursor: grabbing; }
+.lead-card-button:disabled { cursor: default; opacity: .8; }
+.lead-card-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.lead-card-badge { display: inline-flex; align-items: center; padding: .25rem .55rem; border-radius: 99px; color: white; font-size: .58rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.lead-card-score { display: grid; place-items: center; min-width: 1.4rem; height: 1.4rem; padding: 0 .25rem; border-radius: 99px; background: white; font-size: .6rem; font-weight: 700; }
+.lead-card-content { display: grid; gap: .35rem; }
+.lead-card-avatar { display: flex; align-items: center; gap: .5rem; }
+.avatar-circle { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: white; font-size: .55rem; font-weight: 700; }
+.lead-card-avatar small { color: var(--muted); font-size: .62rem; }
+.kanban-card.is-dragging { opacity: .5; transform: scale(.95); }
+.kanban-card.is-dragging .lead-card-button { cursor: grabbing; }
+
+/* LeadCard compact version */
+.lead-card-compact { padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .25rem; background: var(--paper); }
+.lead-card-compact-button { display: flex; align-items: center; gap: .7rem; width: 100%; padding: 0; border: 0; color: var(--ink); background: transparent; text-align: left; }
+.lead-card-compact-badge { display: inline-flex; align-items: center; min-width: 2rem; justify-content: center; padding: .2rem .4rem; border-radius: 99px; color: white; font-size: .55rem; font-weight: 700; }
+.lead-card-compact-content { flex: 1; min-width: 0; }
+.lead-card-compact-content strong { display: block; font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lead-card-compact-content span { display: block; color: var(--muted); font-size: .65rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crm-detail-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 1rem; }
 .crm-opportunity-hero, .crm-stage-panel, .crm-timeline-panel { border: 1px solid var(--line); background: var(--paper); }
 .crm-opportunity-hero { padding: 2rem; color: white; background: var(--forest); }

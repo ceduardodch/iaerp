@@ -7,11 +7,10 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Fecha: 2026-07-03 17:51 `America/Guayaquil`.
+- Fecha: 2026-07-19 `America/Guayaquil`.
 - Rama de trabajo: `release`.
-- Commit del corte: consultar `git log -1 --oneline`; este archivo forma parte
-  del mismo corte y no mantiene un hash autorreferencial.
-- Sprint activo: Sprint 1, en progreso.
+- Commit del corte: `3f087eb` (feat(crm): implementar MVP de CRM de prospectos).
+- Sprint activo: UI/UX Improvements Sprint 1 (CRM Kanban Foundation).
 - El estado ejecutable descrito aqui debe estar publicado en `release`. Si
   `git status` muestra cambios, una IA debe revisarlos antes de continuar.
 
@@ -22,10 +21,11 @@ alcance y las decisiones.
 | Sprint 0 | Aprobado | Documentos, ADR, contratos y backlog inicial |
 | Sprint 1 | Done | CI verde run 28705977016; criterios con evidencia |
 | Sprint 2 | Done | Ciclo SRI simulado completo verificado en vivo 2026-07-04 |
-| Sprint 3 | En progreso | Cartera E5 + E7 MCP; commiteado en release (ef1c427); falta dataset, QA en vivo y deploy staging |
-| Sprint 4 | No iniciado | Cuentas por pagar |
-| Sprint 5 | No iniciado | Agente, dashboard y migracion piloto |
-| Sprint 6 | No iniciado | Estabilizacion y produccion |
+| Sprint 3 | Done | Cartera E5 + E7 MCP completado, CI verde, dataset v3 |
+| CRM MVP | Done | Commit 3f087eb: Leads, Activities, Pipeline básico |
+| UI/UX Improvements | Planning | Plan 12 semanas creado, backlog estructurado |
+| UI Sprint 1: CRM Kanban | No iniciado | Dependencies @dnd-kit listas, tasks definidas |
+| UI Sprint 2-9 | No iniciado | Roadmap detallado en BACKLOG.md |
 
 ## Implementado en Sprint 1
 
