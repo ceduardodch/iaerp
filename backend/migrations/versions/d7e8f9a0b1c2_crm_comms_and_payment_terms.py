@@ -13,8 +13,8 @@ import sqlalchemy as sa
 from alembic import op
 from cryptography.fernet import Fernet
 
-revision: str = "d7e8f9a0b1c2"
-down_revision: str | None = "c4d5e6f7a8b9"
+revision: str = "d7e8f9a0b1c2"  # pragma: allowlist secret
+down_revision: str | None = "c4d5e6f7a8b9"  # pragma: allowlist secret
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
