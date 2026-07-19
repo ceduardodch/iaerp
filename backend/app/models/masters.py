@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -110,6 +111,7 @@ class Party(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     phone: Mapped[str | None] = mapped_column(String(40))
     address: Mapped[str | None] = mapped_column(String(500))
     consent_opt_out: Mapped[bool] = mapped_column(Boolean, default=False)
+    payment_terms_days: Mapped[int | None] = mapped_column(Integer)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 

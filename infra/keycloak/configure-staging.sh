@@ -39,6 +39,19 @@ update_client_secret() {
   "$KCADM" update "clients/$id" -r iaerp -s "secret=$secret"
 }
 
+client_scope_id() {
+  local scope_name=$1
+  local id
+  local name
+
+  while IFS=, read -r id name; do
+    if [ "$name" = "$scope_name" ]; then
+      printf '%s\n' "$id"
+      return 0
+    fi
+  done < <("$KCADM" get client-scopes -r iaerp --fields id,name --format csv --noquotes)
+}
+
 reset_user_password() {
   local username=$1
   local password=$2
@@ -47,6 +60,29 @@ reset_user_password() {
 
 web_client_id=$(resource_id clients clientId iaerp-web)
 test -n "$web_client_id"
+
+ensure_default_scope() {
+  local scope_name=$1
+  local scope_id
+  scope_id=$(client_scope_id "$scope_name")
+  if [ -z "$scope_id" ]; then
+    "$KCADM" create client-scopes -r iaerp \
+      -s "name=$scope_name" \
+      -s 'protocol=openid-connect' \
+      -s 'attributes={"include.in.token.scope":"true","display.on.consent.screen":"false"}' >/dev/null
+    scope_id=$(client_scope_id "$scope_name")
+  fi
+  test -n "$scope_id"
+  "$KCADM" update "clients/$web_client_id/default-client-scopes/$scope_id" -r iaerp >/dev/null
+}
+
+for scope in \
+  leads:read leads:write \
+  communications:read communications:write \
+  receivables:read receivables:write receivables:notify; do
+  ensure_default_scope "$scope"
+done
+
 "$KCADM" update "clients/$web_client_id" -r iaerp \
   -s "rootUrl=$PUBLIC_APP_URL" \
   -s "baseUrl=$PUBLIC_APP_URL" \

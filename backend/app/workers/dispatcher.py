@@ -4,6 +4,7 @@ from redis.asyncio import Redis
 
 from app.core.config import get_settings
 from app.workers.celery_app import celery_app
+from app.workers.collections import run_collection_scheduler
 from app.workers.outbox import OutboxMessage, run_dispatcher
 
 settings = get_settings()
@@ -46,6 +47,7 @@ async def serve() -> None:
     async with asyncio.TaskGroup() as group:
         group.create_task(run_dispatcher(CeleryPublisher()))
         group.create_task(publish_heartbeat())
+        group.create_task(run_collection_scheduler())
 
 
 def main() -> None:

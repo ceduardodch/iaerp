@@ -1,263 +1,180 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useState, type CSSProperties, type DragEvent, type FormEvent } from 'react'
 
-import { apiRequest, idempotencyKey, type Lead, type LeadCreate, type LeadStatus } from '../../api'
 import {
-  ErpActionCell,
-  ErpButton,
-  ErpEmptyState,
-  ErpFormPanel,
-  ErpPageHeader,
-  ErpPanel,
-  ErpStatusBadge,
-  ErpToolbar,
-} from '../erp'
+  apiRequest,
+  idempotencyKey,
+  type Lead,
+  type LeadCreate,
+  type LeadStatus,
+  type LeadWithPartyCreate,
+  type Party,
+  type Product,
+} from '../../api'
+import { ErpButton, ErpEmptyState, ErpFormPanel, ErpPageHeader, ErpStatusBadge, ErpToolbar } from '../erp'
+import { LeadDetailPanel } from './LeadDetailPanel'
 
-const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
-  NEW: 'Nuevo',
-  CONTACTED: 'Contactado',
-  QUALIFIED: 'Calificado',
-  PROPOSAL: 'Propuesta',
-  NEGOTIATION: 'Negociación',
-  WON: 'Ganado',
-  LOST: 'Perdido',
-}
+const PIPELINE: Array<{ id: LeadStatus; label: string }> = [
+  { id: 'NEW', label: 'Nuevo' },
+  { id: 'CONTACTED', label: 'Contactado' },
+  { id: 'QUALIFIED', label: 'Calificado' },
+  { id: 'PROPOSAL', label: 'Propuesta' },
+  { id: 'NEGOTIATION', label: 'Negociación' },
+  { id: 'WON', label: 'Ganado' },
+  { id: 'LOST', label: 'Perdido' },
+]
 
-const LEAD_STATUS_TONES: Record<LeadStatus, 'neutral' | 'success' | 'warning' | 'danger'> = {
-  NEW: 'neutral',
-  CONTACTED: 'neutral',
-  QUALIFIED: 'warning',
-  PROPOSAL: 'warning',
-  NEGOTIATION: 'warning',
-  WON: 'success',
-  LOST: 'danger',
-}
+const ACTIVE_STAGES = new Set<LeadStatus>([
+  'NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION',
+])
 
-function LeadStatusBadge({ status }: { status: LeadStatus }) {
-  return (
-    <ErpStatusBadge tone={LEAD_STATUS_TONES[status]}>
-      {LEAD_STATUS_LABELS[status]}
-    </ErpStatusBadge>
-  )
-}
+type View = { kind: 'board' } | { kind: 'new' } | { kind: 'detail'; lead: Lead }
 
-function HotnessBadge({ hotness }: { hotness: 'COLD' | 'WARM' | 'HOT' }) {
-  const tones: Record<'COLD' | 'WARM' | 'HOT', 'neutral' | 'success' | 'warning' | 'danger'> = {
-    COLD: 'neutral',
-    WARM: 'warning',
-    HOT: 'danger',
-  }
-  const labels: Record<'COLD' | 'WARM' | 'HOT', string> = {
-    COLD: 'Frío',
-    WARM: 'Tibio',
-    HOT: 'Caliente',
-  }
-  return (
-    <ErpStatusBadge tone={tones[hotness]}>
-      {labels[hotness]}
-    </ErpStatusBadge>
-  )
-}
-
-export function LeadsPage({ token }: { token: string }) {
+export function LeadsPage({
+  token,
+  parties,
+  products,
+}: {
+  token: string
+  parties: Party[]
+  products: Product[]
+}) {
   const queryClient = useQueryClient()
-  const [statusFilter, setStatusFilter] = useState<LeadStatus | ''>('')
-  const [editor, setEditor] = useState<Lead | null | undefined>(undefined)
+  const [view, setView] = useState<View>({ kind: 'board' })
+  const [contactMode, setContactMode] = useState<'existing' | 'new'>('existing')
+  const [query, setQuery] = useState('')
+  const [draggedId, setDraggedId] = useState<string | null>(null)
 
-  const { data: leads = [], isLoading } = useQuery({
-    queryKey: ['crm-leads', statusFilter],
-    queryFn: () =>
-      apiRequest<Lead[]>(
-        token,
-        statusFilter ? `/crm/leads?status=${statusFilter}` : '/crm/leads',
-      ),
+  const leadsQuery = useQuery({
+    queryKey: ['crm-leads'],
+    queryFn: () => apiRequest<Lead[]>(token, '/crm/leads'),
   })
 
   const createLead = useMutation({
-    mutationFn: (data: LeadCreate) =>
-      apiRequest<Lead>(token, '/crm/leads', {
+    mutationFn: ({ path, data }: { path: string; data: LeadCreate | LeadWithPartyCreate }) =>
+      apiRequest<Lead>(token, path, {
         method: 'POST',
         headers: { 'Idempotency-Key': idempotencyKey('crm-lead') },
         body: JSON.stringify(data),
       }),
-    onSuccess: () => {
-      setEditor(undefined)
-      return queryClient.invalidateQueries({ queryKey: ['crm-leads'] })
+    onSuccess: (lead) => {
+      void queryClient.invalidateQueries({ queryKey: ['crm-leads'] })
+      void queryClient.invalidateQueries({ queryKey: ['parties'] })
+      setView({ kind: 'detail', lead })
+    },
+  })
+
+  const moveLead = useMutation({
+    mutationFn: ({ leadId, status }: { leadId: string; status: LeadStatus }) =>
+      apiRequest<Lead>(token, `/crm/leads/${leadId}/status`, {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('crm-stage') },
+        body: JSON.stringify({ newStatus: status }),
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<Lead[]>(['crm-leads'], (current) =>
+        current?.map((lead) => lead.id === updated.id ? updated : lead),
+      )
+      if (view.kind === 'detail' && view.lead.id === updated.id) {
+        setView({ kind: 'detail', lead: updated })
+      }
     },
   })
 
   function submitLead(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = event.currentTarget
-    const data = new FormData(form)
+    const data = new FormData(event.currentTarget)
+    const common = {
+      title: String(data.get('title')),
+      productId: String(data.get('productId') || '') || null,
+      source: String(data.get('source') || '') || null,
+      score: Number(data.get('score') || 0),
+      hotness: (data.get('hotness') || 'COLD') as 'COLD' | 'WARM' | 'HOT',
+      estimatedValue: String(data.get('estimatedValue') || '') || null,
+      expectedCloseDate: String(data.get('expectedCloseDate') || '') || null,
+    }
+    if (contactMode === 'existing') {
+      createLead.mutate({
+        path: '/crm/leads',
+        data: { ...common, partyId: String(data.get('partyId')) },
+      })
+      return
+    }
     createLead.mutate({
-      partyId: String(data.get('partyId')),
-      status: (data.get('status') as LeadStatus) || 'NEW',
-      source: data.get('source') as string | null,
-      score: parseInt(String(data.get('score') || '0'), 10),
-      hotness: (data.get('hotness') as 'COLD' | 'WARM' | 'HOT') || 'COLD',
+      path: '/crm/leads/with-party',
+      data: {
+        ...common,
+        partyName: String(data.get('partyName')),
+        partyIdentificationType: data.get('identificationType') as LeadWithPartyCreate['partyIdentificationType'],
+        partyIdentificationNumber: String(data.get('identificationNumber')),
+        partyEmail: String(data.get('email') || '') || null,
+        partyPhone: String(data.get('phone') || '') || null,
+        partyAddress: String(data.get('address') || '') || null,
+      },
     })
   }
 
-  return (
-    <>
-      <ErpPageHeader
-        eyebrow="Gestión de prospectos"
-        title="Leads"
-        subtitle="Pipeline de ventas y seguimiento de prospectos."
-        actions={
-          <ErpButton variant="primary" onClick={() => setEditor(null)}>
-            Nuevo lead
-          </ErpButton>
-        }
-      />
+  function dropLead(event: DragEvent, status: LeadStatus) {
+    event.preventDefault()
+    const leadId = event.dataTransfer.getData('text/lead-id') || draggedId
+    const lead = leadsQuery.data?.find((item) => item.id === leadId)
+    setDraggedId(null)
+    if (lead && lead.status !== status && ACTIVE_STAGES.has(status)) {
+      moveLead.mutate({ leadId: lead.id, status })
+    }
+  }
 
-      <ErpToolbar>
-        <label className="search-field">
-          <span>Filtrar por estado</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as LeadStatus | '')}
-          >
-            <option value="">Todos los estados</option>
-            <option value="NEW">Nuevos</option>
-            <option value="CONTACTED">Contactados</option>
-            <option value="QUALIFIED">Calificados</option>
-            <option value="PROPOSAL">Con propuesta</option>
-            <option value="NEGOTIATION">En negociación</option>
-            <option value="WON">Ganados</option>
-            <option value="LOST">Perdidos</option>
-          </select>
-        </label>
-      </ErpToolbar>
-
-      <section className={`split-layout ${editor === undefined ? 'erp-list-only' : ''}`}>
-        <ErpPanel title="Prospectos" count={leads.length}>
-          {isLoading ? (
-            <p>Cargando leads...</p>
-          ) : leads.length === 0 ? (
-            <ErpEmptyState
-              title="No hay leads"
-              description="Crea el primer prospecto para comenzar tu pipeline de ventas."
-              action={
-                <ErpButton variant="primary" onClick={() => setEditor(null)}>
-                  Nuevo lead
-                </ErpButton>
-              }
-            />
+  if (view.kind === 'new') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Gestión comercial" title="Nueva oportunidad" subtitle="Registra el negocio y su contacto sin usar identificadores técnicos." />
+        <ErpFormPanel title="Datos de la oportunidad" eyebrow="Nuevo lead" pending={createLead.isPending} error={createLead.error?.message} onSubmit={submitLead} onCancel={() => setView({ kind: 'board' })}>
+          <label>Título de la oportunidad<input name="title" placeholder="Venta de servicios AWS" required /></label>
+          <label>Producto o servicio<select name="productId"><option value="">Sin producto definido</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label>
+          <div className="segmented-control" role="group" aria-label="Origen del contacto">
+            <button type="button" className={contactMode === 'existing' ? 'active' : ''} onClick={() => setContactMode('existing')}>Contacto existente</button>
+            <button type="button" className={contactMode === 'new' ? 'active' : ''} onClick={() => setContactMode('new')}>Contacto nuevo</button>
+          </div>
+          {contactMode === 'existing' ? (
+            <label>Contacto<select name="partyId" required><option value="">Seleccionar…</option>{parties.map((party) => <option key={party.id} value={party.id}>{party.name} · {party.identificationNumber}</option>)}</select></label>
           ) : (
-            <div className="table-wrap" tabIndex={0} aria-label="Listado de prospectos">
-              <table className="erp-responsive-table">
-                <thead>
-                  <tr>
-                    <th>Party ID</th>
-                    <th>Estado</th>
-                    <th>Source</th>
-                    <th>Puntuación</th>
-                    <th>Temperatura</th>
-                    <th>Valor estimado</th>
-                    <th>Cierre esperado</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leads.map((lead) => (
-                    <tr key={lead.id}>
-                      <td>
-                        <strong>{lead.partyId}</strong>
-                      </td>
-                      <td>
-                        <LeadStatusBadge status={lead.status} />
-                      </td>
-                      <td>{lead.source || '-'}</td>
-                      <td>{lead.score}/100</td>
-                      <td>
-                        <HotnessBadge hotness={lead.hotness} />
-                      </td>
-                      <td>{lead.estimatedValue || '-'}</td>
-                      <td>{lead.expectedCloseDate || '-'}</td>
-                      <td>
-                        <ErpActionCell>
-                          <ErpButton
-                            variant="ghost"
-                            onClick={() => setEditor(lead)}
-                          >
-                            Ver detalle
-                          </ErpButton>
-                        </ErpActionCell>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="lead-contact-fields">
+              <label>Nombre o razón social<input name="partyName" required /></label>
+              <div className="field-row"><label>Identificación<select name="identificationType"><option value="RUC">RUC</option><option value="CEDULA">Cédula</option><option value="PASSPORT">Pasaporte</option><option value="FINAL_CONSUMER">Consumidor final</option></select></label><label>Número<input name="identificationNumber" required /></label></div>
+              <div className="field-row"><label>Correo<input name="email" type="email" /></label><label>Teléfono<input name="phone" /></label></div>
+              <label>Dirección<input name="address" /></label>
             </div>
           )}
-        </ErpPanel>
+          <div className="field-row"><label>Origen<input name="source" placeholder="Referido, web, evento…" /></label><label>Valor estimado<input name="estimatedValue" type="number" min="0" step="0.01" /></label></div>
+          <div className="field-row"><label>Temperatura<select name="hotness"><option value="COLD">Frío</option><option value="WARM">Tibio</option><option value="HOT">Caliente</option></select></label><label>Puntuación<input name="score" type="number" min="0" max="100" defaultValue="0" /></label></div>
+          <label>Cierre esperado<input name="expectedCloseDate" type="date" /></label>
+        </ErpFormPanel>
+      </>
+    )
+  }
 
-        {editor !== undefined ? (
-          <ErpFormPanel
-            key={editor?.id ?? 'new-lead'}
-            eyebrow={editor ? 'Detalle' : 'Nuevo registro'}
-            title={editor ? 'Detalle del lead' : 'Nuevo lead'}
-            pending={createLead.isPending}
-            error={createLead.error?.message}
-            onSubmit={submitLead}
-            onCancel={() => setEditor(undefined)}
-          >
-            <label>
-              Party ID
-              <input
-                name="partyId"
-                defaultValue={editor?.partyId}
-                required
-              />
-            </label>
-            <label>
-              Estado
-              <select
-                name="status"
-                defaultValue={editor?.status ?? 'NEW'}
-              >
-                <option value="NEW">Nuevo</option>
-                <option value="CONTACTED">Contactado</option>
-                <option value="QUALIFIED">Calificado</option>
-                <option value="PROPOSAL">Propuesta</option>
-                <option value="NEGOTIATION">Negociación</option>
-                <option value="WON">Ganado</option>
-                <option value="LOST">Perdido</option>
-              </select>
-            </label>
-            <label>
-              Source
-              <input
-                name="source"
-                defaultValue={editor?.source ?? ''}
-              />
-            </label>
-            <label>
-              Puntuación (0-100)
-              <input
-                name="score"
-                type="number"
-                min="0"
-                max="100"
-                defaultValue={editor?.score ?? 0}
-              />
-            </label>
-            <label>
-              Temperatura
-              <select
-                name="hotness"
-                defaultValue={editor?.hotness ?? 'COLD'}
-              >
-                <option value="COLD">Frío</option>
-                <option value="WARM">Tibio</option>
-                <option value="HOT">Caliente</option>
-              </select>
-            </label>
-          </ErpFormPanel>
-        ) : null}
-      </section>
+  if (view.kind === 'detail') {
+    return <LeadDetailPanel lead={view.lead} token={token} products={products} onClose={() => setView({ kind: 'board' })} onUpdated={(lead) => { queryClient.setQueryData<Lead[]>(['crm-leads'], (current) => current?.map((item) => item.id === lead.id ? lead : item)); setView((current) => current.kind === 'detail' ? { kind: 'detail', lead } : current) }} />
+  }
+
+  const normalizedQuery = query.trim().toLocaleLowerCase('es')
+  const leads = (leadsQuery.data ?? []).filter((lead) =>
+    !normalizedQuery || `${lead.title} ${lead.party.name} ${lead.product?.name ?? ''}`.toLocaleLowerCase('es').includes(normalizedQuery),
+  )
+
+  return (
+    <>
+      <ErpPageHeader eyebrow="Gestión comercial" title="Pipeline" subtitle="Oportunidades ordenadas por etapa, valor y próxima acción." actions={<ErpButton variant="primary" onClick={() => setView({ kind: 'new' })}>Nueva oportunidad</ErpButton>} />
+      <ErpToolbar><label className="search-field"><span>Buscar</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Oportunidad, contacto o producto" /></label>{moveLead.error ? <p className="form-error" role="alert">{moveLead.error.message}</p> : null}</ErpToolbar>
+      {leadsQuery.isPending ? <p>Cargando pipeline…</p> : leads.length === 0 ? <ErpEmptyState title="No hay oportunidades" description="Crea el primer lead para comenzar el pipeline." action={<ErpButton variant="primary" onClick={() => setView({ kind: 'new' })}>Nueva oportunidad</ErpButton>} /> : (
+        <section className="crm-kanban" aria-label="Pipeline de ventas">
+          {PIPELINE.map((stage) => {
+            const stageLeads = leads.filter((lead) => lead.status === stage.id)
+            const total = stageLeads.reduce((sum, lead) => sum + Number(lead.estimatedValue ?? 0), 0)
+            return <section key={stage.id} className={`kanban-column kanban-${stage.id.toLowerCase()}`} onDragOver={(event) => ACTIVE_STAGES.has(stage.id) && event.preventDefault()} onDrop={(event) => dropLead(event, stage.id)}><header><div><h2>{stage.label}</h2><span>{stageLeads.length}</span></div><small>${total.toLocaleString('es-EC', { minimumFractionDigits: 2 })}</small></header><div className="kanban-stack">{stageLeads.map((lead, index) => <article key={lead.id} className="kanban-card" draggable={ACTIVE_STAGES.has(lead.status)} style={{ '--card-index': index } as CSSProperties} onDragStart={(event) => { setDraggedId(lead.id); event.dataTransfer.setData('text/lead-id', lead.id) }} onDragEnd={() => setDraggedId(null)}><button type="button" onClick={() => setView({ kind: 'detail', lead })}><span className="kanban-card-kicker">{lead.product?.name ?? lead.source ?? 'Oportunidad'}</span><strong>{lead.title}</strong><span>{lead.party.name}</span><small>{lead.owner?.displayName ?? 'Sin responsable'}</small><footer><ErpStatusBadge tone={lead.hotness === 'HOT' ? 'danger' : lead.hotness === 'WARM' ? 'warning' : 'neutral'}>{lead.hotness === 'HOT' ? 'Caliente' : lead.hotness === 'WARM' ? 'Tibio' : 'Frío'}</ErpStatusBadge><b>${Number(lead.estimatedValue ?? 0).toLocaleString('es-EC', { minimumFractionDigits: 2 })}</b></footer></button></article>)}</div></section>
+          })}
+        </section>
+      )}
     </>
   )
 }

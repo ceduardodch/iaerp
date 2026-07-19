@@ -12,6 +12,7 @@ from app.models.crm import (
     Lead,
     LeadActivity,
     LeadStatus,
+    WhatsAppIntegration,
 )
 from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag, TaxCategory
 from app.models.platform import (
@@ -27,6 +28,7 @@ from app.models.platform import (
     User,
 )
 from app.models.receivables import (
+    CollectionPolicy,
     CustomerCredit,
     Movement,
     Receivable,
@@ -42,6 +44,8 @@ __all__ = [
     "EmissionPoint",
     "Establishment",
     "GmailIntegration",
+    "WhatsAppIntegration",
+    "CollectionPolicy",
     "IdempotencyRecord",
     "Lead",
     "LeadActivity",

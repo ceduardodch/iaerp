@@ -159,6 +159,41 @@ class ReminderInput(APIModel):
     channel: str | None = None
     template_id: str | None = None
     message: str | None = None
+    scheduled_at: datetime | None = None
+
+
+class ReminderRead(APIModel):
+    id: uuid.UUID
+    party_id: uuid.UUID
+    receivable_id: uuid.UUID | None
+    installment_id: uuid.UUID | None
+    channel: str
+    template_id: str
+    recipient: str
+    status: str
+    scheduled_at: datetime | None
+    sent_at: datetime | None
+    attempts: int
+    error_message: str | None
+
+
+def _default_collection_channels() -> list[Literal["EMAIL", "WHATSAPP"]]:
+    return ["EMAIL"]
+
+
+class CollectionPolicyUpdate(APIModel):
+    enabled: bool = False
+    offsets_days: list[int] = Field(default_factory=lambda: [-3, 0, 3, 7, 15])
+    channels: list[Literal["EMAIL", "WHATSAPP"]] = Field(
+        default_factory=_default_collection_channels
+    )
+    send_hour: int = Field(default=9, ge=0, le=23)
+    email_template_id: str = Field(default="payment_reminder", max_length=100)
+    whatsapp_template_id: str = Field(default="payment_reminder", max_length=100)
+
+
+class CollectionPolicyRead(CollectionPolicyUpdate):
+    updated_at: datetime
 
 
 __all__ = [
@@ -175,6 +210,9 @@ __all__ = [
     "PaymentInput",
     "PaymentMethod",
     "ReminderInput",
+    "ReminderRead",
+    "CollectionPolicyRead",
+    "CollectionPolicyUpdate",
     "ReversalInput",
     "RetentionInput",
     "RetentionKind",

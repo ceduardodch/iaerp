@@ -64,6 +64,30 @@ class InvoiceInput(APIModel):
     lines: list[InvoiceLineInput] = Field(min_length=1)
 
 
+class InvoicePreviewInput(APIModel):
+    issue_date: date
+    lines: list[InvoiceLineInput] = Field(min_length=1)
+
+
+class InvoicePreviewLineRead(APIModel):
+    description: str
+    quantity: Decimal
+    unit_price: Decimal
+    discount: Decimal
+    base_amount: Decimal
+    tax_code: str
+    tax_rate: Decimal
+    tax_amount: Decimal
+    total: Decimal
+
+
+class InvoicePreviewRead(APIModel):
+    lines: list[InvoicePreviewLineRead]
+    subtotal: Decimal
+    tax_total: Decimal
+    total: Decimal
+
+
 class CreditNoteInput(APIModel):
     invoice_id: uuid.UUID
     reason: str = Field(min_length=3)
@@ -129,6 +153,7 @@ class SalesDocumentRead(APIModel):
     authorized_at: datetime | None = None
     sri_transmission: SRITransmissionRead | None = None
     lines: list[SalesDocumentLineRead] = Field(default_factory=list)
+    installments: list[InstallmentInput] = Field(default_factory=list)
 
     @field_validator("sequential")
     @classmethod

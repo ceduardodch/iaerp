@@ -549,10 +549,14 @@ async def lock_receivable(
     Raises:
         HTTPException 404 si el receivable no existe o pertenece a otro tenant.
     """
-    stmt = select(Receivable).where(
-        Receivable.tenant_id == tenant_id,
-        Receivable.id == receivable_id,
-    ).with_for_update()
+    stmt = (
+        select(Receivable)
+        .where(
+            Receivable.tenant_id == tenant_id,
+            Receivable.id == receivable_id,
+        )
+        .with_for_update()
+    )
     entity = await session.scalar(stmt)
     if entity is None:
         raise HTTPException(status_code=404, detail="Receivable not found")
@@ -613,10 +617,14 @@ async def record_payment(
         )
 
     # Obtener cuotas ordenadas por due_date (oldest-first)
-    stmt = select(ReceivableInstallment).where(
-        ReceivableInstallment.tenant_id == tenant_id,
-        ReceivableInstallment.receivable_id == receivable_id,
-    ).order_by(ReceivableInstallment.due_date.asc())
+    stmt = (
+        select(ReceivableInstallment)
+        .where(
+            ReceivableInstallment.tenant_id == tenant_id,
+            ReceivableInstallment.receivable_id == receivable_id,
+        )
+        .order_by(ReceivableInstallment.due_date.asc())
+    )
     installments = list(await session.scalars(stmt))
 
     if not installments:
@@ -1028,6 +1036,90 @@ async def send_reminder(
     return reminder_record
 
 
+async def send_real_reminder(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    receivable_id: uuid.UUID,
+    reminder: ReminderInput,
+) -> CollectionReminder:
+    from datetime import UTC, datetime
+
+    from app.services import crm_integrations
+
+    receivable = await session.scalar(
+        select(Receivable).where(
+            Receivable.tenant_id == context.tenant_id,
+            Receivable.id == receivable_id,
+        )
+    )
+    if receivable is None:
+        raise HTTPException(status_code=404, detail="Receivable not found")
+    from app.models.masters import Party
+
+    party = await session.scalar(
+        select(Party).where(
+            Party.tenant_id == context.tenant_id,
+            Party.id == receivable.party_id,
+        )
+    )
+    if party is None:
+        raise HTTPException(status_code=404, detail="Party not found")
+    if party.consent_opt_out:
+        raise HTTPException(status_code=422, detail="Client has opted out of reminders")
+    channel = (reminder.channel or "EMAIL").upper()
+    recipient = party.email if channel == "EMAIL" else party.phone
+    if not recipient:
+        raise HTTPException(status_code=422, detail=f"Party has no contact for {channel}")
+    scheduled_at = reminder.scheduled_at or datetime.now(UTC)
+    record = CollectionReminder(
+        tenant_id=context.tenant_id,
+        party_id=party.id,
+        receivable_id=receivable.id,
+        channel=channel,
+        template_id=reminder.template_id or "payment_reminder",
+        recipient=recipient,
+        status="PENDING",
+        scheduled_at=scheduled_at,
+    )
+    session.add(record)
+    await session.flush()
+    if scheduled_at > datetime.now(UTC):
+        return record
+    try:
+        message = reminder.message or (
+            "Le recordamos que mantiene un saldo pendiente. "
+            "Por favor contáctenos si ya realizó el pago."
+        )
+        if channel == "EMAIL":
+            await crm_integrations.send_google_email(
+                session,
+                context,
+                recipient=recipient,
+                subject="Recordatorio de pago",
+                message=message,
+            )
+        elif channel == "WHATSAPP":
+            await crm_integrations.send_whatsapp_message(
+                session,
+                context,
+                recipient=recipient,
+                message=message,
+                template_id=reminder.template_id,
+            )
+        else:
+            raise HTTPException(status_code=422, detail="Unsupported reminder channel")
+        record.status = "SENT"
+        record.sent_at = datetime.now(UTC)
+        record.attempts = 1
+    except HTTPException as exc:
+        record.status = "FAILED"
+        record.attempts = 1
+        record.error_message = str(exc.detail)
+    await session.flush()
+    return record
+
+
 # --- Exportaciones públicas ---------------------------------------------------
 
 __all__ = [
@@ -1052,4 +1144,5 @@ __all__ = [
     "reverse_movement",
     # Recordatorios
     "send_reminder",
+    "send_real_reminder",
 ]

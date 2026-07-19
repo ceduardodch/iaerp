@@ -5,6 +5,7 @@ export type TenantContext = {
   roles: string[]
   scopes: string[]
   automationWritesEnabled: boolean
+  defaultPaymentTermsDays: number
 }
 
 export type Party = {
@@ -16,6 +17,7 @@ export type Party = {
   email?: string
   phone?: string
   address?: string
+  paymentTermsDays?: number | null
 }
 
 export type Product = {
@@ -100,6 +102,7 @@ export type SalesDocument = {
   reason: string | null
   lines: SalesDocumentLine[]
   sriTransmission?: SriTransmission | null
+  installments?: Array<{ dueDate: string; amount: string }>
 }
 
 export type InvoiceLineInput = {
@@ -197,6 +200,35 @@ export type PaymentInput = {
 export type ReminderInput = {
   channel: 'EMAIL' | 'WHATSAPP'
   templateId: string
+  message?: string | null
+  scheduledAt?: string | null
+}
+
+export type CollectionPolicy = {
+  enabled: boolean
+  offsetsDays: number[]
+  channels: Array<'EMAIL' | 'WHATSAPP'>
+  sendHour: number
+  emailTemplateId: string
+  whatsappTemplateId: string
+  updatedAt: string
+}
+
+export type InvoicePreview = {
+  lines: Array<{
+    description: string
+    quantity: string
+    unitPrice: string
+    discount: string
+    baseAmount: string
+    taxCode: string
+    taxRate: string
+    taxAmount: string
+    total: string
+  }>
+  subtotal: string
+  taxTotal: string
+  total: string
 }
 
 // CRM Types
@@ -206,6 +238,11 @@ export type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'PROPOSAL' | 'NEGOT
 export type Lead = {
   id: string
   partyId: string
+  title: string
+  productId?: string | null
+  party: Pick<Party, 'id' | 'name' | 'email' | 'phone' | 'address'>
+  product?: Pick<Product, 'id' | 'name' | 'code'> | null
+  owner?: { id: string; displayName: string; email: string } | null
   status: LeadStatus
   source?: string | null
   ownerUserId?: string | null
@@ -220,6 +257,8 @@ export type Lead = {
 
 export type LeadCreate = {
   partyId: string
+  title: string
+  productId?: string | null
   status?: LeadStatus
   source?: string | null
   ownerUserId?: string | null
@@ -230,6 +269,8 @@ export type LeadCreate = {
 }
 
 export type LeadUpdate = {
+  title?: string | null
+  productId?: string | null
   status?: LeadStatus | null
   source?: string | null
   ownerUserId?: string | null
@@ -246,6 +287,8 @@ export type LeadWithPartyCreate = {
   partyEmail?: string | null
   partyPhone?: string | null
   partyAddress?: string | null
+  title: string
+  productId?: string | null
   status?: LeadStatus
   source?: string | null
   score?: number
@@ -257,7 +300,7 @@ export type LeadWithPartyCreate = {
 export type LeadActivity = {
   id: string
   leadId: string
-  activityType: 'CALL' | 'EMAIL' | 'MEETING' | 'NOTE' | 'TASK'
+  activityType: 'CALL' | 'EMAIL' | 'WHATSAPP' | 'MEETING' | 'NOTE' | 'TASK'
   subject: string
   description?: string | null
   outcome: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | 'PENDING'
@@ -294,6 +337,22 @@ export type GmailSyncResult = {
   lastSyncAt: string
 }
 
+export type IntegrationStatus = {
+  googleConnected: boolean
+  googleEmail?: string | null
+  googleLastSyncAt?: string | null
+  googleConfigurationAvailable: boolean
+  whatsappConnected: boolean
+  whatsappPhone?: string | null
+}
+
+export type OrganizationProfile = {
+  tenantId: string
+  name: string
+  ruc: string
+  defaultPaymentTermsDays: number
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -305,20 +364,33 @@ export class ApiError extends Error {
 
 const apiUrl = import.meta.env.VITE_API_URL ?? '/api/v1'
 
+type TokenProvider = (forceRefresh?: boolean) => Promise<string>
+
+let tokenProvider: TokenProvider | null = null
+
+export function configureApiTokenProvider(provider: TokenProvider | null) {
+  tokenProvider = provider
+}
+
 export async function apiRequest<T>(
   token: string,
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const headers = new Headers(init?.headers)
-  headers.set('Authorization', `Bearer ${token}`)
-  if (!(init?.body instanceof FormData) && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json')
+  async function send(forceRefresh = false) {
+    const accessToken = tokenProvider ? await tokenProvider(forceRefresh) : token
+    const headers = new Headers(init?.headers)
+    headers.set('Authorization', `Bearer ${accessToken}`)
+    if (!(init?.body instanceof FormData) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json')
+    }
+    return fetch(`${apiUrl}${path}`, { ...init, headers })
   }
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    headers,
-  })
+
+  let response = await send()
+  if (response.status === 401 && tokenProvider) {
+    response = await send(true)
+  }
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as

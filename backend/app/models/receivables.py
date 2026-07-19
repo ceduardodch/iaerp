@@ -27,12 +27,15 @@ siempre ``Numeric(18, 2)``/``Decimal`` (ADR 0004, igual que
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
+    DateTime,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -53,9 +56,7 @@ RECEIVABLE_STATUSES = frozenset({"OPEN", "PARTIALLY_PAID", "PAID", "VOID"})
 # tabla por tipo. amount siempre >= 0; el signo del efecto sobre el saldo lo
 # determina movement_type (REVERSAL resta lo que su reversed_movement_id
 # habia sumado).
-MOVEMENT_TYPES = frozenset(
-    {"PAYMENT", "RETENTION", "DISCOUNT", "CREDIT_NOTE", "REVERSAL"}
-)
+MOVEMENT_TYPES = frozenset({"PAYMENT", "RETENTION", "DISCOUNT", "CREDIT_NOTE", "REVERSAL"})
 
 
 class Receivable(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
@@ -261,27 +262,65 @@ class CollectionReminder(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin,
             ["parties.tenant_id", "parties.id"],
             name="fk_collection_reminders_tenant_party",
         ),
+        ForeignKeyConstraint(
+            ["tenant_id", "receivable_id"],
+            ["receivables.tenant_id", "receivables.id"],
+            name="fk_collection_reminders_tenant_receivable",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "installment_id"],
+            ["receivable_installments.tenant_id", "receivable_installments.id"],
+            name="fk_collection_reminders_tenant_installment",
+        ),
         UniqueConstraint("tenant_id", "id", name="uq_collection_reminders_tenant_id"),
         CheckConstraint(
-            "status IN ('STUBBED', 'SENT', 'FAILED')",
+            "status IN ('PENDING', 'PROCESSING', 'STUBBED', 'SENT', 'FAILED', 'SKIPPED')",
             name="ck_collection_reminders_status_valid",
         ),
         Index("ix_collection_reminders_tenant_party", "tenant_id", "party_id"),
         Index("ix_collection_reminders_tenant_status", "tenant_id", "status"),
         Index("ix_collection_reminders_created_at", "tenant_id", "created_at"),
+        UniqueConstraint(
+            "tenant_id",
+            "installment_id",
+            "channel",
+            "scheduled_at",
+            name="uq_collection_reminders_schedule",
+        ),
     )
 
     party_id: Mapped[uuid.UUID]
+    receivable_id: Mapped[uuid.UUID | None]
+    installment_id: Mapped[uuid.UUID | None]
     channel: Mapped[str] = mapped_column(String(50))
     template_id: Mapped[str] = mapped_column(String(100))
     recipient: Mapped[str] = mapped_column(String(320))
-    status: Mapped[str] = mapped_column(String(20), default="STUBBED")
+    status: Mapped[str] = mapped_column(String(20), default="PENDING")
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(String(1000))
+
+
+class CollectionPolicy(TimestampMixin, Base):
+    __tablename__ = "collection_policies"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    offsets_days: Mapped[str] = mapped_column(String(100), default="-3,0,3,7,15")
+    channels: Mapped[str] = mapped_column(String(100), default="EMAIL")
+    send_hour: Mapped[int] = mapped_column(Integer, default=9)
+    email_template_id: Mapped[str] = mapped_column(String(100), default="payment_reminder")
+    whatsapp_template_id: Mapped[str] = mapped_column(String(100), default="payment_reminder")
 
 
 __all__ = [
     "MOVEMENT_TYPES",
     "RECEIVABLE_STATUSES",
     "CollectionReminder",
+    "CollectionPolicy",
     "CustomerCredit",
     "Movement",
     "Receivable",

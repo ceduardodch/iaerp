@@ -1,210 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
-import { apiRequest, idempotencyKey, type Lead, type LeadActivity, type LeadActivityCreate } from '../../api'
-import { ErpButton, ErpEmptyState, ErpFormPanel, ErpStatusBadge, ErpToolbar } from '../erp'
+import { apiRequest, idempotencyKey, type Lead, type LeadActivity, type LeadActivityCreate, type LeadStatus, type Product } from '../../api'
+import { ErpButton, ErpEmptyState, ErpFormPanel, ErpPageHeader, ErpStatusBadge } from '../erp'
 
-const ACTIVITY_TYPE_LABELS: Record<LeadActivity['activityType'], string> = {
-  CALL: 'Llamada',
-  EMAIL: 'Email',
-  MEETING: 'Reunión',
-  NOTE: 'Nota',
-  TASK: 'Tarea',
-}
+const ACTIVE: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION']
+const LABELS: Record<LeadStatus, string> = { NEW: 'Nuevo', CONTACTED: 'Contactado', QUALIFIED: 'Calificado', PROPOSAL: 'Propuesta', NEGOTIATION: 'Negociación', WON: 'Ganado', LOST: 'Perdido' }
 
-const OUTCOME_LABELS: Record<LeadActivity['outcome'], string> = {
-  POSITIVE: 'Positivo',
-  NEUTRAL: 'Neutral',
-  NEGATIVE: 'Negativo',
-  PENDING: 'Pendiente',
-}
-
-const OUTCOME_TONES: Record<LeadActivity['outcome'], 'neutral' | 'success' | 'warning' | 'danger'> = {
-  POSITIVE: 'success',
-  NEUTRAL: 'neutral',
-  NEGATIVE: 'danger',
-  PENDING: 'warning',
-}
-
-interface LeadDetailPanelProps {
-  lead: Lead | null
-  token: string
-  onClose: () => void
-}
-
-export function LeadDetailPanel({ lead, token, onClose }: LeadDetailPanelProps) {
+export function LeadDetailPanel({ lead, token, products, onClose, onUpdated }: { lead: Lead; token: string; products: Product[]; onClose: () => void; onUpdated: (lead: Lead) => void }) {
   const queryClient = useQueryClient()
-  const [showActivityForm, setShowActivityForm] = useState(false)
+  const [mode, setMode] = useState<'detail' | 'edit' | 'activity' | 'message'>('detail')
+  const activitiesQuery = useQuery({ queryKey: ['crm-activities', lead.id], queryFn: () => apiRequest<LeadActivity[]>(token, `/crm/leads/${lead.id}/activities`) })
+  const updateLead = useMutation({ mutationFn: (body: object) => apiRequest<Lead>(token, `/crm/leads/${lead.id}`, { method: 'PUT', headers: { 'Idempotency-Key': idempotencyKey('crm-lead-update') }, body: JSON.stringify(body) }), onSuccess: (updated) => { onUpdated(updated); setMode('detail') } })
+  const moveLead = useMutation({ mutationFn: (newStatus: LeadStatus) => apiRequest<Lead>(token, `/crm/leads/${lead.id}/status`, { method: 'PUT', headers: { 'Idempotency-Key': idempotencyKey('crm-lead-stage') }, body: JSON.stringify({ newStatus }) }), onSuccess: onUpdated })
+  const createActivity = useMutation({ mutationFn: (data: LeadActivityCreate) => apiRequest<LeadActivity>(token, `/crm/leads/${lead.id}/activities`, { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('crm-activity') }, body: JSON.stringify(data) }), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['crm-activities', lead.id] }); setMode('detail') } })
+  const sendMessage = useMutation({ mutationFn: (data: object) => apiRequest<LeadActivity>(token, `/crm/leads/${lead.id}/messages`, { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('crm-message') }, body: JSON.stringify(data) }), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['crm-activities', lead.id] }); setMode('detail') } })
 
-  const { data: activities = [], isLoading: isLoadingActivities } = useQuery({
-    queryKey: ['crm-activities', lead?.id],
-    queryFn: () => apiRequest<LeadActivity[]>(token, `/crm/leads/${lead?.id}/activities`),
-    enabled: !!lead,
-  })
+  function submitEdit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); updateLead.mutate({ title: String(data.get('title')), productId: String(data.get('productId') || '') || null, source: String(data.get('source') || '') || null, estimatedValue: String(data.get('estimatedValue') || '') || null, expectedCloseDate: String(data.get('expectedCloseDate') || '') || null, hotness: data.get('hotness'), score: Number(data.get('score') || 0) }) }
+  function submitActivity(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); createActivity.mutate({ leadId: lead.id, activityType: data.get('activityType') as LeadActivityCreate['activityType'], subject: String(data.get('subject')), description: String(data.get('description') || '') || null, outcome: data.get('outcome') as LeadActivityCreate['outcome'], reminderDate: String(data.get('reminderDate') || '') || null, reminderCompleted: false }) }
+  function submitMessage(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); sendMessage.mutate({ channel: data.get('channel'), subject: String(data.get('subject') || '') || null, message: String(data.get('message')), templateId: String(data.get('templateId') || '') || null }) }
 
-  const createActivity = useMutation({
-    mutationFn: (data: LeadActivityCreate) =>
-      apiRequest<LeadActivity>(token, `/crm/leads/${lead?.id}/activities`, {
-        method: 'POST',
-        headers: { 'Idempotency-Key': idempotencyKey('crm-activity') },
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      setShowActivityForm(false)
-      return queryClient.invalidateQueries({ queryKey: ['crm-activities', lead?.id] })
-    },
-  })
+  if (mode === 'edit') return <><ErpPageHeader eyebrow="CRM" title="Editar oportunidad" subtitle={lead.party.name} /><ErpFormPanel eyebrow="Edición" title={lead.title} pending={updateLead.isPending} error={updateLead.error?.message} onSubmit={submitEdit} onCancel={() => setMode('detail')}><label>Título<input name="title" defaultValue={lead.title} required /></label><label>Producto<select name="productId" defaultValue={lead.productId ?? ''}><option value="">Sin producto</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label><div className="field-row"><label>Origen<input name="source" defaultValue={lead.source ?? ''} /></label><label>Valor estimado<input name="estimatedValue" type="number" step="0.01" defaultValue={lead.estimatedValue ?? ''} /></label></div><div className="field-row"><label>Temperatura<select name="hotness" defaultValue={lead.hotness}><option value="COLD">Frío</option><option value="WARM">Tibio</option><option value="HOT">Caliente</option></select></label><label>Puntuación<input name="score" type="number" min="0" max="100" defaultValue={lead.score} /></label></div><label>Cierre esperado<input name="expectedCloseDate" type="date" defaultValue={lead.expectedCloseDate ?? ''} /></label></ErpFormPanel></>
+  if (mode === 'activity') return <><ErpPageHeader eyebrow="CRM" title="Nueva actividad" subtitle={lead.title} /><ErpFormPanel eyebrow="Seguimiento" title="Registrar actividad" pending={createActivity.isPending} error={createActivity.error?.message} onSubmit={submitActivity} onCancel={() => setMode('detail')}><label>Tipo<select name="activityType"><option value="CALL">Llamada</option><option value="MEETING">Reunión</option><option value="TASK">Tarea</option><option value="NOTE">Nota</option></select></label><label>Asunto<input name="subject" required /></label><label>Descripción<textarea name="description" rows={4} /></label><label>Resultado<select name="outcome"><option value="PENDING">Pendiente</option><option value="POSITIVE">Positivo</option><option value="NEUTRAL">Neutral</option><option value="NEGATIVE">Negativo</option></select></label><label>Recordatorio<input name="reminderDate" type="datetime-local" /></label></ErpFormPanel></>
+  if (mode === 'message') return <><ErpPageHeader eyebrow="CRM" title="Nueva comunicación" subtitle={lead.party.name} /><ErpFormPanel eyebrow="Correo o WhatsApp" title="Enviar mensaje" pending={sendMessage.isPending} error={sendMessage.error?.message} onSubmit={submitMessage} onCancel={() => setMode('detail')}><label>Canal<select name="channel"><option value="EMAIL">Google Workspace</option><option value="WHATSAPP">WhatsApp</option></select></label><label>Asunto de correo<input name="subject" /></label><label>Mensaje<textarea name="message" rows={7} required /></label><label>Plantilla WhatsApp fuera de ventana de 24 h<input name="templateId" placeholder="Opcional" /></label></ErpFormPanel></>
 
-  function submitActivity(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!lead) return
-
-    const form = event.currentTarget
-    const data = new FormData(form)
-    createActivity.mutate({
-      leadId: lead.id,
-      activityType: data.get('activityType') as LeadActivityCreate['activityType'],
-      subject: String(data.get('subject')),
-      description: data.get('description') as string | null,
-      outcome: (data.get('outcome') as LeadActivityCreate['outcome']) || 'PENDING',
-      reminderDate: data.get('reminderDate') as string | null,
-      reminderCompleted: false,
-    })
-  }
-
-  if (!lead) {
-    return (
-      <aside className="form-panel erp-form-panel">
-        <p className="section-number">Detalle</p>
-        <h2>Selecciona un lead</h2>
-        <p className="erp-page-subtitle">Elige un lead de la lista para ver su detalle y actividades.</p>
-        <div className="erp-form-actions">
-          <ErpButton variant="secondary" onClick={onClose}>
-            Cerrar
-          </ErpButton>
-        </div>
-      </aside>
-    )
-  }
-
-  return (
-    <aside className="form-panel erp-form-panel crm-lead-detail">
-      <p className="section-number">Detalle</p>
-      <h2>Lead {lead.partyId.slice(0, 8)}...</h2>
-
-      <div className="crm-lead-info">
-        <span className="tag">Estado: {lead.status}</span>
-        <span className="tag">Puntuación: {lead.score}/100</span>
-        <span className="tag">Temperatura: {lead.hotness}</span>
-        {lead.estimatedValue ? (
-          <span className="tag">Valor: ${lead.estimatedValue}</span>
-        ) : null}
-        {lead.expectedCloseDate ? (
-          <span className="tag">Cierre: {lead.expectedCloseDate}</span>
-        ) : null}
-      </div>
-
-      <ErpToolbar>
-        <div className="erp-toolbar-group">
-          <h3>Actividades</h3>
-          <ErpButton
-            variant="primary"
-            onClick={() => setShowActivityForm(!showActivityForm)}
-          >
-            {showActivityForm ? 'Cancelar' : 'Nueva actividad'}
-          </ErpButton>
-        </div>
-      </ErpToolbar>
-
-      {showActivityForm ? (
-        <ErpFormPanel
-          eyebrow="Nueva actividad"
-          title="Registrar actividad"
-          submitLabel="Registrar"
-          pendingLabel="Registrando..."
-          pending={createActivity.isPending}
-          error={createActivity.error?.message}
-          onSubmit={submitActivity}
-          onCancel={() => setShowActivityForm(false)}
-        >
-          <label>
-            Tipo de actividad
-            <select name="activityType" required>
-              <option value="CALL">Llamada</option>
-              <option value="EMAIL">Email</option>
-              <option value="MEETING">Reunión</option>
-              <option value="NOTE">Nota</option>
-              <option value="TASK">Tarea</option>
-            </select>
-          </label>
-          <label>
-            Asunto
-            <input name="subject" required />
-          </label>
-          <label>
-            Descripción
-            <textarea name="description" rows={3} />
-          </label>
-          <label>
-            Resultado
-            <select name="outcome">
-              <option value="PENDING">Pendiente</option>
-              <option value="POSITIVE">Positivo</option>
-              <option value="NEUTRAL">Neutral</option>
-              <option value="NEGATIVE">Negativo</option>
-            </select>
-          </label>
-          <label>
-            Recordatorio (opcional)
-            <input
-              name="reminderDate"
-              type="datetime-local"
-            />
-          </label>
-        </ErpFormPanel>
-      ) : null}
-
-      <section className="crm-activities">
-        {isLoadingActivities ? (
-          <p>Cargando actividades...</p>
-        ) : activities.length === 0 ? (
-          <ErpEmptyState
-            title="No hay actividades"
-            description="Este lead no tiene actividades registradas aún."
-          />
-        ) : (
-          <div className="timeline">
-            {activities.map((activity) => (
-              <div key={activity.id} className="timeline-item">
-                <small className="timeline-date">
-                  {new Date(activity.createdAt).toLocaleString('es-EC')}
-                </small>
-                <div className="timeline-content">
-                  <span className="tag">{ACTIVITY_TYPE_LABELS[activity.activityType]}</span>
-                  <strong>{activity.subject}</strong>
-                  <ErpStatusBadge tone={OUTCOME_TONES[activity.outcome]}>
-                    {OUTCOME_LABELS[activity.outcome]}
-                  </ErpStatusBadge>
-                  {activity.description ? (
-                    <p className="timeline-description">{activity.description}</p>
-                  ) : null}
-                  {activity.reminderDate && !activity.reminderCompleted ? (
-                    <span className="reminder-chip">
-                      ⏰ Recordatorio: {new Date(activity.reminderDate).toLocaleString('es-EC')}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="erp-form-actions">
-        <ErpButton variant="secondary" onClick={onClose}>
-          Cerrar
-        </ErpButton>
-      </div>
-    </aside>
-  )
+  return <><ErpPageHeader eyebrow="Oportunidad" title={lead.title} subtitle={`${lead.party.name}${lead.product ? ` · ${lead.product.name}` : ''}`} meta={<ErpStatusBadge tone={lead.status === 'WON' ? 'success' : lead.status === 'LOST' ? 'danger' : 'warning'}>{LABELS[lead.status]}</ErpStatusBadge>} actions={<><ErpButton variant="secondary" onClick={onClose}>Volver al pipeline</ErpButton><ErpButton variant="secondary" onClick={() => setMode('edit')}>Editar</ErpButton><ErpButton variant="primary" onClick={() => setMode('message')}>Enviar mensaje</ErpButton></>} /><section className="crm-detail-grid"><article className="crm-opportunity-hero"><p className="section-number">Valor esperado</p><strong>${Number(lead.estimatedValue ?? 0).toLocaleString('es-EC', { minimumFractionDigits: 2 })}</strong><dl><div><dt>Contacto</dt><dd>{lead.party.name}</dd></div><div><dt>Responsable</dt><dd>{lead.owner?.displayName ?? 'Sin responsable'}</dd></div><div><dt>Correo</dt><dd>{lead.party.email ?? 'No registrado'}</dd></div><div><dt>WhatsApp</dt><dd>{lead.party.phone ?? 'No registrado'}</dd></div><div><dt>Cierre</dt><dd>{lead.expectedCloseDate ?? 'Sin fecha'}</dd></div></dl></article><article className="crm-stage-panel"><p className="section-number">Etapa comercial</p><div className="crm-stage-actions">{ACTIVE.map((status) => <button key={status} type="button" className={lead.status === status ? 'active' : ''} disabled={moveLead.isPending} onClick={() => status !== lead.status && moveLead.mutate(status)}>{LABELS[status]}</button>)}</div><div className="crm-close-actions"><ErpButton variant="primary" disabled={lead.status === 'WON'} onClick={() => moveLead.mutate('WON')}>Marcar ganado</ErpButton><ErpButton variant="danger" disabled={lead.status === 'LOST'} onClick={() => moveLead.mutate('LOST')}>Marcar perdido</ErpButton></div>{moveLead.error ? <p className="form-error">{moveLead.error.message}</p> : null}</article></section><section className="crm-timeline-panel"><header><div><p className="section-number">Historial</p><h2>Actividades y comunicaciones</h2></div><ErpButton variant="secondary" onClick={() => setMode('activity')}>Nueva actividad</ErpButton></header>{activitiesQuery.isPending ? <p>Cargando actividades…</p> : (activitiesQuery.data ?? []).length === 0 ? <ErpEmptyState title="Sin actividades" description="Registra la primera llamada, reunión o tarea." /> : <div className="timeline">{activitiesQuery.data?.map((activity) => <article className="timeline-item" key={activity.id}><time>{new Date(activity.createdAt).toLocaleString('es-EC')}</time><div><span>{activity.activityType}</span><strong>{activity.subject}</strong>{activity.description ? <p>{activity.description}</p> : null}</div></article>)}</div>}</section></>
 }

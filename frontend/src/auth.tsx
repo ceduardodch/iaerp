@@ -1,11 +1,14 @@
 import Keycloak from 'keycloak-js'
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
   type PropsWithChildren,
 } from 'react'
+
+import { configureApiTokenProvider } from './api'
 
 type AuthState = {
   mode: 'dev' | 'oidc'
@@ -80,15 +83,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setStored(next)
   }
 
-  async function getToken() {
+  const getToken = useCallback(async (forceRefresh = false) => {
     if (authMode === 'dev') {
       if (!stored?.token) throw new Error('Sesión no disponible')
       return stored.token
     }
-    await keycloak.updateToken(30)
+    await keycloak.updateToken(forceRefresh ? -1 : 30)
     if (!keycloak.token) throw new Error('Sesión no disponible')
     return keycloak.token
-  }
+  }, [stored])
+
+  useEffect(() => {
+    configureApiTokenProvider(getToken)
+    return () => configureApiTokenProvider(null)
+  }, [getToken])
 
   async function loginOidc(organizationAlias: string) {
     const alias = organizationAlias.trim().toLowerCase()

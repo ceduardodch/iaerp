@@ -18,8 +18,10 @@ LeadStatusValue = Literal[
     "LOST",
 ]
 
+
 class LeadStatus(APIModel):
     """Estados válidos del pipeline de ventas."""
+
     NEW: Literal["NEW"] = "NEW"
     CONTACTED: Literal["CONTACTED"] = "CONTACTED"
     QUALIFIED: Literal["QUALIFIED"] = "QUALIFIED"
@@ -31,6 +33,8 @@ class LeadStatus(APIModel):
 
 class LeadCreate(APIModel):
     party_id: uuid.UUID
+    title: str = Field(min_length=1, max_length=200)
+    product_id: uuid.UUID | None = None
     status: LeadStatusValue = Field(default="NEW")
     source: str | None = Field(default=None, max_length=50)
     owner_user_id: uuid.UUID | None = None
@@ -41,6 +45,8 @@ class LeadCreate(APIModel):
 
 
 class LeadUpdate(APIModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    product_id: uuid.UUID | None = None
     status: LeadStatusValue | None = None
     source: str | None = Field(default=None, max_length=50)
     owner_user_id: uuid.UUID | None = None
@@ -50,18 +56,42 @@ class LeadUpdate(APIModel):
     expected_close_date: date | None = None
 
 
+class LeadPartyRead(APIModel):
+    id: uuid.UUID
+    name: str
+    email: str | None
+    phone: str | None
+    address: str | None
+
+
+class LeadProductRead(APIModel):
+    id: uuid.UUID
+    name: str
+    code: str | None
+
+
+class LeadOwnerRead(APIModel):
+    id: uuid.UUID
+    display_name: str
+    email: str
+
+
 class LeadRead(LeadCreate):
     id: uuid.UUID
     created_at: datetime
     updated_at: datetime
     tenant_id: uuid.UUID
+    party: LeadPartyRead
+    product: LeadProductRead | None = None
+    owner: LeadOwnerRead | None = None
 
 
 # LeadActivity Schemas
 
+
 class LeadActivityCreate(APIModel):
     lead_id: uuid.UUID
-    activity_type: Literal["CALL", "EMAIL", "MEETING", "NOTE", "TASK"]
+    activity_type: Literal["CALL", "EMAIL", "WHATSAPP", "MEETING", "NOTE", "TASK"]
     subject: str = Field(min_length=1, max_length=200)
     description: str | None = None
     outcome: Literal["POSITIVE", "NEUTRAL", "NEGATIVE", "PENDING"] = "PENDING"
@@ -81,6 +111,7 @@ class LeadActivityRead(LeadActivityCreate):
 
 # Gmail Integration Schemas
 
+
 class GmailIntegrationRead(APIModel):
     id: uuid.UUID
     user_id: uuid.UUID
@@ -95,6 +126,7 @@ class GmailIntegrationRead(APIModel):
 
 class GmailSyncResult(APIModel):
     """Resultado de una operación de sincronización Gmail."""
+
     messages_processed: int
     activities_created: int
     leads_matched: int
@@ -104,22 +136,29 @@ class GmailSyncResult(APIModel):
 
 # Pipeline Transition Schema
 
+
 class LeadStatusUpdate(APIModel):
     """Solicitud para mover un lead a un nuevo estado del pipeline."""
+
     new_status: LeadStatusValue
     reason: str | None = Field(default=None, max_length=500)
 
 
 # Party-embedded Lead Schema (para crear lead + party en una sola llamada)
 
+
 class LeadWithPartyCreate(APIModel):
     """Crear un lead junto con su Party asociado."""
+
     party_name: str = Field(min_length=1, max_length=200)
     party_identification_type: Literal["RUC", "CEDULA", "PASSPORT", "FINAL_CONSUMER"]
     party_identification_number: str = Field(min_length=1, max_length=30)
     party_email: str | None = Field(default=None, max_length=320)
     party_phone: str | None = Field(default=None, max_length=40)
     party_address: str | None = Field(default=None, max_length=500)
+    title: str = Field(min_length=1, max_length=200)
+    product_id: uuid.UUID | None = None
+    owner_user_id: uuid.UUID | None = None
 
     # Lead fields
     status: LeadStatusValue = Field(default="NEW")
@@ -135,3 +174,32 @@ class LeadWithPartyCreate(APIModel):
         if value and "@" not in value:
             raise ValueError("party_email must be a valid email address")
         return value
+
+
+class IntegrationStatusRead(APIModel):
+    google_connected: bool
+    google_email: str | None = None
+    google_last_sync_at: datetime | None = None
+    google_configuration_available: bool
+    whatsapp_connected: bool
+    whatsapp_phone: str | None = None
+
+
+class GoogleAuthorizationRead(APIModel):
+    authorization_url: str
+
+
+class WhatsAppIntegrationUpdate(APIModel):
+    business_account_id: str = Field(min_length=1, max_length=100)
+    phone_number_id: str = Field(min_length=1, max_length=100)
+    display_phone_number: str | None = Field(default=None, max_length=40)
+    access_token: str = Field(min_length=10)
+    app_secret: str = Field(min_length=10)
+    verify_token: str = Field(min_length=16)
+
+
+class LeadMessageCreate(APIModel):
+    channel: Literal["EMAIL", "WHATSAPP"]
+    subject: str | None = Field(default=None, max_length=200)
+    message: str = Field(min_length=1, max_length=5000)
+    template_id: str | None = Field(default=None, max_length=100)

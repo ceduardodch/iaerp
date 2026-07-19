@@ -8,6 +8,7 @@ const context = {
   roles: ['owner'],
   scopes: ['context:read', 'parties:read', 'products:read', 'invoices:read', 'invoices:write'],
   automationWritesEnabled: false,
+  defaultPaymentTermsDays: 0,
 }
 
 const customer = {
@@ -123,6 +124,19 @@ async function mockApi(page: Page) {
   )
   await page.route('**/api/v1/establishments', (route) => route.fulfill({ json: [establishment] }))
   await page.route('**/api/v1/emission-points', (route) => route.fulfill({ json: [emissionPoint] }))
+  await page.route('**/api/v1/invoices/preview', (route) =>
+    route.fulfill({
+      json: {
+        lines: draftInvoice.lines.map((line) => ({ ...line, total: '22.43' })),
+        taxSubtotals: [
+          { taxCode: '4', taxRate: '15.000000', baseAmount: '19.50', taxAmount: '2.93' },
+        ],
+        subtotal: '19.50',
+        taxTotal: '2.93',
+        total: '22.43',
+      },
+    }),
+  )
   await page.route('**/api/v1/invoices', (route) => {
     if (route.request().method() === 'POST') {
       return route.fulfill({ status: 201, json: draftInvoice })
