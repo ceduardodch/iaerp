@@ -25,6 +25,11 @@ x-backend-environment: &backend-environment
   IAERP_SIGNING_CERT_PATH: /home/iaerp/certs/test-signing.p12
   IAERP_SIGNING_CERT_PASSWORD: ${IAERP_SIGNING_CERT_PASSWORD}
   IAERP_SECRETS_ENCRYPTION_KEY: ${IAERP_SECRETS_ENCRYPTION_KEY}
+  PUBLIC_APP_URL: https://iaerp.b2b.com.ec
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GOOGLE_OAUTH_REDIRECT_URI: https://iaerp.b2b.com.ec/api/v1/crm/integrations/google/callback
+  WHATSAPP_GRAPH_VERSION: ${WHATSAPP_GRAPH_VERSION:-v23.0}
 
 services:
   postgres:

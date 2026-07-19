@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     IAERP_SIGNING_CERT_PATH: str | None = None
     IAERP_SIGNING_CERT_PASSWORD: SecretStr | None = None
     IAERP_SECRETS_ENCRYPTION_KEY: SecretStr | None = None
+    PUBLIC_APP_URL: str = "http://localhost:5173"
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: SecretStr | None = None
+    GOOGLE_OAUTH_REDIRECT_URI: str | None = None
+    WHATSAPP_GRAPH_VERSION: str = "v23.0"
 
     # Simulador SRI (ver app/integrations/sri/simulator.py). Solo se monta el
     # router `/sri-sim` si esta habilitado; NUNCA puede habilitarse fuera de

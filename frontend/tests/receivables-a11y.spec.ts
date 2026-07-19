@@ -15,6 +15,7 @@ const context = {
     'receivables:notify',
   ],
   automationWritesEnabled: false,
+  defaultPaymentTermsDays: 0,
 }
 
 const customer = {
@@ -79,6 +80,19 @@ async function mockApi(page: Page) {
       json: currentReceivables,
     })
   })
+  await page.route('**/api/v1/receivables/collection-policy', (route) =>
+    route.fulfill({
+      json: {
+        enabled: true,
+        offsetsDays: [-3, 0, 3, 7, 15],
+        channels: ['EMAIL'],
+        sendHour: 9,
+        emailTemplateId: 'payment_reminder',
+        whatsappTemplateId: 'payment_reminder',
+        updatedAt: '2026-07-05T12:00:00Z',
+      },
+    }),
+  )
   await page.route(`**/api/v1/receivables/${overdueReceivable.id}/payments`, (route) => {
     if (route.request().method() === 'POST') {
       currentReceivables = currentReceivables.map((item) =>

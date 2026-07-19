@@ -64,6 +64,7 @@ class IAERPTokenVerifier:
         if settings.AUTH_MODE == "dev":
             try:
                 import jwt as pyjwt
+
                 # Decodificar sin verificar firma (inseguro, pero OK para dev)
                 payload = pyjwt.decode(
                     token,
@@ -210,6 +211,7 @@ async def context_get() -> dict[str, object]:
             automation_writes_enabled=(
                 automation.writes_enabled if automation is not None else False
             ),
+            default_payment_terms_days=tenant.default_payment_terms_days,
         ).model_dump(mode="json", by_alias=True)
     finally:
         await session.close()

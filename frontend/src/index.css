@@ -144,6 +144,10 @@ textarea { resize: vertical; }
 .company-identity { padding: 2rem; color: white; background: var(--forest); }
 .company-identity .section-number { color: var(--lime); }
 .company-identity h2 { margin: 5rem 0 2rem; font-size: 2.7rem; }
+.company-profile-editor form { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.company-profile-editor label { color: #c6d7d1; }
+.company-profile-editor input, .company-profile-editor select { color: var(--ink); background: white; }
+.company-profile-editor .erp-button-primary { color: var(--forest); background: var(--lime); }
 dl { margin: 0; }
 dl div { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem 0; border-top: 1px solid #41645b; }
 dt { color: #b8c9c3; font-size: .68rem; }
@@ -157,6 +161,70 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .invoice-lines { display: grid; gap: 1rem; margin: 0; padding: 0; border: 0; }
 .invoice-lines legend { padding: 0; color: var(--muted); font-size: .7rem; font-weight: 650; text-transform: uppercase; letter-spacing: .07em; }
 .invoice-line-row { display: grid; gap: .7rem; padding: .9rem; border: 1px solid var(--line); background: rgba(255,255,255,.5); }
+.invoice-live-preview { padding: 1rem; border: 1px solid var(--line); background: #f4f1e8; }
+.invoice-live-preview .invoice-totals { margin-left: auto; }
+.collection-policy-panel { margin-bottom: 1rem; }
+.collection-policy-form { display: grid; gap: 1rem; padding: 1.2rem 1.5rem 1.5rem; }
+.collection-policy-toggle { display: flex; align-items: center; gap: .55rem; color: var(--ink); font-weight: 750; }
+.collection-policy-toggle input, .collection-policy-channels input { width: auto; }
+.collection-policy-channels { display: flex; gap: 1rem; margin: 0; padding: 0; border: 0; }
+.collection-policy-channels legend { margin-bottom: .5rem; color: var(--muted); font-size: .64rem; font-weight: 750; text-transform: uppercase; letter-spacing: .07em; }
+.collection-policy-channels label { display: flex; align-items: center; gap: .45rem; }
+
+.segmented-control { display: inline-flex; width: fit-content; padding: .2rem; border: 1px solid var(--line); border-radius: .4rem; background: #ece9df; }
+.segmented-control button { padding: .55rem .8rem; border: 0; border-radius: .28rem; color: var(--muted); background: transparent; font-size: .72rem; font-weight: 750; }
+.segmented-control button.active { color: white; background: var(--forest); }
+.lead-contact-fields { display: grid; gap: 1rem; }
+.crm-kanban { display: grid; grid-template-columns: repeat(7, minmax(250px, 1fr)); gap: .8rem; padding: .3rem 0 1.5rem; overflow-x: auto; scroll-snap-type: x proximity; }
+.kanban-column { min-height: 520px; border-top: 3px solid #9b978d; background: #e9e6dc; scroll-snap-align: start; }
+.kanban-column > header { display: grid; gap: .35rem; padding: 1rem; border-bottom: 1px solid #cfcbc0; }
+.kanban-column > header > div { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.kanban-column h2 { margin: 0; font-family: var(--sans); font-size: .77rem; letter-spacing: .04em; text-transform: uppercase; }
+.kanban-column header span { display: grid; place-items: center; width: 1.45rem; height: 1.45rem; border-radius: 50%; background: white; font-size: .67rem; }
+.kanban-column header small { color: var(--muted); font-size: .65rem; }
+.kanban-new { border-color: #839c95; }
+.kanban-contacted { border-color: #4d8173; }
+.kanban-qualified { border-color: #d29e43; }
+.kanban-proposal { border-color: #cf7d4f; }
+.kanban-negotiation { border-color: var(--clay); }
+.kanban-won { border-color: #50845d; }
+.kanban-lost { border-color: var(--danger); }
+.kanban-stack { display: grid; align-content: start; gap: .7rem; padding: .7rem; }
+.kanban-card { border: 1px solid #cbc7bc; border-radius: .35rem; background: var(--paper); box-shadow: 0 2px 0 rgba(23, 52, 45, .06); transition: transform 180ms var(--ease-out), box-shadow 180ms var(--ease-out), border-color 180ms ease; }
+.kanban-card:hover { transform: translateY(-2px); border-color: #839c95; box-shadow: 0 8px 22px rgba(23, 52, 45, .1); }
+.kanban-card:active { transform: scale(.985); }
+.kanban-card[draggable="true"] { cursor: grab; }
+.kanban-card[draggable="true"]:active { cursor: grabbing; }
+.kanban-card button { display: grid; width: 100%; gap: .45rem; padding: .9rem; border: 0; color: var(--ink); background: transparent; text-align: left; }
+.kanban-card strong { font-family: var(--serif); font-size: 1.15rem; line-height: 1.08; }
+.kanban-card > button > span:not(.kanban-card-kicker) { color: var(--muted); font-size: .72rem; }
+.kanban-card-kicker { color: var(--forest); font-size: .58rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.kanban-card footer { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .35rem; }
+.kanban-card footer b { font-size: .72rem; }
+.crm-detail-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 1rem; }
+.crm-opportunity-hero, .crm-stage-panel, .crm-timeline-panel { border: 1px solid var(--line); background: var(--paper); }
+.crm-opportunity-hero { padding: 2rem; color: white; background: var(--forest); }
+.crm-opportunity-hero .section-number { color: var(--lime); }
+.crm-opportunity-hero > strong { display: block; margin: 2rem 0; font-family: var(--serif); font-size: clamp(3rem, 7vw, 6rem); font-weight: 450; line-height: .9; }
+.crm-opportunity-hero dl { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+.crm-opportunity-hero dl div { padding-top: .7rem; border-top: 1px solid #4c7167; }
+.crm-opportunity-hero dt { color: #b9ccc5; font-size: .62rem; text-transform: uppercase; }
+.crm-opportunity-hero dd { margin: .25rem 0 0; font-size: .8rem; }
+.crm-stage-panel { padding: 1.5rem; }
+.crm-stage-actions { display: grid; gap: .45rem; margin: 1.5rem 0; }
+.crm-stage-actions button { padding: .7rem .8rem; border: 1px solid var(--line); border-radius: .25rem; color: var(--ink); background: white; text-align: left; transition: transform 130ms var(--ease-out), border-color 130ms ease, background 130ms ease; }
+.crm-stage-actions button:hover { border-color: var(--forest); transform: translateX(3px); }
+.crm-stage-actions button.active { color: white; border-color: var(--forest); background: var(--forest); }
+.crm-close-actions { display: flex; gap: .5rem; }
+.crm-timeline-panel { margin-top: 1rem; padding: 1.5rem; }
+.crm-timeline-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+.crm-timeline-panel h2 { margin: 0; font-size: 1.7rem; }
+.timeline { display: grid; }
+.timeline-item { display: grid; grid-template-columns: 150px 1fr; gap: 1.3rem; padding: 1rem 0; border-top: 1px solid var(--line); }
+.timeline-item time { color: var(--muted); font-size: .65rem; }
+.timeline-item > div { display: grid; gap: .3rem; }
+.timeline-item span { color: var(--forest); font-size: .58rem; font-weight: 800; letter-spacing: .08em; }
+.timeline-item p { margin: .2rem 0 0; color: var(--muted); font-size: .75rem; }
 .invoice-summary { margin: 1rem 0; }
 .invoice-summary div { display: flex; justify-content: space-between; gap: 1rem; padding: .6rem 0; border-top: 1px solid var(--line); }
 .invoice-summary dt { color: var(--muted); font-size: .68rem; }
@@ -192,6 +260,7 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 @media (max-width: 1050px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .split-layout, .company-grid, .company-grid-expanded { grid-template-columns: 1fr; }
+  .crm-detail-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -229,6 +298,10 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
   .metric-card { min-height: 180px; }
   .readiness-panel { grid-template-columns: 1fr; gap: 1rem; }
   .product-grid { grid-template-columns: 1fr; }
+  .crm-kanban { grid-template-columns: repeat(7, minmax(84vw, 1fr)); }
+  .crm-opportunity-hero dl { grid-template-columns: 1fr; }
+  .crm-close-actions, .crm-timeline-panel > header { align-items: stretch; flex-direction: column; }
+  .timeline-item { grid-template-columns: 1fr; gap: .35rem; }
   .login-shell { grid-template-columns: 1fr; }
   .login-story { min-height: 60vh; }
 }
@@ -247,5 +320,6 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
   .metric-card:nth-child(2) { animation-delay: 60ms; }
   .metric-card:nth-child(3) { animation-delay: 120ms; }
   .metric-card:nth-child(4) { animation-delay: 180ms; }
+  .kanban-card { animation: reveal .3s both; animation-delay: calc(var(--card-index) * 35ms); }
   @keyframes reveal { from { opacity: 0; transform: translateY(12px); } }
 }

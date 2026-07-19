@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -28,6 +29,7 @@ class Tenant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200))
     organization_id: Mapped[str | None] = mapped_column(String(100), unique=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    default_payment_terms_days: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class TenantFiscalSettings(TimestampMixin, Base):

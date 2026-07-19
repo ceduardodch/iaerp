@@ -34,6 +34,9 @@ from app.schemas.billing import (
     CreditNoteInput,
     DocumentArtifactRead,
     InvoiceInput,
+    InvoicePreviewInput,
+    InvoicePreviewLineRead,
+    InvoicePreviewRead,
     SalesDocumentLineRead,
     SalesDocumentRead,
     SRITransmissionRead,
@@ -70,6 +73,52 @@ _CREDIT_NOTE_STATUSES_RESERVING_BALANCE = frozenset(
 # Evento outbox que dispara el worker de transmision SRI (workers/tasks.py
 # rutea por event_type; workers/sri_transmission.py es el handler).
 INVOICE_SIGNED_EVENT = "invoice.signed"
+
+
+async def preview_invoice(
+    session: AsyncSession,
+    context: AuthContext,
+    data: InvoicePreviewInput,
+) -> InvoicePreviewRead:
+    if data.issue_date > today_in_fiscal_timezone():
+        raise HTTPException(status_code=422, detail="issueDate cannot be in the future")
+    policy = resolve_fiscal_policy(data.issue_date)
+    inputs: list[LineInput] = []
+    for line in data.lines:
+        tax = await _get_tenant_scoped_tax_category_by_code(session, context, line.tax_code)
+        if line.product_id is not None:
+            await _get_tenant_scoped_product(session, context, line.product_id)
+        inputs.append(
+            LineInput(
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                discount=line.discount,
+                tax_rate=tax.rate,
+                tax_sri_code=tax.sri_code,
+            )
+        )
+    calculation = policy.calculate_document(inputs)
+    lines = [
+        InvoicePreviewLineRead(
+            description=source.description,
+            quantity=result.quantity,
+            unit_price=result.unit_price,
+            discount=result.discount,
+            base_amount=result.base_amount,
+            tax_code=result.tax_sri_code,
+            tax_rate=result.tax_rate,
+            tax_amount=result.tax_amount,
+            total=result.base_amount + result.tax_amount,
+        )
+        for source, result in zip(data.lines, calculation.lines, strict=True)
+    ]
+    return InvoicePreviewRead(
+        lines=lines,
+        subtotal=calculation.subtotal,
+        tax_total=calculation.tax_total,
+        total=calculation.total,
+    )
+
 
 async def _get_tenant_scoped_establishment(
     session: AsyncSession,
@@ -203,9 +252,7 @@ async def _reserve_sequential(
         # Re-select with the lock now that the row exists, closing the race
         # window between the initial lookup and the insert.
         sequence_row = await session.scalar(
-            select(Sequence)
-            .where(Sequence.id == sequence_row.id)
-            .with_for_update()
+            select(Sequence).where(Sequence.id == sequence_row.id).with_for_update()
         )
         assert sequence_row is not None  # noqa: S101 - guaranteed by the flush above
 
@@ -235,9 +282,7 @@ async def create_invoice_draft(
             detail="issueDate cannot be in the future (America/Guayaquil)",
         )
 
-    establishment = await _get_tenant_scoped_establishment(
-        session, context, data.establishment_id
-    )
+    establishment = await _get_tenant_scoped_establishment(session, context, data.establishment_id)
     emission_point = await _get_tenant_scoped_emission_point(
         session, context, data.emission_point_id, establishment.id
     )
@@ -475,8 +520,7 @@ def _credit_note_line_inputs(
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    "Credit note line must reference a product billed on the "
-                    "supporting invoice"
+                    "Credit note line must reference a product billed on the supporting invoice"
                 ),
             )
         source_line = lines_by_product[credit_line.product_id]
@@ -573,9 +617,7 @@ async def create_credit_note(
     party = await _get_tenant_scoped_party(session, context, invoice.party_id)
 
     invoice_lines = await list_sales_document_lines(session, context, invoice.id)
-    line_inputs, line_products, line_descriptions = _credit_note_line_inputs(
-        data, invoice_lines
-    )
+    line_inputs, line_products, line_descriptions = _credit_note_line_inputs(data, invoice_lines)
 
     # Punto 3 del docstring: version vigente a la fecha del SUSTENTO, nunca a
     # la fecha de emision de la NC (ADR 0008 #5, vectores 6/7).
@@ -753,8 +795,7 @@ async def list_sales_documents(
     if query:
         pattern = f"%{query}%"
         statement = statement.where(
-            (SalesDocument.sequential.ilike(pattern))
-            | (SalesDocument.access_key.ilike(pattern))
+            (SalesDocument.sequential.ilike(pattern)) | (SalesDocument.access_key.ilike(pattern))
         )
     effective_limit = min(limit, _LIST_SALES_DOCUMENTS_MAX_LIMIT)
     return list(
@@ -797,6 +838,7 @@ async def to_sales_document_read(
     document: SalesDocument,
 ) -> SalesDocumentRead:
     lines = await list_sales_document_lines(session, context, document.id)
+    installments = await list_sales_document_installments(session, context, document.id)
     transmission = await _get_latest_sri_transmission(session, context, document.id)
     sri_transmission = (
         SRITransmissionRead(
@@ -843,6 +885,7 @@ async def to_sales_document_read(
             )
             for line in lines
         ],
+        installments=[{"due_date": item.due_date, "amount": item.amount} for item in installments],
     )
 
 
@@ -961,9 +1004,11 @@ async def issue_document(
     p12_bytes: bytes | None = None
     certificate_password: bytes | None = None
     if fiscal.certificate_object_key and fiscal.certificate_password_encrypted:
-        p12_bytes, certificate_password, _fiscal = (
-            await fiscal_settings.load_tenant_signing_credentials(session, context.tenant_id)
-        )
+        (
+            p12_bytes,
+            certificate_password,
+            _fiscal,
+        ) = await fiscal_settings.load_tenant_signing_credentials(session, context.tenant_id)
     elif runtime_settings.APP_ENV not in {"development", "test"}:
         raise HTTPException(status_code=409, detail="Signing certificate is not configured")
 
@@ -999,9 +1044,11 @@ async def issue_document(
             buyer=party,
         )
     else:
-        related_invoice, related_establishment, related_emission_point = (
-            await _load_credit_note_supporting_invoice(session, context, document.id)
-        )
+        (
+            related_invoice,
+            related_establishment,
+            related_emission_point,
+        ) = await _load_credit_note_supporting_invoice(session, context, document.id)
         xml_result = sri_xml.build_credit_note_xml(
             document=document,
             lines=lines,

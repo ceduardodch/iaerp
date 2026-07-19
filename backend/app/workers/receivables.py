@@ -181,16 +181,31 @@ async def handle_invoice_authorized(
     await session.flush()
 
     for sequence, due_date, amount in installments:
-        session.add(
-            ReceivableInstallment(
-                tenant_id=tenant_id,
-                receivable_id=receivable.id,
-                sequence=sequence,
-                due_date=due_date,
-                amount=amount,
+        installment = ReceivableInstallment(
+            tenant_id=tenant_id,
+            receivable_id=receivable.id,
+            sequence=sequence,
+            due_date=due_date,
+            amount=amount,
+        )
+        session.add(installment)
+    await session.flush()
+
+    from app.workers.collections import schedule_receivable_reminders
+
+    persisted_installments = list(
+        await session.scalars(
+            select(ReceivableInstallment).where(
+                ReceivableInstallment.tenant_id == tenant_id,
+                ReceivableInstallment.receivable_id == receivable.id,
             )
         )
-    await session.flush()
+    )
+    await schedule_receivable_reminders(
+        session,
+        receivable=receivable,
+        installments=persisted_installments,
+    )
 
     await append_audit(
         session,

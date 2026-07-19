@@ -13,13 +13,17 @@ import {
   type AccountItem,
   type AccountItemStatus,
   type ArtifactDownload,
+  type CollectionPolicy,
   type DiscountInput,
   type DocumentArtifact,
   type EmissionPoint,
   type Establishment,
   type FiscalSettings,
   type InvoiceLineInput,
+  type InvoicePreview,
+  type IntegrationStatus,
   type Operation,
+  type OrganizationProfile,
   type Party,
   type PaymentInput,
   type Product,
@@ -271,6 +275,7 @@ function PartiesPage({
       email: FormDataEntryValue | null
       phone: FormDataEntryValue | null
       address: FormDataEntryValue | null
+      paymentTermsDays: FormDataEntryValue | null
     }) =>
       apiRequest<Party>(token, data.id ? `/parties/${data.id}` : '/parties', {
         method: data.id ? 'PUT' : 'POST',
@@ -283,6 +288,7 @@ function PartiesPage({
           email: data.email || null,
           phone: data.phone || null,
           address: data.address || null,
+          paymentTermsDays: data.paymentTermsDays === '' ? null : Number(data.paymentTermsDays),
         }),
       }),
     onSuccess: () => {
@@ -305,6 +311,7 @@ function PartiesPage({
         email: data.get('email'),
         phone: data.get('phone'),
         address: data.get('address'),
+        paymentTermsDays: data.get('paymentTermsDays'),
       },
     )
   }
@@ -337,6 +344,7 @@ function PartiesPage({
             <label>Teléfono<input name="phone" type="tel" defaultValue={editor?.phone ?? ''} /></label>
           </div>
           <label>Dirección<textarea name="address" rows={3} defaultValue={editor?.address ?? ''} /></label>
+          <label>Condición de pago predeterminada<select name="paymentTermsDays" defaultValue={editor?.paymentTermsDays ?? ''}><option value="">Usar valor de la empresa</option><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="45">45 días</option><option value="60">60 días</option><option value="90">90 días</option></select></label>
         </ErpFormPanel>
       </>
     )
@@ -603,6 +611,14 @@ function todayInFiscalTimezone(): string {
   return `${values.year}-${values.month}-${values.day}`
 }
 
+function addDays(dateValue: string, days: number): string {
+  if (!dateValue) return ''
+  const date = new Date(`${dateValue}T12:00:00Z`)
+  if (Number.isNaN(date.getTime())) return ''
+  date.setUTCDate(date.getUTCDate() + (Number.isFinite(days) ? days : 0))
+  return date.toISOString().slice(0, 10)
+}
+
 type InvoicePanel =
   | { view: 'new' }
   | { view: 'detail'; id: string }
@@ -615,6 +631,7 @@ function NewInvoiceForm({
   taxes,
   establishments,
   emissionPoints,
+  defaultPaymentTermsDays,
   onCreated,
   onCancel,
 }: {
@@ -624,6 +641,7 @@ function NewInvoiceForm({
   taxes: TaxCategory[]
   establishments: Establishment[]
   emissionPoints: EmissionPoint[]
+  defaultPaymentTermsDays: number
   onCreated: (invoiceId: string) => void
   onCancel: () => void
 }) {
@@ -635,10 +653,37 @@ function NewInvoiceForm({
   )
   const [issueDate, setIssueDate] = useState(todayInFiscalTimezone)
   const [lines, setLines] = useState<DraftLine[]>([emptyDraftLine()])
+  const initialCustomer = customers.find((customer) => customer.id === customerId)
+  const [paymentTermsDays, setPaymentTermsDays] = useState(
+    initialCustomer?.paymentTermsDays ?? defaultPaymentTermsDays ?? 0,
+  )
 
   const availableEmissionPoints = emissionPoints.filter(
     (point) => point.establishmentId === establishmentId,
   )
+  const previewPayload = JSON.stringify({
+    issueDate,
+    lines: lines.map((line) => ({
+      productId: line.productId || null,
+      description: line.description,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      discount: line.discount || '0.00',
+      taxCode: line.taxCode,
+    })),
+  })
+  const deferredPreviewPayload = useDeferredValue(previewPayload)
+  const previewQuery = useQuery({
+    queryKey: ['invoice-preview', deferredPreviewPayload],
+    queryFn: () => apiRequest<InvoicePreview>(token, '/invoices/preview', {
+      method: 'POST',
+      body: deferredPreviewPayload,
+    }),
+    enabled: lines.every((line) => Boolean(
+      line.description && line.taxCode && Number(line.quantity) > 0 && Number(line.unitPrice) >= 0,
+    )),
+  })
+  const previewIsCurrent = deferredPreviewPayload === previewPayload && !previewQuery.isFetching
 
   function updateLine(key: string, patch: Partial<DraftLine>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))
@@ -655,14 +700,18 @@ function NewInvoiceForm({
   }
 
   const createDraft = useMutation({
-    mutationFn: (payload: {
+    mutationFn: async (payload: {
       customerId: string
       establishmentId: string
       emissionPointId: string
       issueDate: string
       lines: InvoiceLineInput[]
-    }) =>
-      apiRequest<SalesDocument>(token, '/invoices', {
+    }) => {
+      const authoritativePreview = await apiRequest<InvoicePreview>(token, '/invoices/preview', {
+        method: 'POST',
+        body: JSON.stringify({ issueDate: payload.issueDate, lines: payload.lines }),
+      })
+      return apiRequest<SalesDocument>(token, '/invoices', {
         method: 'POST',
         headers: { 'Idempotency-Key': idempotencyKey('web-invoice') },
         body: JSON.stringify({
@@ -670,13 +719,14 @@ function NewInvoiceForm({
           establishmentId: payload.establishmentId,
           emissionPointId: payload.emissionPointId,
           issueDate: payload.issueDate,
-          // Sin plan de pago: el backend crea una sola cuota al contado por el
-          // total. La UI nunca calcula el total, asi que no puede declarar
-          // cuotas que cuadren; las omite y deja que el backend las derive.
-          installments: [],
+          installments: [{
+            dueDate: addDays(payload.issueDate, paymentTermsDays),
+            amount: authoritativePreview.total,
+          }],
           lines: payload.lines,
         }),
-      }),
+      })
+    },
     onSuccess: (invoice) => {
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       onCreated(invoice.id)
@@ -713,7 +763,11 @@ function NewInvoiceForm({
     >
       <label>
         Cliente
-        <select value={customerId} onChange={(event) => setCustomerId(event.target.value)} required>
+        <select value={customerId} onChange={(event) => {
+          const nextId = event.target.value
+          setCustomerId(nextId)
+          setPaymentTermsDays(customers.find((customer) => customer.id === nextId)?.paymentTermsDays ?? defaultPaymentTermsDays)
+        }} required>
           {customers.map((customer) => (
             <option key={customer.id} value={customer.id}>{customer.name}</option>
           ))}
@@ -749,6 +803,23 @@ function NewInvoiceForm({
         Fecha de emisión
         <input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} required />
       </label>
+      <div className="field-row">
+        <label>
+          Condición de pago
+          <select value={paymentTermsDays} onChange={(event) => setPaymentTermsDays(Number(event.target.value))}>
+            <option value={0}>Contado</option>
+            <option value={15}>15 días</option>
+            <option value={30}>30 días</option>
+            <option value={45}>45 días</option>
+            <option value={60}>60 días</option>
+            <option value={90}>90 días</option>
+          </select>
+        </label>
+        <label>
+          Vencimiento
+          <input value={addDays(issueDate, paymentTermsDays)} readOnly />
+        </label>
+      </div>
       <fieldset className="invoice-lines">
         <legend>Líneas</legend>
         {lines.map((line, index) => (
@@ -816,7 +887,23 @@ function NewInvoiceForm({
           Agregar línea
         </ErpButton>
       </fieldset>
-      <p className="fine-print">Los totales e impuestos los calcula el servidor al guardar el borrador.</p>
+      <section className="invoice-live-preview" aria-live="polite">
+        <p className="section-number">Cálculo en vivo</p>
+        {!previewIsCurrent ? <small>Validando con el servidor…</small> : null}
+        {previewQuery.error ? <p className="form-error">{previewQuery.error.message}</p> : null}
+        {previewQuery.data ? (
+          <dl className="invoice-totals">
+            {Array.from(previewQuery.data.lines.reduce((groups, line) => {
+              groups.set(line.taxRate, (groups.get(line.taxRate) ?? 0) + Number(line.baseAmount))
+              return groups
+            }, new Map<string, number>())).map(([rate, base]) => <div key={rate}><dt>Subtotal IVA {formatPercent(rate)}</dt><dd>${formatAmount(base)}</dd></div>)}
+            <div><dt>Subtotal</dt><dd>${formatAmount(previewQuery.data.subtotal)}</dd></div>
+            <div><dt>IVA total</dt><dd>${formatAmount(previewQuery.data.taxTotal)}</dd></div>
+            <div className="invoice-grand-total"><dt>Total</dt><dd>${formatAmount(previewQuery.data.total)}</dd></div>
+          </dl>
+        ) : <p className="fine-print">Completa la primera línea para calcular los valores.</p>}
+      </section>
+      <p className="fine-print">El servidor valida impuestos, redondeos y total antes de crear el borrador.</p>
     </ErpFormPanel>
   )
 }
@@ -910,11 +997,17 @@ function CreditNoteForm({
 function InvoiceDetail({
   token,
   invoiceId,
+  customers,
+  establishments,
+  emissionPoints,
   onClose,
   onOpenCreditNote,
 }: {
   token: string
   invoiceId: string
+  customers: Party[]
+  establishments: Establishment[]
+  emissionPoints: EmissionPoint[]
   onClose: () => void
   onOpenCreditNote: (invoice: SalesDocument) => void
 }) {
@@ -975,6 +1068,9 @@ function InvoiceDetail({
   }
 
   const invoice = invoiceQuery.data
+  const customer = customers.find((item) => item.id === invoice.partyId)
+  const establishment = establishments.find((item) => item.id === invoice.establishmentId)
+  const emissionPoint = emissionPoints.find((item) => item.id === invoice.emissionPointId)
   const transmission = invoice.sriTransmission
   const canIssue = invoice.status === 'DRAFT'
   const canCreditNote = invoice.type === 'INVOICE' && invoice.status === 'AUTHORIZED'
@@ -994,7 +1090,14 @@ function InvoiceDetail({
       <h2 id="invoice-detail-title">Factura {invoice.sequential}</h2>
       <InvoiceStatusBadge status={invoice.status} />
       <dl className="invoice-summary invoice-metadata">
+        <div><dt>Cliente</dt><dd>{customer?.name ?? 'No disponible'}</dd></div>
+        <div><dt>Identificación</dt><dd>{customer?.identificationNumber ?? 'No disponible'}</dd></div>
+        <div><dt>Dirección</dt><dd>{customer?.address ?? 'No registrada'}</dd></div>
         <div><dt>Fecha</dt><dd>{invoice.issueDate}</dd></div>
+        <div><dt>Establecimiento</dt><dd>{establishment ? `${establishment.code} · ${establishment.name}` : 'No disponible'}</dd></div>
+        <div><dt>Punto de emisión</dt><dd>{emissionPoint?.code ?? 'No disponible'}</dd></div>
+        <div><dt>Condición de pago</dt><dd>{invoice.installments?.[0]?.dueDate === invoice.issueDate ? 'Contado' : 'Crédito'}</dd></div>
+        <div><dt>Vencimiento</dt><dd>{invoice.installments?.[0]?.dueDate ?? invoice.issueDate}</dd></div>
         {invoice.accessKey ? <div><dt>Clave de acceso</dt><dd>{invoice.accessKey}</dd></div> : null}
       </dl>
 
@@ -1100,6 +1203,7 @@ function InvoicesPage({
   taxes,
   establishments,
   emissionPoints,
+  defaultPaymentTermsDays,
 }: {
   token: string
   customers: Party[]
@@ -1107,6 +1211,7 @@ function InvoicesPage({
   taxes: TaxCategory[]
   establishments: Establishment[]
   emissionPoints: EmissionPoint[]
+  defaultPaymentTermsDays: number
 }) {
   const [panel, setPanel] = useState<InvoicePanel | undefined>(undefined)
   const lastTriggerRef = useRef<HTMLElement | null>(null)
@@ -1131,12 +1236,12 @@ function InvoicesPage({
     return (
       <>
         <ErpPageHeader eyebrow="Facturación electrónica" title="Nueva factura" subtitle="Crea el borrador; los totales serán calculados y validados por el servidor." />
-        <NewInvoiceForm token={token} customers={customers} products={products} taxes={taxes} establishments={establishments} emissionPoints={emissionPoints} onCreated={(invoiceId) => setPanel({ view: 'detail', id: invoiceId })} onCancel={closePanel} />
+        <NewInvoiceForm token={token} customers={customers} products={products} taxes={taxes} establishments={establishments} emissionPoints={emissionPoints} defaultPaymentTermsDays={defaultPaymentTermsDays} onCreated={(invoiceId) => setPanel({ view: 'detail', id: invoiceId })} onCancel={closePanel} />
       </>
     )
   }
   if (panel?.view === 'detail') {
-    return <InvoiceDetail key={panel.id} token={token} invoiceId={panel.id} onClose={closePanel} onOpenCreditNote={(invoice) => setPanel({ view: 'credit-note', invoice })} />
+    return <InvoiceDetail key={panel.id} token={token} invoiceId={panel.id} customers={customers} establishments={establishments} emissionPoints={emissionPoints} onClose={closePanel} onOpenCreditNote={(invoice) => setPanel({ view: 'credit-note', invoice })} />
   }
   if (panel?.view === 'credit-note') {
     return (
@@ -1514,13 +1619,15 @@ function SendReminderForm({
 }) {
   const [channel, setChannel] = useState<ReminderInput['channel']>('EMAIL')
   const [templateId, setTemplateId] = useState('')
+  const [scheduledAt, setScheduledAt] = useState('')
+  const [message, setMessage] = useState('')
 
   const sendReminder = useMutation({
     mutationFn: () =>
       apiRequest<Operation>(token, `/receivables/${receivable.id}/reminders`, {
         method: 'POST',
         headers: { 'Idempotency-Key': idempotencyKey('web-receivable-reminder') },
-        body: JSON.stringify({ channel, templateId } satisfies ReminderInput),
+        body: JSON.stringify({ channel, templateId, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null, message: message || null } satisfies ReminderInput),
       }),
     onSuccess: () => onSent(),
   })
@@ -1558,7 +1665,79 @@ function SendReminderForm({
           required
         />
       </label>
+      <label>Mensaje personalizado<textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={4} placeholder="Opcional" /></label>
+      <label>Programar para<input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
     </ErpFormPanel>
+  )
+}
+
+function CollectionPolicyEditor({
+  policy,
+  pending,
+  error,
+  onSave,
+}: {
+  policy: CollectionPolicy
+  pending: boolean
+  error?: string
+  onSave: (policy: Omit<CollectionPolicy, 'updatedAt'>) => void
+}) {
+  const [enabled, setEnabled] = useState(policy.enabled)
+  const [offsets, setOffsets] = useState(policy.offsetsDays.join(', '))
+  const [channels, setChannels] = useState(policy.channels)
+  const [sendHour, setSendHour] = useState(policy.sendHour)
+  const [emailTemplateId, setEmailTemplateId] = useState(policy.emailTemplateId)
+  const [whatsappTemplateId, setWhatsAppTemplateId] = useState(policy.whatsappTemplateId)
+
+  function toggleChannel(channel: 'EMAIL' | 'WHATSAPP', checked: boolean) {
+    setChannels((current) => checked
+      ? Array.from(new Set([...current, channel]))
+      : current.filter((item) => item !== channel))
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const offsetsDays = offsets
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isInteger(value) && value >= -365 && value <= 365)
+    if (offsetsDays.length === 0 || channels.length === 0) return
+    onSave({
+      enabled,
+      offsetsDays: Array.from(new Set(offsetsDays)).sort((left, right) => left - right),
+      channels,
+      sendHour,
+      emailTemplateId,
+      whatsappTemplateId,
+    })
+  }
+
+  return (
+    <ErpPanel
+      title="Cobranza programada"
+      actions={<ErpStatusBadge tone={enabled ? 'success' : 'neutral'}>{enabled ? 'Activa' : 'Pausada'}</ErpStatusBadge>}
+      className="collection-policy-panel"
+    >
+      <form className="collection-policy-form" onSubmit={submit}>
+        <label className="collection-policy-toggle"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Activar mensajes automáticos</label>
+        <div className="field-row">
+          <label>Hitos en días<input value={offsets} onChange={(event) => setOffsets(event.target.value)} placeholder="-3, 0, 3, 7, 15" required /></label>
+          <label>Hora de envío<input type="number" min="0" max="23" value={sendHour} onChange={(event) => setSendHour(Number(event.target.value))} required /></label>
+        </div>
+        <fieldset className="collection-policy-channels">
+          <legend>Canales</legend>
+          <label><input type="checkbox" checked={channels.includes('EMAIL')} onChange={(event) => toggleChannel('EMAIL', event.target.checked)} /> Correo</label>
+          <label><input type="checkbox" checked={channels.includes('WHATSAPP')} onChange={(event) => toggleChannel('WHATSAPP', event.target.checked)} /> WhatsApp</label>
+        </fieldset>
+        <div className="field-row">
+          <label>Plantilla de correo<input value={emailTemplateId} onChange={(event) => setEmailTemplateId(event.target.value)} required /></label>
+          <label>Plantilla de WhatsApp<input value={whatsappTemplateId} onChange={(event) => setWhatsAppTemplateId(event.target.value)} required /></label>
+        </div>
+        <p className="fine-print">Usa valores negativos antes del vencimiento, 0 el día de pago y positivos después.</p>
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        <ErpButton variant="primary" type="submit" disabled={pending || channels.length === 0}>{pending ? 'Guardando…' : 'Guardar reglas'}</ErpButton>
+      </form>
+    </ErpPanel>
   )
 }
 
@@ -1582,6 +1761,18 @@ function ReceivablesPage({
         token,
         statusFilter ? `/receivables?status=${statusFilter}` : '/receivables',
       ),
+  })
+  const policyQuery = useQuery({
+    queryKey: ['receivables', 'collection-policy'],
+    queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
+  })
+  const updatePolicy = useMutation({
+    mutationFn: (policy: Omit<CollectionPolicy, 'updatedAt'>) => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy', {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': idempotencyKey('web-collection-policy') },
+      body: JSON.stringify(policy),
+    }),
+    onSuccess: (policy) => queryClient.setQueryData(['receivables', 'collection-policy'], policy),
   })
   const receivables = receivablesQuery.data ?? []
 
@@ -1643,6 +1834,7 @@ function ReceivablesPage({
           </select>
         </label>
       </ErpToolbar>
+      {policyQuery.data && !Array.isArray(policyQuery.data) && Array.isArray(policyQuery.data.offsetsDays) && Array.isArray(policyQuery.data.channels) ? <CollectionPolicyEditor key={policyQuery.data.updatedAt} policy={policyQuery.data} pending={updatePolicy.isPending} error={updatePolicy.error?.message} onSave={(policy) => updatePolicy.mutate(policy)} /> : null}
       <section className="split-layout erp-list-only">
         <ErpPanel title="Cuentas por cobrar" count={receivables.length}>
           <div className="table-wrap" tabIndex={0} aria-label="Listado de cuentas por cobrar">
@@ -1716,6 +1908,34 @@ function OrganizationPage({
     queryKey: ['organization', 'fiscal-settings'],
     queryFn: () => apiRequest<FiscalSettings>(token, '/organization/fiscal-settings'),
   })
+  const integrationsQuery = useQuery({
+    queryKey: ['crm', 'integrations'],
+    queryFn: () => apiRequest<IntegrationStatus>(token, '/crm/integrations'),
+  })
+  const updateProfile = useMutation({
+    mutationFn: (data: Omit<OrganizationProfile, 'tenantId'>) =>
+      apiRequest<OrganizationProfile>(token, '/organization/profile', {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('web-organization-profile') },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (profile) => {
+      queryClient.setQueryData<TenantContext>(['context'], (current) => current ? {
+        ...current,
+        name: profile.name,
+        ruc: profile.ruc,
+        defaultPaymentTermsDays: profile.defaultPaymentTermsDays,
+      } : current)
+    },
+  })
+  const connectGoogle = useMutation({
+    mutationFn: () => apiRequest<{ authorizationUrl: string }>(token, '/crm/integrations/google/authorize', { method: 'POST' }),
+    onSuccess: ({ authorizationUrl }) => window.location.assign(authorizationUrl),
+  })
+  const saveWhatsApp = useMutation({
+    mutationFn: (data: object) => apiRequest<IntegrationStatus>(token, '/crm/integrations/whatsapp', { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: (status) => queryClient.setQueryData(['crm', 'integrations'], status),
+  })
   const updateEnvironment = useMutation({
     mutationFn: (sriEnvironment: '1' | '2') =>
       apiRequest<FiscalSettings>(token, '/organization/fiscal-settings', {
@@ -1744,6 +1964,29 @@ function OrganizationPage({
     uploadCertificate.mutate(new FormData(event.currentTarget))
   }
 
+  function submitProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    updateProfile.mutate({
+      name: String(data.get('name')),
+      ruc: String(data.get('ruc')),
+      defaultPaymentTermsDays: Number(data.get('defaultPaymentTermsDays') || 0),
+    })
+  }
+
+  function submitWhatsApp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    saveWhatsApp.mutate({
+      businessAccountId: data.get('businessAccountId'),
+      phoneNumberId: data.get('phoneNumberId'),
+      displayPhoneNumber: data.get('displayPhoneNumber') || null,
+      accessToken: data.get('accessToken'),
+      appSecret: data.get('appSecret'),
+      verifyToken: data.get('verifyToken'),
+    })
+  }
+
   const fiscal = fiscalQuery.data
   return (
     <>
@@ -1754,10 +1997,15 @@ function OrganizationPage({
         meta={<ErpStatusBadge tone="success">Tenant activo</ErpStatusBadge>}
       />
       <section className="company-grid company-grid-expanded">
-        <article className="company-identity">
+        <article className="company-identity company-profile-editor">
           <p className="section-number">Contribuyente</p>
-          <h2>{context.name}</h2>
-          <dl><div><dt>RUC</dt><dd>{context.ruc}</dd></div><div><dt>Roles</dt><dd>{context.roles.join(', ')}</dd></div></dl>
+          <form onSubmit={submitProfile}>
+            <label>Razón social<input name="name" defaultValue={context.name} required /></label>
+            <label>RUC<input name="ruc" defaultValue={context.ruc} pattern="[0-9]{13}" required /></label>
+            <label>Condición de pago general<select name="defaultPaymentTermsDays" defaultValue={context.defaultPaymentTermsDays}><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="45">45 días</option><option value="60">60 días</option><option value="90">90 días</option></select></label>
+            {updateProfile.error ? <p className="form-error">{updateProfile.error.message}</p> : null}
+            <ErpButton variant="primary" type="submit" disabled={updateProfile.isPending}>{updateProfile.isPending ? 'Guardando…' : 'Guardar datos de empresa'}</ErpButton>
+          </form>
         </article>
         <ErpPanel title="Establecimientos" count={establishments.length}>
           <ul className="establishment-list">
@@ -1816,6 +2064,28 @@ function OrganizationPage({
             </form>
           </div>
         </ErpPanel>
+        <ErpPanel title="Google Workspace" actions={<ErpStatusBadge tone={integrationsQuery.data?.googleConnected ? 'success' : 'warning'}>{integrationsQuery.data?.googleConnected ? 'Conectado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
+          <div className="fiscal-panel-body">
+            {integrationsQuery.data?.googleConnected ? <p>Cuenta conectada: <strong>{integrationsQuery.data.googleEmail}</strong></p> : <p className="fiscal-panel-copy">Conecta tu cuenta para enviar correos y sincronizar conversaciones del CRM.</p>}
+            {!integrationsQuery.data?.googleConfigurationAvailable ? <p className="environment-warning">Faltan GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET y callback en Coolify.</p> : null}
+            {connectGoogle.error ? <p className="form-error">{connectGoogle.error.message}</p> : null}
+            <ErpButton variant="primary" disabled={!integrationsQuery.data?.googleConfigurationAvailable || connectGoogle.isPending} onClick={() => connectGoogle.mutate()}>{integrationsQuery.data?.googleConnected ? 'Reconectar Google' : 'Conectar Google Workspace'}</ErpButton>
+          </div>
+        </ErpPanel>
+        <ErpPanel title="WhatsApp Business" actions={<ErpStatusBadge tone={integrationsQuery.data?.whatsappConnected ? 'success' : 'warning'}>{integrationsQuery.data?.whatsappConnected ? 'Conectado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
+          <form className="fiscal-panel-body" onSubmit={submitWhatsApp}>
+            {integrationsQuery.data?.whatsappConnected ? <p>Número activo: <strong>{integrationsQuery.data.whatsappPhone ?? 'Configurado'}</strong></p> : null}
+            <label>WhatsApp Business Account ID<input name="businessAccountId" required /></label>
+            <label>Phone Number ID<input name="phoneNumberId" required /></label>
+            <label>Número visible<input name="displayPhoneNumber" placeholder="+593…" /></label>
+            <label>Token permanente<input name="accessToken" type="password" autoComplete="new-password" required /></label>
+            <label>Meta App Secret<input name="appSecret" type="password" autoComplete="new-password" required /></label>
+            <label>Verify token<input name="verifyToken" type="password" minLength={16} required /></label>
+            <p className="fine-print">Webhook: {window.location.origin}/api/v1/crm/webhooks/whatsapp</p>
+            {saveWhatsApp.error ? <p className="form-error">{saveWhatsApp.error.message}</p> : null}
+            <ErpButton variant="primary" type="submit" disabled={saveWhatsApp.isPending}>{saveWhatsApp.isPending ? 'Validando…' : 'Guardar conexión'}</ErpButton>
+          </form>
+        </ErpPanel>
       </section>
     </>
   )
@@ -1829,6 +2099,7 @@ function Workspace() {
       queryKey: ['auth-token'],
       queryFn: auth.getToken,
       staleTime: 20_000,
+      refetchInterval: 20_000,
     }],
   })[0]
   const token = tokenQuery.data ?? ''
@@ -1888,11 +2159,12 @@ function Workspace() {
             taxes={taxesQuery.data ?? []}
             establishments={establishmentsQuery.data ?? []}
             emissionPoints={emissionPointsQuery.data ?? []}
+            defaultPaymentTermsDays={contextQuery.data.defaultPaymentTermsDays}
           />
         ) : null}
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
-        {section === 'crm' ? <LeadsPage token={token} /> : null}
+        {section === 'crm' ? <LeadsPage token={token} parties={parties} products={products} /> : null}
       </main>
     </div>
   )

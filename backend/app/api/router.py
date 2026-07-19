@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthContext, create_dev_token, require_scopes
 from app.core.config import get_settings
 from app.db.session import get_session
+from app.models.billing import SalesDocument
 from app.models.platform import (
     AutomationSettings,
     Membership,
@@ -17,11 +18,14 @@ from app.models.platform import (
     Tenant,
     User,
 )
+from app.models.receivables import CollectionPolicy
 from app.schemas.billing import (
     ArtifactDownloadRead,
     CreditNoteInput,
     DocumentArtifactRead,
     InvoiceInput,
+    InvoicePreviewInput,
+    InvoicePreviewRead,
     SalesDocumentRead,
 )
 from app.schemas.masters import (
@@ -45,6 +49,8 @@ from app.schemas.platform import (
     FiscalSettingsUpdate,
     MembershipRead,
     OperationRead,
+    OrganizationProfileRead,
+    OrganizationProfileUpdate,
     ServiceAccountCreate,
     ServiceAccountCreated,
     ServiceAccountRead,
@@ -55,9 +61,13 @@ from app.schemas.receivables import (
     AccountItemRead,
     AgingBucketTotalRead,
     AgingSummaryRead,
+    CollectionPolicyRead,
+    CollectionPolicyUpdate,
     MovementRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
+    ReminderInput,
+    ReminderRead,
     ReversalInput,
 )
 from app.services import billing, fiscal_settings, masters, receivables
@@ -146,6 +156,54 @@ async def get_context(
         roles=sorted(context.roles),
         scopes=sorted(context.scopes),
         automation_writes_enabled=automation.writes_enabled if automation else False,
+        default_payment_terms_days=tenant.default_payment_terms_days,
+    )
+
+
+@router.put("/organization/profile", response_model=OrganizationProfileRead)
+async def put_organization_profile(
+    data: OrganizationProfileUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        tenant = await masters.get_active_tenant(session, context.tenant_id)
+        if tenant.ruc != data.ruc:
+            issued = await session.scalar(
+                select(SalesDocument.id)
+                .where(
+                    SalesDocument.tenant_id == context.tenant_id,
+                    SalesDocument.status != "DRAFT",
+                )
+                .limit(1)
+            )
+            if issued is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="RUC cannot change after a fiscal document has been issued",
+                )
+        tenant.name = data.name
+        tenant.ruc = data.ruc
+        tenant.default_payment_terms_days = data.default_payment_terms_days
+        await session.flush()
+        response = OrganizationProfileRead(
+            tenant_id=tenant.id,
+            name=tenant.name,
+            ruc=tenant.ruc,
+            default_payment_terms_days=tenant.default_payment_terms_days,
+        ).model_dump(mode="json", by_alias=True)
+        return str(tenant.id), response
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="organization.profile.update",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="organization.profile.updated",
+        entity_type="tenant",
+        callback=update,
     )
 
 
@@ -594,6 +652,15 @@ async def put_automation(
     )
 
 
+@router.post("/invoices/preview", response_model=InvoicePreviewRead)
+async def post_invoice_preview(
+    data: InvoicePreviewInput,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+) -> InvoicePreviewRead:
+    return await billing.preview_invoice(session, context, data)
+
+
 @router.post("/invoices", response_model=SalesDocumentRead, status_code=201)
 async def post_invoice(
     data: InvoiceInput,
@@ -637,9 +704,7 @@ async def get_invoices(
     """
 
     entities = await billing.list_sales_documents(session, context, query=q, status=status)
-    return [
-        await billing.to_sales_document_read(session, context, entity) for entity in entities
-    ]
+    return [await billing.to_sales_document_read(session, context, entity) for entity in entities]
 
 
 @router.get("/invoices/{invoice_id}", response_model=SalesDocumentRead)
@@ -900,6 +965,64 @@ async def get_receivables_aging(
     ).model_dump(mode="json", by_alias=True)
 
 
+@router.get("/receivables/collection-policy", response_model=CollectionPolicyRead)
+async def get_collection_policy(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+) -> CollectionPolicyRead:
+    policy = await session.get(CollectionPolicy, context.tenant_id)
+    if policy is None:
+        policy = CollectionPolicy(tenant_id=context.tenant_id)
+        session.add(policy)
+        await session.commit()
+        await session.refresh(policy)
+    return CollectionPolicyRead(
+        enabled=policy.enabled,
+        offsets_days=[int(item) for item in policy.offsets_days.split(",") if item],
+        channels=[item for item in policy.channels.split(",") if item],
+        send_hour=policy.send_hour,
+        email_template_id=policy.email_template_id,
+        whatsapp_template_id=policy.whatsapp_template_id,
+        updated_at=policy.updated_at,
+    )
+
+
+@router.put("/receivables/collection-policy", response_model=CollectionPolicyRead)
+async def put_collection_policy(
+    data: CollectionPolicyUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:notify"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        policy = await session.get(CollectionPolicy, context.tenant_id)
+        if policy is None:
+            policy = CollectionPolicy(tenant_id=context.tenant_id)
+            session.add(policy)
+        policy.enabled = data.enabled
+        policy.offsets_days = ",".join(str(item) for item in sorted(set(data.offsets_days)))
+        policy.channels = ",".join(dict.fromkeys(data.channels))
+        policy.send_hour = data.send_hour
+        policy.email_template_id = data.email_template_id
+        policy.whatsapp_template_id = data.whatsapp_template_id
+        await session.flush()
+        response = CollectionPolicyRead(
+            **data.model_dump(), updated_at=policy.updated_at
+        ).model_dump(mode="json", by_alias=True)
+        return str(context.tenant_id), response
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.collection_policy.update",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="collection_policy.updated",
+        entity_type="collection_policy",
+        callback=update,
+    )
+
+
 @router.get("/receivables/{receivable_id}", response_model=AccountItemRead)
 async def get_receivable(
     receivable_id: uuid.UUID,
@@ -1001,6 +1124,40 @@ async def post_receivable_payment(
         action="receivable.payment_registered",
         entity_type="receivable",
         callback=apply_payment,
+    )
+
+
+@router.post(
+    "/receivables/{receivable_id}/reminders",
+    response_model=ReminderRead,
+    status_code=201,
+)
+async def post_receivable_reminder(
+    receivable_id: uuid.UUID,
+    data: ReminderInput,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:notify"))],
+) -> dict[str, object]:
+    async def send() -> tuple[str, dict[str, object]]:
+        entity = await receivables.send_real_reminder(
+            session,
+            context,
+            receivable_id=receivable_id,
+            reminder=data,
+        )
+        response = ReminderRead.model_validate(entity).model_dump(mode="json", by_alias=True)
+        return str(entity.id), response
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.reminder.send",
+        idempotency_key=idempotency_key,
+        request_payload={"receivable_id": str(receivable_id), **data.model_dump(mode="json")},
+        action="receivable.reminder_requested",
+        entity_type="collection_reminder",
+        callback=send,
     )
 
 

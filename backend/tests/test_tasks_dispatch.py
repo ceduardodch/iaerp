@@ -9,7 +9,7 @@ handler dedicado.
 
 import uuid
 
-from app.workers import sri_transmission, tasks
+from app.workers import collections, sri_transmission, tasks
 from app.workers.outbox import OutboxMessage
 
 
@@ -36,6 +36,12 @@ def test_resolve_consumer_falls_back_to_default_for_unknown_event_types() -> Non
     consumer_name, handler = tasks._resolve_consumer("party.created")
     assert consumer_name == "iaerp.default"
     assert handler is tasks._acknowledge_event
+
+
+def test_resolve_consumer_routes_collection_reminders_to_dedicated_handler() -> None:
+    consumer_name, handler = tasks._resolve_consumer(collections.COLLECTION_REMINDER_DUE_EVENT)
+    assert consumer_name == collections.CONSUMER_NAME
+    assert handler is collections.handle_collection_reminder_due
 
 
 async def test_default_handler_is_a_true_no_op() -> None:

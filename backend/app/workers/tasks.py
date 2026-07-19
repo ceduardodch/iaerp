@@ -7,6 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import engine
 from app.workers.celery_app import celery_app
+from app.workers.collections import (
+    COLLECTION_REMINDER_DUE_EVENT,
+    handle_collection_reminder_due,
+)
+from app.workers.collections import (
+    CONSUMER_NAME as COLLECTIONS_CONSUMER,
+)
 from app.workers.outbox import OutboxMessage, consume_once
 from app.workers.receivables import CONSUMER_NAME as RECEIVABLES_CONSUMER
 from app.workers.receivables import handle_credit_note_authorized, handle_invoice_authorized
@@ -54,6 +61,7 @@ _HANDLERS_BY_EVENT_TYPE: dict[str, tuple[str, Handler]] = {
     "invoice.signed": (SRI_TRANSMISSION_CONSUMER, handle_invoice_signed),
     "invoice.authorized": (RECEIVABLES_CONSUMER, handle_invoice_authorized),
     CREDIT_NOTE_AUTHORIZED_EVENT: (RECEIVABLES_CONSUMER, handle_credit_note_authorized),
+    COLLECTION_REMINDER_DUE_EVENT: (COLLECTIONS_CONSUMER, handle_collection_reminder_due),
 }
 
 _DEFAULT_CONSUMER_NAME = "iaerp.default"

@@ -57,6 +57,7 @@ class PartyCreate(APIModel):
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=40)
     address: str | None = Field(default=None, max_length=500)
+    payment_terms_days: int | None = Field(default=None, ge=0, le=365)
 
     @field_validator("roles")
     @classmethod

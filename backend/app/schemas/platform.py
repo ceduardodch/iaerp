@@ -27,6 +27,17 @@ class TenantContextRead(APIModel):
     roles: list[str]
     scopes: list[str]
     automation_writes_enabled: bool
+    default_payment_terms_days: int
+
+
+class OrganizationProfileUpdate(APIModel):
+    name: str = Field(min_length=1, max_length=200)
+    ruc: str = Field(pattern=r"^[0-9]{13}$")
+    default_payment_terms_days: int = Field(default=0, ge=0, le=365)
+
+
+class OrganizationProfileRead(OrganizationProfileUpdate):
+    tenant_id: uuid.UUID
 
 
 class FiscalSettingsUpdate(APIModel):
