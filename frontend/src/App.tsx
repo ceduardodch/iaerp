@@ -40,8 +40,9 @@ import {
   ErpStatusBadge,
   ErpToolbar,
 } from './components/erp'
+import { LeadsPage } from './components/crm'
 
-type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' | 'organization'
+type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' | 'organization' | 'crm'
 
 const sections: Array<{ id: Section; label: string; eyebrow: string }> = [
   { id: 'overview', label: 'Resumen', eyebrow: '01' },
@@ -50,6 +51,7 @@ const sections: Array<{ id: Section; label: string; eyebrow: string }> = [
   { id: 'invoices', label: 'Facturas', eyebrow: '04' },
   { id: 'organization', label: 'Empresa', eyebrow: '05' },
   { id: 'receivables', label: 'Cartera', eyebrow: '06' },
+  { id: 'crm', label: 'CRM', eyebrow: '07' },
 ]
 
 function DevLogin() {
@@ -1722,6 +1724,7 @@ function Workspace() {
         ) : null}
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} /> : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
+        {section === 'crm' ? <LeadsPage /> : null}
       </main>
     </div>
   )

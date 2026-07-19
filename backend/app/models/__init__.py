@@ -7,6 +7,12 @@ from app.models.billing import (
     Sequence,
     SRITransmission,
 )
+from app.models.crm import (
+    GmailIntegration,
+    Lead,
+    LeadActivity,
+    LeadStatus,
+)
 from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag, TaxCategory
 from app.models.platform import (
     AuditEvent,
@@ -17,6 +23,7 @@ from app.models.platform import (
     OutboxEvent,
     ServiceAccount,
     Tenant,
+    TenantFiscalSettings,
     User,
 )
 from app.models.receivables import (
@@ -34,7 +41,11 @@ __all__ = [
     "DocumentRelation",
     "EmissionPoint",
     "Establishment",
+    "GmailIntegration",
     "IdempotencyRecord",
+    "Lead",
+    "LeadActivity",
+    "LeadStatus",
     "Membership",
     "Movement",
     "OperationRecord",
@@ -52,5 +63,6 @@ __all__ = [
     "Tag",
     "TaxCategory",
     "Tenant",
+    "TenantFiscalSettings",
     "User",
 ]

@@ -188,6 +188,101 @@ export type ReminderInput = {
   templateId: string
 }
 
+// CRM Types
+
+export type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'PROPOSAL' | 'NEGOTIATION' | 'WON' | 'LOST'
+
+export type Lead = {
+  id: string
+  partyId: string
+  status: LeadStatus
+  source?: string | null
+  ownerUserId?: string | null
+  score: number
+  hotness: 'COLD' | 'WARM' | 'HOT'
+  estimatedValue?: string | null
+  expectedCloseDate?: string | null
+  createdAt: string
+  updatedAt: string
+  tenantId: string
+}
+
+export type LeadCreate = {
+  partyId: string
+  status?: LeadStatus
+  source?: string | null
+  ownerUserId?: string | null
+  score?: number
+  hotness?: 'COLD' | 'WARM' | 'HOT'
+  estimatedValue?: string | null
+  expectedCloseDate?: string | null
+}
+
+export type LeadUpdate = {
+  status?: LeadStatus | null
+  source?: string | null
+  ownerUserId?: string | null
+  score?: number | null
+  hotness?: 'COLD' | 'WARM' | 'HOT' | null
+  estimatedValue?: string | null
+  expectedCloseDate?: string | null
+}
+
+export type LeadWithPartyCreate = {
+  partyName: string
+  partyIdentificationType: 'RUC' | 'CEDULA' | 'PASSPORT' | 'FINAL_CONSUMER'
+  partyIdentificationNumber: string
+  partyEmail?: string | null
+  partyPhone?: string | null
+  partyAddress?: string | null
+  status?: LeadStatus
+  source?: string | null
+  score?: number
+  hotness?: 'COLD' | 'WARM' | 'HOT'
+  estimatedValue?: string | null
+  expectedCloseDate?: string | null
+}
+
+export type LeadActivity = {
+  id: string
+  leadId: string
+  activityType: 'CALL' | 'EMAIL' | 'MEETING' | 'NOTE' | 'TASK'
+  subject: string
+  description?: string | null
+  outcome: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | 'PENDING'
+  reminderDate?: string | null
+  reminderCompleted: boolean
+  actorId: string
+  sourceEmailId?: string | null
+  sourceEmailThreadId?: string | null
+  createdAt: string
+  updatedAt: string
+  tenantId: string
+}
+
+export type LeadActivityCreate = {
+  leadId: string
+  activityType: 'CALL' | 'EMAIL' | 'MEETING' | 'NOTE' | 'TASK'
+  subject: string
+  description?: string | null
+  outcome?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | 'PENDING'
+  reminderDate?: string | null
+  reminderCompleted?: boolean
+}
+
+export type LeadStatusUpdate = {
+  newStatus: LeadStatus
+  reason?: string | null
+}
+
+export type GmailSyncResult = {
+  messagesProcessed: number
+  activitiesCreated: number
+  leadsMatched: number
+  errors: string[]
+  lastSyncAt: string
+}
+
 export class ApiError extends Error {
   readonly status: number
 

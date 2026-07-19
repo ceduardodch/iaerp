@@ -1,8 +1,9 @@
+import hashlib
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +41,8 @@ from app.schemas.platform import (
     AutomationSettingsRead,
     AutomationSettingsUpdate,
     DevTokenRequest,
+    FiscalSettingsRead,
+    FiscalSettingsUpdate,
     MembershipRead,
     OperationRead,
     ServiceAccountCreate,
@@ -57,7 +60,7 @@ from app.schemas.receivables import (
     PaymentInput,
     ReversalInput,
 )
-from app.services import billing, masters, receivables
+from app.services import billing, fiscal_settings, masters, receivables
 from app.services.unit_of_work import append_audit, execute_idempotent
 
 router = APIRouter()
@@ -86,6 +89,10 @@ ALL_DEV_SCOPES = {
     "receivables:read",
     "receivables:write",
     "receivables:notify",
+    "leads:read",
+    "leads:write",
+    "communications:read",
+    "communications:write",
 }
 
 IdempotencyKey = Annotated[
@@ -242,6 +249,72 @@ async def get_establishments(
         EstablishmentRead.model_validate(entity)
         for entity in await masters.list_establishments(session, context)
     ]
+
+
+@router.get("/organization/fiscal-settings", response_model=FiscalSettingsRead)
+async def get_fiscal_settings(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:read"))],
+) -> FiscalSettingsRead:
+    return await fiscal_settings.read_settings(session, context)
+
+
+@router.put("/organization/fiscal-settings", response_model=FiscalSettingsRead)
+async def put_fiscal_settings(
+    data: FiscalSettingsUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        response = await fiscal_settings.update_settings(session, context, data)
+        return str(context.tenant_id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="organization.fiscal_settings.update",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="organization.fiscal_settings.updated",
+        entity_type="tenant_fiscal_settings",
+        callback=update,
+    )
+
+
+@router.post("/organization/signing-certificate", response_model=FiscalSettingsRead)
+async def post_signing_certificate(
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+    file: Annotated[UploadFile, File()],
+    password: Annotated[str, Form(min_length=1, max_length=500)],
+) -> dict[str, object]:
+    certificate_bytes = await file.read(fiscal_settings.MAX_CERTIFICATE_SIZE + 1)
+
+    async def upload() -> tuple[str, dict[str, object]]:
+        response = await fiscal_settings.upload_signing_certificate(
+            session,
+            context,
+            filename=file.filename,
+            data=certificate_bytes,
+            password=password,
+        )
+        return str(context.tenant_id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="organization.signing_certificate.upload",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "filename": file.filename,
+            "sha256": hashlib.sha256(certificate_bytes).hexdigest(),
+        },
+        action="organization.signing_certificate.uploaded",
+        entity_type="tenant_fiscal_settings",
+        callback=upload,
+    )
 
 
 @router.post("/establishments", response_model=EstablishmentRead, status_code=201)

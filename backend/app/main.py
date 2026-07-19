@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from app.api.crm import router as crm_router
 from app.api.router import router
 from app.core.config import get_settings
 from app.health import readiness, startup_readiness
@@ -35,6 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router, prefix=settings.API_PREFIX)
+app.include_router(crm_router, prefix=settings.API_PREFIX)
 
 if settings.SRI_SIMULATOR_ENABLED:
     from app.integrations.sri.simulator import router as sri_simulator_router
