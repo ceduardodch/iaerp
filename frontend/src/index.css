@@ -507,3 +507,36 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .kanban-column-total { color: #565b54; }
 .lead-card-score { color: #4c514a; }
 .kanban-column-count { color: #4c514a; }
+
+/* ── Sprint 5: Forms Verticales - Layout profesional multi-columna ── */
+.form-section { margin-bottom: 1.5rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--paper); overflow: hidden; }
+.form-section-header { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border: 0; background: rgba(216,239,133,.15); cursor: pointer; transition: background-color 140ms ease; }
+.form-section-header:hover { background: rgba(216,239,133,.25); }
+.form-section-header h3 { margin: 0; font-size: .95rem; font-weight: 600; color: var(--ink); }
+.form-section-description { margin: 0; font-size: .8rem; color: var(--muted); }
+.form-section-toggle { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--forest); color: white; transition: transform 200ms var(--ease-out); }
+.form-section-toggle.expanded { transform: rotate(180deg); }
+.form-section-toggle.collapsed { transform: rotate(0deg); }
+.form-section-content { padding: 1.25rem; display: grid; gap: 1rem; animation: slide-down 200ms var(--ease-out); }
+@keyframes slide-down { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+.form-progress { margin-bottom: 2rem; }
+.form-progress-steps { display: flex; align-items: center; justify-content: space-between; margin: 0 0 1rem; padding: 0; list-style: none; gap: .5rem; }
+.form-progress-step { position: relative; flex: 1; display: flex; align-items: center; gap: .75rem; }
+.form-progress-step-number { width: 32px; height: 32px; display: grid; place-items: center; border: 2px solid var(--line); border-radius: 50%; font-size: .85rem; font-weight: 600; background: white; color: var(--muted); transition: all 140ms ease; }
+.form-progress-step.completed .form-progress-step-number { border-color: var(--forest); background: var(--forest); color: white; }
+.form-progress-step.current .form-progress-step-number { border-color: var(--lime); background: var(--lime); color: var(--ink); box-shadow: 0 0 0 3px rgba(216,239,133,.4); }
+.form-progress-step-title { font-size: .85rem; font-weight: 500; color: var(--muted); }
+.form-progress-step.completed .form-progress-step-title { color: var(--ink); }
+.form-progress-step.current .form-progress-step-title { color: var(--ink); font-weight: 600; }
+.form-progress-step-connector { flex: 1; height: 2px; background: var(--line); margin: 0 .5rem; }
+.form-progress-step.completed + .form-progress-step .form-progress-step-connector { background: var(--forest); }
+.form-progress-summary { margin: 0; font-size: .8rem; color: var(--muted); text-align: center; }
+
+.form-grid { display: grid; gap: 1rem; }
+.form-grid-1 { grid-template-columns: 1fr; }
+.form-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.form-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 768px) {
+  .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+}
