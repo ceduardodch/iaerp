@@ -20,7 +20,7 @@ Este documento permite **continuar trabajo 1x1 entre sesiones** sin perder conte
 
 ## 📋 Tareas Pendientes (Sprint 3 - Sidebar Colapsible + UX)
 
-### 🟢 Tareas COMPLETADAS (5)
+### 🟢 Tareas COMPLETADAS (6) - SPRINT 3 COMPLETADO ✅
 
 #### ✅ TASK-3.1: Mejorar visibilidad de navegación activa
 **Estado:** 🟢 Completada (2026-07-20)
@@ -269,17 +269,25 @@ npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
 - ✅ startTransition usado para cambios de sección
 - ✅ Estructura limpia sin inline sidebar
 
-#### TASK-3.5: Tooltips
-**Estado:** 🔵 Pendiente
+#### ✅ TASK-3.5: Tooltips
+**Estado:** 🟢 Completada (2026-07-20)
 **Prioridad:** LOW
 **Estimación:** 1 hora
-**Archivos:** `frontend/src/components/Sidebar.tsx` (modificar)
-**Requisitos:**
-- @radix-ui/react-tooltip o custom
-- Mostrar en icon-only mode
-**Estado:** 🔵 Pendiente
-**Prioridad:** HIGH
-**Estimación:** 1-2 horas
+**Archivos modificados:**
+- `frontend/src/components/Sidebar.tsx` (data-tooltip attribute añadido)
+- `frontend/src/index.css` (custom tooltip CSS)
+**Resultado:**
+- ✅ Custom tooltip con CSS puro (sin dependencias)
+- ✅ data-tooltip attribute en botones de navegación
+- ✅ Tooltip aparece al hover con transición suave 140ms
+- ✅ Posicionado a la derecha del icono (calc(100% + 8px))
+- ✅ Colores verde oscuro (texto) + verde lima (fondo)
+- ✅ Transform scale(0.9) → scale(1) para animación
+- ✅ Z-index 10 para aparecer sobre otros elementos
+- ✅ Box-shadow para mejor visibilidad
+- ✅ Opacity 0 en active para no interferir con clicks
+- ✅ Solo visible cuando sidebar está colapsado
+- ✅ Build funcionando sin errores (531 KB JS + 41 KB CSS)
 **Archivos:** `frontend/src/hooks/useKanban.ts` (nuevo)
 **Requisitos:** Zustand store para leads, drag handlers
 

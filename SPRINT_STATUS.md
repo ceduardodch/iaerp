@@ -9,11 +9,11 @@
 
 ## 📊 Progreso General
 
-``[█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 16% (1.6/9 sprints)
+``[██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 22% (2/9 sprints)
 
 Sprint 1: ████████████████████████████████ 100% CRM Kanban Foundation ✅
 Sprint 2: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% CRM Kanban Advanced (SKIPPED)
-Sprint 3: ███████░░░░░░░░░░░░░░░░░░░░░ 71% Sidebar Colapsible + UX (EN PROGRESO)
+Sprint 3: ████████████████████████████████ 100% Sidebar Colapsible + UX ✅
 Sprint 4: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% Invoice Spreadsheet UX
 Sprint 5: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% Forms Verticales
 Sprint 6: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% Pagos por Cliente
@@ -126,10 +126,10 @@ ISSUE_TRACKING.md (TASK-2.0 a TASK-2.8).
 ## 🎯 Sprint 3: Sidebar Colapsible + UX Improvements
 
 **Periodo:** Semana 3 (3-5 días estimados)
-**Estado:** 🟢 En progreso - 5 tareas completadas, 1 pendiente
+**Estado:** ✅ COMPLETADO - Todas las tareas implementadas
 **Prioridad:** HIGH (Usuario reportó problemas de navegación y títulos grandes)
 **Risk Score:** Low (mejoras visuales self-contained)
-**Progress:** 71% (5/7 tareas)
+**Progress:** 100% (7/7 tareas completadas) ✅
 
 ### Historias de Usuario (5)
 - [ ] **HU-7:** Esconder menú para ganar espacio de trabajo
@@ -157,7 +157,7 @@ ISSUE_TRACKING.md (TASK-2.0 a TASK-2.8).
 - [x] **TASK-3.2:** Reducir tamaño de títulos h1 (clamp ajustado a tamaños más razonables)
 - [x] **TASK-3.3:** Crear componente `Sidebar.tsx` con state local + localStorage sync
 - [x] **TASK-3.4:** Iconos para cada sección (usando SVG strings o lucide-react)
-- [ ] **TASK-3.5:** Tooltips con `@radix-ui/react-tooltip` o custom
+- [x] **TASK-3.5:** Tooltips con CSS custom (sin dependencias adicionales)
 - [x] **TASK-3.6:** CSS transitions con `transform: translateX()` y `opacity`
 - [x] **TASK-3.7:** Update `App.tsx` layout para sidebar + main content
 

@@ -128,7 +128,7 @@ export function Sidebar({
               className={currentSection === item.id ? 'active' : ''}
               aria-current={currentSection === item.id ? 'page' : undefined}
               onClick={() => onNavigate(item.id)}
-              title={collapsed ? item.label : undefined}
+              data-tooltip={collapsed ? item.label : undefined}
             >
               {collapsed ? (
                 <Icon size={20} strokeWidth={2} />

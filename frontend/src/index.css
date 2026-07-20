@@ -64,6 +64,35 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 .sidebar-toggle:hover { color: var(--lime); background: rgba(216,239,133, 0.2); }
 .sidebar-toggle:active { transform: scale(.95); }
 
+/* Custom tooltip para icon-only mode */
+.sidebar-collapsed .sidebar nav button[data-tooltip] { position: relative; }
+.sidebar-collapsed .sidebar nav button[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.9);
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.25rem;
+  color: var(--ink);
+  background: var(--lime);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms var(--ease-out);
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.sidebar-collapsed .sidebar nav button[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+.sidebar-collapsed .sidebar nav button[data-tooltip][data-tooltip]:active::after {
+  opacity: 0;
+}
+
 #main-content { min-width: 0; padding: clamp(1.5rem, 4vw, 4.5rem); overflow: hidden; }
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; margin-bottom: clamp(2.5rem, 7vw, 6rem); }
 .kicker, .section-number, .metric-label { margin-bottom: .8rem; color: var(--clay); font-size: .68rem; font-weight: 750; letter-spacing: .13em; text-transform: uppercase; }
