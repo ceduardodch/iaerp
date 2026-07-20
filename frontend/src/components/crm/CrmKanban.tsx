@@ -3,7 +3,7 @@ import { useDroppable } from '@dnd-kit/core'
 import { motion } from 'framer-motion'
 import type { Lead, LeadStatus } from '../../api'
 
-const PIPELINE: Array<{ id: LeadStatus; label: string; color: string }> = [
+export const PIPELINE: Array<{ id: LeadStatus; label: string; color: string }> = [
   { id: 'NEW', label: 'Nuevo', color: '#3b82f6' },          // blue
   { id: 'CONTACTED', label: 'Contactado', color: '#8b5cf6' }, // purple
   { id: 'QUALIFIED', label: 'Calificado', color: '#06b6d4' }, // cyan
@@ -27,6 +27,12 @@ interface CrmKanbanProps {
   renderLeadCard: (lead: Lead, index: number) => ReactNode
   /** Lead actualmente siendo arrastrado */
   draggedLeadId: string | null
+  /** Abre el quick-add precargado con la etapa de la columna (solo etapas activas) */
+  onQuickAdd?: (stage: LeadStatus) => void
+  /** Determina si un lead está seleccionado (checkbox "seleccionar todos") */
+  isLeadSelected?: (leadId: string) => boolean
+  /** Alterna la selección de todos los leads visibles de una columna */
+  onToggleColumnSelection?: (columnLeadIds: string[]) => void
 }
 
 /**
@@ -43,6 +49,9 @@ export function CrmKanban({
   leads,
   renderLeadCard,
   draggedLeadId,
+  onQuickAdd,
+  isLeadSelected,
+  onToggleColumnSelection,
 }: CrmKanbanProps) {
   // Agrupar leads por etapa para optimizar renderizado
   const leadsByStage = useMemo(() => {
@@ -85,6 +94,17 @@ export function CrmKanban({
               totalValue={totalValue}
               isActive={isActive}
               hasDraggedLead={hasDraggedLead}
+              onQuickAdd={isActive ? onQuickAdd : undefined}
+              columnSelected={
+                stageLeads.length > 0 &&
+                !!isLeadSelected &&
+                stageLeads.every((lead) => isLeadSelected(lead.id))
+              }
+              onToggleColumnSelection={
+                onToggleColumnSelection && stageLeads.length > 0
+                  ? () => onToggleColumnSelection(stageLeads.map((lead) => lead.id))
+                  : undefined
+              }
             >
               {stageLeads.map((lead, index) => renderLeadCard(lead, index))}
             </KanbanColumn>
@@ -106,6 +126,12 @@ interface KanbanColumnProps {
   totalValue: number
   isActive: boolean
   hasDraggedLead: boolean
+  /** Abre el quick-add para esta etapa (solo columnas activas) */
+  onQuickAdd?: (stage: LeadStatus) => void
+  /** ¿Todos los leads visibles de la columna están seleccionados? */
+  columnSelected?: boolean
+  /** Alterna la selección de toda la columna */
+  onToggleColumnSelection?: () => void
   children: ReactNode
 }
 
@@ -116,6 +142,9 @@ function KanbanColumn({
   totalValue,
   isActive,
   hasDraggedLead,
+  onQuickAdd,
+  columnSelected = false,
+  onToggleColumnSelection,
   children,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
@@ -138,12 +167,33 @@ function KanbanColumn({
     >
       <header className="kanban-column-header">
         <div className="kanban-column-title">
+          {onToggleColumnSelection ? (
+            <input
+              type="checkbox"
+              className="kanban-column-select"
+              checked={columnSelected}
+              onChange={onToggleColumnSelection}
+              aria-label={`Seleccionar todos los leads de ${label}`}
+            />
+          ) : null}
           <h2>{label}</h2>
           <span className="kanban-column-count">{leadCount}</span>
         </div>
-        <small className="kanban-column-total">
-          ${totalValue.toLocaleString('es-EC', { minimumFractionDigits: 2 })}
-        </small>
+        <div className="kanban-column-actions">
+          <small className="kanban-column-total">
+            ${totalValue.toLocaleString('es-EC', { minimumFractionDigits: 2 })}
+          </small>
+          {onQuickAdd ? (
+            <button
+              type="button"
+              className="kanban-quick-add"
+              onClick={() => onQuickAdd(stage)}
+              aria-label={`Crear lead en ${label}`}
+            >
+              +
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <div className="kanban-stack">{children}</div>

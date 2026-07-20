@@ -6,15 +6,27 @@ import {
   idempotencyKey,
   type Lead,
   type LeadCreate,
+  type LeadStatus,
   type LeadWithPartyCreate,
   type Party,
   type Product,
 } from '../../api'
-import { ErpButton, ErpEmptyState, ErpFormPanel, ErpPageHeader, ErpToolbar } from '../erp'
-import { CrmKanban } from './CrmKanban'
+import { ErpButton, ErpEmptyState, ErpFormPanel, ErpPageHeader } from '../erp'
+import { ErpModal } from '../erp/ErpModal'
+import { CrmKanban, PIPELINE } from './CrmKanban'
 import { LeadCard } from './LeadCard'
 import { LeadDetailPanel } from './LeadDetailPanel'
+import { LeadDetailModal } from './LeadDetailModal'
+import { QuickAddLeadForm } from './QuickAddLeadForm'
+import { BulkActionBar } from './BulkActionBar'
+import { KanbanFilters } from './KanbanFilters'
+import { ShortcutsHint } from './ShortcutsHint'
 import { useKanban } from '../../hooks/useKanban'
+import { useKanbanShortcuts } from '../../hooks/useKanbanShortcuts'
+
+const STAGE_LABELS: Record<LeadStatus, string> = Object.fromEntries(
+  PIPELINE.map((stage) => [stage.id, stage.label])
+) as Record<LeadStatus, string>
 
 type View = { kind: 'board' } | { kind: 'new' } | { kind: 'detail'; lead: Lead }
 
@@ -30,16 +42,51 @@ export function LeadsPage({
   const queryClient = useQueryClient()
   const [view, setView] = useState<View>({ kind: 'board' })
   const [contactMode, setContactMode] = useState<'existing' | 'new'>('existing')
+  const [quickAddStage, setQuickAddStage] = useState<LeadStatus | null>(null)
+  const [quickAddNotice, setQuickAddNotice] = useState<string | null>(null)
+  const [hintOpen, setHintOpen] = useState(false)
 
   // Hook custom para gestión del Kanban con drag & drop
   const {
     filteredLeads,
+    selectedLead,
     draggedLeadId,
+    searchQuery,
+    scoreMin,
+    scoreMax,
+    hotnessFilter,
+    closeDateFrom,
+    closeDateTo,
+    activeFilterCount,
+    selectedLeadIds,
     leadsQuery,
+    createLeadWithPartyMutation,
+    bulkMoveMutation,
     selectLead,
     setSearchQuery,
+    setScoreFilter,
+    setHotnessFilter,
+    setDateRangeFilter,
+    clearAdvancedFilters,
+    toggleLeadSelection,
+    selectLeadRange,
+    toggleColumnSelection,
+    clearSelection,
     kanbanProviders,
   } = useKanban({ token })
+
+  useKanbanShortcuts({
+    filteredLeads,
+    hintOpen,
+    setHintOpen,
+    selectedCount: selectedLeadIds.size,
+    clearSelection,
+  })
+
+  /** Ids visibles de la columna de un lead, para el rango con Shift+click. */
+  function columnLeadIds(status: LeadStatus): string[] {
+    return filteredLeads.filter((lead) => lead.status === status).map((lead) => lead.id)
+  }
 
   const createLead = useMutation({
     mutationFn: ({ path, data }: { path: string; data: LeadCreate | LeadWithPartyCreate }) =>
@@ -88,6 +135,12 @@ export function LeadsPage({
     })
   }
 
+  function handleUpdatedLead(lead: Lead) {
+    queryClient.setQueryData<Lead[]>(['crm-leads'], (current) =>
+      current?.map((item) => (item.id === lead.id ? lead : item))
+    )
+  }
+
   if (view.kind === 'new') {
     return (
       <>
@@ -118,20 +171,55 @@ export function LeadsPage({
   }
 
   if (view.kind === 'detail') {
-    return <LeadDetailPanel lead={view.lead} token={token} products={products} onClose={() => setView({ kind: 'board' })} onUpdated={(lead) => { queryClient.setQueryData<Lead[]>(['crm-leads'], (current) => current?.map((item) => item.id === lead.id ? lead : item)); setView((current) => current.kind === 'detail' ? { kind: 'detail', lead } : current) }} />
+    return <LeadDetailPanel lead={view.lead} token={token} products={products} onClose={() => setView({ kind: 'board' })} onUpdated={(lead) => { handleUpdatedLead(lead); setView((current) => current.kind === 'detail' ? { kind: 'detail', lead } : current) }} />
   }
 
   const KanbanWithProviders = kanbanProviders
 
   return (
     <>
-      <ErpPageHeader eyebrow="Gestión comercial" title="Pipeline" subtitle="Oportunidades ordenadas por etapa, valor y próxima acción." actions={<ErpButton variant="primary" onClick={() => setView({ kind: 'new' })}>Nueva oportunidad</ErpButton>} />
-      <ErpToolbar><label className="search-field"><span>Buscar</span><input value="" onChange={(event) => setSearchQuery(event.target.value)} placeholder="Oportunidad, contacto o producto" /></label></ErpToolbar>
+      <ErpPageHeader
+        eyebrow="Gestión comercial"
+        title="Pipeline"
+        subtitle="Oportunidades ordenadas por etapa, valor y próxima acción."
+        actions={
+          <>
+            <ShortcutsHint open={hintOpen} onToggle={() => setHintOpen((current) => !current)} />
+            <ErpButton variant="primary" onClick={() => setView({ kind: 'new' })}>Nueva oportunidad</ErpButton>
+          </>
+        }
+      />
+
+      <KanbanFilters
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        scoreMin={scoreMin}
+        scoreMax={scoreMax}
+        onScoreChange={setScoreFilter}
+        hotnessFilter={hotnessFilter}
+        onHotnessChange={setHotnessFilter}
+        closeDateFrom={closeDateFrom}
+        closeDateTo={closeDateTo}
+        onDateRangeChange={setDateRangeFilter}
+        activeFilterCount={activeFilterCount}
+        onClearAdvanced={clearAdvancedFilters}
+      />
+
+      {quickAddNotice ? (
+        <div className="crm-quick-add-notice" role="status">
+          <p>{quickAddNotice}</p>
+          <ErpButton variant="ghost" onClick={() => setQuickAddNotice(null)}>Cerrar</ErpButton>
+        </div>
+      ) : null}
+
       {leadsQuery.isPending ? <p>Cargando pipeline…</p> : filteredLeads.length === 0 ? <ErpEmptyState title="No hay oportunidades" description="Crea el primer lead para comenzar el pipeline." action={<ErpButton variant="primary" onClick={() => setView({ kind: 'new' })}>Nueva oportunidad</ErpButton>} /> : (
         <KanbanWithProviders>
           <CrmKanban
             leads={filteredLeads}
             draggedLeadId={draggedLeadId}
+            onQuickAdd={setQuickAddStage}
+            isLeadSelected={(leadId) => selectedLeadIds.has(leadId)}
+            onToggleColumnSelection={toggleColumnSelection}
             renderLeadCard={(lead, index) => (
               <LeadCard
                 key={lead.id}
@@ -139,11 +227,54 @@ export function LeadsPage({
                 index={index}
                 onClick={() => selectLead(lead.id)}
                 isDragging={draggedLeadId === lead.id}
+                selected={selectedLeadIds.has(lead.id)}
+                onToggleSelect={(shiftKey) =>
+                  shiftKey
+                    ? selectLeadRange(columnLeadIds(lead.status), lead.id)
+                    : toggleLeadSelection(lead.id)
+                }
               />
             )}
           />
         </KanbanWithProviders>
       )}
+
+      {selectedLead ? (
+        <LeadDetailModal
+          lead={selectedLead}
+          token={token}
+          onClose={() => selectLead(null)}
+          onUpdated={handleUpdatedLead}
+        />
+      ) : null}
+
+      {quickAddStage ? (
+        <ErpModal
+          title={`Nueva oportunidad en ${STAGE_LABELS[quickAddStage]}`}
+          onClose={() => setQuickAddStage(null)}
+        >
+          <QuickAddLeadForm
+            targetStatus={quickAddStage}
+            mutation={createLeadWithPartyMutation}
+            products={products}
+            onCancel={() => setQuickAddStage(null)}
+            onCreated={(result) => {
+              setQuickAddStage(null)
+              setQuickAddNotice(
+                result.stayedInNew
+                  ? `"${result.lead.title}" se creó en Nuevos: no se simulan varios saltos de etapa a la vez.`
+                  : null
+              )
+            }}
+          />
+        </ErpModal>
+      ) : null}
+
+      <BulkActionBar
+        selectedLeadIds={selectedLeadIds}
+        mutation={bulkMoveMutation}
+        onClear={clearSelection}
+      />
     </>
   )
 }

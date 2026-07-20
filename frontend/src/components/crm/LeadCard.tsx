@@ -108,7 +108,9 @@ export function LeadCard({
   return (
     <motion.article
       ref={setNodeRef}
-      className={`kanban-card ${isDragging || isSortableDragging ? 'is-dragging' : ''}`}
+      className={`kanban-card ${isDragging || isSortableDragging ? 'is-dragging' : ''} ${
+        selected ? 'is-selected' : ''
+      }`}
       style={style}
       data-lead-id={lead.id}
       data-active={isActive}
@@ -124,6 +126,21 @@ export function LeadCard({
       whileHover={{ scale: 1.02, boxShadow: '0 8px 22px rgba(23, 52, 45, 0.15)' }}
       whileTap={{ scale: 0.98 }}
     >
+      {/* Checkbox de selección múltiple: fuera del botón draggable para no
+          disparar drag ni abrir el detalle al marcarlo. */}
+      {onToggleSelect ? (
+        <label className="lead-card-select">
+          <input
+            type="checkbox"
+            checked={selected}
+            aria-label={`Seleccionar ${lead.title}`}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) =>
+              onToggleSelect((event.nativeEvent as MouseEvent).shiftKey ?? false)
+            }
+          />
+        </label>
+      ) : null}
       <button
         type="button"
         onClick={onClick}

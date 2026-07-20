@@ -47,3 +47,4 @@ test-results/
 *.log
 tmp/
 .cache/
+graphify-out/

@@ -367,11 +367,23 @@ _No hay tareas en progreso actualmente._
 - [x] **✅ TASK-1.9:** Testing E2E Playwright (COMPLETADO)
 - [x] **✅ TASK-1.10:** Deploy staging y QA (COMPLETADO)
 
-**Última tarea completada:** TASK-1.10 (Deploy staging y QA)
+**Última tarea completada:** TASK-2.8 (Sprint 2 - CRM Kanban Advanced completo)
 
 **SPRINT 1 COMPLETADO:** ✅ Todas las 10 tareas terminadas
+**SPRINT 2 COMPLETADO:** ✅ CRM Kanban Advanced (2026-07-20)
 
-**Próxima acción:** Subir a main y release para QA con usuario
+### Sprint 2 - Tareas completadas
+- [x] **TASK-2.0:** Fix bug 500 en POST /crm/leads/{id}/activities (lead_id duplicado en create_activity) + test de regresión backend ✅
+- [x] **TASK-2.1:** Quick-add por columna (botón "+" solo en etapas activas; crea vía POST with-party con update optimista + rollback; salto encadenado solo NEW→CONTACTED, aviso si queda en Nuevos) ✅
+- [x] **TASK-2.2:** Modal de detalle al click en card (ErpModal accesible: foco atrapado, Esc, inert de fondo) con contacto, edición de score/temperatura/valor y timeline de actividades con alta ✅
+- [x] **TASK-2.3:** Bulk operations: checkbox por card, Shift+click rango en columna, "seleccionar todos" por columna, barra flotante "Mover a" con validación por lead y resumen (movidos/omitidos/errores) ✅
+- [x] **TASK-2.4:** Filtros avanzados client-side en Zustand: rango de score, temperatura (multi), rango de cierre esperado, contador de filtros activos y limpiar ✅
+- [x] **TASK-2.5:** Búsqueda extendida a email del contacto (además de título/nombre/producto) ✅
+- [x] **TASK-2.6:** Atajos de teclado (←→↑↓ foco entre cards/columnas vía DOM, Enter abre, Esc cierra hint/limpia selección) + panel de ayuda "?" accesible ✅
+- [x] **TASK-2.7:** Reglas de transición del pipeline centralizadas en `crmTransitions.ts` (cliente; el backend no restringe por contrato) ✅
+- [x] **TASK-2.8:** E2E `crm-kanban-advanced.spec.ts`: 8 escenarios × 2 viewports con mocks (quick-add, modal sin perder contexto, bulk con omitidos, filtros, búsqueda por email, atajos, axe AA) + fixes de contraste AA en kanban ✅
+
+**Próxima acción:** Sprint 3 - Sidebar Colapsible (verificar: la sidebar ya tiene collapse — puede estar parcialmente hecho) o Sprint 4 - Invoice Spreadsheet UX
 
 **Contexto para próxima sesión:**
 - ✅ SPRINT 1 COMPLETADO (10/10 tareas - 100%)

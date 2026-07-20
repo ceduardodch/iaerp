@@ -432,3 +432,49 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
   .kanban-card { animation: reveal .3s both; animation-delay: calc(var(--card-index) * 35ms); }
   @keyframes reveal { from { opacity: 0; transform: translateY(12px); } }
 }
+
+/* ── CRM Kanban Advanced (Sprint 2): selección, quick-add, filtros, bulk ── */
+.lead-card-select { position: absolute; top: .5rem; left: .5rem; z-index: 2; display: grid; place-items: center; }
+.lead-card-select input { width: 1rem; height: 1rem; accent-color: var(--ink); cursor: pointer; }
+.kanban-card { position: relative; }
+.kanban-column-actions { display: flex; align-items: center; gap: .5rem; }
+.kanban-quick-add { width: 1.6rem; height: 1.6rem; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.7); font-size: 1rem; line-height: 1; cursor: pointer; }
+.kanban-quick-add:hover, .kanban-quick-add:focus-visible { background: var(--lime); }
+.kanban-filters { display: grid; gap: .5rem; margin-bottom: 1rem; }
+.kanban-advanced-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; padding: 1rem; border: 1px solid var(--line); background: rgba(251,250,245,.65); }
+.kanban-advanced-filters fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: .4rem; }
+.kanban-advanced-filters legend { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.hotness-options { display: flex; gap: .8rem; }
+.hotness-option { display: flex; align-items: center; gap: .35rem; font-size: .85rem; }
+.bulk-action-bar { position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); z-index: 30; display: flex; align-items: center; gap: 1rem; padding: .75rem 1.25rem; border: 1px solid var(--line); border-radius: 14px; background: var(--ink); color: white; box-shadow: 0 12px 30px rgba(23,32,25,.35); }
+.bulk-action-bar label { display: flex; align-items: center; gap: .5rem; font-size: .85rem; }
+.bulk-action-bar select { padding: .4rem .6rem; border-radius: 8px; border: 1px solid var(--line); }
+.bulk-summary { display: flex; align-items: center; gap: .75rem; margin: 0; font-size: .85rem; }
+.bulk-summary-close { border: 0; background: transparent; color: inherit; text-decoration: underline; cursor: pointer; }
+.shortcuts-hint { position: relative; }
+.shortcuts-panel { position: absolute; right: 0; top: calc(100% + .5rem); z-index: 25; width: 300px; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: white; box-shadow: 0 12px 30px rgba(23,32,25,.18); }
+.shortcuts-panel h3 { margin: 0 0 .6rem; font-size: .95rem; }
+.shortcuts-panel dl { display: grid; gap: .45rem; margin: 0; }
+.shortcuts-panel dl div { display: flex; gap: .75rem; align-items: baseline; }
+.shortcuts-panel dt { min-width: 84px; font-family: monospace; font-size: .8rem; background: rgba(216,239,133,.4); padding: .1rem .35rem; border-radius: 6px; }
+.shortcuts-panel dd { margin: 0; font-size: .82rem; color: var(--muted); }
+.quick-add-form { display: grid; gap: .8rem; }
+.quick-add-actions { display: flex; justify-content: flex-end; gap: .75rem; }
+.lead-detail-modal { display: grid; gap: 1.25rem; }
+.lead-detail-contact dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .7rem; margin: .5rem 0 0; }
+.lead-detail-contact dt { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.lead-detail-contact dd { margin: .1rem 0 0; font-size: .9rem; }
+.lead-detail-activities h3 { margin: 0 0 .6rem; }
+.activity-form { display: grid; gap: .6rem; margin-bottom: 1rem; }
+.activity-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: .7rem; max-height: 260px; overflow-y: auto; }
+.activity-timeline li { padding: .7rem .9rem; border: 1px solid var(--line); border-radius: 10px; background: rgba(251,250,245,.65); display: grid; gap: .2rem; }
+.activity-type { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.activity-timeline time { font-size: .75rem; color: var(--muted); }
+.lead-detail-empty { color: var(--muted); font-size: .88rem; }
+
+/* Contraste AA (axe): colores del kanban por debajo de 4.5:1 en el fondo
+   #edeae1/#f7f5f1. Se oscurecen títulos de columna, totales y score. */
+.kanban-column h2 { color: var(--ink); }
+.kanban-column-total { color: #565b54; }
+.lead-card-score { color: #4c514a; }
+.kanban-column-count { color: #4c514a; }
