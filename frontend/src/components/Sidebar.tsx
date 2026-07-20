@@ -1,16 +1,30 @@
 import { useState, useEffect } from 'react'
+import {
+  LayoutDashboard,
+  Users,
+  Package,
+  FileText,
+  Building2,
+  DollarSign,
+  TrendingUp,
+} from 'lucide-react'
 import { useAuth } from '../auth'
 
 type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' | 'organization' | 'crm'
 
-const sections: Array<{ id: Section; label: string; eyebrow: string }> = [
-  { id: 'overview', label: 'Resumen', eyebrow: '01' },
-  { id: 'parties', label: 'Contactos', eyebrow: '02' },
-  { id: 'products', label: 'Productos', eyebrow: '03' },
-  { id: 'invoices', label: 'Facturas', eyebrow: '04' },
-  { id: 'organization', label: 'Empresa', eyebrow: '05' },
-  { id: 'receivables', label: 'Cartera', eyebrow: '06' },
-  { id: 'crm', label: 'CRM', eyebrow: '07' },
+const sections: Array<{
+  id: Section
+  label: string
+  eyebrow: string
+  icon: typeof LayoutDashboard
+}> = [
+  { id: 'overview', label: 'Resumen', eyebrow: '01', icon: LayoutDashboard },
+  { id: 'parties', label: 'Contactos', eyebrow: '02', icon: Users },
+  { id: 'products', label: 'Productos', eyebrow: '03', icon: Package },
+  { id: 'invoices', label: 'Facturas', eyebrow: '04', icon: FileText },
+  { id: 'organization', label: 'Empresa', eyebrow: '05', icon: Building2 },
+  { id: 'receivables', label: 'Cartera', eyebrow: '06', icon: DollarSign },
+  { id: 'crm', label: 'CRM', eyebrow: '07', icon: TrendingUp },
 ]
 
 const STORAGE_KEY = 'sidebar-collapsed'
@@ -106,18 +120,27 @@ export function Sidebar({
       </div>
 
       <nav aria-label="Navegación principal">
-        {sections.map((item) => (
-          <button
-            key={item.id}
-            className={currentSection === item.id ? 'active' : ''}
-            aria-current={currentSection === item.id ? 'page' : undefined}
-            onClick={() => onNavigate(item.id)}
-            title={collapsed ? item.label : undefined}
-          >
-            <span>{item.eyebrow}</span>
-            {!collapsed ? item.label : null}
-          </button>
-        ))}
+        {sections.map((item) => {
+          const Icon = item.icon
+          return (
+            <button
+              key={item.id}
+              className={currentSection === item.id ? 'active' : ''}
+              aria-current={currentSection === item.id ? 'page' : undefined}
+              onClick={() => onNavigate(item.id)}
+              title={collapsed ? item.label : undefined}
+            >
+              {collapsed ? (
+                <Icon size={20} strokeWidth={2} />
+              ) : (
+                <>
+                  <span>{item.eyebrow}</span>
+                  {item.label}
+                </>
+              )}
+            </button>
+          )
+        })}
       </nav>
 
       {!collapsed ? (

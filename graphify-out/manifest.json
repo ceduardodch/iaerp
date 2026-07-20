@@ -220,8 +220,8 @@
     "semantic_hash": "11e1c604ce5783653d4354d8efa6713a"
   },
   "backend/app/services/crm.py": {
-    "mtime": 1784552474.8857212,
-    "ast_hash": "d8fc33449c9fc79afdf293cc9250253b",
+    "mtime": 1784552753.0712707,
+    "ast_hash": "70b07b08339b18eb99b9a7847785c6af",
     "semantic_hash": ""
   },
   "backend/app/services/crm_integrations.py": {
@@ -430,8 +430,8 @@
     "semantic_hash": "901454d5a584d2aedf70e4fb1cefae9e"
   },
   "backend/tests/test_crm_features.py": {
-    "mtime": 1784552474.8861096,
-    "ast_hash": "f72c7976cc23ddee57e5144de2a413d8",
+    "mtime": 1784552792.8697672,
+    "ast_hash": "8bd39f93780fd6153937ecc9f9ca9520",
     "semantic_hash": ""
   },
   "backend/tests/test_fiscal_policy.py": {
@@ -580,9 +580,9 @@
     "semantic_hash": "967f85de6063ed6d350f180f906c28a9"
   },
   "frontend/src/App.tsx": {
-    "mtime": 1784480270.7213826,
-    "ast_hash": "d62b334366bf8608c9e1546cd74a24ab",
-    "semantic_hash": "d62b334366bf8608c9e1546cd74a24ab"
+    "mtime": 1784552762.0105588,
+    "ast_hash": "d839e116e5a52ae8d7a692061542593f",
+    "semantic_hash": ""
   },
   "frontend/src/api.ts": {
     "mtime": 1784480270.7218325,
@@ -985,8 +985,8 @@
     "semantic_hash": ""
   },
   "ISSUE_TRACKING.md": {
-    "mtime": 1784552591.2723382,
-    "ast_hash": "29fb76cf852ab7800d1c9d65a93ddd03",
+    "mtime": 1784552810.8190515,
+    "ast_hash": "f6295c3e811161debca9af7cca61aa17",
     "semantic_hash": ""
   },
   "QUICK_START.md": {
@@ -1000,8 +1000,8 @@
     "semantic_hash": ""
   },
   "SPRINT_STATUS.md": {
-    "mtime": 1784552480.263887,
-    "ast_hash": "cb40e7ce3a2f242cad7af006ae5115f4",
+    "mtime": 1784552835.7427464,
+    "ast_hash": "13ab7abd7019f3fa58e06796b09fce5d",
     "semantic_hash": ""
   },
   "compose.coolify.yaml": {
@@ -1217,6 +1217,16 @@
   "frontend/src/assets/vite.svg": {
     "mtime": 1784424984.462994,
     "ast_hash": "9960a24288958394ac50e57ff638b036",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/Sidebar.tsx": {
+    "mtime": 1784552757.3767595,
+    "ast_hash": "c8e46b55f8fb44ab3d8a4728ccb2e870",
+    "semantic_hash": ""
+  },
+  "frontend/src/store/crmTransitions.ts": {
+    "mtime": 1784552840.9484525,
+    "ast_hash": "e22cf234931e903df61fc90857bc7583",
     "semantic_hash": ""
   }
 }

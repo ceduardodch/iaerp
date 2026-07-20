@@ -46,8 +46,9 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 .sidebar-toggle { align-self: flex-end; padding: .5rem; border: 0; border-radius: .3rem; color: #d5e1dc; background: transparent; cursor: pointer; transition: color 140ms ease, background-color 140ms ease; }
 .sidebar-toggle:hover { color: var(--lime); background: rgba(216,239,133, 0.2); }
 .sidebar nav { display: grid; gap: .35rem; }
-.sidebar nav button { position: relative; display: grid; grid-template-columns: 2.2rem 1fr; gap: .3rem; align-items: center; width: 100%; padding: .85rem .7rem; border: 0; border-radius: .4rem; color: #d5e1dc; background: transparent; text-align: left; transition: color 140ms ease, background-color 140ms ease, transform 140ms var(--ease-out); justify-content: center; }
-.sidebar-collapsed .sidebar nav button { grid-template-columns: 1fr; padding: .85rem; }
+.sidebar nav button { position: relative; display: grid; grid-template-columns: 2.2rem 1fr; gap: .3rem; align-items: center; width: 100%; padding: .85rem .7rem; border: 0; border-radius: .4rem; color: #d5e1dc; background: transparent; text-align: left; transition: color 140ms ease, background-color 140ms ease, transform 140ms var(--ease-out); justify-content: start; }
+.sidebar nav button svg { flex: 0 0 auto; }
+.sidebar-collapsed .sidebar nav button { grid-template-columns: 1fr; padding: .85rem; justify-content: center; }
 .sidebar nav button span { color: #9fb8b0; font-size: .67rem; letter-spacing: .08em; }
 .sidebar nav button:hover { color: var(--ink); background: rgba(216,239,133, 0.4); transform: translateX(2px); }
 .sidebar-collapsed .sidebar nav button:hover { transform: scale(1.05); }

@@ -1,16 +1,16 @@
 # Graph Report - iaerp  (2026-07-20)
 
 ## Corpus Check
-- 233 files · ~159,825 words
+- 235 files · ~160,485 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2704 nodes · 5423 edges · 207 communities (174 shown, 33 thin omitted)
-- Extraction: 83% EXTRACTED · 17% INFERRED · 0% AMBIGUOUS · INFERRED: 933 edges (avg confidence: 0.72)
+- 2718 nodes · 5357 edges · 219 communities (178 shown, 41 thin omitted)
+- Extraction: 83% EXTRACTED · 17% INFERRED · 0% AMBIGUOUS · INFERRED: 921 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d41f5b83`
+- Built from commit: `bc21c5f5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -204,6 +204,18 @@
 - 📋 Tareas Pendientes (Sprint 3 - Sidebar Colapsible + UX)
 - 📊 Progress Metrics
 - 📊 Progress Metrics
+- CollectionReminder
+- get_receivable
+- Receivable
+- masters.py
+- LeadsPage.tsx
+- crmTransitions.ts
+- AuthContext
+- datetime
+- LeadActivityCreate
+- LeadCreate
+- LeadUpdate
+- LeadWithPartyCreate
 
 ## God Nodes (most connected - your core abstractions)
 1. `APIModel` - 60 edges
@@ -214,8 +226,8 @@
 6. `Base` - 39 edges
 7. `UUIDPrimaryKeyMixin` - 38 edges
 8. `TimestampMixin` - 38 edges
-9. `Party` - 38 edges
-10. `_setup_billing_masters()` - 36 edges
+9. `_setup_billing_masters()` - 36 edges
+10. `SalesDocument` - 35 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `post_lead()` --calls--> `execute_idempotent()`  [INFERRED]
@@ -232,19 +244,19 @@
 ## Import Cycles
 - None detected.
 
-## Communities (207 total, 33 thin omitted)
+## Communities (219 total, 41 thin omitted)
 
 ### Community 0 - "_setup_billing_masters"
-Cohesion: 0.08
-Nodes (66): auth(), _invoice_payload(), UUID, ``InvoiceInput`` no declara subtotal/tax/total: si el cliente los envia     igua, Sprint 3 Fase 2: ``installments`` persiste en ``sales_document_installments``., Sin plan de pago, el backend crea una sola cuota al contado = total.      La UI, Crea establishment/emission-point/party/product usados por una factura., _setup_billing_masters() (+58 more)
+Cohesion: 0.06
+Nodes (77): auth(), _invoice_payload(), UUID, ``InvoiceInput`` no declara subtotal/tax/total: si el cliente los envia     igua, Sprint 3 Fase 2: ``installments`` persiste en ``sales_document_installments``., Sin plan de pago, el backend crea una sola cuota al contado = total.      La UI, Crea establishment/emission-point/party/product usados por una factura., _setup_billing_masters() (+69 more)
 
 ### Community 1 - "App.tsx"
-Cohesion: 0.05
-Nodes (48): AccountItem, AccountItemStatus, ApiError, ArtifactDownload, CollectionPolicy, CreditNoteInput, DiscountInput, DocumentArtifact (+40 more)
+Cohesion: 0.06
+Nodes (31): AccountItem, AccountItemStatus, ApiError, ArtifactDownload, CollectionPolicy, CreditNoteInput, DiscountInput, DocumentArtifact (+23 more)
 
 ### Community 2 - "get_settings"
-Cohesion: 0.06
-Nodes (57): get_settings(), Settings, _client(), _content_type_for_artifact(), download_artifact(), _download_sync(), _ensure_bucket_sync(), generate_presigned_download_url() (+49 more)
+Cohesion: 0.07
+Nodes (46): get_settings(), Settings, _client(), _content_type_for_artifact(), download_artifact(), _download_sync(), _ensure_bucket_sync(), generate_presigned_download_url() (+38 more)
 
 ### Community 3 - "handle_invoice_authorized"
 Cohesion: 0.07
@@ -256,15 +268,11 @@ Nodes (54): create_and_issue_credit_note(), create_artifact_download(), create_c
 
 ### Community 5 - "crm_integrations.py"
 Cohesion: 0.12
-Nodes (40): TenantFiscalSettings, FiscalSettingsRead, FiscalSettingsUpdate, complete_google_oauth(), disconnect_google(), disconnect_whatsapp(), _google_access_token(), google_authorization_url() (+32 more)
+Nodes (42): WhatsAppIntegration, TenantFiscalSettings, FiscalSettingsRead, FiscalSettingsUpdate, complete_google_oauth(), disconnect_google(), disconnect_whatsapp(), _google_access_token() (+34 more)
 
 ### Community 6 - "require_scopes"
 Cohesion: 0.17
 Nodes (51): delete_service_account(), get_automation(), get_collection_policy(), get_context(), get_emission_points(), get_establishments(), get_fiscal_settings(), get_invoice() (+43 more)
-
-### Community 7 - "FastAPI"
-Cohesion: 0.16
-Nodes (28): create_activity(), create_lead(), create_lead_with_party(), get_lead(), get_pending_reminders(), list_activities(), list_leads(), move_lead_status() (+20 more)
 
 ### Community 8 - "LineInput"
 Cohesion: 0.07
@@ -284,39 +292,39 @@ Nodes (41): delete_google_integration(), delete_whatsapp_integration(), get_goog
 
 ### Community 12 - "APIModel"
 Cohesion: 0.06
-Nodes (52): issue_dev_token(), post_invoice_preview(), APIModel, BaseModel, ArtifactDownloadRead, CreditNoteInput, DocumentArtifactRead, InstallmentInput (+44 more)
+Nodes (53): issue_dev_token(), APIModel, BaseModel, ArtifactDownloadRead, CreditNoteInput, DocumentArtifactRead, InstallmentInput, InvoiceInput (+45 more)
 
 ### Community 13 - "server.py"
 Cohesion: 0.11
-Nodes (41): context_get(), credit_notes_create_and_issue(), invoices_create_draft(), invoices_get(), invoices_issue(), parties_create(), parties_search(), products_create() (+33 more)
+Nodes (40): context_get(), credit_notes_create_and_issue(), invoices_create_draft(), invoices_get(), invoices_issue(), parties_create(), parties_search(), products_create() (+32 more)
 
 ### Community 14 - "LeadsPage.tsx"
-Cohesion: 0.11
-Nodes (21): LeadActivity, LeadActivityCreate, LeadCreate, LeadWithPartyCreate, Party, Product, ACTIVE, LABELS (+13 more)
+Cohesion: 0.14
+Nodes (12): LeadActivity, LeadActivityCreate, Product, ACTIVE, LABELS, ButtonVariant, ErpButton(), ErpButtonProps (+4 more)
 
 ### Community 15 - "masters.py"
-Cohesion: 0.09
-Nodes (47): EmissionPointCreate, EmissionPointRead, EstablishmentCreate, EstablishmentRead, PartyCreate, PartyRead, ProductCreate, TagCreate (+39 more)
+Cohesion: 0.13
+Nodes (37): _admin_configured(), _admin_token(), _client_representation(), delete_service_account(), disable_service_account(), _find_client(), provision_service_account(), Any (+29 more)
 
 ### Community 16 - "test_mcp_receivables.py"
 Cohesion: 0.12
 Nodes (36): E7-07: resistir prompt injection (fixtures maliciosos no ejecutan tools).  Postu, Un payload de inyeccion en `Product.name` vuelve como texto plano por MCP., Un payload de inyeccion como `receivableId` (no UUID) falla en validacion., El catalogo completo es la lista cerrada esperada; no hay tool de SQL libre., _tax_category_id(), test_mcp_prompt_injection_invalid_receivable_id_is_rejected_by_schema(), test_mcp_prompt_injection_product_name_returns_as_inert_plain_text(), test_mcp_tool_catalog_has_no_free_sql_or_arbitrary_execution_tool() (+28 more)
 
 ### Community 17 - "receivables.py"
-Cohesion: 0.11
-Nodes (42): apply_credit_note(), compute_aging_summary(), compute_installment_balance(), _compute_installment_open_balance(), compute_receivable_balance(), _compute_worst_aging(), get_receivable(), installment_agings_for_receivable() (+34 more)
+Cohesion: 0.12
+Nodes (37): Vencimiento de un ``Receivable``.      La suma de ``amount`` de las cuotas de un, ReceivableInstallment, compute_aging_summary(), _compute_installment_open_balance(), _compute_worst_aging(), get_receivable(), installment_agings_for_receivable(), InstallmentAging (+29 more)
 
 ### Community 18 - "Party"
-Cohesion: 0.08
-Nodes (37): Notifier, Protocol, Protocolo ``Notifier`` para envío de recordatorios de cobranza (Sprint 3, decisi, Solicitud de envío de recordatorio.      ``channel`` puede ser "email", "sms", ", Respuesta de ``send``.      ``reminder_id`` es el UUID del ``CollectionReminder`, Proveedor de envío de recordatorios (real o stub).      Ninguna implementación d, ReminderRequest, ReminderResult (+29 more)
+Cohesion: 0.15
+Nodes (16): Notifier, Protocol, Protocolo ``Notifier`` para envío de recordatorios de cobranza (Sprint 3, decisi, Solicitud de envío de recordatorio.      ``channel`` puede ser "email", "sms", ", Respuesta de ``send``.      ``reminder_id`` es el UUID del ``CollectionReminder`, Proveedor de envío de recordatorios (real o stub).      Ninguna implementación d, ReminderRequest, ReminderResult (+8 more)
 
 ### Community 19 - "OutboxMessage"
 Cohesion: 0.14
 Nodes (24): OutboxEvent, claim_outbox_batch(), consume_once(), dispatch_outbox_once(), EventPublisher, _mark_failed(), _mark_published(), messages_for_tenant() (+16 more)
 
 ### Community 20 - "Receivable"
-Cohesion: 0.23
-Nodes (29): Cabecera de cartera 1:1 con la factura ``AUTHORIZED`` que la origina.      Cread, Receivable, PaymentInput, Cobro parcial o total, con retenciones/descuentos anidados (E5-03/E5-04).      L, lock_receivable(), Lock exclusivo sobre un ``Receivable`` con ``SELECT ... FOR UPDATE``.      Seria, _authorized_credit_note_stub(), _context() (+21 more)
+Cohesion: 0.25
+Nodes (26): PaymentInput, Cobro parcial o total, con retenciones/descuentos anidados (E5-03/E5-04).      L, PaymentInput, Registra un cobro parcial o total con retenciones/descuentos (E5-03/E5-04)., record_payment(), _authorized_credit_note_stub(), _context(), _create_receivable() (+18 more)
 
 ### Community 21 - "test_access_key.py"
 Cohesion: 0.11
@@ -332,27 +340,27 @@ Nodes (27): classify_aging_bucket(), Clasifica una cuota en su bucket de aging s
 
 ### Community 24 - "AuthContext"
 Cohesion: 0.06
-Nodes (40): AccessToken, create_dev_token(), decode_access_token(), _extract_organization_id(), get_auth_context(), AsyncSession, Depends, UUID (+32 more)
+Nodes (58): AsyncSession, AuthContext, readiness(), startup_readiness(), correlation_middleware(), integrity_error_handler(), lifespan(), Request (+50 more)
 
 ### Community 25 - "receivables.py"
-Cohesion: 0.06
-Nodes (37): alias, _account_item_response(), get_invoices(), get_receivable(), get_receivables(), get_receivables_aging(), date, min_length (+29 more)
+Cohesion: 0.09
+Nodes (22): AgingBucketTotalRead, AgingRead, AgingSummaryRead, CollectionPolicyRead, CollectionPolicyUpdate, DiscountInput, MovementRead, PartyAgingBucketTotalRead (+14 more)
 
 ### Community 26 - "Base"
-Cohesion: 0.16
-Nodes (29): Base, MastersSeedResult, Ids resueltos por ``_seed_masters`` que ``_seed_billing`` necesita.      ``tax_c, _seed_masters(), GmailIntegration, Lead, LeadActivity, LeadStatus (+21 more)
+Cohesion: 0.20
+Nodes (19): MastersSeedResult, date, Ids resueltos por ``_seed_masters`` que ``_seed_billing`` necesita.      ``tax_c, _seed_masters(), EmissionPoint, Establishment, Party, Product (+11 more)
 
 ### Community 27 - "Movement"
-Cohesion: 0.25
-Nodes (25): Movement, Aplicacion sobre una cuota: pago, retencion, descuento, NC o reverso.      Defin, Revierte un movimiento creando un ``REVERSAL`` que lo deshace (E5-09).      El m, reverse_movement(), _context(), _create_receivable_via_event_http(), AuthContext, Decimal (+17 more)
+Cohesion: 0.26
+Nodes (24): Movement, Aplicacion sobre una cuota: pago, retencion, descuento, NC o reverso.      Defin, Revierte un movimiento creando un ``REVERSAL`` que lo deshace (E5-09).      El m, reverse_movement(), _context(), _create_receivable_via_event_http(), AuthContext, Decimal (+16 more)
 
 ### Community 28 - "useKanban.ts"
-Cohesion: 0.16
-Nodes (19): Lead, LeadStatus, ACTIVE_STAGES, CrmKanban(), CrmKanbanProps, KanbanColumnProps, PIPELINE, buildOptimisticLead() (+11 more)
+Cohesion: 0.23
+Nodes (14): apiRequest(), idempotencyKey(), LeadDetailPanel(), LeadsPage(), buildOptimisticLead(), BulkMoveOutcome, BulkMoveResult, useKanban() (+6 more)
 
 ### Community 29 - "initial_data.py"
-Cohesion: 0.22
-Nodes (24): _build_access_key(), _ensure_sequence_floor(), AsyncSession, date, datetime, Decimal, SalesDocument, UUID (+16 more)
+Cohesion: 0.23
+Nodes (23): _build_access_key(), _ensure_sequence_floor(), AsyncSession, datetime, Decimal, SalesDocument, UUID, Create reproducible local hashes without storing a usable plaintext secret. (+15 more)
 
 ### Community 30 - "SimulatorSRIClient"
 Cohesion: 0.19
@@ -363,20 +371,20 @@ Cohesion: 0.08
 Nodes (23): compilerOptions, allowArbitraryExtensions, allowImportingTsExtensions, erasableSyntaxOnly, jsx, lib, module, moduleDetection (+15 more)
 
 ### Community 32 - "SalesDocument"
-Cohesion: 0.17
-Nodes (23): seed(), DocumentRelation, Relacion nota de credito -> factura autorizada que compensa., Siguiente valor de secuencial por tenant/establecimiento/punto/tipo.      La res, Cada intento de transmision al SRI (o al simulador), con su respuesta.      Esta, Cabecera comun de factura y nota de credito.      Estados: DRAFT -> READY -> SIG, Linea de un ``SalesDocument`` con el impuesto ya cuantizado.      ``tax_sri_code, SalesDocument (+15 more)
+Cohesion: 0.19
+Nodes (21): seed(), DocumentRelation, Relacion nota de credito -> factura autorizada que compensa., Siguiente valor de secuencial por tenant/establecimiento/punto/tipo.      La res, Cada intento de transmision al SRI (o al simulador), con su respuesta.      Esta, Cabecera comun de factura y nota de credito.      Estados: DRAFT -> READY -> SIG, Linea de un ``SalesDocument`` con el impuesto ya cuantizado.      ``tax_sri_code, SalesDocument (+13 more)
 
 ### Community 33 - "build_ride_pdf"
-Cohesion: 0.14
-Nodes (23): _access_key_as_text_groups(), build_ride_pdf(), _format_amount(), _format_quantity_or_price(), _full_document_number(), Decimal, EmissionPoint, Establishment (+15 more)
+Cohesion: 0.15
+Nodes (21): _access_key_as_text_groups(), build_ride_pdf(), _format_amount(), _format_quantity_or_price(), _full_document_number(), Decimal, EmissionPoint, Establishment (+13 more)
 
 ### Community 34 - "get_store"
 Cohesion: 0.21
 Nodes (17): get_store(), _claim_signed_event(), _create_draft(), _issue(), Integracion Fase 4 (E4-04/E4-05/E4-08): emision, transmision, reconciliacion.  C, E4-05: con una transmision RECEIVED previa, un TIMEOUT en recepcion nunca     de, _reset_simulator(), test_duplicate_response_scenario_does_not_create_second_authorization() (+9 more)
 
 ### Community 35 - "_create_authorized_invoice_stub"
-Cohesion: 0.32
-Nodes (19): _create_authorized_invoice_stub(), _create_party(), _create_receivable(), date, Decimal, Party, SalesDocument, UUID (+11 more)
+Cohesion: 0.29
+Nodes (21): compute_installment_balance(), Calcula el saldo de una cuota sumando sus movimientos activos.      Cuenta solo, _create_authorized_invoice_stub(), _create_party(), _create_receivable(), date, Decimal, Party (+13 more)
 
 ### Community 36 - "compilerOptions"
 Cohesion: 0.10
@@ -395,16 +403,16 @@ Cohesion: 0.11
 Nodes (19): @dnd-kit/core, @dnd-kit/sortable, @fontsource-variable/manrope, @fontsource-variable/newsreader, framer-motion, dependencies, @dnd-kit/core, @dnd-kit/sortable (+11 more)
 
 ### Community 40 - "apiRequest"
-Cohesion: 0.20
-Nodes (20): apiRequest(), idempotencyKey(), addDays(), CreditNoteForm(), emptyDiscount(), emptyDraftLine(), emptyRetention(), formatAmount() (+12 more)
+Cohesion: 0.07
+Nodes (29): addDays(), AgingBucket, agingLabels, amountFormatter, CreditNoteForm(), DraftLine, emptyDiscount(), emptyDraftLine() (+21 more)
 
 ### Community 41 - "test_tenant_switch_poc.py"
 Cohesion: 0.29
 Nodes (15): _decode_unverified(), _get_context(), http(), _password_grant(), Any, AsyncClient, Response, PoC automatizado del cambio de tenant OIDC multi-tenant (ADR 0009).  Comprueba c (+7 more)
 
 ### Community 42 - "get_receivable"
-Cohesion: 0.21
-Nodes (21): AuthContext, TimestampMixin, UUIDPrimaryKeyMixin, IAERPTokenVerifier, ScopedFastMCP, DocumentArtifact, Plan de pago propuesto de una factura (``InvoiceInput.installments``).      Spri, XML firmado o RIDE PDF de un ``SalesDocument``, con checksum y version.      Usa (+13 more)
+Cohesion: 0.17
+Nodes (28): Base, TimestampMixin, UUIDPrimaryKeyMixin, DocumentArtifact, Plan de pago propuesto de una factura (``InvoiceInput.installments``).      Spri, XML firmado o RIDE PDF de un ``SalesDocument``, con checksum y version.      Usa, SalesDocumentInstallment, GmailIntegration (+20 more)
 
 ### Community 43 - "simulator.py"
 Cohesion: 0.15
@@ -439,8 +447,8 @@ Cohesion: 0.05
 Nodes (36): Backend, Backend, Backend, Branch strategy:, Commit messages:, Configuración de Agentes IA, Contacto y Soporte, Contexto del Proyecto (+28 more)
 
 ### Community 51 - "auth.tsx"
-Cohesion: 0.19
-Nodes (11): configureApiTokenProvider(), AuthContext, AuthProvider(), AuthState, keycloak, readStoredAuth(), StoredAuth, ErpModal() (+3 more)
+Cohesion: 0.25
+Nodes (8): configureApiTokenProvider(), AuthContext, AuthProvider(), AuthState, keycloak, readStoredAuth(), StoredAuth, queryClient
 
 ### Community 52 - "keycloak_poc.py"
 Cohesion: 0.44
@@ -459,8 +467,8 @@ Cohesion: 0.44
 Nodes (8): admin_connection(), alembic(), assert_downgraded_to_base(), database_url(), main(), reset_database(), Connection, URL
 
 ### Community 56 - "test_crm_features.py"
-Cohesion: 0.50
-Nodes (8): auth(), UUID, Regresion: el body incluye lead_id (schema) y el path tambien; el     servicio d, test_crm_and_integrations_require_their_declared_scopes(), test_invoice_preview_and_collection_policy_are_server_authoritative(), test_lead_activity_creation_returns_201_and_ignores_body_lead_id(), test_lead_with_new_contact_has_title_summary_owner_and_customer_conversion(), token_for()
+Cohesion: 0.11
+Nodes (23): AccessToken, AuthContext, create_dev_token(), decode_access_token(), _extract_organization_id(), get_auth_context(), AsyncSession, Depends (+15 more)
 
 ### Community 57 - "ERP Domain Knowledge Skill"
 Cohesion: 0.07
@@ -487,8 +495,8 @@ Cohesion: 0.18
 Nodes (11): 🟢 Tareas COMPLETADAS (10) - SPRINT 1 COMPLETADO ✅, ✅ TASK-1.10: Deploy staging y QA, ✅ TASK-1.1: Instalar dependencias @dnd-kit, ✅ TASK-1.2: Crear componente CrmKanban.tsx, ✅ TASK-1.3: Implementar useKanban hook con Zustand, ✅ TASK-1.4: Crear componente LeadCard.tsx, ✅ TASK-1.5: Implementar drag handlers con @dnd-kit, ✅ TASK-1.6: Verificar backend API (+3 more)
 
 ### Community 63 - "debug4.spec.ts"
-Cohesion: 0.33
-Nodes (4): HOTNESS_COLORS, LeadCard(), LeadCardProps, STAGE_COLORS
+Cohesion: 0.15
+Nodes (13): Lead, LeadStatus, ACTIVE_STAGES, CrmKanban(), CrmKanbanProps, KanbanColumnProps, PIPELINE, HOTNESS_COLORS (+5 more)
 
 ### Community 64 - "configure-staging.sh"
 Cohesion: 0.43
@@ -848,7 +856,7 @@ Nodes (4): 🚨 Emergency Procedures, Si cambian prioridades:, Si hay bloqueo t�
 
 ### Community 204 - "📋 Tareas Pendientes (Sprint 3 - Sidebar Colapsible + UX)"
 Cohesion: 0.50
-Nodes (4): 🟢 Tareas COMPLETADAS (2), 📋 Tareas Pendientes (Sprint 3 - Sidebar Colapsible + UX), ✅ TASK-3.1: Mejorar visibilidad de navegación activa, ✅ TASK-3.2: Reducir tamaño de títulos h1
+Nodes (4): 🟢 Tareas COMPLETADAS (3), 📋 Tareas Pendientes (Sprint 3 - Sidebar Colapsible + UX), ✅ TASK-3.1: Mejorar visibilidad de navegación activa, ✅ TASK-3.2: Reducir tamaño de títulos h1
 
 ### Community 205 - "📊 Progress Metrics"
 Cohesion: 0.67
@@ -858,25 +866,45 @@ Nodes (3): Overall Progress (0%), 📊 Progress Metrics, Sprint 1 Progress (100%
 Cohesion: 0.67
 Nodes (3): 📊 Progress Metrics, 🟢 Tareas COMPLETADAS (1), ✅ TASK-1.1: Instalar dependencias @dnd-kit
 
+### Community 207 - "CollectionReminder"
+Cohesion: 0.16
+Nodes (13): AsyncSession, Implementación stub de ``Notifier`` sin apertura de red (Sprint 3, decisión 8)., Notifier stub que solo crea el registro en BD sin enviar nada.      Útil para de, Crea un CollectionReminder con status=STUBBED sin enviar nada.          Verifica, StubNotifier, CollectionReminder, Registro de un recordatorio de cobranza enviado (o stubbeado) a un cliente., dispatch_due_reminders_once() (+5 more)
+
+### Community 208 - "get_receivable"
+Cohesion: 0.18
+Nodes (16): alias, _account_item_response(), get_invoices(), get_parties(), get_receivable(), get_receivables(), get_receivables_aging(), date (+8 more)
+
+### Community 209 - "Receivable"
+Cohesion: 0.27
+Nodes (14): CustomerCredit, Modelos del contexto Receivables (Sprint 3, Fase 1: E5-01/E5-02).  ``Receivable`, Saldo a favor cuando una nota de credito excede el saldo abierto.      Definido, Cabecera de cartera 1:1 con la factura ``AUTHORIZED`` que la origina.      Cread, Receivable, apply_credit_note(), compute_receivable_balance(), lock_receivable() (+6 more)
+
+### Community 210 - "masters.py"
+Cohesion: 0.22
+Nodes (11): EmissionPointCreate, EmissionPointRead, EstablishmentCreate, EstablishmentRead, PartyCreate, PartyRead, ProductCreate, ProductRead (+3 more)
+
+### Community 211 - "LeadsPage.tsx"
+Cohesion: 0.24
+Nodes (8): LeadCreate, LeadWithPartyCreate, Party, STAGE_LABELS, View, ErpModal(), useInertBackground(), react
+
 ## Knowledge Gaps
-- **792 isolated node(s):** `graphify-mcp`, `🎯 Visión General`, `Módulo CRM Mejoras (Sprints 1-2)`, `UX Modernización (Sprints 3-6)`, `Stack Technical Upgrade (Sprint 7-8)` (+787 more)
+- **815 isolated node(s):** `🎯 Objetivo de este Documento`, `✅ TASK-3.1: Mejorar visibilidad de navegación activa`, `✅ TASK-3.2: Reducir tamaño de títulos h1`, `✅ TASK-1.1: Instalar dependencias @dnd-kit`, `✅ TASK-1.2: Crear componente CrmKanban.tsx` (+810 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **33 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **41 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `get_settings()` connect `get_settings` to `SalesDocument`, `get_store`, `billing.py`, `crm_integrations.py`, `sign_xml`?**
-  _High betweenness centrality (0.046) - this node is a cross-community bridge._
-- **Why does `SalesDocument` connect `SalesDocument` to `_setup_billing_masters`, `build_ride_pdf`, `get_store`, `handle_invoice_authorized`, `billing.py`, `get_receivable`, `Party`, `Receivable`, `handle_invoice_signed`, `Base`, `Movement`, `initial_data.py`?**
-  _High betweenness centrality (0.035) - this node is a cross-community bridge._
-- **Why does `Party` connect `Base` to `SalesDocument`, `build_ride_pdf`, `billing.py`, `crm_integrations.py`, `FastAPI`, `get_receivable`, `masters.py`, `test_mcp_receivables.py`, `receivables.py`, `Party`, `test_crm_features.py`?**
-  _High betweenness centrality (0.025) - this node is a cross-community bridge._
+- **Why does `get_settings()` connect `get_settings` to `SalesDocument`, `_setup_billing_masters`, `get_store`, `billing.py`, `crm_integrations.py`, `sign_xml`?**
+  _High betweenness centrality (0.030) - this node is a cross-community bridge._
+- **Why does `SalesDocument` connect `SalesDocument` to `_setup_billing_masters`, `get_store`, `handle_invoice_authorized`, `billing.py`, `get_receivable`, `receivables.py`, `Party`, `Receivable`, `handle_invoice_signed`, `Base`, `Movement`, `initial_data.py`?**
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._
+- **Why does `OutboxEvent` connect `OutboxMessage` to `_setup_billing_masters`, `get_store`, `get_receivable`, `CollectionReminder`, `execute_idempotent`, `handle_invoice_signed`, `AuthContext`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
 - **Are the 41 inferred relationships involving `Receivable` (e.g. with `Base` and `TimestampMixin`) actually correct?**
   _`Receivable` has 41 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `graphify-mcp`, `🎯 Visión General`, `Módulo CRM Mejoras (Sprints 1-2)` to the rest of the system?**
-  _792 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `🎯 Objetivo de este Documento`, `✅ TASK-3.1: Mejorar visibilidad de navegación activa`, `✅ TASK-3.2: Reducir tamaño de títulos h1` to the rest of the system?**
+  _815 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `_setup_billing_masters` be split into smaller, more focused modules?**
-  _Cohesion score 0.07847082494969819 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0642570281124498 - nodes in this community are weakly interconnected._
 - **Should `App.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.05075187969924812 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06060606060606061 - nodes in this community are weakly interconnected._

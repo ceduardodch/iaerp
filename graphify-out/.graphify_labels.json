@@ -205,5 +205,17 @@
   "203": "🚨 Emergency Procedures",
   "204": "📋 Tareas Pendientes (Sprint 3 - Sidebar Colapsible + UX)",
   "205": "📊 Progress Metrics",
-  "206": "📊 Progress Metrics"
+  "206": "📊 Progress Metrics",
+  "207": "CollectionReminder",
+  "208": "get_receivable",
+  "209": "Receivable",
+  "210": "masters.py",
+  "211": "LeadsPage.tsx",
+  "212": "crmTransitions.ts",
+  "213": "AuthContext",
+  "214": "datetime",
+  "215": "LeadActivityCreate",
+  "216": "LeadCreate",
+  "217": "LeadUpdate",
+  "218": "LeadWithPartyCreate"
 }

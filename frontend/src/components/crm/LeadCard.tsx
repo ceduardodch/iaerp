@@ -15,6 +15,10 @@ interface LeadCardProps {
   onClick: () => void
   /** Indica si el lead está siendo arrastrado */
   isDragging?: boolean
+  /** Selección múltiple (Sprint 2): ¿esta card está seleccionada? */
+  selected?: boolean
+  /** Alternar selección; `shiftKey` activa el rango contiguo en la columna */
+  onToggleSelect?: (shiftKey: boolean) => void
 }
 
 /**
@@ -62,7 +66,14 @@ const STAGE_COLORS = {
  * - Animaciones escalonadas por índice
  * - Responsive design
  */
-export function LeadCard({ lead, index, onClick, isDragging }: LeadCardProps) {
+export function LeadCard({
+  lead,
+  index,
+  onClick,
+  isDragging,
+  selected = false,
+  onToggleSelect,
+}: LeadCardProps) {
   const {
     attributes,
     listeners,

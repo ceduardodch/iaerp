@@ -20,7 +20,7 @@ Este documento permite **continuar trabajo 1x1 entre sesiones** sin perder conte
 
 ## 📋 Tareas Pendientes (Sprint 3 - Sidebar Colapsible + UX)
 
-### 🟢 Tareas COMPLETADAS (3)
+### 🟢 Tareas COMPLETADAS (5)
 
 #### ✅ TASK-3.1: Mejorar visibilidad de navegación activa
 **Estado:** 🟢 Completada (2026-07-20)
@@ -227,14 +227,47 @@ npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
 - ✅ Transición suave de 300ms con cubic-bezier
 - ✅ Build funcionando sin errores (505 KB JS + 37 KB CSS)
 
-#### TASK-3.4: Iconos para cada sección
-**Estado:** 🔵 Pendiente
+#### ✅ TASK-3.4: Iconos para cada sección
+**Estado:** 🟢 Completada (2026-07-20)
 **Prioridad:** MEDIUM
 **Estimación:** 1 hora
-**Archivos:** `frontend/src/components/Sidebar.tsx` (modificar)
-**Requisitos:**
-- SVG strings o lucide-react
-- Icon-only mode cuando colapsado
+**Archivos modificados:**
+- `frontend/src/components/Sidebar.tsx` (actualizado con iconos)
+- `frontend/package.json` (lucide-react añadido)
+- `frontend/src/index.css` (estilos para iconos)
+**Resultado:**
+- ✅ lucide-react instalado (versión más reciente)
+- ✅ Iconos por sección: LayoutDashboard, Users, Package, FileText, Building2, DollarSign, TrendingUp
+- ✅ Iconos mostrados cuando sidebar está colapsado
+- ✅ Layout con eyebrow + label cuando está expandido
+- ✅ Iconos centrados en modo colapsado con justify-content: center
+- ✅ Build funcionando sin errores (510 KB JS + 37 KB CSS)
+
+#### ✅ TASK-3.6: CSS transitions
+**Estado:** 🟢 Completada (2026-07-20) - Parte de TASK-3.3
+**Prioridad:** MEDIUM
+**Estimación:** 1 hora
+**Archivos modificados:**
+- `frontend/src/index.css` (transiciones añadidas)
+**Resultado:**
+- ✅ Transición suave de 300ms con cubic-bezier en app-shell
+- ✅ grid-template-columns transition de 250px → 64px
+- ✅ Transform scale(1.05) en hover cuando está colapsado
+- ✅ Transform translateX(2px) en hover cuando está expandido
+- ✅ Todas las transiciones usan cubic-bezier(.23, 1, .32, 1)
+
+#### ✅ TASK-3.7: Update App.tsx layout
+**Estado:** 🟢 Completada (2026-07-20) - Parte de TASK-3.3
+**Prioridad:** MEDIUM
+**Estimación:** 1 hora
+**Archivos modificados:**
+- `frontend/src/App.tsx` (Sidebar component integrado)
+**Resultado:**
+- ✅ Sidebar component importado y usado en Workspace
+- ✅ Layout app-shell con grid-template-columns dinámico
+- ✅ Sidebar recibe currentSection y onNavigate props
+- ✅ startTransition usado para cambios de sección
+- ✅ Estructura limpia sin inline sidebar
 
 #### TASK-3.5: Tooltips
 **Estado:** 🔵 Pendiente
@@ -244,24 +277,6 @@ npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
 **Requisitos:**
 - @radix-ui/react-tooltip o custom
 - Mostrar en icon-only mode
-
-#### TASK-3.6: CSS transitions
-**Estado:** 🔵 Pendiente
-**Prioridad:** MEDIUM
-**Estimación:** 1 hora
-**Archivos:** `frontend/src/index.css` (modificar)
-**Requisitos:**
-- Transición suave 300ms cubic-bezier
-- transform: translateX() y opacity
-
-#### TASK-3.7: Update App.tsx layout
-**Estado:** 🔵 Pendiente
-**Prioridad:** MEDIUM
-**Estimación:** 1 hora
-**Archivos:** `frontend/src/App.tsx` (modificar)
-**Requisitos:**
-- Layout para sidebar + main content
-- Responsive adjustments
 **Estado:** 🔵 Pendiente
 **Prioridad:** HIGH
 **Estimación:** 1-2 horas
