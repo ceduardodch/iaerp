@@ -1,8 +1,5 @@
-@import '@fontsource-variable/manrope';
-@import '@fontsource-variable/newsreader';
-
 :root {
-  font-family: 'Manrope Variable', sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   color: #172019;
   background: #f2efe7;
   font-synthesis: none;
@@ -18,6 +15,12 @@
   --focus: #1469c9;
   --danger: #a12e22;
   --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --system-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --system-serif: 'New York', 'SF Pro Display', 'Segoe UI', Georgia, Cambria, 'Times New Roman', Times, serif;
+  --border-default: #c8c5ba;
+  --border-focus: var(--focus);
+  --border-hover: #a8a498;
+  --border-error: var(--danger);
 }
 
 * { box-sizing: border-box; }
@@ -26,10 +29,175 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .6; }
+
+/* Focus states consistentes */
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 
+/* Input focus states */
+input:focus, select:focus, textarea:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(20, 105, 201, 0.1);
+  outline: none;
+}
+
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 0;
+  box-shadow: 0 0 0 3px rgba(20, 105, 201, 0.1);
+}
+
+/* Input hover states */
+input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
+  border-color: var(--border-hover);
+}
+
+/* Input error states */
+input.erp-input-error, select.erp-input-error, textarea.erp-input-error {
+  border-color: var(--border-error);
+  background-color: #fff5f5;
+}
+
+input.erp-input-error:focus, select.erp-input-error:focus, textarea.erp-input-error:focus {
+  border-color: var(--border-error);
+  box-shadow: 0 0 0 3px rgba(161, 46, 34, 0.1);
+}
+
+/* Help text styling */
+.erp-help-text {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.4;
+}
+
+/* Error text styling */
+.erp-error-text {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  color: var(--danger);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.erp-error-text::before {
+  content: '⚠';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background-color: var(--danger);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Success text styling */
+.erp-success-text {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  color: #2f8c66;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.erp-success-text::before {
+  content: '✓';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background-color: #2f8c66;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Warning text styling */
+.erp-warning-text {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  color: #c18b1d;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.erp-warning-text::before {
+  content: '⚠';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background-color: #c18b1d;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Field group with help/error text */
+.erp-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.erp-field-group.has-error input,
+.erp-field-group.has-error select,
+.erp-field-group.has-error textarea {
+  border-color: var(--border-error);
+  background-color: #fff5f5;
+}
+
+.erp-field-group.has-success input,
+.erp-field-group.has-success select,
+.erp-field-group.has-success textarea {
+  border-color: #2f8c66;
+  background-color: #f0fdf6;
+}
+
+/* Required field indicator */
+label.required::after {
+  content: ' *';
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* Button focus states */
+button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Estados de botones mejorados */
+.erp-button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--focus);
+}
+
+.erp-button-primary:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.3);
+}
+
 h1, h2, p { margin-top: 0; }
-h1, h2 { font-family: 'Newsreader Variable', serif; font-weight: 500; }
+h1, h2 { font-family: var(--system-serif); font-weight: 500; }
 h1 { margin-bottom: 0; font-size: clamp(1.8rem, 3vw, 2.5rem); line-height: 1.1; letter-spacing: -.03em; }
 h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 1; letter-spacing: -.025em; }
 
@@ -131,12 +299,12 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 .erp-form-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: .6rem; margin: 1.5rem -1.5rem -1.5rem; padding: 1rem 1.5rem; border-top: 1px solid var(--line); background: rgba(251,250,245,.96); backdrop-filter: blur(10px); }
 .erp-action-cell { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; }
 .erp-empty-state { grid-column: 1 / -1; padding: 3rem 1.5rem; text-align: center; background: var(--paper); }
-.erp-empty-state h3 { margin: 0 0 .5rem; font-family: 'Newsreader Variable', serif; font-size: 1.5rem; font-weight: 500; }
+.erp-empty-state h3 { margin: 0 0 .5rem; font-family: var(--system-serif); font-size: 1.5rem; font-weight: 500; }
 .erp-empty-state p { max-width: 440px; margin: 0 auto 1.2rem; color: var(--muted); font-size: .78rem; line-height: 1.6; }
 
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 1px; margin-bottom: 1.5rem; overflow: hidden; border: 1px solid var(--line); background: var(--line); }
 .metric-card { min-height: 230px; padding: 1.5rem; background: var(--paper); }
-.metric-card strong { display: block; margin: 2.5rem 0 .6rem; font-family: 'Newsreader Variable', serif; font-size: clamp(2.8rem, 5vw, 5rem); font-weight: 400; line-height: .8; }
+.metric-card strong { display: block; margin: 2.5rem 0 .6rem; font-family: var(--system-serif); font-size: clamp(2.8rem, 5vw, 5rem); font-weight: 400; line-height: .8; }
 .metric-card p { color: var(--muted); font-size: .78rem; line-height: 1.5; }
 .metric-feature { color: white; background: var(--forest); }
 .metric-feature .metric-label { color: var(--lime); }
@@ -165,12 +333,12 @@ td small { margin-top: .25rem; color: var(--muted); }
 .form-panel { padding: 1.5rem; border-top: 4px solid var(--clay); }
 .form-panel form, .login-panel form { display: grid; gap: 1rem; }
 label { display: grid; gap: .4rem; color: var(--muted); font-size: .7rem; font-weight: 650; }
-input, select, textarea { min-width: 0; width: 100%; padding: .75rem; border: 1px solid #c8c5ba; border-radius: .25rem; color: var(--ink); background: white; }
+input, select, textarea { min-width: 0; width: 100%; padding: .75rem; border: 1px solid var(--border-default); border-radius: .25rem; color: var(--ink); background: white; transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease; }
 textarea { resize: vertical; }
 .field-row { display: grid; grid-template-columns: .65fr 1fr; gap: .7rem; }
 .primary-button { min-height: 44px; padding: .8rem 1rem; border: 0; border-radius: .25rem; color: white; background: var(--forest); font-weight: 700; }
 .primary-button:hover { background: #235b4c; }
-.form-error { margin: 0; color: #9d2f20; font-size: .72rem; }
+.form-error { margin: 0.35rem 0 0; color: var(--danger); font-size: .72rem; font-weight: 600; line-height: 1.4; }
 .product-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); }
 .product-card { min-height: 210px; padding: 1.4rem; background: var(--paper); }
 .product-card > span { color: var(--clay); font-size: .65rem; }
