@@ -46,18 +46,9 @@ import {
   ErpToolbar,
 } from './components/erp'
 import { LeadsPage } from './components/crm'
+import { Sidebar } from './components/Sidebar'
 
 type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' | 'organization' | 'crm'
-
-const sections: Array<{ id: Section; label: string; eyebrow: string }> = [
-  { id: 'overview', label: 'Resumen', eyebrow: '01' },
-  { id: 'parties', label: 'Contactos', eyebrow: '02' },
-  { id: 'products', label: 'Productos', eyebrow: '03' },
-  { id: 'invoices', label: 'Facturas', eyebrow: '04' },
-  { id: 'organization', label: 'Empresa', eyebrow: '05' },
-  { id: 'receivables', label: 'Cartera', eyebrow: '06' },
-  { id: 'crm', label: 'CRM', eyebrow: '07' },
-]
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
   minimumFractionDigits: 2,
@@ -2128,25 +2119,7 @@ function Workspace() {
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Saltar al contenido</a>
-      <aside className="sidebar">
-        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">IA</span><div><strong>IAERP</strong><small>Finanzas aumentadas</small></div></div>
-        <nav aria-label="Navegación principal">
-          {sections.map((item) => (
-            <button
-              key={item.id}
-              className={section === item.id ? 'active' : ''}
-              aria-current={section === item.id ? 'page' : undefined}
-              onClick={() => startTransition(() => setSection(item.id))}
-            >
-              <span>{item.eyebrow}</span>{item.label}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <span className="avatar" aria-hidden="true">{auth.displayName.slice(0, 2).toUpperCase()}</span>
-          <div><strong>{auth.displayName}</strong><button onClick={() => void auth.logout()}>Cerrar sesión</button></div>
-        </div>
-      </aside>
+      <Sidebar currentSection={section} onNavigate={(newSection) => startTransition(() => setSection(newSection))} />
       <main id="main-content" tabIndex={-1}>
         {section === 'overview' ? <Overview context={contextQuery.data} parties={parties} products={products} /> : null}
         {section === 'parties' ? <PartiesPage parties={parties} token={token} /> : null}

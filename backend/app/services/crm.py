@@ -241,11 +241,13 @@ async def create_activity(
     # Verificar que el lead existe
     await get_lead(session, context, lead_id)
 
+    # lead_id se excluye del dump: el path es la fuente de verdad y dejarlo
+    # duplicado provocaba TypeError (kwarg repetido) -> 500 en el endpoint.
     activity = LeadActivity(
         tenant_id=context.tenant_id,
         lead_id=lead_id,
         actor_id=context.actor_id,
-        **data.model_dump(by_alias=False),
+        **data.model_dump(by_alias=False, exclude={"lead_id"}),
     )
     session.add(activity)
     await session.flush()

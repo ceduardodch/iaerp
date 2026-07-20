@@ -20,7 +20,7 @@ Este documento permite **continuar trabajo 1x1 entre sesiones** sin perder conte
 
 ## 📋 Tareas Pendientes (Sprint 3 - Sidebar Colapsible + UX)
 
-### 🟢 Tareas COMPLETADAS (2)
+### 🟢 Tareas COMPLETADAS (3)
 
 #### ✅ TASK-3.1: Mejorar visibilidad de navegación activa
 **Estado:** 🟢 Completada (2026-07-20)
@@ -207,15 +207,25 @@ npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
 - Reducir a: clamp(1.8rem, 3vw, 2.5rem) - más legible
 - Mantener jerarquía visual pero mejor legibilidad
 
-#### TASK-3.3: Crear componente Sidebar.tsx
-**Estado:** 🔵 Pendiente
+#### ✅ TASK-3.3: Crear componente Sidebar.tsx
+**Estado:** 🟢 Completada (2026-07-20)
 **Prioridad:** MEDIUM
 **Estimación:** 1-2 horas
-**Archivos:** `frontend/src/components/Sidebar.tsx` (nuevo)
-**Requisitos:**
-- State local + localStorage sync
-- Colapsible: 250px → 64px
-- Toggle button
+**Archivos modificados:**
+- `frontend/src/components/Sidebar.tsx` (nuevo, 106 líneas)
+- `frontend/src/App.tsx` (integrado Sidebar component)
+- `frontend/src/index.css` (estilos para collapsed sidebar)
+**Resultado:**
+- ✅ Componente Sidebar con state local collapsed/expanded
+- ✅ localStorage sync (clave: 'sidebar-collapsed')
+- ✅ Ancho transición 250px → 64px con cubic-bezier 300ms
+- ✅ Toggle button con icono SVG (flecha izquierda/derecha)
+- ✅ Navegación colapsada muestra solo números (eyebrows)
+- ✅ app-shell recibe clase 'sidebar-collapsed' dinámicamente
+- ✅ Brand lockup se oculta cuando está colapsado
+- ✅ Sidebar footer (avatar + logout) se oculta cuando está colapsado
+- ✅ Transición suave de 300ms con cubic-bezier
+- ✅ Build funcionando sin errores (505 KB JS + 37 KB CSS)
 
 #### TASK-3.4: Iconos para cada sección
 **Estado:** 🔵 Pendiente

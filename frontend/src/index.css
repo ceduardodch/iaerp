@@ -35,16 +35,22 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 
 .skip-link { position: fixed; z-index: 20; top: .75rem; left: .75rem; padding: .7rem 1rem; color: white; background: var(--ink); transform: translateY(-180%); }
 .skip-link:focus { transform: translateY(0); }
-.app-shell { min-height: 100vh; display: grid; grid-template-columns: 250px 1fr; }
+.app-shell { min-height: 100vh; display: grid; grid-template-columns: 250px 1fr; transition: grid-template-columns 300ms var(--ease-out); }
+.app-shell.sidebar-collapsed { grid-template-columns: 64px 1fr; }
 .sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 1.4rem; color: white; background: var(--forest); border-right: 1px solid #31584e; }
-.brand-lockup { display: flex; align-items: center; gap: .8rem; margin-bottom: 4rem; }
+.sidebar-header { display: flex; flex-direction: column; gap: .8rem; margin-bottom: 4rem; }
+.brand-lockup { display: flex; align-items: center; gap: .8rem; }
 .brand-lockup strong, .brand-lockup small { display: block; }
 .brand-lockup small { color: #b8c9c3; font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; }
 .brand-mark { width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: var(--forest); background: var(--lime); font-weight: 800; letter-spacing: -.08em; }
+.sidebar-toggle { align-self: flex-end; padding: .5rem; border: 0; border-radius: .3rem; color: #d5e1dc; background: transparent; cursor: pointer; transition: color 140ms ease, background-color 140ms ease; }
+.sidebar-toggle:hover { color: var(--lime); background: rgba(216,239,133, 0.2); }
 .sidebar nav { display: grid; gap: .35rem; }
-.sidebar nav button { position: relative; display: grid; grid-template-columns: 2.2rem 1fr; gap: .3rem; align-items: center; width: 100%; padding: .85rem .7rem; border: 0; border-radius: .4rem; color: #d5e1dc; background: transparent; text-align: left; transition: color 140ms ease, background-color 140ms ease, transform 140ms var(--ease-out); }
+.sidebar nav button { position: relative; display: grid; grid-template-columns: 2.2rem 1fr; gap: .3rem; align-items: center; width: 100%; padding: .85rem .7rem; border: 0; border-radius: .4rem; color: #d5e1dc; background: transparent; text-align: left; transition: color 140ms ease, background-color 140ms ease, transform 140ms var(--ease-out); justify-content: center; }
+.sidebar-collapsed .sidebar nav button { grid-template-columns: 1fr; padding: .85rem; }
 .sidebar nav button span { color: #9fb8b0; font-size: .67rem; letter-spacing: .08em; }
 .sidebar nav button:hover { color: var(--ink); background: rgba(216,239,133, 0.4); transform: translateX(2px); }
+.sidebar-collapsed .sidebar nav button:hover { transform: scale(1.05); }
 .sidebar nav button.active { color: var(--ink); background: var(--lime); font-weight: 700; box-shadow: 0 2px 8px rgba(216,239,133, 0.3); }
 .sidebar nav button.active::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 60%; background: var(--ink); border-radius: 0 2px 2px 0; }
 .sidebar nav button.active span { color: #536528; font-weight: 700; }
@@ -53,6 +59,9 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 .sidebar-footer strong, .sidebar-footer button { display: block; }
 .sidebar-footer strong { max-width: 130px; overflow: hidden; font-size: .82rem; text-overflow: ellipsis; }
 .sidebar-footer button { padding: .2rem 0; border: 0; color: #b8c9c3; background: transparent; font-size: .7rem; text-decoration: underline; }
+.sidebar-toggle { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: .3rem; color: #d5e1dc; background: transparent; cursor: pointer; transition: color 140ms ease, background-color 140ms ease, transform 140ms var(--ease-out); }
+.sidebar-toggle:hover { color: var(--lime); background: rgba(216,239,133, 0.2); }
+.sidebar-toggle:active { transform: scale(.95); }
 
 #main-content { min-width: 0; padding: clamp(1.5rem, 4vw, 4.5rem); overflow: hidden; }
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; margin-bottom: clamp(2.5rem, 7vw, 6rem); }

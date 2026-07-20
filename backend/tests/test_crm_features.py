@@ -142,3 +142,41 @@ async def test_invoice_preview_and_collection_policy_are_server_authoritative(cl
     isolated = await client.get("/api/v1/receivables/collection-policy", headers=auth(tenant_b))
     assert isolated.status_code == 200
     assert isolated.json()["enabled"] is False
+
+
+async def test_lead_activity_creation_returns_201_and_ignores_body_lead_id(client):
+    """Regresion: el body incluye lead_id (schema) y el path tambien; el
+    servicio debe usar el del path sin chocar (antes: TypeError -> 500)."""
+
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["leads:read", "leads:write"])
+    created = await client.post(
+        "/api/v1/crm/leads/with-party",
+        headers=auth(token, "crm-activity-lead-0001"),
+        json={
+            "partyName": "Contacto Actividad",
+            "partyIdentificationType": "CEDULA",
+            "partyIdentificationNumber": "1713209772",
+            "title": "Lead con actividades",
+        },
+    )
+    assert created.status_code == 201, created.text
+    lead_id = created.json()["id"]
+
+    activity = await client.post(
+        f"/api/v1/crm/leads/{lead_id}/activities",
+        headers=auth(token, "crm-activity-note-0001"),
+        json={
+            "leadId": lead_id,
+            "activityType": "NOTE",
+            "subject": "Primer contacto",
+            "description": "Llamada inicial registrada desde el modal",
+        },
+    )
+    assert activity.status_code == 201, activity.text
+    assert activity.json()["subject"] == "Primer contacto"
+
+    timeline = await client.get(
+        f"/api/v1/crm/leads/{lead_id}/activities", headers=auth(token)
+    )
+    assert timeline.status_code == 200
+    assert [item["subject"] for item in timeline.json()] == ["Primer contacto"]

@@ -5,9 +5,9 @@
     "semantic_hash": "565df8cfbf6916c1c2a7630deefac90e"
   },
   ".claude/settings.local.json": {
-    "mtime": 1784552474.7858367,
-    "ast_hash": "5fab17079aabb77030af2cbb2ea14143",
-    "semantic_hash": ""
+    "mtime": 1784502035.9733577,
+    "ast_hash": "0a5d8f24bc2ed416cd6954e6111a679a",
+    "semantic_hash": "0a5d8f24bc2ed416cd6954e6111a679a"
   },
   ".codex/hooks.json": {
     "mtime": 1784552141.5403786,
@@ -220,9 +220,9 @@
     "semantic_hash": "11e1c604ce5783653d4354d8efa6713a"
   },
   "backend/app/services/crm.py": {
-    "mtime": 1784552474.8857212,
-    "ast_hash": "d8fc33449c9fc79afdf293cc9250253b",
-    "semantic_hash": ""
+    "mtime": 1784505556.0652585,
+    "ast_hash": "1e58a3ae6d3c4a5b2815d95c53c28816",
+    "semantic_hash": "1e58a3ae6d3c4a5b2815d95c53c28816"
   },
   "backend/app/services/crm_integrations.py": {
     "mtime": 1784480270.7167652,
@@ -430,9 +430,9 @@
     "semantic_hash": "901454d5a584d2aedf70e4fb1cefae9e"
   },
   "backend/tests/test_crm_features.py": {
-    "mtime": 1784552474.8861096,
-    "ast_hash": "f72c7976cc23ddee57e5144de2a413d8",
-    "semantic_hash": ""
+    "mtime": 1784505556.0656714,
+    "ast_hash": "018f5af74fc007c1f9f05c8e67ae5da4",
+    "semantic_hash": "018f5af74fc007c1f9f05c8e67ae5da4"
   },
   "backend/tests/test_fiscal_policy.py": {
     "mtime": 1784424984.437346,
@@ -594,25 +594,50 @@
     "ast_hash": "8ffd85437d4b93cdcd6c56a31a5bc8bf",
     "semantic_hash": "8ffd85437d4b93cdcd6c56a31a5bc8bf"
   },
+  "frontend/src/components/crm/BulkActionBar.tsx": {
+    "mtime": 1784503947.9502752,
+    "ast_hash": "b6b8b9fd6b247ccc3a77f3a2fd662cdf",
+    "semantic_hash": "b6b8b9fd6b247ccc3a77f3a2fd662cdf"
+  },
   "frontend/src/components/crm/CrmKanban.tsx": {
-    "mtime": 1784552474.8863552,
-    "ast_hash": "95f0cfe208379b6dea4868d76cb16776",
-    "semantic_hash": ""
+    "mtime": 1784505556.066104,
+    "ast_hash": "fb942b16d19456a3cab5796e6aa41ed7",
+    "semantic_hash": "fb942b16d19456a3cab5796e6aa41ed7"
+  },
+  "frontend/src/components/crm/KanbanFilters.tsx": {
+    "mtime": 1784503963.5485415,
+    "ast_hash": "6659ad2bdfdb9fcd33ec535a9c5c7d18",
+    "semantic_hash": "6659ad2bdfdb9fcd33ec535a9c5c7d18"
   },
   "frontend/src/components/crm/LeadCard.tsx": {
-    "mtime": 1784552474.8871114,
-    "ast_hash": "06338a273ba0bb1b302a6791a38c1da6",
-    "semantic_hash": ""
+    "mtime": 1784507510.5200472,
+    "ast_hash": "e0ac79b2b563faaa2e14179156d53e18",
+    "semantic_hash": "e0ac79b2b563faaa2e14179156d53e18"
+  },
+  "frontend/src/components/crm/LeadDetailModal.tsx": {
+    "mtime": 1784503925.9606144,
+    "ast_hash": "c9789dad55047f248e3ef5f280715226",
+    "semantic_hash": "c9789dad55047f248e3ef5f280715226"
   },
   "frontend/src/components/crm/LeadDetailPanel.tsx": {
-    "mtime": 1784552474.889402,
-    "ast_hash": "8eefd8abdb162f3a5e212ba6adf82332",
-    "semantic_hash": ""
+    "mtime": 1784505556.0674353,
+    "ast_hash": "02019db0218d01f0a9f9e14d7040081b",
+    "semantic_hash": "02019db0218d01f0a9f9e14d7040081b"
   },
   "frontend/src/components/crm/LeadsPage.tsx": {
-    "mtime": 1784552474.889703,
-    "ast_hash": "ee0333fb673baecbbfbe018f101f1873",
+    "mtime": 1784552456.9728403,
+    "ast_hash": "9f02fda1fc45b69c2486539758cc7230",
     "semantic_hash": ""
+  },
+  "frontend/src/components/crm/QuickAddLeadForm.tsx": {
+    "mtime": 1784503863.9488547,
+    "ast_hash": "1dc095218d5fe0ef2d3d137ca3f012f1",
+    "semantic_hash": "1dc095218d5fe0ef2d3d137ca3f012f1"
+  },
+  "frontend/src/components/crm/ShortcutsHint.tsx": {
+    "mtime": 1784503974.1482708,
+    "ast_hash": "2086642d7c3f2a12ccc27a13c0a1d55e",
+    "semantic_hash": "2086642d7c3f2a12ccc27a13c0a1d55e"
   },
   "frontend/src/components/crm/index.ts": {
     "mtime": 1784424984.4649801,
@@ -635,24 +660,39 @@
     "semantic_hash": "62cdc9fafba2e528fe9292b8652f0100"
   },
   "frontend/src/hooks/useKanban.ts": {
-    "mtime": 1784552474.8902266,
-    "ast_hash": "f3a37fd16cdea6b7e9d9033c68a7a8e9",
+    "mtime": 1784552444.02311,
+    "ast_hash": "3006b94cb2f196d147aca75bcc25ee97",
     "semantic_hash": ""
+  },
+  "frontend/src/hooks/useKanbanShortcuts.ts": {
+    "mtime": 1784507534.0599115,
+    "ast_hash": "f7f1d8d1ea6cecb34a7d64d4abb2c000",
+    "semantic_hash": "f7f1d8d1ea6cecb34a7d64d4abb2c000"
   },
   "frontend/src/main.tsx": {
-    "mtime": 1784552474.890658,
-    "ast_hash": "01a5417edc8e28c4ac6dcbc13648f18f",
-    "semantic_hash": ""
+    "mtime": 1784506382.146788,
+    "ast_hash": "96114f9680b7e420dc1b918d84e8ac58",
+    "semantic_hash": "96114f9680b7e420dc1b918d84e8ac58"
   },
   "frontend/src/store/crmStore.ts": {
-    "mtime": 1784552474.8909056,
-    "ast_hash": "8450164489fe1e89eefbe72b7a1925e7",
-    "semantic_hash": ""
+    "mtime": 1784507573.5100963,
+    "ast_hash": "efc11fde5c7d2a1a975f6cfd3d412329",
+    "semantic_hash": "efc11fde5c7d2a1a975f6cfd3d412329"
+  },
+  "frontend/src/store/crmTransitions.ts": {
+    "mtime": 1784504553.7642446,
+    "ast_hash": "d580e711385f36d7f1e446c1f6712732",
+    "semantic_hash": "d580e711385f36d7f1e446c1f6712732"
   },
   "frontend/tests/a11y.spec.ts": {
     "mtime": 1784424984.4664776,
     "ast_hash": "717f532b3bedb21474be2e8e49eab3b3",
     "semantic_hash": "717f532b3bedb21474be2e8e49eab3b3"
+  },
+  "frontend/tests/crm-kanban-advanced.spec.ts": {
+    "mtime": 1784507269.5409105,
+    "ast_hash": "c58e87d11a66e9ffe0a50a3b80cfc681",
+    "semantic_hash": "c58e87d11a66e9ffe0a50a3b80cfc681"
   },
   "frontend/tests/crm-kanban.spec.ts": {
     "mtime": 1784502433.243796,
@@ -660,9 +700,14 @@
     "semantic_hash": "5d44094420f5c87b452a3b8b1c8cbf1c"
   },
   "frontend/tests/crm.spec.ts": {
-    "mtime": 1784552474.8914251,
-    "ast_hash": "c9a01425a91d9fc37e8ecfc04768c7e7",
-    "semantic_hash": ""
+    "mtime": 1784506292.1400979,
+    "ast_hash": "d000bbcae77b1b75844875484c36dcce",
+    "semantic_hash": "d000bbcae77b1b75844875484c36dcce"
+  },
+  "frontend/tests/debug4.spec.ts": {
+    "mtime": 1784507405.6113884,
+    "ast_hash": "bb5ac243cb94e4bda39bca21084253d3",
+    "semantic_hash": "bb5ac243cb94e4bda39bca21084253d3"
   },
   "frontend/tests/functional.spec.ts": {
     "mtime": 1784425563.189335,
@@ -965,13 +1010,13 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1784552474.8849099,
-    "ast_hash": "9a6c7ac448c81eea3d7bedc96becddab",
+    "mtime": 1784552141.538385,
+    "ast_hash": "4c69d68608a44232cc7c023622787755",
     "semantic_hash": ""
   },
   "BACKLOG.md": {
-    "mtime": 1784552480.2628934,
-    "ast_hash": "7012ebd0ee46e7a562eaddf465d57779",
+    "mtime": 1784552449.340494,
+    "ast_hash": "9487a6b6fdf0c70bd2b0ce6aa38d21ac",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -985,8 +1030,8 @@
     "semantic_hash": ""
   },
   "ISSUE_TRACKING.md": {
-    "mtime": 1784552591.2723382,
-    "ast_hash": "29fb76cf852ab7800d1c9d65a93ddd03",
+    "mtime": 1784552449.3402603,
+    "ast_hash": "b435eff5b155da9ca10358ec32472df5",
     "semantic_hash": ""
   },
   "QUICK_START.md": {
@@ -1000,8 +1045,8 @@
     "semantic_hash": ""
   },
   "SPRINT_STATUS.md": {
-    "mtime": 1784552480.263887,
-    "ast_hash": "cb40e7ce3a2f242cad7af006ae5115f4",
+    "mtime": 1784552449.3401122,
+    "ast_hash": "1c6c2787d3d60c77781450744bcc1689",
     "semantic_hash": ""
   },
   "compose.coolify.yaml": {
