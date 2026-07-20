@@ -1,8 +1,8 @@
 # Issue Tracking - Sesión por Sesión
 
-**Fecha:** 2026-07-19
-**Sprint Activo:** Sprint 1 - CRM Kanban Foundation
-**Estado:** 🟢 En progreso - TASK-1.2 completada
+**Fecha:** 2026-07-20
+**Sprint Activo:** Sprint 3 - Sidebar Colapsible + UX Improvements
+**Estado:** 🟢 Iniciando Sprint 3
 
 ---
 
@@ -18,7 +18,34 @@ Este documento permite **continuar trabajo 1x1 entre sesiones** sin perder conte
 
 ---
 
-## 📋 Tareas Pendientes (Sprint 1 - CRM Kanban Foundation)
+## 📋 Tareas Pendientes (Sprint 3 - Sidebar Colapsible + UX)
+
+### 🟢 Tareas COMPLETADAS (2)
+
+#### ✅ TASK-3.1: Mejorar visibilidad de navegación activa
+**Estado:** 🟢 Completada (2026-07-20)
+**Prioridad:** HIGH
+**Estimación:** 30 min
+**Archivos modificados:**
+- `frontend/src/index.css` (estilos sidebar mejorados)
+**Resultado:**
+- ✅ Borde izquierdo indicador (4px verde oscuro)
+- ✅ Hover con transform translateX(2px)
+- ✅ Active con sombra y mejor contraste
+- ✅ transition suave 140ms
+- ✅ Accessibility: aria-current="page" ya existente
+
+#### ✅ TASK-3.2: Reducir tamaño de títulos h1
+**Estado:** 🟢 Completada (2026-07-20)
+**Prioridad:** HIGH
+**Estimación:** 30 min
+**Archivos modificados:**
+- `frontend/src/index.css` (estilos h1 mejorados)
+**Resultado:**
+- ✅ Títulos reducidos de clamp(2.5rem, 5vw, 5.8rem) a clamp(1.8rem, 3vw, 2.5rem)
+- ✅ Line-height mejorado de .92 a 1.1
+- ✅ Letter-spacing reducido de -.055em a -.03em
+- ✅ Mucho más legible y profesional
 
 ### 🟢 Tareas COMPLETADAS (10) - SPRINT 1 COMPLETADO ✅
 
@@ -156,7 +183,75 @@ npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
 - ✅ Preparado para subir a release y main branches
 - ✅ Código listo para QA con usuario
 
-#### TASK-1.3: Implementar useKanban hook
+---
+
+### 🔵 Tareas Sprint 3 - Sidebar Colapsible + UX (5 pendientes)
+
+#### TASK-3.1: Mejorar visibilidad de navegación activa
+**Estado:** 🔵 Pendiente
+**Prioridad:** HIGH (Usuario reportó que no se ve dónde está)
+**Estimación:** 30 min
+**Archivos:** `frontend/src/App.tsx` (modificar), `frontend/src/index.css` (modificar)
+**Requisitos:**
+- Badge o highlight más visible para la sección activa
+- Indicador visual claro de ubicación actual
+- ARIA current attribute para accessibility
+
+#### TASK-3.2: Reducir tamaño de títulos h1
+**Estado:** 🔵 Pendiente
+**Prioridad:** HIGH (Usuario reportó títulos muy grandes)
+**Estimación:** 30 min
+**Archivos:** `frontend/src/index.css` (modificar)
+**Requisitos:**
+- Títulos h1 actuales: clamp(2.5rem, 5vw, 5.8rem) - demasiado grandes
+- Reducir a: clamp(1.8rem, 3vw, 2.5rem) - más legible
+- Mantener jerarquía visual pero mejor legibilidad
+
+#### TASK-3.3: Crear componente Sidebar.tsx
+**Estado:** 🔵 Pendiente
+**Prioridad:** MEDIUM
+**Estimación:** 1-2 horas
+**Archivos:** `frontend/src/components/Sidebar.tsx` (nuevo)
+**Requisitos:**
+- State local + localStorage sync
+- Colapsible: 250px → 64px
+- Toggle button
+
+#### TASK-3.4: Iconos para cada sección
+**Estado:** 🔵 Pendiente
+**Prioridad:** MEDIUM
+**Estimación:** 1 hora
+**Archivos:** `frontend/src/components/Sidebar.tsx` (modificar)
+**Requisitos:**
+- SVG strings o lucide-react
+- Icon-only mode cuando colapsado
+
+#### TASK-3.5: Tooltips
+**Estado:** 🔵 Pendiente
+**Prioridad:** LOW
+**Estimación:** 1 hora
+**Archivos:** `frontend/src/components/Sidebar.tsx` (modificar)
+**Requisitos:**
+- @radix-ui/react-tooltip o custom
+- Mostrar en icon-only mode
+
+#### TASK-3.6: CSS transitions
+**Estado:** 🔵 Pendiente
+**Prioridad:** MEDIUM
+**Estimación:** 1 hora
+**Archivos:** `frontend/src/index.css` (modificar)
+**Requisitos:**
+- Transición suave 300ms cubic-bezier
+- transform: translateX() y opacity
+
+#### TASK-3.7: Update App.tsx layout
+**Estado:** 🔵 Pendiente
+**Prioridad:** MEDIUM
+**Estimación:** 1 hora
+**Archivos:** `frontend/src/App.tsx` (modificar)
+**Requisitos:**
+- Layout para sidebar + main content
+- Responsive adjustments
 **Estado:** 🔵 Pendiente
 **Prioridad:** HIGH
 **Estimación:** 1-2 horas

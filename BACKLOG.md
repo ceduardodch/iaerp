@@ -121,6 +121,8 @@ Transformar IAERP en un ERP moderno con interfaces dinámicas, manteniendo la ro
 - [ ] **HU-7:** Como usuario, quiero esconder el menú para tener más espacio de trabajo
 - [ ] **HU-8:** Como usuario, quiero acceso rápido a secciones frecuentes con iconos
 - [ ] **HU-9:** Como usuario, quiero que el menú recuerde mi preferencia
+- [ ] **HU-10:** Como usuario, quiero ver claramente dónde estoy en la navegación (actualmente no se visualiza bien)
+- [ ] **HU-11:** Como usuario, quiero que los títulos de página no sean tan grandes y difíciles de leer
 
 #### Criterios de Aceptación:
 - [ ] Sidebar colapsible: 250px (expanded) → 64px (collapsed)
@@ -132,11 +134,13 @@ Transformar IAERP en un ERP moderno con interfaces dinámicas, manteniendo la ro
 - [ ] ARIA labels para accessibility
 
 #### Tareas Técnicas:
-- [ ] **TASK-3.1:** Crear componente `Sidebar.tsx` con state local + localStorage sync
-- [ ] **TASK-3.2:** Iconos para cada sección (usando SVG strings o lucide-react)
-- [ ] **TASK-3.3:** Tooltips con `@radix-ui/react-tooltip` o custom
-- [ ] **TASK-3.4:** CSS transitions con `transform: translateX()` y `opacity`
-- [ ] **TASK-3.5:** Update `App.tsx` layout para sidebar + main content
+- [ ] **TASK-3.1:** Mejorar visibilidad de navegación activa (badge/highlight más visible)
+- [ ] **TASK-3.2:** Reducir tamaño de títulos h1 (clamp ajustado a tamaños más razonables)
+- [ ] **TASK-3.3:** Crear componente `Sidebar.tsx` con state local + localStorage sync
+- [ ] **TASK-3.4:** Iconos para cada sección (usando SVG strings o lucide-react)
+- [ ] **TASK-3.5:** Tooltips con `@radix-ui/react-tooltip` o custom
+- [ ] **TASK-3.6:** CSS transitions con `transform: translateX()` y `opacity`
+- [ ] **TASK-3.7:** Update `App.tsx` layout para sidebar + main content
 - [ ] **TASK-3.6:** Breakpoint mobile: <768px sidebar colapsado por defecto
 - [ ] **TASK-3.7:** Testing E2E: expandir/colapsar, navegación mobile
 - [ ] **TASK-3.8:** Accessibility audit con axe-core
