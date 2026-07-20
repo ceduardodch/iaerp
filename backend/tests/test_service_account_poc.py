@@ -288,7 +288,9 @@ async def test_expired_token_is_rejected(http: httpx.AsyncClient) -> None:
         assert lookup.status_code == 200, lookup.text
         representation = lookup.json()[0]
         attributes = representation.get("attributes") or {}
-        attributes["access.token.lifespan"] = "1"
+        # 5s (no 1s): en runners lentos de CI el primer request puede tardar
+        # mas de 1s y el "control positivo" llegaria ya expirado (flaky).
+        attributes["access.token.lifespan"] = "5"
         representation["attributes"] = attributes
         updated = await http.put(
             f"{ADMIN_CLIENTS_ENDPOINT}/{representation['id']}",
@@ -300,10 +302,10 @@ async def test_expired_token_is_rejected(http: httpx.AsyncClient) -> None:
         issued = await _client_credentials(http, client_id, client_secret)
         assert issued.status_code == 200, issued.text
         short_lived_token = issued.json()["access_token"]
-        assert issued.json()["expires_in"] <= 1
+        assert issued.json()["expires_in"] <= 5
 
         assert await _mcp_initialize_status(http, short_lived_token) != 401
-        await asyncio.sleep(3)
+        await asyncio.sleep(7)
         assert await _mcp_initialize_status(http, short_lived_token) == 401
     finally:
         await _revoke_service_account(http, owner_token, account["id"])
