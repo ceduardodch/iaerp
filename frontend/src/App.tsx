@@ -1,6 +1,8 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  lazy,
   startTransition,
+  Suspense,
   useDeferredValue,
   useRef,
   useState,
@@ -45,7 +47,12 @@ import {
   ErpStatusBadge,
   ErpToolbar,
 } from './components/erp'
-import { LeadsPage } from './components/crm'
+// Code-splitting (Sprint 7): la sección CRM arrastra dependencias pesadas
+// (@dnd-kit + framer-motion) y es la menos usada en el arranque; se carga
+// bajo demanda para reducir el bundle inicial.
+const LeadsPage = lazy(() =>
+  import('./components/crm').then((module) => ({ default: module.LeadsPage })),
+)
 import { InvoiceSpreadsheet } from './components/InvoiceSpreadsheet'
 import { Sidebar } from './components/Sidebar'
 
@@ -2095,7 +2102,11 @@ function Workspace() {
         ) : null}
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
-        {section === 'crm' ? <LeadsPage token={token} parties={parties} products={products} /> : null}
+        {section === 'crm' ? (
+          <Suspense fallback={<div className="lazy-loading" role="status" aria-live="polite">Cargando CRM…</div>}>
+            <LeadsPage token={token} parties={parties} products={products} />
+          </Suspense>
+        ) : null}
       </main>
     </div>
   )
