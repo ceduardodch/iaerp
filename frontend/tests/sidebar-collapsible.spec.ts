@@ -123,7 +123,11 @@ test.describe('Sidebar Collapsible - Sprint 6', () => {
     await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
   })
 
-  test('tooltips appear on collapsed navigation items', async ({ page }) => {
+  test('tooltips appear on collapsed navigation items', async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'mobile',
+      'El tooltip se muestra en :hover; en móvil (touch, sin hover) no aplica.',
+    )
     await page.getByRole('button', { name: 'Continuar' }).click()
 
     // Collapse sidebar
