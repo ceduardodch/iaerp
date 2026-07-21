@@ -272,8 +272,9 @@ export function useKanban({ token }: { token: string }) {
       onProgress?: (done: number, total: number) => void
     }) => {
       const results: BulkMoveResult[] = []
-      for (let index = 0; index < leadIds.length; index += 1) {
-        const leadId = leadIds[index]
+      // `for...of entries()` da `leadId: string` (no `string | undefined` como
+      // el acceso indexado bajo noUncheckedIndexedAccess).
+      for (const [index, leadId] of leadIds.entries()) {
         const lead = leads.find((item) => item.id === leadId)
 
         if (!lead) {

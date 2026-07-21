@@ -1,5 +1,9 @@
 # IAERP - Claude AI Assistant Configuration
 
+> ⚠️ **ANTES DE TOCAR NADA, LEE [`COORDINACION_IA.md`](COORDINACION_IA.md)** —
+> coordinación entre IAs (quién está activo, estado real de sprints, ramas,
+> regla de no mutear tests). Obligatorio leerlo primero.
+
 **Proyecto:** IAERP - ERP Ecuatoriano con facturación electrónica SRI
 **Stack:** FastAPI + SQLAlchemy + PostgreSQL + React 19 + TypeScript
 **Arquitectura:** Monolito modular multi-tenant

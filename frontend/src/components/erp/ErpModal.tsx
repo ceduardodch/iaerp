@@ -76,12 +76,12 @@ export function ErpModal({
       const last = focusableEls[focusableEls.length - 1]
       const active = document.activeElement
 
-      if (event.shiftKey && active === first) {
+      if (event.shiftKey && first && active === first) {
         event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && active === last) {
+        last?.focus()
+      } else if (!event.shiftKey && last && active === last) {
         event.preventDefault()
-        first.focus()
+        first?.focus()
       }
     }
 

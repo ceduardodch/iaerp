@@ -85,17 +85,23 @@ test.describe('WCAG 2.1 AA - Perceivable', () => {
   })
 
   test('1.4.4 Resize text: Text can be resized up to 200%', async ({ page }) => {
-    // Check that text can be resized without assistive technology
-    // Less strict check - just verify text resizing is possible
-    const canZoomText = await page.evaluate(() => {
-      const html = document.documentElement
-      const currentFontSize = window.getComputedStyle(html).fontSize
-
-      // Test that browser supports text zoom (most modern browsers do)
-      return currentFontSize && currentFontSize !== '0px'
+    // Prueba REAL de resize. `getComputedStyle().fontSize` SIEMPRE devuelve px
+    // (el navegador resuelve rem/em a px), así que comparar la unidad no sirve
+    // (la versión anterior nunca podía pasar). En su lugar se escala el
+    // font-size raíz al 200% y se verifica que el texto de contenido crece: si
+    // usara px fijos no cambiaría (violación real de 1.4.4).
+    const scalesWithRoot = await page.evaluate(() => {
+      const sample =
+        document.querySelector('main p, main h1, .login-copy, p, h1') ?? document.body
+      const before = parseFloat(getComputedStyle(sample).fontSize)
+      const previous = document.documentElement.style.fontSize
+      document.documentElement.style.fontSize = '200%'
+      const after = parseFloat(getComputedStyle(sample).fontSize)
+      document.documentElement.style.fontSize = previous
+      return before > 0 && after >= before * 1.5
     })
 
-    expect(canZoomText).toBe(true)
+    expect(scalesWithRoot).toBe(true)
   })
 
   test('1.4.10 Reflow: Content does not cause horizontal scroll at 400% zoom', async ({ page }) => {
@@ -158,13 +164,28 @@ test.describe('WCAG 2.1 AA - Operable', () => {
   test('2.4.7 Focus Visible: Keyboard focus indicator is visible', async ({ page }) => {
     await page.getByRole('button', { name: '07 CRM' }).click()
 
-    // Focus an element and check for visible indicator
-    const button = page.getByRole('button', { name: 'Nueva oportunidad' }).first()
-    await button.focus()
+    // Se navega por TECLADO (Tab), no con `.focus()` programático: el foco
+    // visible del app se da con `:focus-visible`, que en Chromium solo se
+    // activa por interacción de teclado. Probar `.focus()` daba un falso
+    // negativo aunque el usuario de teclado sí ve el indicador.
+    await page.keyboard.press('Tab')
 
-    // Less strict check - just verify element can be focused
-    const isFocused = await button.evaluate(el => document.activeElement === el)
-    expect(isFocused).toBe(true)
+    const hasVisibleFocus = await page.evaluate(() => {
+      const el = document.activeElement
+      if (!el || el === document.body) return false
+      const styles = window.getComputedStyle(el)
+      const outlineVisible =
+        (parseInt(styles.outlineWidth) || 0) > 0 && styles.outlineStyle !== 'none'
+      const shadowVisible = styles.boxShadow !== 'none' && styles.boxShadow !== ''
+      return (
+        (outlineVisible || shadowVisible) &&
+        // El elemento realmente coincide con :focus-visible (indicador de
+        // teclado), no un simple :focus sin anillo.
+        el.matches(':focus-visible')
+      )
+    })
+
+    expect(hasVisibleFocus).toBe(true)
   })
 
   test('2.5.5 Target Size: Click targets are at least 44x44 pixels', async ({ page }) => {
@@ -252,26 +273,30 @@ test.describe('WCAG 2.1 AA - Understandable', () => {
     await page.getByRole('button', { name: '07 CRM' }).click()
     await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()
 
-    // Check that important form controls have associated labels
-    // Less strict check - just verify some labeling exists
-    const hasSomeLabels = await page.evaluate(() => {
-      const controls = document.querySelectorAll('input[required], select[required]')
-      let labeledCount = 0
+    // Check that all form controls have labels
+    const unlabeledControls = await page.evaluate(() => {
+      const unlabeled: string[] = []
 
+      const controls = document.querySelectorAll('input, select, textarea')
       controls.forEach(control => {
-        const hasId = control.hasAttribute('id')
-        const hasAriaLabel = control.hasAttribute('aria-label')
-        const hasAriaLabelledby = control.hasAttribute('aria-labelledby')
+        const hasLabel =
+          control.hasAttribute('aria-label') ||
+          control.hasAttribute('aria-labelledby') ||
+          (control.id && document.querySelector(`label[for="${control.id}"]`)) ||
+          // `<label>texto <input></label>` (etiqueta envolvente): patrón HTML
+          // válido y accesible que la versión anterior de este check omitía,
+          // reportando falsos "sin label".
+          control.closest('label') !== null
 
-        if (hasId || hasAriaLabel || hasAriaLabelledby) {
-          labeledCount++
+        if (!hasLabel && (control as HTMLInputElement).type !== 'hidden') {
+          unlabeled.push(control.tagName + ' ' + (control as HTMLElement).className)
         }
       })
 
-      return labeledCount > 0 || controls.length === 0
+      return unlabeled
     })
 
-    expect(hasSomeLabels).toBe(true)
+    expect(unlabeledControls).toEqual([])
   })
 })
 
@@ -369,16 +394,21 @@ test.describe('WCAG 2.1 AA - Additional Success Criteria', () => {
   test('1.3.2 Meaningful Sequence: Content order makes sense when linearized', async ({ page }) => {
     await page.getByRole('button', { name: '07 CRM' }).click()
 
-    // Less strict check - just verify main content exists and is structured
-    const hasStructuredContent = await page.evaluate(() => {
-      const hasMain = document.querySelector('main')
-      const hasNav = document.querySelector('nav')
-      const hasHeadings = document.querySelectorAll('h1, h2, h3').length > 0
-
-      return hasMain && (hasNav || hasHeadings)
+    // Secuencia significativa. Que la navegación venga ANTES del `main` en el
+    // DOM es un patrón estándar y válido SIEMPRE que exista un "skip link" que
+    // permita saltar la navegación e ir directo al contenido (WCAG 2.4.1). Ese
+    // es el mecanismo que hace la secuencia significativa para lectores de
+    // pantalla y teclado; exigir "main antes que nav" (versión anterior) era
+    // incorrecto.
+    const meaningfulOrder = await page.evaluate(() => {
+      const main = document.querySelector('main')
+      if (!main) return false
+      const skip = document.querySelector('a.skip-link[href^="#"]')
+      const targetId = skip?.getAttribute('href')?.slice(1)
+      return !!targetId && document.getElementById(targetId) === main
     })
 
-    expect(hasStructuredContent).toBe(true)
+    expect(meaningfulOrder).toBe(true)
   })
 
   test('3.3.4 Error Prevention (Legal/Financial): Confirmation for important actions', async ({ page }) => {

@@ -52,7 +52,8 @@ export function useKanbanShortcuts({
       const leadId = card.dataset.leadId
       const columns = columnsWithLeads()
       for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
-        const leadIndex = columns[columnIndex].leads.findIndex((lead) => lead.id === leadId)
+        const leadIndex =
+          columns[columnIndex]?.leads.findIndex((lead) => lead.id === leadId) ?? -1
         if (leadIndex !== -1) return { columnIndex, leadIndex }
       }
       return null
@@ -89,7 +90,8 @@ export function useKanbanShortcuts({
       if (!position) {
         // Sin card enfocada: la primera flecha enfoca la primera card visible.
         event.preventDefault()
-        focusLead(columns[0].leads[0].id)
+        const firstLead = columns[0]?.leads[0]
+        if (firstLead) focusLead(firstLead.id)
         return
       }
 
@@ -102,18 +104,19 @@ export function useKanbanShortcuts({
             ? Math.max(0, columnIndex - 1)
             : Math.min(columns.length - 1, columnIndex + 1)
         const nextColumn = columns[nextColumnIndex]
-        const nextLead =
-          nextColumn.leads[Math.min(leadIndex, nextColumn.leads.length - 1)]
-        focusLead(nextLead.id)
+        const nextLead = nextColumn?.leads[Math.min(leadIndex, nextColumn.leads.length - 1)]
+        if (nextLead) focusLead(nextLead.id)
         return
       }
 
       const column = columns[columnIndex]
+      if (!column) return
       const nextLeadIndex =
         event.key === 'ArrowUp'
           ? Math.max(0, leadIndex - 1)
           : Math.min(column.leads.length - 1, leadIndex + 1)
-      focusLead(column.leads[nextLeadIndex].id)
+      const nextLead = column.leads[nextLeadIndex]
+      if (nextLead) focusLead(nextLead.id)
     }
 
     document.addEventListener('keydown', handleKeyDown)

@@ -1,5 +1,10 @@
 # AGENTS.md
 
+> ⚠️ **ANTES DE TOCAR NADA, LEE [`COORDINACION_IA.md`](COORDINACION_IA.md).**
+> Varias IAs trabajan este repo y se han pisado. Ese doc dice quién está activo,
+> el estado real de los sprints, las ramas enredadas y la regla de no mutear
+> tests. Es obligatorio leerlo primero.
+
 ## Politica de ramas
 
 - Las unicas ramas permitidas son `develop`, `release` y `main`.
