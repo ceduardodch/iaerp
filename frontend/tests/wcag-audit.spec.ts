@@ -1,4 +1,14 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+// La sección CRM se carga con code-splitting (React.lazy + Suspense) dentro de un
+// startTransition. Navegar y auditar de inmediato puede medir el fallback de
+// Suspense (o el heading de la sección previa, aún visible durante la
+// transición). Este helper espera a que el contenido real del CRM —el board
+// "Pipeline"— esté montado antes de que el test inspeccione el DOM.
+async function gotoCrm(page: Page) {
+  await page.getByRole('button', { name: '07 CRM' }).click()
+  await expect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible()
+}
 
 /**
  * WCAG 2.1 AA Compliance Audit Tests
@@ -32,13 +42,7 @@ test.describe('WCAG 2.1 AA - Perceivable', () => {
   })
 
   test('1.3.1 Adaptable: Content can be presented in different ways', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
-
-    // La sección CRM se carga con code-splitting (React.lazy + Suspense). Sin
-    // esperar a que su contenido monte, este `page.evaluate` (que no tiene
-    // auto-wait, a diferencia de los locators) mediría el fallback de Suspense,
-    // que aún no tiene encabezados. Se espera a que aparezca un heading real.
-    await expect(page.getByRole('heading').first()).toBeVisible()
+    await gotoCrm(page)
 
     // Check for semantic HTML structure
     const hasSemanticHTML = await page.evaluate(() => {
@@ -59,7 +63,7 @@ test.describe('WCAG 2.1 AA - Perceivable', () => {
   })
 
   test('1.4.3 Contrast (Minimum): Text has sufficient contrast', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Check contrast ratios for text elements (4.5:1 for normal text, 3:1 for large text)
     const contrastFailures = await page.evaluate(() => {
@@ -111,7 +115,7 @@ test.describe('WCAG 2.1 AA - Perceivable', () => {
   })
 
   test('1.4.10 Reflow: Content does not cause horizontal scroll at 400% zoom', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Set viewport to 320x320 (simulating 400% zoom on a 1280px screen)
     await page.setViewportSize({ width: 320, height: 480 })
@@ -132,7 +136,7 @@ test.describe('WCAG 2.1 AA - Operable', () => {
   })
 
   test('2.1.1 Keyboard: All functionality is available via keyboard', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Test keyboard navigation
     await page.keyboard.press('Tab')
@@ -152,7 +156,7 @@ test.describe('WCAG 2.1 AA - Operable', () => {
   })
 
   test('2.1.4 Character Key Shortcuts: No keyboard traps', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Test that keyboard focus can be moved away from any element
     const canEscape = await page.evaluate(() => {
@@ -168,7 +172,7 @@ test.describe('WCAG 2.1 AA - Operable', () => {
   })
 
   test('2.4.7 Focus Visible: Keyboard focus indicator is visible', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Se navega por TECLADO (Tab), no con `.focus()` programático: el foco
     // visible del app se da con `:focus-visible`, que en Chromium solo se
@@ -195,7 +199,7 @@ test.describe('WCAG 2.1 AA - Operable', () => {
   })
 
   test('2.5.5 Target Size: Click targets are at least 44x44 pixels', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Check that interactive elements meet minimum size requirements
     const undersizedTargets = await page.evaluate(() => {
@@ -242,7 +246,7 @@ test.describe('WCAG 2.1 AA - Understandable', () => {
   })
 
   test('3.2.1 On Focus: No unexpected context changes on focus', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Focus elements and ensure no unexpected changes
     const initialUrl = page.url()
@@ -257,7 +261,7 @@ test.describe('WCAG 2.1 AA - Understandable', () => {
   })
 
   test('3.3.1 Error Identification: Errors are identified and described', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
     await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()
 
     // Trigger form validation errors
@@ -276,7 +280,7 @@ test.describe('WCAG 2.1 AA - Understandable', () => {
   })
 
   test('3.3.2 Labels or Instructions: Form controls have labels', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
     await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()
 
     // Check that all form controls have labels
@@ -328,7 +332,7 @@ test.describe('WCAG 2.1 AA - Robust', () => {
 
   test('4.1.2 Name, Role, Value: UI components have proper ARIA attributes', async ({ page }) => {
     await page.getByRole('button', { name: 'Continuar' }).click()
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Check that interactive elements have proper roles
     const elementsWithMissingRoles = await page.evaluate(() => {
@@ -362,7 +366,7 @@ test.describe('WCAG 2.1 AA - Additional Success Criteria', () => {
   })
 
   test('2.4.6 Headings and Labels: Uses headings hierarchically', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Check for proper heading hierarchy
     const properHierarchy = await page.evaluate(() => {
@@ -398,7 +402,7 @@ test.describe('WCAG 2.1 AA - Additional Success Criteria', () => {
   })
 
   test('1.3.2 Meaningful Sequence: Content order makes sense when linearized', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // Secuencia significativa. Que la navegación venga ANTES del `main` en el
     // DOM es un patrón estándar y válido SIEMPRE que exista un "skip link" que
@@ -418,7 +422,7 @@ test.describe('WCAG 2.1 AA - Additional Success Criteria', () => {
   })
 
   test('3.3.4 Error Prevention (Legal/Financial): Confirmation for important actions', async ({ page }) => {
-    await page.getByRole('button', { name: '07 CRM' }).click()
+    await gotoCrm(page)
 
     // For destructive actions, check for confirmations
     const deleteButtons = page.locator('button:has-text("Eliminar"), button:has-text("Borrar")')
