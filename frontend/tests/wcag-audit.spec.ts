@@ -34,6 +34,12 @@ test.describe('WCAG 2.1 AA - Perceivable', () => {
   test('1.3.1 Adaptable: Content can be presented in different ways', async ({ page }) => {
     await page.getByRole('button', { name: '07 CRM' }).click()
 
+    // La sección CRM se carga con code-splitting (React.lazy + Suspense). Sin
+    // esperar a que su contenido monte, este `page.evaluate` (que no tiene
+    // auto-wait, a diferencia de los locators) mediría el fallback de Suspense,
+    // que aún no tiene encabezados. Se espera a que aparezca un heading real.
+    await expect(page.getByRole('heading').first()).toBeVisible()
+
     // Check for semantic HTML structure
     const hasSemanticHTML = await page.evaluate(() => {
       const hasHeadings = document.querySelectorAll('h1, h2, h3, h4, h5, h6').length > 0
