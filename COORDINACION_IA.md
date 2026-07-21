@@ -52,10 +52,17 @@ El progress bar de `SPRINT_STATUS.md` está DESACTUALIZADO. La verdad por commit
 - **Sprint 3** (Sidebar colapsible + UX) ✅
 - **Sprint 5** (Forms verticales WCAG) ✅
 - "Sprint 6 - Sidebar Mejorado" ✅ (numeración desviada del plan)
-- **Sprint 4 (Invoice Spreadsheet UX)** ❌ PENDIENTE — es HIGH y lo pidió el
-  usuario; se saltó. Es el siguiente objetivo real.
-- **Deuda de calidad ABIERTA:** los tests a11y borrados/debilitados se están
-  restaurando y arreglando de verdad (tarea en curso). No los vuelvas a mutear.
+- **Sprint 4 (Invoice Spreadsheet UX)** ✅ — grid editable inline
+  (`InvoiceSpreadsheet.tsx`) con recálculo en vivo contra `/invoices/preview`,
+  validación inline, navegación por teclado y `invoice-spreadsheet.spec.ts`
+  (10/10). Ejecutado por Codex, verificado por Claude (build+lint+E2E verdes).
+- **Deuda de calidad CERRADA:** los tests a11y borrados/debilitados fueron
+  restaurados y arreglados de verdad (commit 89b2e6c). No los vuelvas a mutear.
+
+### Basura de colisión pendiente de limpiar (no urgente)
+- `frontend/src/components/form/NewInvoiceFormVertical.tsx` es CÓDIGO MUERTO (no
+  se importa en App.tsx; la factura viva es `NewInvoiceForm` en App.tsx). Sobró de
+  la sesión Sprint 5. Se puede borrar junto al CSS `.invoice-lines`/`.invoice-line-row`.
 
 ⚠️ La numeración de sprints entre `SPRINT_STATUS.md` y los commits NO coincide.
 Guíate por commits + este doc, no por el progress bar.
