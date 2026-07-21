@@ -650,6 +650,11 @@ function NewInvoiceForm({
     initialCustomer?.paymentTermsDays ?? defaultPaymentTermsDays ?? 0,
   )
 
+  // Origen de la condición de pago aplicada (Sprint 6, HU-17): override del
+  // cliente vs. valor predeterminado de la empresa. Se deriva del cliente
+  // seleccionado (initialCustomer se recomputa en cada render con customerId).
+  const paymentTermsFromCustomer = initialCustomer?.paymentTermsDays != null
+
   const availableEmissionPoints = emissionPoints.filter(
     (point) => point.establishmentId === establishmentId,
   )
@@ -812,6 +817,14 @@ function NewInvoiceForm({
           <input value={addDays(issueDate, paymentTermsDays)} readOnly />
         </label>
       </div>
+      <p
+        className={`payment-terms-source ${paymentTermsFromCustomer ? 'is-customer' : 'is-company'}`}
+        data-terms-source={paymentTermsFromCustomer ? 'customer' : 'company'}
+      >
+        {paymentTermsFromCustomer
+          ? 'Aplicando la condición de pago configurada para este cliente.'
+          : 'Aplicando la condición de pago predeterminada de la empresa.'}
+      </p>
       <InvoiceSpreadsheet
         lines={lines}
         products={products}

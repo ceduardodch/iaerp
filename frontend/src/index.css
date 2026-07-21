@@ -380,6 +380,10 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .establishment-list strong, .establishment-list small { display: block; }
 .establishment-list small { margin-top: .3rem; color: var(--muted); }
 
+.payment-terms-source { display: inline-flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem .6rem; border: 1px solid var(--line); border-radius: .3rem; font-size: .68rem; font-weight: 600; letter-spacing: .02em; }
+.payment-terms-source::before { content: ''; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
+.payment-terms-source.is-customer { color: var(--forest); background: #eaf3ee; border-color: #cfe3d7; }
+.payment-terms-source.is-company { color: var(--muted); background: #f4f1e8; }
 .invoice-spreadsheet-section { display: grid; gap: .75rem; }
 .invoice-spreadsheet-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); background: var(--paper); }
 .invoice-spreadsheet { min-width: 980px; border-collapse: collapse; }
