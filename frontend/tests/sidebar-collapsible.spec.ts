@@ -8,7 +8,11 @@ test.describe('Sidebar Collapsible - Sprint 6', () => {
     await page.reload()
   })
 
-  test('initial state: sidebar expanded by default', async ({ page }) => {
+  test('initial state: sidebar expanded by default', async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'mobile',
+      'Ancho de escritorio (250px): en móvil el sidebar es full-width por diseño (ver test dedicado a móvil).',
+    )
     await page.getByRole('button', { name: 'Continuar' }).click()
 
     // Check sidebar is expanded
@@ -68,7 +72,11 @@ test.describe('Sidebar Collapsible - Sprint 6', () => {
     await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
   })
 
-  test('sidebar width changes on collapse', async ({ page }) => {
+  test('sidebar width changes on collapse', async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'mobile',
+      'Anchos de escritorio (250px/64px): en móvil el sidebar es full-width por diseño (ver test dedicado a móvil).',
+    )
     await page.getByRole('button', { name: 'Continuar' }).click()
 
     // Check expanded width
@@ -80,13 +88,25 @@ test.describe('Sidebar Collapsible - Sprint 6', () => {
     // Collapse and check width
     await page.locator('.sidebar-toggle').first().click()
 
-    const collapsedWidth = await page.locator('.sidebar').evaluate(el => {
-      return parseFloat(window.getComputedStyle(el).width)
-    })
-    // ~64px (el ancho computado puede traer subpíxeles, p.ej. 64.7px); se usa
-    // tolerancia en vez de comparar el string exacto '64px'.
+    // El ancho se anima con una transición CSS de 300ms sobre
+    // grid-template-columns; medir de inmediato captura un valor intermedio de
+    // la animación (~115px en CI). Se sondea hasta que asiente en ~64px antes de
+    // aplicar la tolerancia de subpíxeles (el computado puede ser p.ej. 64.7px).
+    await expect
+      .poll(
+        async () =>
+          Math.round(
+            await page
+              .locator('.sidebar')
+              .evaluate((el) => parseFloat(window.getComputedStyle(el).width)),
+          ),
+        { timeout: 2000 },
+      )
+      .toBeLessThanOrEqual(66)
+    const collapsedWidth = await page
+      .locator('.sidebar')
+      .evaluate((el) => parseFloat(window.getComputedStyle(el).width))
     expect(Math.round(collapsedWidth)).toBeGreaterThanOrEqual(62)
-    expect(Math.round(collapsedWidth)).toBeLessThanOrEqual(66)
   })
 
   test('sidebar persists state across page reloads', async ({ page }) => {
@@ -164,7 +184,11 @@ test.describe('Sidebar Collapsible - Sprint 6', () => {
     await expect(navButton.locator('svg')).toBeVisible()
   })
 
-  test('footer user info hides on collapse, avatar remains', async ({ page }) => {
+  test('footer user info hides on collapse, avatar remains', async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'mobile',
+      'El footer expandido (nombre + botón) no es visible en el layout móvil.',
+    )
     await page.getByRole('button', { name: 'Continuar' }).click()
 
     // Check footer is fully visible when expanded
