@@ -198,6 +198,13 @@ async function loginAndOpenInvoices(page: Page) {
   await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
   await page.getByRole('button', { name: '04 Facturas' }).click()
   await expect(page.getByRole('heading', { name: 'Facturas', exact: true })).toBeVisible()
+  // Espera a que la LISTA cargue (el mock devuelve 3 facturas). Sin esto, entre
+  // que aparece el encabezado y resuelve la query de facturas se muestra el
+  // empty-state, cuyo botón "Nueva factura" colisiona (strict mode) con el del
+  // encabezado. Es un race latente que el code-split (timing distinto) destapó.
+  await expect(
+    page.getByRole('row', { name: new RegExp(draftInvoice.sequential) }),
+  ).toBeVisible()
 }
 
 test.beforeEach(async ({ page }) => {
