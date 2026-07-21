@@ -46,6 +46,7 @@ import {
   ErpToolbar,
 } from './components/erp'
 import { LeadsPage } from './components/crm'
+import { InvoiceSpreadsheet } from './components/InvoiceSpreadsheet'
 import { Sidebar } from './components/Sidebar'
 
 type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' | 'organization' | 'crm'
@@ -811,73 +812,17 @@ function NewInvoiceForm({
           <input value={addDays(issueDate, paymentTermsDays)} readOnly />
         </label>
       </div>
-      <fieldset className="invoice-lines">
-        <legend>Líneas</legend>
-        {lines.map((line, index) => (
-          <div className="invoice-line-row" key={line.key}>
-            <label>
-              {`Producto ${index + 1}`}
-              <select
-                value={line.productId}
-                onChange={(event) => onProductChange(line.key, event.target.value)}
-                required
-              >
-                <option value="" disabled>Seleccionar…</option>
-                {products.map((product) => {
-                  const tax = taxes.find((item) => item.id === product.taxCategoryId)
-                  return <option key={product.id} value={product.id}>{product.name}{tax ? ` · IVA ${formatPercent(tax.rate)}` : ''}</option>
-                })}
-              </select>
-            </label>
-            <div className="field-row">
-              <label>
-                Cantidad
-                <input
-                  type="number"
-                  min="0.000001"
-                  step="0.000001"
-                  value={line.quantity}
-                  onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
-                  required
-                />
-              </label>
-              <label>
-                Precio unitario
-                <input
-                  type="number"
-                  min="0"
-                  step="0.000001"
-                  value={line.unitPrice}
-                  onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })}
-                  required
-                />
-              </label>
-            </div>
-            <label>
-              Descuento
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={line.discount}
-                onChange={(event) => updateLine(line.key, { discount: event.target.value })}
-              />
-            </label>
-            {lines.length > 1 ? (
-              <ErpButton
-                variant="ghost"
-                aria-label={`Quitar línea ${index + 1}`}
-                onClick={() => setLines((current) => current.filter((item) => item.key !== line.key))}
-              >
-                Quitar línea
-              </ErpButton>
-            ) : null}
-          </div>
-        ))}
-        <ErpButton variant="secondary" onClick={() => setLines((current) => [...current, emptyDraftLine()])}>
-          Agregar línea
-        </ErpButton>
-      </fieldset>
+      <InvoiceSpreadsheet
+        lines={lines}
+        products={products}
+        taxes={taxes}
+        preview={previewQuery.data}
+        previewPending={!previewIsCurrent}
+        onProductChange={onProductChange}
+        onUpdateLine={updateLine}
+        onAddLine={() => setLines((current) => [...current, emptyDraftLine()])}
+        onRemoveLine={(key) => setLines((current) => current.filter((item) => item.key !== key))}
+      />
       <section className="invoice-live-preview" aria-live="polite">
         <p className="section-number">Cálculo en vivo</p>
         {!previewIsCurrent ? <small>Validando con el servidor…</small> : null}

@@ -380,9 +380,24 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .establishment-list strong, .establishment-list small { display: block; }
 .establishment-list small { margin-top: .3rem; color: var(--muted); }
 
-.invoice-lines { display: grid; gap: 1rem; margin: 0; padding: 0; border: 0; }
-.invoice-lines legend { padding: 0; color: var(--muted); font-size: .7rem; font-weight: 650; text-transform: uppercase; letter-spacing: .07em; }
-.invoice-line-row { display: grid; gap: .7rem; padding: .9rem; border: 1px solid var(--line); background: rgba(255,255,255,.5); }
+.invoice-spreadsheet-section { display: grid; gap: .75rem; }
+.invoice-spreadsheet-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); background: var(--paper); }
+.invoice-spreadsheet { min-width: 980px; border-collapse: collapse; }
+.invoice-spreadsheet th, .invoice-spreadsheet td { padding: .45rem .5rem; border: 1px solid var(--line); }
+.invoice-spreadsheet thead th { background: #f4f1e8; }
+.invoice-spreadsheet th:first-child, .invoice-spreadsheet td:first-child { min-width: 190px; }
+.invoice-spreadsheet th:nth-child(2), .invoice-spreadsheet td:nth-child(2) { min-width: 210px; }
+.invoice-spreadsheet input, .invoice-spreadsheet select { width: 100%; min-height: 36px; padding: .4rem .45rem; border-color: transparent; border-radius: .15rem; background: transparent; }
+.invoice-spreadsheet input:focus, .invoice-spreadsheet select:focus { border-color: var(--focus); background: white; }
+.invoice-spreadsheet .cell-invalid { border-color: var(--danger); outline: 1px solid var(--danger); outline-offset: -1px; }
+.invoice-spreadsheet-amount { white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+.invoice-spreadsheet-action { width: 1%; white-space: nowrap; }
+.invoice-spreadsheet-action .erp-button { min-height: 36px; padding: .4rem .55rem; }
+.invoice-spreadsheet tfoot th, .invoice-spreadsheet tfoot td { color: var(--ink); background: #e9e6dc; font-weight: 750; }
+.invoice-spreadsheet tfoot th { text-align: right; }
+.invoice-spreadsheet tfoot td { white-space: nowrap; text-align: right; }
+.invoice-spreadsheet tfoot td span { display: block; margin-bottom: .2rem; color: var(--muted); font-size: .58rem; letter-spacing: .06em; text-transform: uppercase; }
+.invoice-spreadsheet-pending { display: block; min-height: 1em; margin-top: .2rem; color: var(--muted); font-size: .62rem; font-weight: 500; letter-spacing: 0; text-transform: none; }
 .invoice-live-preview { padding: 1rem; border: 1px solid var(--line); background: #f4f1e8; }
 .invoice-live-preview .invoice-totals { margin-left: auto; }
 .collection-policy-panel { margin-bottom: 1rem; }

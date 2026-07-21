@@ -78,7 +78,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     })
     if (!response.ok) throw new Error('Usuario o empresa de desarrollo no válidos')
     const body = (await response.json()) as { accessToken: string }
-    const next = { token: body.accessToken, displayName: email.split('@')[0] }
+    const displayName = email.split('@')[0] || 'Usuario'
+    const next = { token: body.accessToken, displayName }
     sessionStorage.setItem(storageKey, JSON.stringify(next))
     setStored(next)
   }
