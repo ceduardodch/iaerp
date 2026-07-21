@@ -59,10 +59,12 @@ El progress bar de `SPRINT_STATUS.md` está DESACTUALIZADO. La verdad por commit
 - **Deuda de calidad CERRADA:** los tests a11y borrados/debilitados fueron
   restaurados y arreglados de verdad (commit 89b2e6c). No los vuelvas a mutear.
 
-### Basura de colisión pendiente de limpiar (no urgente)
-- `frontend/src/components/form/NewInvoiceFormVertical.tsx` es CÓDIGO MUERTO (no
-  se importa en App.tsx; la factura viva es `NewInvoiceForm` en App.tsx). Sobró de
-  la sesión Sprint 5. Se puede borrar junto al CSS `.invoice-lines`/`.invoice-line-row`.
+### Basura de colisión (parcialmente limpiada)
+- `NewInvoiceFormVertical.tsx` + CSS `.invoice-lines`/`.invoice-line-row`: ELIMINADOS
+  (eran código muerto reemplazado por `InvoiceSpreadsheet`).
+- ⚠️ SIGUEN muertos pero NO borrados (posible WIP de otra sesión, no tocar sin
+  confirmar): `PartyFormVertical.tsx` y `LeadWithPartyFormVertical.tsx` en
+  `components/form/` — 0 usos externos hoy, pero podrían ser trabajo en curso.
 
 ⚠️ La numeración de sprints entre `SPRINT_STATUS.md` y los commits NO coincide.
 Guíate por commits + este doc, no por el progress bar.

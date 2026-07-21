@@ -380,9 +380,6 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .establishment-list strong, .establishment-list small { display: block; }
 .establishment-list small { margin-top: .3rem; color: var(--muted); }
 
-.invoice-lines { display: grid; gap: 1rem; margin: 0; padding: 0; border: 0; }
-.invoice-lines legend { padding: 0; color: var(--muted); font-size: .7rem; font-weight: 650; text-transform: uppercase; letter-spacing: .07em; }
-.invoice-line-row { display: grid; gap: .7rem; padding: .9rem; border: 1px solid var(--line); background: rgba(255,255,255,.5); }
 .invoice-spreadsheet-section { display: grid; gap: .75rem; }
 .invoice-spreadsheet-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); background: var(--paper); }
 .invoice-spreadsheet { min-width: 980px; border-collapse: collapse; }
