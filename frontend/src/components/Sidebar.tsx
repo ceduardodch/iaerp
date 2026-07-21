@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -67,9 +67,22 @@ export function Sidebar({
     }
   }, [collapsed])
 
-  function toggleCollapse() {
+  // Keyboard shortcut: Cmd/Ctrl + B to toggle sidebar
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'b') {
+        event.preventDefault()
+        setCollapsed((current) => !current)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  const toggleCollapse = useCallback(() => {
     setCollapsed((current) => !current)
-  }
+  }, [])
 
   return (
     <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
@@ -88,8 +101,9 @@ export function Sidebar({
         <button
           className="sidebar-toggle"
           onClick={toggleCollapse}
-          aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'}
+          aria-label={collapsed ? 'Expandir menú (⌘B)' : 'Contraer menú (⌘B)'}
           aria-pressed={collapsed}
+          title={`${collapsed ? 'Expandir' : 'Contraer'} menú (⌘B)`}
         >
           <svg
             width="20"
@@ -129,6 +143,7 @@ export function Sidebar({
               aria-current={currentSection === item.id ? 'page' : undefined}
               onClick={() => onNavigate(item.id)}
               data-tooltip={collapsed ? item.label : undefined}
+              title={collapsed ? undefined : item.label}
             >
               {collapsed ? (
                 <Icon size={20} strokeWidth={2} />
@@ -143,20 +158,21 @@ export function Sidebar({
         })}
       </nav>
 
-      {!collapsed ? (
-        <div className="sidebar-footer">
-          <span
-            className="avatar"
-            aria-hidden="true"
-          >
-            {auth.displayName.slice(0, 2).toUpperCase()}
-          </span>
+      <div className="sidebar-footer">
+        <span
+          className="avatar"
+          aria-hidden="true"
+          title={auth.displayName}
+        >
+          {auth.displayName.slice(0, 2).toUpperCase()}
+        </span>
+        {!collapsed ? (
           <div>
             <strong>{auth.displayName}</strong>
             <button onClick={() => void auth.logout()}>Cerrar sesión</button>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </aside>
   )
 }

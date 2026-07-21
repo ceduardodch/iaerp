@@ -38,7 +38,6 @@ test.describe('WCAG 2.1 AA - Perceivable', () => {
     const hasSemanticHTML = await page.evaluate(() => {
       const hasHeadings = document.querySelectorAll('h1, h2, h3, h4, h5, h6').length > 0
       const hasLandmarks = document.querySelectorAll('nav, main, header, footer, section, article').length > 0
-      const hasLists = document.querySelectorAll('ul, ol').length > 0
       return hasHeadings && hasLandmarks
     })
 
@@ -387,13 +386,12 @@ test.describe('WCAG 2.1 AA - Additional Success Criteria', () => {
 
     // Check that content appears in a meaningful order
     const meaningfulOrder = await page.evaluate(() => {
-      // Check that main content comes before navigation or footer
+      // Check that main content comes before navigation
       const main = document.querySelector('main')
       const nav = document.querySelector('nav')
-      const footer = document.querySelector('footer')
 
       if (main && nav) {
-        return main.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING
+        return (main.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
       }
 
       return true
