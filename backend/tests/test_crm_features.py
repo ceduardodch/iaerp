@@ -1,6 +1,7 @@
 import uuid
 from datetime import date
 
+from app.core.timezones import today_in_fiscal_timezone
 from app.db.session import SessionFactory
 from app.models.masters import Party
 
@@ -96,7 +97,11 @@ async def test_invoice_preview_and_collection_policy_are_server_authoritative(cl
         "/api/v1/invoices/preview",
         headers=auth(invoice_token),
         json={
-            "issueDate": date.today().isoformat(),
+            # Fecha de hoy en la timezone FISCAL (America/Guayaquil), la misma
+            # fuente que usa la validación del servidor. Con date.today() (UTC en
+            # CI) el test flakeaba entre 00:00–05:00 UTC: en Guayaquil aún era el
+            # día anterior, así que la fecha "de hoy en UTC" caía en el futuro.
+            "issueDate": today_in_fiscal_timezone().isoformat(),
             "lines": [
                 {
                     "productId": None,
