@@ -381,6 +381,22 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .establishment-list small { margin-top: .3rem; color: var(--muted); }
 
 .lazy-loading { padding: 2rem; color: var(--muted); font-size: .85rem; }
+
+/* Skeletons de carga (Sprint 8) */
+.skeleton { display: block; background: linear-gradient(90deg, #e9e6dc 25%, #f4f1e8 50%, #e9e6dc 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s ease-in-out infinite; }
+@keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+.section-skeleton { display: grid; gap: .9rem; padding: 1.5rem 0; }
+.section-skeleton-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: .6rem; }
+@media (max-width: 720px) { .section-skeleton-cards { grid-template-columns: 1fr; } }
+
+/* Error boundary (Sprint 8) */
+.error-boundary { display: grid; place-items: center; min-height: 60vh; padding: 2rem; }
+.error-boundary-card { max-width: 32rem; padding: 2rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--paper); text-align: center; }
+.error-boundary-eyebrow { margin: 0 0 .3rem; color: var(--danger); font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.error-boundary-card h2 { margin: 0 0 .6rem; font-size: 1.1rem; color: var(--ink); }
+.error-boundary-detail { margin: 0 0 1.4rem; color: var(--muted); font-size: .85rem; }
+.error-boundary-actions { display: flex; gap: .6rem; justify-content: center; }
 .payment-terms-source { display: inline-flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem .6rem; border: 1px solid var(--line); border-radius: .3rem; font-size: .68rem; font-weight: 600; letter-spacing: .02em; }
 .payment-terms-source::before { content: ''; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
 .payment-terms-source.is-customer { color: var(--forest); background: #eaf3ee; border-color: #cfe3d7; }

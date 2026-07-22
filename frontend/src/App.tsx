@@ -55,6 +55,8 @@ const LeadsPage = lazy(() =>
 )
 import { InvoiceSpreadsheet } from './components/InvoiceSpreadsheet'
 import { Sidebar } from './components/Sidebar'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { SectionLoadingSkeleton } from './components/LoadingSkeleton'
 
 type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' | 'organization' | 'crm'
 
@@ -2103,9 +2105,11 @@ function Workspace() {
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
         {section === 'crm' ? (
-          <Suspense fallback={<div className="lazy-loading" role="status" aria-live="polite">Cargando CRM…</div>}>
-            <LeadsPage token={token} parties={parties} products={products} />
-          </Suspense>
+          <ErrorBoundary label="el CRM">
+            <Suspense fallback={<SectionLoadingSkeleton label="Cargando CRM…" />}>
+              <LeadsPage token={token} parties={parties} products={products} />
+            </Suspense>
+          </ErrorBoundary>
         ) : null}
       </main>
     </div>
