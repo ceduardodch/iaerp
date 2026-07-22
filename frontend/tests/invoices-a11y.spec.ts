@@ -257,6 +257,11 @@ test('creating a draft shows backend totals and opens detail with SRI status', a
   await page.getByLabel('Producto 1').selectOption(product.id)
   await page.getByRole('button', { name: 'Guardar' }).click()
 
+  // Toast de éxito (Sprint 8) al crear la factura.
+  await expect(page.locator('.toast-success')).toContainText(
+    `Factura ${draftInvoice.sequential} creada`,
+  )
+
   const detail = page.getByLabel(`Factura ${draftInvoice.sequential}`, { exact: true })
   await expect(page.getByRole('heading', { name: `Factura ${draftInvoice.sequential}` })).toBeVisible()
   await expect(detail.getByTestId('invoice-total')).toContainText('$22,43')

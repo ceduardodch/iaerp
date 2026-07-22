@@ -390,6 +390,18 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .section-skeleton-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: .6rem; }
 @media (max-width: 720px) { .section-skeleton-cards { grid-template-columns: 1fr; } }
 
+/* Toasts (Sprint 8) */
+.toast-container { position: fixed; right: 1rem; bottom: 1rem; z-index: 1000; display: flex; flex-direction: column; gap: .5rem; max-width: min(24rem, calc(100vw - 2rem)); }
+.toast { display: flex; align-items: center; gap: .75rem; padding: .7rem .9rem; border: 1px solid var(--line); border-left-width: 4px; border-radius: .4rem; background: white; box-shadow: 0 6px 20px rgba(0,0,0,.12); font-size: .82rem; animation: toast-in 200ms var(--ease-out); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+.toast-success { border-left-color: var(--forest); }
+.toast-error { border-left-color: var(--danger); }
+.toast-info { border-left-color: var(--muted); }
+.toast-message { flex: 1; color: var(--ink); }
+.toast-close { padding: 0 .2rem; border: 0; background: transparent; color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer; }
+.toast-close:hover { color: var(--ink); }
+
 /* Error boundary (Sprint 8) */
 .error-boundary { display: grid; place-items: center; min-height: 60vh; padding: 2rem; }
 .error-boundary-card { max-width: 32rem; padding: 2rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--paper); text-align: center; }

@@ -57,6 +57,7 @@ import { InvoiceSpreadsheet } from './components/InvoiceSpreadsheet'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionLoadingSkeleton } from './components/LoadingSkeleton'
+import { useToast } from './components/Toast'
 
 type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' | 'organization' | 'crm'
 
@@ -647,6 +648,7 @@ function NewInvoiceForm({
   onCancel: () => void
 }) {
   const queryClient = useQueryClient()
+  const { notify } = useToast()
   const [customerId, setCustomerId] = useState(customers[0]?.id ?? '')
   const [establishmentId, setEstablishmentId] = useState(establishments[0]?.id ?? '')
   const [emissionPointId, setEmissionPointId] = useState(
@@ -735,7 +737,11 @@ function NewInvoiceForm({
     },
     onSuccess: (invoice) => {
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      notify(`Factura ${invoice.sequential} creada`, 'success')
       onCreated(invoice.id)
+    },
+    onError: (error) => {
+      notify(error instanceof Error ? error.message : 'No se pudo crear la factura', 'error')
     },
   })
 
