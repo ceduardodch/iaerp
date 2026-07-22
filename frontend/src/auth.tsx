@@ -26,6 +26,12 @@ const authMode: 'dev' | 'oidc' =
   import.meta.env.VITE_AUTH_MODE === 'oidc' ? 'oidc' : 'dev'
 const apiUrl = import.meta.env.VITE_API_URL ?? '/api/v1'
 const storageKey = 'iaerp.auth.v1'
+// Alias de organización elegido en el login OIDC. El backend exige que el token
+// traiga EXACTAMENTE una organización (scope `organization:<alias>`). Un usuario
+// puede pertenecer a varias, así que hay que recordar cuál eligió y re-pedir ese
+// scope en cada carga; si no, `check-sso` genera un token sin (o con varias)
+// organización y el backend responde "Token must contain exactly one organization".
+const orgAliasKey = 'iaerp.auth.org'
 
 const keycloak = new Keycloak({
   url: import.meta.env.VITE_KEYCLOAK_URL ?? 'http://localhost:8080',
@@ -58,14 +64,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (authMode === 'dev') return
 
+    const savedAlias = localStorage.getItem(orgAliasKey)
     void keycloak
       .init({
         onLoad: 'check-sso',
         pkceMethod: 'S256',
         checkLoginIframe: false,
+        // Re-pide la organización elegida para que el token de `check-sso`
+        // (recarga) traiga exactamente esa una; si no, el backend lo rechaza.
+        scope: savedAlias ? `organization:${savedAlias}` : undefined,
       })
       .then((authenticated) => {
-        setKeycloakReady(authenticated)
+        // Red de seguridad: si hay sesión pero el token NO trae exactamente una
+        // organización (sesión previa sin alias guardado, o usuario miembro de
+        // varias), se trata como "no autenticado" para mostrar la pantalla de
+        // elegir empresa, en vez de dejar que el backend responda 403
+        // "Token must contain exactly one organization".
+        const org = keycloak.tokenParsed?.organization as
+          | Record<string, unknown>
+          | undefined
+        const hasExactlyOneOrg =
+          !!org && typeof org === 'object' && Object.keys(org).length === 1
+        setKeycloakReady(authenticated && hasExactlyOneOrg)
         setLoading(false)
       })
   }, [])
@@ -104,6 +124,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(alias)) {
       throw new Error('El alias de empresa no es válido')
     }
+    // Se recuerda el alias para re-pedir el scope en cada `init`/refresh.
+    localStorage.setItem(orgAliasKey, alias)
     await keycloak.login({
       redirectUri: window.location.origin,
       scope: `openid organization:${alias}`,
@@ -116,6 +138,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setStored(null)
       return
     }
+    localStorage.removeItem(orgAliasKey)
     await keycloak.logout({ redirectUri: window.location.origin })
   }
 
