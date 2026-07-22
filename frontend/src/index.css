@@ -390,6 +390,12 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .section-skeleton-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: .6rem; }
 @media (max-width: 720px) { .section-skeleton-cards { grid-template-columns: 1fr; } }
 
+/* Transición de sección (Sprint 8): fade SOLO de opacidad — no afecta geometría
+   ni visibilidad para Playwright, a diferencia de transform. */
+.section-fade { animation: section-fade-in 160ms var(--ease-out); }
+@keyframes section-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .section-fade { animation: none; } }
+
 /* Toasts (Sprint 8) */
 .toast-container { position: fixed; right: 1rem; bottom: 1rem; z-index: 1000; display: flex; flex-direction: column; gap: .5rem; max-width: min(24rem, calc(100vw - 2rem)); }
 .toast { display: flex; align-items: center; gap: .75rem; padding: .7rem .9rem; border: 1px solid var(--line); border-left-width: 4px; border-radius: .4rem; background: white; box-shadow: 0 6px 20px rgba(0,0,0,.12); font-size: .82rem; animation: toast-in 200ms var(--ease-out); }

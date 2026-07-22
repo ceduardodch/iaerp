@@ -2094,6 +2094,7 @@ function Workspace() {
       <a className="skip-link" href="#main-content">Saltar al contenido</a>
       <Sidebar currentSection={section} onNavigate={(newSection) => startTransition(() => setSection(newSection))} />
       <main id="main-content" tabIndex={-1}>
+       <div key={section} className="section-fade">
         {section === 'overview' ? <Overview context={contextQuery.data} parties={parties} products={products} /> : null}
         {section === 'parties' ? <PartiesPage parties={parties} token={token} /> : null}
         {section === 'products' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
@@ -2117,6 +2118,7 @@ function Workspace() {
             </Suspense>
           </ErrorBoundary>
         ) : null}
+       </div>
       </main>
     </div>
   )
