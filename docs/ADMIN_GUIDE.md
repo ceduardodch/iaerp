@@ -70,6 +70,14 @@ operen con permisos limitados:
 Ver [`05-ai-mcp.md`](05-ai-mcp.md) y
 [`06-security-threat-model.md`](06-security-threat-model.md).
 
+## 6.1 Conectar Gmail (Google Workspace)
+
+La app registra **un solo** OAuth client de Google (identidad de IAERP, la
+configura el operador una vez); luego **cada tenant** conecta su propio correo con
+un botón y sus tokens se guardan cifrados por `tenant_id`. Paso a paso completo
+(Google Cloud + variables de entorno + verificación) en
+[`GMAIL_SETUP.md`](GMAIL_SETUP.md).
+
 ## 7. Zona horaria fiscal
 
 Todas las validaciones de fecha fiscal usan **America/Guayaquil**
