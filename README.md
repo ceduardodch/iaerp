@@ -42,6 +42,11 @@ nomina ni modulos propios de franquicias.
 2. **[CLAUDE.md](CLAUDE.md)** - 🤖 Configuración del proyecto para agentes AI
 3. **[docs/STATUS.md](docs/STATUS.md)** - 🏠 Fuente de verdad del proyecto
 
+### Guías de uso y desarrollo:
+- **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** - 👤 Manual de usuario (facturación, cartera, CRM)
+- **[docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md)** - ⚙️ Configuración (empresa, condiciones de pago, scopes, MCP)
+- **[docs/DEV_SETUP.md](docs/DEV_SETUP.md)** - 🛠️ Entorno de desarrollo, testing y despliegue
+
 ### Planificación y Alcance:
 4. **[BACKLOG.md](BACKLOG.md)** - 📋 Alcance completo (12 semanas de UI/UX improvements)
 5. **[SPRINT_STATUS.md](SPRINT_STATUS.md)** - 📊 Status detallado de sprints y decisiones técnicas
