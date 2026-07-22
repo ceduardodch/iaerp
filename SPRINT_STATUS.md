@@ -1,25 +1,29 @@
 # Sprint Status Tracking - IAERP UI/UX Improvements
 
 **Fecha inicio:** 2026-07-19
-**Fecha actualización:** 2026-07-20
+**Fecha actualización:** 2026-07-21
 **Horizonte:** 12 semanas
-**Estado general:** 🔄 Sprint 1 completado, iniciando Sprint 3
+**Estado general:** ✅ Sprints 1-9 completados (5 parcial; 7 con alcance ajustado). App completa, CI verde en `release`, pendiente promoción a `main`.
+
+> ⚠️ Este progreso se sincronizó con la realidad por commits (antes estaba
+> desactualizado en 22%). La fuente viva de coordinación es
+> [`COORDINACION_IA.md`](COORDINACION_IA.md).
 
 ---
 
 ## 📊 Progreso General
 
-``[██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 22% (2/9 sprints)
+``[███████████████████████████████░░] ~94% (8.5/9 sprints)
 
 Sprint 1: ████████████████████████████████ 100% CRM Kanban Foundation ✅
-Sprint 2: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% CRM Kanban Advanced (SKIPPED)
+Sprint 2: ████████████████████████████████ 100% CRM Kanban Advanced ✅ (NO fue "skipped": sí se hizo)
 Sprint 3: ████████████████████████████████ 100% Sidebar Colapsible + UX ✅
-Sprint 4: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% Invoice Spreadsheet UX
-Sprint 5: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% Forms Verticales
-Sprint 6: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% Pagos por Cliente
-Sprint 7: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% Stack Modernization
-Sprint 8: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% Polish & Animations
-Sprint 9: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% Testing & Documentation
+Sprint 4: ████████████████████████████████ 100% Invoice Spreadsheet UX ✅
+Sprint 5: ████████████████░░░░░░░░░░░░░░░░ ~50% Forms Verticales ⚠️ (forms accesibles vigentes y validados por wcag-audit; los componentes *Vertical duplicados sin cablear fueron eliminados)
+Sprint 6: ████████████████████████████████ 100% Pagos por Cliente ✅ (modelo ya existía; se añadió el indicador HU-17)
+Sprint 7: ████████████████████████████████ 100% Stack Modernization ✅ (code-splitting CRM + vendor chunk; reescrituras react-hook-form/radix descartadas por riesgo/valor)
+Sprint 8: ████████████████████████████████ 100% Polish & Animations ✅ (ErrorBoundary, skeletons, toasts, transición de sección)
+Sprint 9: ████████████████████████████████ 100% Testing & Documentation ✅ (cobertura E2E ampliada + guías USER/ADMIN/DEV)
 ```
 
 ---
