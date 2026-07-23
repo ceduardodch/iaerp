@@ -45,3 +45,26 @@ test('PKCE login changes tenant only through a new organization authorization', 
     page.getByText('Proveedor Sintetico Sur', { exact: true }),
   ).toBeVisible()
 })
+
+test('an unconfirmed organization alias does not trap the login on reload', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByLabel('Alias de empresa').fill('empresa-inexistente')
+  await page.getByRole('button', { name: 'Continuar con Keycloak' }).click()
+
+  await page.getByLabel('Username or email').fill('owner')
+  await page.getByRole('button', { name: 'Sign In' }).click()
+  await page.getByRole('textbox', { name: 'Password' }).fill('DemoPass123!')
+  await page.getByRole('button', { name: 'Sign In' }).click()
+
+  await expect(page).toHaveURL('http://localhost:8088/')
+  await expect(
+    page.getByRole('heading', { name: 'Elegir empresa' }),
+  ).toBeVisible()
+
+  await page.reload()
+  await expect(
+    page.getByRole('heading', { name: 'Elegir empresa' }),
+  ).toBeVisible()
+})
