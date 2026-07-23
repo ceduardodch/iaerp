@@ -53,15 +53,13 @@ test('an unconfirmed organization alias does not trap the login on reload', asyn
   await page.getByLabel('Alias de empresa').fill('empresa-inexistente')
   await page.getByRole('button', { name: 'Continuar con Keycloak' }).click()
 
-  await page.getByLabel('Username or email').fill('owner')
-  await page.getByRole('button', { name: 'Sign In' }).click()
-  await page.getByRole('textbox', { name: 'Password' }).fill('DemoPass123!')
-  await page.getByRole('button', { name: 'Sign In' }).click()
-
+  // Keycloak rechaza un scope de organización inexistente antes de solicitar
+  // credenciales y devuelve el error al redirect URI de la aplicación.
   await expect(page).toHaveURL('http://localhost:8088/')
   await expect(
     page.getByRole('heading', { name: 'Elegir empresa' }),
   ).toBeVisible()
+  await expect(page.getByRole('alert')).toBeVisible()
 
   await page.reload()
   await expect(
