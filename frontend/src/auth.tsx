@@ -27,6 +27,7 @@ const authMode: 'dev' | 'oidc' =
   import.meta.env.VITE_AUTH_MODE === 'oidc' ? 'oidc' : 'dev'
 const apiUrl = import.meta.env.VITE_API_URL ?? '/api/v1'
 const storageKey = 'iaerp.auth.v1'
+const oidcInitializationTimeoutMs = 10_000
 // Alias de organización elegido en el login OIDC. El backend exige que el token
 // traiga EXACTAMENTE una organización (scope `organization:<alias>`). Un usuario
 // puede pertenecer a varias, así que hay que recordar cuál eligió y re-pedir ese
@@ -67,6 +68,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (authMode === 'dev') return
 
     const savedAlias = localStorage.getItem(orgAliasKey)
+    const initializationTimeout = window.setTimeout(() => {
+      localStorage.removeItem(orgAliasKey)
+      setKeycloakReady(false)
+      setAuthError(
+        'La autenticación tardó demasiado. Verifica el alias de empresa e intenta nuevamente.',
+      )
+      setLoading(false)
+    }, oidcInitializationTimeoutMs)
+
     void keycloak
       .init({
         // Sin una empresa ya confirmada no hay un contexto tenant seguro que
@@ -111,8 +121,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         )
       })
       .finally(() => {
+        window.clearTimeout(initializationTimeout)
         setLoading(false)
       })
+
+    return () => window.clearTimeout(initializationTimeout)
   }, [])
 
   async function loginDev(email: string, tenantId: string) {

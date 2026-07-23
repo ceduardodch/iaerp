@@ -66,3 +66,20 @@ test('an unconfirmed organization alias does not trap the login on reload', asyn
     page.getByRole('heading', { name: 'Elegir empresa' }),
   ).toBeVisible()
 })
+
+test('a pending OIDC initialization releases the login UI', async ({ page }) => {
+  await page.route(
+    '**/realms/iaerp/.well-known/openid-configuration',
+    (route) => {
+      setTimeout(() => void route.abort('timedout'), 15_000)
+    },
+  )
+
+  await page.goto('/')
+  await expect(
+    page.getByRole('heading', { name: 'Elegir empresa' }),
+  ).toBeVisible({ timeout: 12_000 })
+  await expect(page.getByRole('alert')).toContainText(
+    'La autenticación tardó demasiado',
+  )
+})
