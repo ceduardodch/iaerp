@@ -14,6 +14,7 @@ type AuthState = {
   mode: 'dev' | 'oidc'
   loading: boolean
   authenticated: boolean
+  authError: string
   displayName: string
   getToken: () => Promise<string>
   loginDev: (email: string, tenantId: string) => Promise<void>
@@ -60,6 +61,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   )
   const [loading, setLoading] = useState(authMode !== 'dev')
   const [keycloakReady, setKeycloakReady] = useState(false)
+  const [authError, setAuthError] = useState('')
 
   useEffect(() => {
     if (authMode === 'dev') return
@@ -75,17 +77,35 @@ export function AuthProvider({ children }: PropsWithChildren) {
         scope: savedAlias ? `organization:${savedAlias}` : undefined,
       })
       .then((authenticated) => {
-        // Red de seguridad: si hay sesión pero el token NO trae exactamente una
-        // organización (sesión previa sin alias guardado, o usuario miembro de
-        // varias), se trata como "no autenticado" para mostrar la pantalla de
-        // elegir empresa, en vez de dejar que el backend responda 403
-        // "Token must contain exactly one organization".
         const org = keycloak.tokenParsed?.organization as
           | Record<string, unknown>
           | undefined
-        const hasExactlyOneOrg =
-          !!org && typeof org === 'object' && Object.keys(org).length === 1
-        setKeycloakReady(authenticated && hasExactlyOneOrg)
+        const aliases =
+          org && typeof org === 'object' ? Object.keys(org) : []
+        const hasExactlyOneOrg = aliases.length === 1
+
+        if (authenticated && hasExactlyOneOrg) {
+          localStorage.setItem(orgAliasKey, aliases[0] ?? '')
+          setAuthError('')
+          setKeycloakReady(true)
+        } else {
+          setKeycloakReady(false)
+        }
+        if (authenticated && !hasExactlyOneOrg) {
+          localStorage.removeItem(orgAliasKey)
+          setAuthError(
+            'La empresa indicada no está asociada a tu usuario. Verifica el alias e intenta nuevamente.',
+          )
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem(orgAliasKey)
+        setKeycloakReady(false)
+        setAuthError(
+          'No se pudo conectar con el servicio de autenticación. Intenta nuevamente.',
+        )
+      })
+      .finally(() => {
         setLoading(false)
       })
   }, [])
@@ -126,6 +146,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
     // Se recuerda el alias para re-pedir el scope en cada `init`/refresh.
     localStorage.setItem(orgAliasKey, alias)
+    setAuthError('')
     await keycloak.login({
       redirectUri: window.location.origin,
       scope: `openid organization:${alias}`,
@@ -139,6 +160,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return
     }
     localStorage.removeItem(orgAliasKey)
+    setAuthError('')
     await keycloak.logout({ redirectUri: window.location.origin })
   }
 
@@ -154,6 +176,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         mode: authMode,
         loading,
         authenticated: authMode === 'dev' ? Boolean(stored) : keycloakReady,
+        authError,
         displayName,
         getToken,
         loginDev,

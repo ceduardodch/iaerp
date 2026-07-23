@@ -24,6 +24,11 @@ test('PKCE login changes tenant only through a new organization authorization', 
   await page.goto('/')
   await login(page, 'iaerp-norte', 'IAERP Demo Norte')
 
+  await page.reload()
+  await expect(
+    page.getByRole('heading', { name: 'IAERP Demo Norte' }),
+  ).toBeVisible()
+
   await page.getByRole('button', { name: '02 Contactos' }).click()
   await expect(
     page.getByText('Cliente Sintetico Norte', { exact: true }),

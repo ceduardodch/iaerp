@@ -37,10 +37,10 @@ credenciales, red del SRI) y por tanto NO se puede completar desde el repo/CI:
 
 | Ítem | Código | Pendiente del operador |
 | --- | --- | --- |
-| **Facturación electrónica** | Firma XAdES-BES + `SoapSRIClient` (celcer/cel) | Instalar `.p12` + `IAERP_SIGNING_CERT_PASSWORD`; `SRI_TRANSMISSION_MODE=soap`, `SRI_ENVIRONMENT=1`; certificar contra celcer. Ver `docs/SRI_GOLIVE.md` |
-| **Subida del .p12 por UI** | Endpoint `/organization/signing-certificate` | Falla con 500 si faltan `IAERP_SECRETS_ENCRYPTION_KEY` o MinIO accesible en el deploy |
+| **Facturación electrónica** | Firma XAdES-BES + `SoapSRIClient` (celcer/cel) | Instalar `.p12` + la contraseña del certificado como secreto de entorno; configurar transmisión SOAP en ambiente de pruebas; certificar contra celcer. Ver `docs/SRI_GOLIVE.md` |
+| **Subida del .p12 por UI** | Endpoint `/organization/signing-certificate` | Falla con 500 si faltan la clave de cifrado de secretos o MinIO accesible en el deploy |
 | **Gmail (cobranza + CRM)** | Botón conectar, tokens cifrados por tenant, envío/sync | Crear OAuth client de Google (1 vez) + `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI`. Ver `docs/GMAIL_SETUP.md` |
-| **Login OIDC** | Funciona con alias de empresa; persiste la org elegida (fix del "exactly one organization" al recargar) | "Login sin teclear la empresa" quedó pendiente: `organization:*` no devolvió las orgs en el `iaerp-web` de CI. Requiere ajustar el mapper de Keycloak o validar contra Keycloak en vivo |
+| **Login OIDC** | Solicita un alias sin prellenar una empresa demo, persiste la empresa confirmada para recargas y muestra errores recuperables | Promover el cambio por `release -> PR -> main` y verificar el login público después del despliegue |
 | **Migración de facturas** | Plan documentado, sin migrador construido | Entregar data de origen; construir migrador + dry-run con conciliación en staging antes de tocar producción |
 
 Guías de operación: `docs/SRI_GOLIVE.md`, `docs/GMAIL_SETUP.md`,
