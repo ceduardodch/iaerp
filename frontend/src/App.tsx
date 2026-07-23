@@ -24,6 +24,7 @@ import {
   type InvoiceLineInput,
   type InvoicePreview,
   type IntegrationStatus,
+  type Lead,
   type Operation,
   type OrganizationProfile,
   type Party,
@@ -201,54 +202,65 @@ function LoadingScreen() {
 
 function Overview({
   context,
-  parties,
-  products,
+  token,
 }: {
   context: TenantContext
-  parties: Party[]
-  products: Product[]
+  token: string
 }) {
-  const customers = parties.filter((party) => party.roles.includes('CUSTOMER')).length
-  const suppliers = parties.filter((party) => party.roles.includes('SUPPLIER')).length
+  const [invoicesQuery, receivablesQuery, leadsQuery] = useQueries({
+    queries: [
+      { queryKey: ['invoices', 'overview'], queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices') },
+      { queryKey: ['receivables', 'overview'], queryFn: () => apiRequest<AccountItem[]>(token, '/receivables') },
+      { queryKey: ['crm', 'leads', 'overview'], queryFn: () => apiRequest<Lead[]>(token, '/crm/leads') },
+    ],
+  })
+  const invoices = invoicesQuery.data ?? []
+  const receivables = receivablesQuery.data ?? []
+  const leads = leadsQuery.data ?? []
+  const today = todayInFiscalTimezone().slice(0, 7)
+  const outstanding = receivables.reduce((sum, item) => sum + Number(item.openAmount), 0)
+  const overdue = receivables.filter((item) => item.status === 'OVERDUE').reduce((sum, item) => sum + Number(item.openAmount), 0)
+  const monthlyInvoices = invoices.filter((invoice) => invoice.issueDate.startsWith(today) && invoice.type === 'INVOICE').length
+  const openPipeline = leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).reduce((sum, lead) => sum + Number(lead.estimatedValue ?? 0), 0)
   return (
     <>
       <ErpPageHeader
         eyebrow="Pulso operativo"
         title={context.name}
-        subtitle="Resumen de preparación y datos maestros del tenant activo."
+        subtitle="El pulso de cobranza, emisión y oportunidades de tu empresa."
         meta={<span className="date-chip">RUC {context.ruc}</span>}
       />
-      <section className="metric-grid" aria-label="Indicadores de datos maestros">
-        <article className="metric-card metric-feature">
-          <span className="metric-label">Preparación</span>
-          <strong>{context.automationWritesEnabled ? 'Activa' : 'Supervisada'}</strong>
-          <p>Escrituras autónomas {context.automationWritesEnabled ? 'habilitadas' : 'pausadas'}.</p>
+      <section className="metric-grid" aria-label="Indicadores operativos">
+        <article className="metric-card">
+          <span className="metric-label">Por cobrar</span>
+          <strong>${formatAmount(outstanding)}</strong>
+          <p>{receivables.length} cuentas activas.</p>
         </article>
         <article className="metric-card">
-          <span className="metric-label">Clientes</span>
-          <strong>{customers.toString().padStart(2, '0')}</strong>
-          <p>Contactos listos para facturar.</p>
+          <span className="metric-label">Vencido</span>
+          <strong className={overdue > 0 ? 'metric-danger' : ''}>${formatAmount(overdue)}</strong>
+          <p>Saldo que requiere seguimiento.</p>
         </article>
         <article className="metric-card">
-          <span className="metric-label">Proveedores</span>
-          <strong>{suppliers.toString().padStart(2, '0')}</strong>
-          <p>Contrapartes registradas.</p>
+          <span className="metric-label">Facturas del mes</span>
+          <strong>{monthlyInvoices}</strong>
+          <p>Documentos emitidos este mes.</p>
         </article>
         <article className="metric-card">
-          <span className="metric-label">Catálogo</span>
-          <strong>{products.length.toString().padStart(2, '0')}</strong>
-          <p>Productos con definición tributaria.</p>
+          <span className="metric-label">Pipeline abierto</span>
+          <strong className="metric-success">${formatAmount(openPipeline)}</strong>
+          <p>{leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).length} oportunidades activas.</p>
         </article>
       </section>
       <section className="readiness-panel">
         <div>
           <p className="section-number">Próximo hito</p>
-          <h2>Base fiscal lista para facturación</h2>
+          <h2>Preparación fiscal</h2>
         </div>
         <ol className="readiness-list">
-          <li><span>01</span> Verificar establecimiento y punto de emisión</li>
-          <li><span>02</span> Completar catálogo y contactos</li>
-          <li><span>03</span> Cargar certificado de firma de forma segura</li>
+          <li><span>✓</span> Verificar establecimiento y punto de emisión</li>
+          <li><span>✓</span> Completar catálogo y contactos</li>
+          <li><span>✓</span> Cargar certificado de firma de forma segura</li>
         </ol>
       </section>
     </>
@@ -520,33 +532,20 @@ function ProductsPage({
       </ErpToolbar>
       <section className="split-layout erp-list-only">
         <ErpPanel title="Catálogo" count={filtered.length}>
-          <div className="product-grid" aria-label="Productos">
-            {filtered.map((product, index) => (
-              <article className="product-card" key={product.id}>
-                <span>{String(index + 1).padStart(2, '0')}</span>
-                <h2>{product.name}</h2>
-                <p>{product.code ?? 'Sin código interno'}</p>
-                <strong>${formatAmount(product.unitPrice)}</strong>
-                <ErpButton
-                  variant="ghost"
-                  aria-label={`Editar ${product.name}`}
-                  onClick={() => setEditor(product)}
-                >
-                  Editar
-                </ErpButton>
-              </article>
-            ))}
-            {filtered.length === 0 ? (
-              <ErpEmptyState
-                title="No hay productos"
-                description="Crea el primer producto o servicio del catálogo."
-                action={
-                  <ErpButton variant="primary" onClick={() => setEditor(null)}>
-                    Nuevo producto
-                  </ErpButton>
-                }
-              />
-            ) : null}
+          <div className="table-wrap" tabIndex={0} aria-label="Listado de productos">
+            <table className="erp-responsive-table">
+              <thead><tr><th>Producto</th><th>Código</th><th>Precio unitario</th><th>Impuesto</th><th>Acciones</th></tr></thead>
+              <tbody>{filtered.map((product) => (
+                <tr key={product.id}>
+                  <td><strong>{product.name}</strong></td>
+                  <td><code>{product.code ?? '—'}</code></td>
+                  <td className="amount-cell">${formatAmount(product.unitPrice)}</td>
+                  <td>{taxes.find((tax) => tax.id === product.taxCategoryId)?.name ?? '—'}</td>
+                  <td><ErpActionCell><ErpButton variant="ghost" aria-label={`Editar ${product.name}`} onClick={() => setEditor(product)}>Editar</ErpButton></ErpActionCell></td>
+                </tr>
+              ))}</tbody>
+            </table>
+            {filtered.length === 0 ? <ErpEmptyState title="No hay productos" description="Crea el primer producto o servicio del catálogo." action={<ErpButton variant="primary" onClick={() => setEditor(null)}>Nuevo producto</ErpButton>} /> : null}
           </div>
         </ErpPanel>
       </section>
@@ -1784,21 +1783,12 @@ function ReceivablesPage({
         title="Cartera"
         subtitle="Cartera trazable a la factura de origen, con saldo y aging calculados por el servidor."
       />
-      <ErpToolbar>
-        <label className="search-field">
-          <span>Filtrar por estado</span>
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as '' | AccountItemStatus)}
-          >
-            <option value="">Todos los estados</option>
-            <option value="OPEN">Abierta</option>
-            <option value="PARTIAL">Parcial</option>
-            <option value="OVERDUE">Vencida</option>
-            <option value="SETTLED">Saldada</option>
-            <option value="VOIDED">Anulada</option>
-          </select>
-        </label>
+      <ErpToolbar ariaLabel="Filtros de cartera">
+        <div className="pill-tabs" role="group" aria-label="Filtrar cartera por estado">
+          {([['', 'Todas'], ['OPEN', 'Abiertas'], ['PARTIAL', 'Parciales'], ['OVERDUE', 'Vencidas'], ['SETTLED', 'Saldadas']] as const).map(([value, label]) => (
+            <button key={value || 'all'} type="button" className={statusFilter === value ? 'active' : ''} onClick={() => setStatusFilter(value)}>{label}</button>
+          ))}
+        </div>
       </ErpToolbar>
       {policyQuery.data && !Array.isArray(policyQuery.data) && Array.isArray(policyQuery.data.offsetsDays) && Array.isArray(policyQuery.data.channels) ? <CollectionPolicyEditor key={policyQuery.data.updatedAt} policy={policyQuery.data} pending={updatePolicy.isPending} error={updatePolicy.error?.message} onSave={(policy) => updatePolicy.mutate(policy)} /> : null}
       <section className="split-layout erp-list-only">
@@ -2094,10 +2084,10 @@ function Workspace() {
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Saltar al contenido</a>
-      <Sidebar currentSection={section} onNavigate={(newSection) => startTransition(() => setSection(newSection))} />
+      <Sidebar currentSection={section} onNavigate={(newSection) => startTransition(() => setSection(newSection))} organizationName={contextQuery.data.name} ruc={contextQuery.data.ruc} />
       <main id="main-content" tabIndex={-1}>
        <div key={section} className="section-fade">
-        {section === 'overview' ? <Overview context={contextQuery.data} parties={parties} products={products} /> : null}
+        {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}
         {section === 'parties' ? <PartiesPage parties={parties} token={token} /> : null}
         {section === 'products' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
         {section === 'invoices' ? (

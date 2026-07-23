@@ -1,0 +1,15 @@
+:root {
+  --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0; --slate-300: #cbd5e1;
+  --slate-400: #94a3b8; --slate-500: #64748b; --slate-600: #475569; --slate-700: #334155;
+  --slate-800: #1e293b; --slate-900: #0f172a;
+  --blue-50: #eff6ff; --blue-100: #dbeafe; --blue-600: #2563eb; --blue-700: #1d4ed8; --blue-800: #1e40af;
+  --emerald-50: #ecfdf5; --emerald-100: #d1fae5; --emerald-600: #059669; --emerald-700: #047857; --emerald-800: #065f46;
+  --amber-50: #fffbeb; --amber-100: #fef3c7; --amber-200: #fde68a; --amber-700: #b45309; --amber-900: #78350f;
+  --red-50: #fef2f2; --red-100: #fee2e2; --red-200: #fecaca; --red-600: #dc2626; --red-700: #b91c1c; --red-800: #991b1b;
+  --surface-page: var(--slate-100); --surface-card: #fff; --surface-inset: var(--slate-50); --surface-code: var(--slate-100);
+  --border-card: var(--slate-200); --border-divider: var(--slate-100); --border-input: var(--slate-300); --border-empty: var(--slate-300);
+  --text-heading: var(--slate-900); --text-subheading: var(--slate-800); --text-body: var(--slate-700); --text-secondary: var(--slate-600); --text-muted: var(--slate-500); --text-faint: var(--slate-400);
+  --accent: var(--blue-600); --accent-hover: var(--blue-700); --accent-soft: var(--blue-50); --accent-soft-text: var(--blue-700);
+  --success: var(--emerald-600); --success-hover: var(--emerald-700); --success-text: var(--emerald-700); --danger-text: var(--red-600); --warning-text: var(--amber-700);
+  --badge-info-bg: var(--blue-100); --badge-info-text: var(--blue-800); --badge-success-bg: var(--emerald-100); --badge-success-text: var(--emerald-800); --badge-warning-bg: var(--amber-100); --badge-warning-text: var(--amber-900); --badge-danger-bg: var(--red-100); --badge-danger-text: var(--red-800); --badge-neutral-bg: var(--slate-100); --badge-neutral-text: var(--slate-700);
+}

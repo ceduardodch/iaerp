@@ -4,6 +4,11 @@
 **Sprint Activo:** Sprint 3 - Sidebar Colapsible + UX Improvements
 **Estado:** 🟢 Iniciando Sprint 3
 
+> Corte 2026-07-23: rediseño visual de presentación completado en `release`
+> (header superior, slate/azul, tablas/pills y CRM sin gradientes). Las pruebas
+> de lint, build, Playwright, WCAG AA y reflow móvil pasaron localmente; queda
+> esperar CI remoto tras el push.
+
 ---
 
 ## 🎯 Objetivo de este Documento

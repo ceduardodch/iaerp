@@ -5,7 +5,7 @@ import type {
   ReactNode,
 } from 'react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
 
 type ErpButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant

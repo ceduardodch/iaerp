@@ -1,6 +1,5 @@
 import { useMemo, type ReactNode } from 'react'
 import { useDroppable } from '@dnd-kit/core'
-import { motion } from 'framer-motion'
 import type { Lead, LeadStatus } from '../../api'
 
 export const PIPELINE: Array<{ id: LeadStatus; label: string; color: string }> = [
@@ -76,17 +75,7 @@ export function CrmKanban({
           : false
 
         return (
-          <motion.div
-            key={stage.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{
-              type: 'spring',
-              stiffness: 200,
-              damping: 20,
-              delay: PIPELINE.indexOf(stage) * 0.1,
-            }}
-          >
+          <div key={stage.id}>
             <KanbanColumn
               stage={stage.id}
               label={stage.label}
@@ -108,7 +97,7 @@ export function CrmKanban({
             >
               {stageLeads.map((lead, index) => renderLeadCard(lead, index))}
             </KanbanColumn>
-          </motion.div>
+          </div>
         )
       })}
     </section>
@@ -199,20 +188,9 @@ function KanbanColumn({
       <div className="kanban-stack">{children}</div>
 
       {showDropIndicator && (
-        <motion.div
-          className="kanban-drop-indicator"
-          aria-hidden="true"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.9 }}
-          transition={{
-            type: 'spring',
-            stiffness: 400,
-            damping: 15,
-          }}
-        >
+        <div className="kanban-drop-indicator" aria-hidden="true">
           Soltar para mover a {label}
-        </motion.div>
+        </div>
       )}
     </section>
   )

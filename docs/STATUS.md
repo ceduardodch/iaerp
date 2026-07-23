@@ -13,6 +13,10 @@ alcance y las decisiones.
 - Estado: **plan UI/UX (Sprints 1-9) completo** + cliente SRI real + integración
   Gmail listos. En preparación de **go-live** (faltan pasos de config del
   operador; ver "Go-live" abajo).
+- Rediseño visual IAERP preparado en `release`: header superior, sistema slate
+  + azul, tablas/pills, KPIs de cobranza/emisión/pipeline y Kanban sin
+  gradientes ni animación. Validado localmente con lint, build y Playwright
+  (incluye WCAG AA y reflow móvil); pendiente de CI remoto.
 - El estado ejecutable descrito aqui debe estar publicado en `release`. Si
   `git status` muestra cambios, una IA debe revisarlos antes de continuar.
 
@@ -25,7 +29,7 @@ alcance y las decisiones.
 | Sprint 2 (backend) | Done | Ciclo SRI simulado completo verificado en vivo |
 | Sprint 3 (backend) | Done | Cartera E5 + E7 MCP; CI verde |
 | CRM MVP | Done | Leads, Activities, Pipeline |
-| UI/UX Sprints 1-9 | **Done** | Kanban, Sidebar, Invoice Spreadsheet, Pagos por cliente, code-splitting, Polish (ErrorBoundary/skeletons/toasts), Testing+Docs. CI verde en `release` |
+| UI/UX Sprints 1-9 | **Done + rediseño visual pendiente de CI** | Header superior, sistema slate/azul, Kanban, Invoice Spreadsheet, pagos por cliente, code-splitting, polish y pruebas. |
 | **SRI cliente real** | **Done (código)** | `SoapSRIClient` (recepción+autorización) — falta certificar contra celcer con cert real (operador) |
 | **Integración Gmail** | **Done (código)** | Botón conectar + tokens por tenant — falta OAuth client de Google (operador) |
 | Migración de facturas | No iniciado | Plan en `docs/07-data-migration.md`; requiere data de origen + dry-run |
