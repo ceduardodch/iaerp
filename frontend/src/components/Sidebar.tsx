@@ -5,14 +5,15 @@ type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' 
 const sections: Array<{
   id: Section
   label: string
+  eyebrow: string
 }> = [
-  { id: 'overview', label: 'Resumen' },
-  { id: 'parties', label: 'Contactos' },
-  { id: 'products', label: 'Productos' },
-  { id: 'invoices', label: 'Facturas' },
-  { id: 'organization', label: 'Empresa' },
-  { id: 'receivables', label: 'Cartera' },
-  { id: 'crm', label: 'CRM' },
+  { id: 'overview', label: 'Resumen', eyebrow: '01' },
+  { id: 'parties', label: 'Contactos', eyebrow: '02' },
+  { id: 'products', label: 'Productos', eyebrow: '03' },
+  { id: 'invoices', label: 'Facturas', eyebrow: '04' },
+  { id: 'organization', label: 'Empresa', eyebrow: '05' },
+  { id: 'receivables', label: 'Cartera', eyebrow: '06' },
+  { id: 'crm', label: 'CRM', eyebrow: '07' },
 ]
 
 export function Sidebar({
@@ -39,6 +40,7 @@ export function Sidebar({
               key={item.id}
               className={currentSection === item.id ? 'active' : ''}
               aria-current={currentSection === item.id ? 'page' : undefined}
+              aria-label={`${item.eyebrow} ${item.label}`}
               onClick={() => onNavigate(item.id)}
             >
               {item.label}
