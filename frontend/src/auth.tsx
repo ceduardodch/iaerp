@@ -14,6 +14,7 @@ type AuthState = {
   mode: 'dev' | 'oidc'
   loading: boolean
   authenticated: boolean
+  authError: string
   displayName: string
   getToken: () => Promise<string>
   loginDev: (email: string, tenantId: string) => Promise<void>
@@ -26,6 +27,12 @@ const authMode: 'dev' | 'oidc' =
   import.meta.env.VITE_AUTH_MODE === 'oidc' ? 'oidc' : 'dev'
 const apiUrl = import.meta.env.VITE_API_URL ?? '/api/v1'
 const storageKey = 'iaerp.auth.v1'
+// Alias de organización elegido en el login OIDC. El backend exige que el token
+// traiga EXACTAMENTE una organización (scope `organization:<alias>`). Un usuario
+// puede pertenecer a varias, así que hay que recordar cuál eligió y re-pedir ese
+// scope en cada carga; si no, `check-sso` genera un token sin (o con varias)
+// organización y el backend responde "Token must contain exactly one organization".
+const orgAliasKey = 'iaerp.auth.org'
 
 const keycloak = new Keycloak({
   url: import.meta.env.VITE_KEYCLOAK_URL ?? 'http://localhost:8080',
@@ -54,18 +61,51 @@ export function AuthProvider({ children }: PropsWithChildren) {
   )
   const [loading, setLoading] = useState(authMode !== 'dev')
   const [keycloakReady, setKeycloakReady] = useState(false)
+  const [authError, setAuthError] = useState('')
 
   useEffect(() => {
     if (authMode === 'dev') return
 
+    const savedAlias = localStorage.getItem(orgAliasKey)
     void keycloak
       .init({
         onLoad: 'check-sso',
         pkceMethod: 'S256',
         checkLoginIframe: false,
+        // Re-pide la organización elegida para que el token de `check-sso`
+        // (recarga) traiga exactamente esa una; si no, el backend lo rechaza.
+        scope: savedAlias ? `organization:${savedAlias}` : undefined,
       })
       .then((authenticated) => {
-        setKeycloakReady(authenticated)
+        const org = keycloak.tokenParsed?.organization as
+          | Record<string, unknown>
+          | undefined
+        const aliases =
+          org && typeof org === 'object' ? Object.keys(org) : []
+        const hasExactlyOneOrg = aliases.length === 1
+
+        if (authenticated && hasExactlyOneOrg) {
+          localStorage.setItem(orgAliasKey, aliases[0] ?? '')
+          setAuthError('')
+          setKeycloakReady(true)
+        } else {
+          setKeycloakReady(false)
+        }
+        if (authenticated && !hasExactlyOneOrg) {
+          localStorage.removeItem(orgAliasKey)
+          setAuthError(
+            'La empresa indicada no está asociada a tu usuario. Verifica el alias e intenta nuevamente.',
+          )
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem(orgAliasKey)
+        setKeycloakReady(false)
+        setAuthError(
+          'No se pudo conectar con el servicio de autenticación. Intenta nuevamente.',
+        )
+      })
+      .finally(() => {
         setLoading(false)
       })
   }, [])
@@ -104,6 +144,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(alias)) {
       throw new Error('El alias de empresa no es válido')
     }
+    // Se recuerda el alias para re-pedir el scope en cada `init`/refresh.
+    localStorage.setItem(orgAliasKey, alias)
+    setAuthError('')
     await keycloak.login({
       redirectUri: window.location.origin,
       scope: `openid organization:${alias}`,
@@ -116,6 +159,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setStored(null)
       return
     }
+    localStorage.removeItem(orgAliasKey)
+    setAuthError('')
     await keycloak.logout({ redirectUri: window.location.origin })
   }
 
@@ -131,6 +176,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         mode: authMode,
         loading,
         authenticated: authMode === 'dev' ? Boolean(stored) : keycloakReady,
+        authError,
         displayName,
         getToken,
         loginDev,

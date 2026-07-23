@@ -133,7 +133,7 @@ function DevLogin() {
 }
 
 function OidcLogin() {
-  const { loginOidc } = useAuth()
+  const { authError, loginOidc } = useAuth()
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -157,8 +157,8 @@ function OidcLogin() {
         <p className="kicker">IAERP / Acceso seguro</p>
         <h1 id="login-title">Una empresa activa. Ningún dato cruzado.</h1>
         <p className="login-copy">
-          Selecciona el alias de la empresa antes de autenticarte. El token
-          quedará ligado únicamente a esa organización.
+          Indica tu empresa antes de autenticarte. Tu sesión quedará ligada
+          únicamente a esa organización.
         </p>
       </section>
       <section className="login-panel" aria-labelledby="access-title">
@@ -169,19 +169,21 @@ function OidcLogin() {
             Alias de empresa
             <input
               name="organizationAlias"
-              defaultValue="iaerp-norte"
-              pattern="[a-z0-9][a-z0-9-]{1,62}"
+              autoCapitalize="none"
               autoComplete="organization"
+              spellCheck={false}
               required
             />
           </label>
-          {error ? <p className="form-error" role="alert">{error}</p> : null}
+          {authError || error ? (
+            <p className="form-error" role="alert">{error || authError}</p>
+          ) : null}
           <button className="primary-button" type="submit" disabled={submitting}>
             {submitting ? 'Redirigiendo…' : 'Continuar con Keycloak'}
           </button>
         </form>
         <p className="fine-print">
-          Usa `iaerp-norte` o `iaerp-sur` para el entorno local.
+          Usa el alias que te entregó el administrador de IAERP.
         </p>
       </section>
     </main>

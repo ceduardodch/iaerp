@@ -7,10 +7,12 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Fecha: 2026-07-19 `America/Guayaquil`.
-- Rama de trabajo: `release`.
-- Commit del corte: `3f087eb` (feat(crm): implementar MVP de CRM de prospectos).
-- Sprint activo: UI/UX Improvements Sprint 1 (CRM Kanban Foundation).
+- Fecha: 2026-07-23 `America/Guayaquil`.
+- Rama de trabajo: `release` (CI verde). `main` = producción (Coolify/SRI).
+- Commit del corte: `aed991e`.
+- Estado: **plan UI/UX (Sprints 1-9) completo** + cliente SRI real + integración
+  Gmail listos. En preparación de **go-live** (faltan pasos de config del
+  operador; ver "Go-live" abajo).
 - El estado ejecutable descrito aqui debe estar publicado en `release`. Si
   `git status` muestra cambios, una IA debe revisarlos antes de continuar.
 
@@ -19,13 +21,30 @@ alcance y las decisiones.
 | Fase | Estado | Evidencia o siguiente puerta |
 | --- | --- | --- |
 | Sprint 0 | Aprobado | Documentos, ADR, contratos y backlog inicial |
-| Sprint 1 | Done | CI verde run 28705977016; criterios con evidencia |
-| Sprint 2 | Done | Ciclo SRI simulado completo verificado en vivo 2026-07-04 |
-| Sprint 3 | Done | Cartera E5 + E7 MCP completado, CI verde, dataset v3 |
-| CRM MVP | Done | Commit 3f087eb: Leads, Activities, Pipeline básico |
-| UI/UX Improvements | Planning | Plan 12 semanas creado, backlog estructurado |
-| UI Sprint 1: CRM Kanban | No iniciado | Dependencies @dnd-kit listas, tasks definidas |
-| UI Sprint 2-9 | No iniciado | Roadmap detallado en BACKLOG.md |
+| Sprint 1 (backend) | Done | Plataforma, maestros, MCP; CI verde |
+| Sprint 2 (backend) | Done | Ciclo SRI simulado completo verificado en vivo |
+| Sprint 3 (backend) | Done | Cartera E5 + E7 MCP; CI verde |
+| CRM MVP | Done | Leads, Activities, Pipeline |
+| UI/UX Sprints 1-9 | **Done** | Kanban, Sidebar, Invoice Spreadsheet, Pagos por cliente, code-splitting, Polish (ErrorBoundary/skeletons/toasts), Testing+Docs. CI verde en `release` |
+| **SRI cliente real** | **Done (código)** | `SoapSRIClient` (recepción+autorización) — falta certificar contra celcer con cert real (operador) |
+| **Integración Gmail** | **Done (código)** | Botón conectar + tokens por tenant — falta OAuth client de Google (operador) |
+| Migración de facturas | No iniciado | Plan en `docs/07-data-migration.md`; requiere data de origen + dry-run |
+
+## Go-live (estado real 2026-07-23)
+
+Lo que **está en código y verde**, y lo que **depende del operador** (config,
+credenciales, red del SRI) y por tanto NO se puede completar desde el repo/CI:
+
+| Ítem | Código | Pendiente del operador |
+| --- | --- | --- |
+| **Facturación electrónica** | Firma XAdES-BES + `SoapSRIClient` (celcer/cel) | Instalar `.p12` + la contraseña del certificado como secreto de entorno; configurar transmisión SOAP en ambiente de pruebas; certificar contra celcer. Ver `docs/SRI_GOLIVE.md` |
+| **Subida del .p12 por UI** | Endpoint `/organization/signing-certificate` | Falla con 500 si faltan la clave de cifrado de secretos o MinIO accesible en el deploy |
+| **Gmail (cobranza + CRM)** | Botón conectar, tokens cifrados por tenant, envío/sync | Crear OAuth client de Google (1 vez) + `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI`. Ver `docs/GMAIL_SETUP.md` |
+| **Login OIDC** | Solicita un alias sin prellenar una empresa demo, persiste la empresa confirmada para recargas y muestra errores recuperables | Promover el cambio por `release -> PR -> main` y verificar el login público después del despliegue |
+| **Migración de facturas** | Plan documentado, sin migrador construido | Entregar data de origen; construir migrador + dry-run con conciliación en staging antes de tocar producción |
+
+Guías de operación: `docs/SRI_GOLIVE.md`, `docs/GMAIL_SETUP.md`,
+`docs/ADMIN_GUIDE.md`, `docs/USER_GUIDE.md`, `docs/DEV_SETUP.md`.
 
 ## Implementado en Sprint 1
 

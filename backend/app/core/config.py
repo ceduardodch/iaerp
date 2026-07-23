@@ -59,6 +59,20 @@ class Settings(BaseSettings):
     # router `/sri-sim` si esta habilitado; NUNCA puede habilitarse fuera de
     # development/test (docs/sprints/sprint-02.md, decision 7).
     SRI_SIMULATOR_ENABLED: bool = True
+    # Modo de transmision al SRI: `simulator` (in-process, dev/test) o `soap`
+    # (cliente real contra los web services del SRI, ver
+    # app/integrations/sri/soap.py). El worker elige el cliente segun esto.
+    SRI_TRANSMISSION_MODE: Literal["simulator", "soap"] = "simulator"
+    # Ambiente SRI para el cliente SOAP: "1" = pruebas (celcer), "2" =
+    # produccion (cel). Debe coincidir con el `ambiente` declarado en el XML del
+    # comprobante (fiscal settings del tenant).
+    SRI_ENVIRONMENT: Literal["1", "2"] = "1"
+    # Timeout (segundos) de cada llamada SOAP al SRI.
+    SRI_HTTP_TIMEOUT: float = 30.0
+    # Overrides opcionales de los endpoints SOAP (para pruebas/mocks). Si son
+    # None se usan las URLs oficiales del SRI segun `SRI_ENVIRONMENT`.
+    SRI_RECEPTION_URL: str | None = None
+    SRI_AUTHORIZATION_URL: str | None = None
     # Dataset sintetico para ambientes de prueba compartidos. Debe habilitarse
     # de forma explicita y nunca puede ejecutarse en release/production.
     SYNTHETIC_SEED_ENABLED: bool = False

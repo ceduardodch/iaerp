@@ -305,7 +305,11 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 .erp-status-danger { color: #84251b; background: #f3deda; }
 .erp-status-danger::before { background: var(--danger); }
 .erp-panel-heading-side { display: flex; align-items: center; gap: .75rem; }
-.erp-list-only { grid-template-columns: minmax(0, 1fr); }
+/* `.erp-list-only` debe ganarle a `.split-layout` (definida más abajo, que si no
+   deja una segunda columna vacía a la derecha porque el editor abre a página
+   completa, no en el split). Se usa el selector combinado para más especificidad. */
+.erp-list-only,
+.split-layout.erp-list-only { grid-template-columns: minmax(0, 1fr); }
 .erp-form-panel form { gap: 0; }
 .erp-full-page-form { width: 100%; max-width: 1180px; }
 .erp-form-fields { display: grid; gap: 1rem; }
