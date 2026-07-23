@@ -40,7 +40,7 @@ credenciales, red del SRI) y por tanto NO se puede completar desde el repo/CI:
 | **Facturación electrónica** | Firma XAdES-BES + `SoapSRIClient` (celcer/cel) | Instalar `.p12` + la contraseña del certificado como secreto de entorno; configurar transmisión SOAP en ambiente de pruebas; certificar contra celcer. Ver `docs/SRI_GOLIVE.md` |
 | **Subida del .p12 por UI** | Endpoint `/organization/signing-certificate` | Falla con 500 si faltan la clave de cifrado de secretos o MinIO accesible en el deploy |
 | **Gmail (cobranza + CRM)** | Botón conectar, tokens cifrados por tenant, envío/sync | Crear OAuth client de Google (1 vez) + `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI`. Ver `docs/GMAIL_SETUP.md` |
-| **Login OIDC** | Solicita un alias sin prellenar una empresa demo, persiste solo la empresa confirmada para recargas y evita recuperar SSO sin contexto tenant | Revalidar CI OIDC y producción después de corregir el ciclo detectado con un alias inexistente |
+| **Login OIDC** | Solicita un alias sin prellenar una empresa demo, persiste solo la empresa confirmada, evita recuperar SSO sin contexto tenant y libera la UI si la inicialización OIDC queda pendiente | Revalidar CI OIDC y producción después del timeout recuperable añadido para el Keycloak desplegado |
 | **Migración de facturas** | Plan documentado, sin migrador construido | Entregar data de origen; construir migrador + dry-run con conciliación en staging antes de tocar producción |
 
 Guías de operación: `docs/SRI_GOLIVE.md`, `docs/GMAIL_SETUP.md`,
