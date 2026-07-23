@@ -29,6 +29,11 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
+# La respuesta del SRI es XML NO confiable (viene de la red): se parsea con
+# defusedxml para evitar ataques XXE / billion-laughs (bandit B314). El Element
+# resultante es un xml.etree estándar, así que el resto del código no cambia.
+from defusedxml.ElementTree import fromstring as _safe_fromstring  # type: ignore[import-untyped]
+
 from app.integrations.sri.protocol import (
     AuthorizationResult,
     AuthorizationStatus,
@@ -167,7 +172,7 @@ class SoapSRIClient:
 
     @staticmethod
     def _parse_reception(xml_text: str) -> ReceptionResult:
-        root = ET.fromstring(xml_text)
+        root = _safe_fromstring(xml_text)
         estado = (_first_text(root, "estado") or "").upper()
         messages = _messages(root)
         if estado == "RECIBIDA":
@@ -177,7 +182,7 @@ class SoapSRIClient:
 
     @staticmethod
     def _parse_authorization(xml_text: str) -> AuthorizationResult:
-        root = ET.fromstring(xml_text)
+        root = _safe_fromstring(xml_text)
         autorizaciones = _iter_local(root, "autorizacion")
         if not autorizaciones:
             # Sin autorizaciones: el comprobante sigue en procesamiento.
