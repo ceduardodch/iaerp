@@ -8,7 +8,7 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Fecha: 2026-07-23 `America/Guayaquil`.
-- Rama de trabajo: `release` (validación remota pendiente). `main` = producción
+- Rama de trabajo: `release` (CI `30043763940` verde). `main` = producción
   (Coolify/SRI).
 - Commit de producción verificado: `2f7f323`.
 - Estado: **plan UI/UX (Sprints 1-9) completo** + cliente SRI real + integración
@@ -18,8 +18,8 @@ alcance y las decisiones.
   cobranza/emisión/pipeline y Kanban sin gradientes ni animación. Se conservaron
   la navegación lateral plegable y los contratos funcionales del catálogo y
   cartera. Validado localmente con lint, build y Playwright completo
-  (188 aprobadas, 8 omitidas; incluye WCAG AA y reflow móvil); pendiente de CI
-  remoto.
+  (188 aprobadas, 8 omitidas; incluye WCAG AA y reflow móvil) y con CI remoto
+  `30043763940` aprobado.
 - El estado ejecutable descrito aqui debe estar publicado en `release`. Si
   `git status` muestra cambios, una IA debe revisarlos antes de continuar.
 
@@ -32,7 +32,7 @@ alcance y las decisiones.
 | Sprint 2 (backend) | Done | Ciclo SRI simulado completo verificado en vivo |
 | Sprint 3 (backend) | Done | Cartera E5 + E7 MCP; CI verde |
 | CRM MVP | Done | Leads, Activities, Pipeline |
-| UI/UX Sprints 1-9 | **Done + rediseño visual pendiente de CI** | Sistema slate/azul compatible con la navegación lateral, Kanban, Invoice Spreadsheet, pagos por cliente, code-splitting, polish y pruebas. |
+| UI/UX Sprints 1-9 | **Done + rediseño visual con CI verde** | Sistema slate/azul compatible con la navegación lateral, Kanban, Invoice Spreadsheet, pagos por cliente, code-splitting, polish y pruebas. |
 | **SRI cliente real** | **Done (código)** | `SoapSRIClient` (recepción+autorización) — falta certificar contra celcer con cert real (operador) |
 | **Integración Gmail** | **Done (código)** | Botón conectar + tokens por tenant — falta OAuth client de Google (operador) |
 | Migración de facturas | No iniciado | Plan en `docs/07-data-migration.md`; requiere data de origen + dry-run |
