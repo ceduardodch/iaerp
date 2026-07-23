@@ -6,17 +6,13 @@ test.skip(
 )
 
 async function login(page: Page, alias: string, expectedTenant: string) {
-  // Nuevo flujo: se entra sin teclear el alias; se solicita el scope de todas
-  // las empresas del usuario.
+  await page.getByLabel('Alias de empresa').fill(alias)
   await page.getByRole('button', { name: 'Continuar con Keycloak' }).click()
 
   await page.getByLabel('Username or email').fill('owner')
   await page.getByRole('button', { name: 'Sign In' }).click()
   await page.getByRole('textbox', { name: 'Password' }).fill('DemoPass123!')
   await page.getByRole('button', { name: 'Sign In' }).click()
-
-  // `owner` pertenece a dos empresas → aparece el selector; se elige por alias.
-  await page.getByRole('button', { name: alias, exact: true }).click()
 
   await expect(page).toHaveURL('http://localhost:8088/')
   await expect(page.getByRole('heading', { name: expectedTenant })).toBeVisible()

@@ -17,12 +17,7 @@ type AuthState = {
   displayName: string
   getToken: () => Promise<string>
   loginDev: (email: string, tenantId: string) => Promise<void>
-  // Inicia sesión OIDC sin pedir el alias: se solicita el scope `organization`
-  // (todas las empresas del usuario). Si pertenece a una sola, entra directo; si
-  // a varias, `organizationChoices` se llena para que elija.
-  loginOidc: () => Promise<void>
-  selectOrganization: (alias: string) => Promise<void>
-  organizationChoices: string[]
+  loginOidc: (organizationAlias: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -65,8 +60,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
   )
   const [loading, setLoading] = useState(authMode !== 'dev')
   const [keycloakReady, setKeycloakReady] = useState(false)
-  // Empresas entre las que el usuario debe elegir (solo si pertenece a >1).
-  const [organizationChoices, setOrganizationChoices] = useState<string[]>([])
 
   useEffect(() => {
     if (authMode === 'dev') return
@@ -77,25 +70,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
         onLoad: 'check-sso',
         pkceMethod: 'S256',
         checkLoginIframe: false,
-        // Con alias guardado se re-pide esa empresa (para que `check-sso` en
-        // cada recarga traiga exactamente una); si no, se piden TODAS con
-        // `organization:*` (convención Keycloak, ver scripts/keycloak_poc.py)
-        // para auto-detectar o poder elegir.
-        scope: savedAlias ? `organization:${savedAlias}` : 'organization:*',
+        // Re-pide la organización elegida para que el token de `check-sso`
+        // (recarga) traiga exactamente esa una; si no, el backend lo rechaza.
+        scope: savedAlias ? `organization:${savedAlias}` : undefined,
       })
       .then((authenticated) => {
+        // Red de seguridad: si hay sesión pero el token NO trae exactamente una
+        // organización (sesión previa sin alias guardado, o usuario miembro de
+        // varias), se trata como "no autenticado" para mostrar la pantalla de
+        // elegir empresa, en vez de dejar que el backend responda 403
+        // "Token must contain exactly one organization".
         const org = keycloak.tokenParsed?.organization as
           | Record<string, unknown>
           | undefined
-        const aliases = org && typeof org === 'object' ? Object.keys(org) : []
-        if (authenticated && aliases.length === 1) {
-          // Una sola empresa: entra directo y se recuerda para las recargas.
-          localStorage.setItem(orgAliasKey, aliases[0] ?? '')
-        }
-        // Si pertenece a varias, se ofrece elegir (evita el 403 del backend
-        // "Token must contain exactly one organization").
-        setOrganizationChoices(authenticated && aliases.length > 1 ? aliases : [])
-        setKeycloakReady(authenticated && aliases.length === 1)
+        const hasExactlyOneOrg =
+          !!org && typeof org === 'object' && Object.keys(org).length === 1
+        setKeycloakReady(authenticated && hasExactlyOneOrg)
         setLoading(false)
       })
   }, [])
@@ -129,22 +119,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => configureApiTokenProvider(null)
   }, [getToken])
 
-  async function loginOidc() {
-    // Sin alias: se piden TODAS las empresas del usuario con `organization:*`
-    // (convención Keycloak, ver scripts/keycloak_poc.py). La elección (si hay
-    // más de una) se resuelve después con `selectOrganization`.
-    await keycloak.login({
-      redirectUri: window.location.origin,
-      scope: 'openid organization:*',
-    })
-  }
-
-  async function selectOrganization(organizationAlias: string) {
+  async function loginOidc(organizationAlias: string) {
     const alias = organizationAlias.trim().toLowerCase()
     if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(alias)) {
       throw new Error('El alias de empresa no es válido')
     }
-    // Se recuerda para re-pedir el scope en cada `init`/refresh.
+    // Se recuerda el alias para re-pedir el scope en cada `init`/refresh.
     localStorage.setItem(orgAliasKey, alias)
     await keycloak.login({
       redirectUri: window.location.origin,
@@ -178,8 +158,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
         getToken,
         loginDev,
         loginOidc,
-        selectOrganization,
-        organizationChoices,
         logout,
       }}
     >

@@ -385,8 +385,6 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .establishment-list small { margin-top: .3rem; color: var(--muted); }
 
 .lazy-loading { padding: 2rem; color: var(--muted); font-size: .85rem; }
-.org-choices { display: grid; gap: .6rem; }
-.org-choices .primary-button { text-transform: none; letter-spacing: 0; }
 
 /* Skeletons de carga (Sprint 8) */
 .skeleton { display: block; background: linear-gradient(90deg, #e9e6dc 25%, #f4f1e8 50%, #e9e6dc 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s ease-in-out infinite; }
