@@ -3,7 +3,10 @@
 **Fecha inicio:** 2026-07-19
 **Fecha actualización:** 2026-07-21
 **Horizonte:** 12 semanas
-**Estado general:** ✅ Sprints 1-9 completados (5 parcial; 7 con alcance ajustado). App completa, CI verde en `release`, pendiente promoción a `main`.
+**Estado general:** ✅ Sprints 1-9 completados (5 parcial; 7 con alcance ajustado).
+Post-plan: **cliente SRI real** (`SoapSRIClient`) + **integración Gmail** listos en
+código, en preparación de **go-live** (faltan pasos de config del operador). CI
+verde en `release`. Fuente de verdad operativa: [`docs/STATUS.md`](docs/STATUS.md).
 
 > ⚠️ Este progreso se sincronizó con la realidad por commits (antes estaba
 > desactualizado en 22%). La fuente viva de coordinación es

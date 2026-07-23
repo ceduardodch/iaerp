@@ -6,7 +6,13 @@
 > "SKIPPED" mientras otra sesión lo completaba, y tests borrados/debilitados
 > para forzar el CI en verde. Este doc evita que se repita.
 
-**Última actualización:** 2026-07-21 12:47 (America/Guayaquil)
+**Última actualización:** 2026-07-23 (America/Guayaquil)
+
+> **Estado actual (2026-07-23):** plan UI/UX (Sprints 1-9) **completo**; además
+> cliente **SRI real** (`SoapSRIClient`) e integración **Gmail** listos en código.
+> CI verde en `release`. En preparación de **go-live** — lo pendiente depende del
+> operador (cert `.p12`, OAuth de Google, certificar contra celcer, migración).
+> Detalle en [`docs/STATUS.md`](docs/STATUS.md) (fuente de verdad).
 
 ---
 
