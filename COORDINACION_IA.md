@@ -43,7 +43,7 @@
 | --- | --- | --- | --- |
 | Claude (orquestador) | 🟢 ACTIVA | Calidad de tests a11y RESTAURADA; próximo: Sprint 4 (facturas) | 2026-07-21 |
 | Codex (GPT-5.6, vía Claude) | ⚪ detenido | Se colgó por `approval_mode="approve"` en modo no interactivo; para usarlo hay que invocarlo con `--full-auto`/`-a never`. Alcanzó a hacer 2 mejoras menores (auth.tsx, ErpModal.tsx) que se conservaron | 2026-07-21 |
-| Codex (este hilo) | ✅ terminado | Rediseño visual: header superior, tokens slate/azul, tablas/pills y Kanban accesible sin gradientes; lint, build y Playwright locales verificados | 2026-07-23 |
+| Codex (este hilo) | 🟡 validando | Rediseño visual: cabecera superior, azul sobrio, tablas/pills y Kanban accesible; Playwright local completo verde, pendiente CI y promoción autorizada | 2026-07-23 |
 | Otra sesión (Sonnet 4.6) | ⚠️ ¿activa? | Venía haciendo Sprints UI/UX (sidebar, forms) y muteando tests | reciente |
 
 > Si eres una IA nueva y esta tabla muestra a alguien 🟢 ACTIVA, **no toques su

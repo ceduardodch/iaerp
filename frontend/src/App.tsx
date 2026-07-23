@@ -2106,7 +2106,12 @@ function Workspace() {
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Saltar al contenido</a>
-      <Sidebar currentSection={section} onNavigate={(newSection) => startTransition(() => setSection(newSection))} />
+      <Sidebar
+        currentSection={section}
+        onNavigate={(newSection) => startTransition(() => setSection(newSection))}
+        organizationName={contextQuery.data.name}
+        ruc={contextQuery.data.ruc}
+      />
       <main id="main-content" tabIndex={-1}>
        <div key={section} className="section-fade">
         {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}

@@ -92,7 +92,7 @@ test('primary sections are keyboard reachable and labelled', async ({ page }) =>
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
 
-  const contacts = page.getByRole('button', { name: '02 Contactos' })
+  const contacts = page.getByRole('button', { name: 'Contactos' })
   await contacts.focus()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('heading', { name: 'Contactos', exact: true })).toBeVisible()
@@ -112,7 +112,7 @@ test('layout reflows at 320 CSS px and at 200% zoom without horizontal scroll', 
   await expectNoHorizontalOverflow(page)
   await expectNoA11yViolations(page)
 
-  await page.getByRole('button', { name: '02 Contactos' }).click()
+  await page.getByRole('button', { name: 'Contactos' }).click()
   await expect(page.getByRole('heading', { name: 'Contactos', exact: true })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

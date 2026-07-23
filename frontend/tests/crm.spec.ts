@@ -5,7 +5,7 @@ test('creates an opportunity and advances it through the accessible CRM flow', a
 
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
-  await page.getByRole('button', { name: '07 CRM' }).click()
+  await page.getByRole('button', { name: 'CRM' }).click()
   await expect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()

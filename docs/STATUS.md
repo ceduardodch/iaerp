@@ -14,12 +14,13 @@ alcance y las decisiones.
 - Estado: **plan UI/UX (Sprints 1-9) completo** + cliente SRI real + integración
   Gmail listos. En preparación de **go-live** (faltan pasos de config del
   operador; ver "Go-live" abajo).
-- Rediseño visual IAERP preparado en `release`: sistema slate + azul, KPIs de
-  cobranza/emisión/pipeline y Kanban sin gradientes ni animación. Se conservaron
-  la navegación lateral plegable y los contratos funcionales del catálogo y
-  cartera. Validado localmente con lint, build y Playwright completo
-  (188 aprobadas, 8 omitidas; incluye WCAG AA y reflow móvil) y con CI remoto
-  `30043763940` aprobado.
+- Rediseño visual IAERP preparado en `release`: sistema slate + azul sobrio,
+  cabecera superior con navegación visible, KPIs de cobranza/emisión/pipeline
+  y Kanban sin gradientes ni animación. Se preservaron los contratos
+  funcionales del catálogo, facturación y cartera. Validado localmente con
+  lint, build y Playwright completo contra API, PostgreSQL y Redis (174
+  aprobadas, 2 omitidas; incluye WCAG AA y reflow móvil). Pendiente la nueva
+  validación remota de CI antes de promover a `main`.
 - El estado ejecutable descrito aqui debe estar publicado en `release`. Si
   `git status` muestra cambios, una IA debe revisarlos antes de continuar.
 
@@ -32,7 +33,7 @@ alcance y las decisiones.
 | Sprint 2 (backend) | Done | Ciclo SRI simulado completo verificado en vivo |
 | Sprint 3 (backend) | Done | Cartera E5 + E7 MCP; CI verde |
 | CRM MVP | Done | Leads, Activities, Pipeline |
-| UI/UX Sprints 1-9 | **Done + rediseño visual con CI verde** | Sistema slate/azul compatible con la navegación lateral, Kanban, Invoice Spreadsheet, pagos por cliente, code-splitting, polish y pruebas. |
+| UI/UX Sprints 1-9 | **Done + rediseño visual en validación CI** | Sistema slate/azul sobrio, cabecera superior, Kanban, Invoice Spreadsheet, pagos por cliente, code-splitting, polish y pruebas. |
 | **SRI cliente real** | **Done (código)** | `SoapSRIClient` (recepción+autorización) — falta certificar contra celcer con cert real (operador) |
 | **Integración Gmail** | **Done (código)** | Botón conectar + tokens por tenant — falta OAuth client de Google (operador) |
 | Migración de facturas | No iniciado | Plan en `docs/07-data-migration.md`; requiere data de origen + dry-run |

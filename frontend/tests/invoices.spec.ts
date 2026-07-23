@@ -38,7 +38,7 @@ test('creates an invoice draft with two lines and a discount; UI shows exactly t
   await expect(page.getByRole('heading', { name: 'IAERP Demo Norte' })).toBeVisible()
 
   // Producto propio de este test para no depender de datos sintéticos compartidos.
-  await page.getByRole('button', { name: '03 Productos' }).click()
+  await page.getByRole('button', { name: 'Productos' }).click()
   await page.getByRole('button', { name: 'Nuevo producto' }).click()
   await page.getByLabel('Nombre').fill(productName)
   await page.getByLabel('Código interno').fill(`FACT-E2E-${suffix}`)
@@ -46,7 +46,7 @@ test('creates an invoice draft with two lines and a discount; UI shows exactly t
   await page.getByRole('button', { name: 'Guardar' }).click()
   await expect(page.getByRole('heading', { name: productName })).toBeVisible()
 
-  await page.getByRole('button', { name: '04 Facturas' }).click()
+  await page.getByRole('button', { name: 'Facturas' }).click()
   await expect(page.getByRole('heading', { name: 'Facturas', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Nueva factura' }).first().click()
 

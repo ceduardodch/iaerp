@@ -6,7 +6,7 @@ import { expect, test, type Page } from '@playwright/test'
 // transición). Este helper espera a que el contenido real del CRM —el board
 // "Pipeline"— esté montado antes de que el test inspeccione el DOM.
 async function gotoCrm(page: Page) {
-  await page.getByRole('button', { name: '07 CRM' }).click()
+  await page.getByRole('button', { name: 'CRM' }).click()
   await expect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible()
 }
 

@@ -82,7 +82,7 @@ async function mockApi(page: Page) {
 async function openInvoiceForm(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
-  await page.getByRole('button', { name: '04 Facturas' }).click()
+  await page.getByRole('button', { name: 'Facturas' }).click()
   await page.getByRole('button', { name: 'Nueva factura' }).first().click()
 }
 

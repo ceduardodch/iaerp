@@ -29,7 +29,7 @@ test('PKCE login changes tenant only through a new organization authorization', 
     page.getByRole('heading', { name: 'IAERP Demo Norte' }),
   ).toBeVisible()
 
-  await page.getByRole('button', { name: '02 Contactos' }).click()
+  await page.getByRole('button', { name: 'Contactos' }).click()
   await expect(
     page.getByText('Cliente Sintetico Norte', { exact: true }),
   ).toBeVisible()
@@ -37,7 +37,7 @@ test('PKCE login changes tenant only through a new organization authorization', 
 
   await expect(page.getByRole('heading', { name: 'Elegir empresa' })).toBeVisible()
   await login(page, 'iaerp-sur', 'IAERP Demo Sur')
-  await page.getByRole('button', { name: '02 Contactos' }).click()
+  await page.getByRole('button', { name: 'Contactos' }).click()
   await expect(
     page.getByText('Cliente Sintetico Norte', { exact: true }),
   ).toHaveCount(0)

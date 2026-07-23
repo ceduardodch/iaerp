@@ -196,7 +196,7 @@ async function loginAndOpenInvoices(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
   await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
-  await page.getByRole('button', { name: '04 Facturas' }).click()
+  await page.getByRole('button', { name: 'Facturas' }).click()
   await expect(page.getByRole('heading', { name: 'Facturas', exact: true })).toBeVisible()
   // Espera a que la LISTA cargue (el mock devuelve 3 facturas). Sin esto, entre
   // que aparece el encabezado y resuelve la query de facturas se muestra el
