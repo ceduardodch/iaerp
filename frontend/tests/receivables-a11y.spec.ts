@@ -138,7 +138,7 @@ async function loginAndOpenReceivables(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
   await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
-  await page.getByRole('button', { name: '06 Cartera' }).click()
+  await page.getByRole('button', { name: 'Cartera' }).click()
   await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
 }
 

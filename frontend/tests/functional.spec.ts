@@ -35,7 +35,7 @@ test('login and tenant switch preserve isolation', async ({ page }) => {
     page.getByRole('heading', { name: 'IAERP Demo Norte' }),
   ).toBeVisible()
 
-  await page.getByRole('button', { name: '02 Contactos' }).click()
+  await page.getByRole('button', { name: 'Contactos' }).click()
   await page.getByRole('button', { name: 'Nuevo contacto' }).click()
   await page.getByLabel('Nombre o razón social').fill(contactName)
   await page.getByLabel('Número').fill(identification)
@@ -54,7 +54,7 @@ test('login and tenant switch preserve isolation', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: 'IAERP Demo Sur' }),
   ).toBeVisible()
-  await page.getByRole('button', { name: '02 Contactos' }).click()
+  await page.getByRole('button', { name: 'Contactos' }).click()
   await expect(page.getByText(editedName)).toHaveCount(0)
 })
 
@@ -65,7 +65,7 @@ test('creates a product through the real API and refreshes the catalog', async (
   const productName = `Producto E2E ${suffix}`
 
   await login(page, tenantNorte)
-  await page.getByRole('button', { name: '03 Productos' }).click()
+  await page.getByRole('button', { name: 'Productos' }).click()
   await page.getByRole('button', { name: 'Nuevo producto' }).click()
   await page.getByLabel('Nombre').fill(productName)
   await page.getByLabel('Código interno').fill(`E2E-${suffix}`)
