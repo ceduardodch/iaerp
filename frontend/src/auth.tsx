@@ -69,7 +69,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const savedAlias = localStorage.getItem(orgAliasKey)
     void keycloak
       .init({
-        onLoad: 'check-sso',
+        // Sin una empresa ya confirmada no hay un contexto tenant seguro que
+        // recuperar. Ejecutar `check-sso` en ese caso puede reusar una sesión
+        // de Keycloak cuyo intento de organización falló y provocar un ciclo
+        // de redirecciones silenciosas. `init` sigue procesando normalmente
+        // cualquier callback OIDC presente en la URL.
+        onLoad: savedAlias ? 'check-sso' : undefined,
         pkceMethod: 'S256',
         checkLoginIframe: false,
         // Re-pide la organización elegida para que el token de `check-sso`

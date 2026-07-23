@@ -45,3 +45,24 @@ test('PKCE login changes tenant only through a new organization authorization', 
     page.getByText('Proveedor Sintetico Sur', { exact: true }),
   ).toBeVisible()
 })
+
+test('an unconfirmed organization alias does not trap the login on reload', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByLabel('Alias de empresa').fill('empresa-inexistente')
+  await page.getByRole('button', { name: 'Continuar con Keycloak' }).click()
+
+  // Keycloak rechaza un scope de organización inexistente antes de solicitar
+  // credenciales y devuelve el error al redirect URI de la aplicación.
+  await expect(page).toHaveURL('http://localhost:8088/')
+  await expect(
+    page.getByRole('heading', { name: 'Elegir empresa' }),
+  ).toBeVisible()
+  await expect(page.getByRole('alert')).toBeVisible()
+
+  await page.reload()
+  await expect(
+    page.getByRole('heading', { name: 'Elegir empresa' }),
+  ).toBeVisible()
+})
