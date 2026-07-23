@@ -59,6 +59,7 @@ from app.integrations.sri.protocol import (
     SRIClient,
 )
 from app.integrations.sri.simulator import SimulatorSRIClient
+from app.integrations.sri.soap import SoapSRIClient
 from app.models.billing import DocumentArtifact, SalesDocument, SRITransmission
 from app.models.platform import DeadLetter, OutboxEvent
 from app.services import storage
@@ -87,6 +88,16 @@ _ALREADY_TRANSMITTED_STATUSES = frozenset(
 
 
 def _default_sri_client() -> SRIClient:
+    # `soap` = cliente real contra los web services del SRI (celcer/cel segun
+    # SRI_ENVIRONMENT); `simulator` = in-process para dev/test. La reconciliacion
+    # y los reintentos viven en este worker, sin importar la implementacion.
+    if settings.SRI_TRANSMISSION_MODE == "soap":
+        return SoapSRIClient(
+            environment=settings.SRI_ENVIRONMENT,
+            reception_url=settings.SRI_RECEPTION_URL,
+            authorization_url=settings.SRI_AUTHORIZATION_URL,
+            timeout=settings.SRI_HTTP_TIMEOUT,
+        )
     return SimulatorSRIClient()
 
 
