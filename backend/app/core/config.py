@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     # caso se fija a `localhost:9000`. Si es None, se reutiliza MINIO_ENDPOINT
     # (despliegue con un unico host publico).
     MINIO_PUBLIC_ENDPOINT: str | None = None
+    # El transporte interno y el publico pueden diferir: en Compose, el API
+    # habla HTTP con MinIO dentro de la red privada, mientras el navegador usa
+    # HTTPS a traves del proxy publico.
+    MINIO_PUBLIC_SECURE: bool | None = None
     MINIO_ACCESS_KEY: str = "iaerp-local"
     MINIO_SECRET_KEY: SecretStr = SecretStr("iaerp-local-password")
     MINIO_SECURE: bool = False

@@ -92,6 +92,11 @@ def _public_client() -> Minio:
 
     settings = get_settings()
     endpoint = settings.MINIO_PUBLIC_ENDPOINT or settings.MINIO_ENDPOINT
+    secure = (
+        settings.MINIO_PUBLIC_SECURE
+        if settings.MINIO_PUBLIC_SECURE is not None
+        else settings.MINIO_SECURE
+    )
     # region explicita: al firmar una URL con un endpoint publico que puede no
     # ser alcanzable desde este proceso (p. ej. `localhost:9000` visto desde el
     # contenedor), el SDK no debe intentar resolver la region por red. Fijarla
@@ -100,7 +105,7 @@ def _public_client() -> Minio:
         endpoint,
         access_key=settings.MINIO_ACCESS_KEY,
         secret_key=settings.MINIO_SECRET_KEY.get_secret_value(),
-        secure=settings.MINIO_SECURE,
+        secure=secure,
         region=settings.MINIO_REGION,
     )
 

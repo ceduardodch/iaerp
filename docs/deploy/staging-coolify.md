@@ -75,9 +75,11 @@ IAERP_SIGNING_CERT_PASSWORD=<CERT_PASSWORD>
 # alcanzable por el navegador para descargar XML/RIDE via URL prefirmada.
 MINIO_ENDPOINT=minio:9000
 MINIO_PUBLIC_ENDPOINT=files.staging.tu-dominio
+MINIO_PUBLIC_SECURE=true
 MINIO_ACCESS_KEY=<MINIO_KEY>
 MINIO_SECRET_KEY=<MINIO_SECRET>
-MINIO_SECURE=true
+# La red privada de Compose habla HTTP; el proxy publico termina TLS.
+MINIO_SECURE=false
 
 # CORS: solo el dominio del frontend de staging
 CORS_ORIGINS=https://staging.tu-dominio
