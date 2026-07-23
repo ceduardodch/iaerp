@@ -144,8 +144,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(alias)) {
       throw new Error('El alias de empresa no es válido')
     }
-    // Se recuerda el alias para re-pedir el scope en cada `init`/refresh.
-    localStorage.setItem(orgAliasKey, alias)
+    // No se persiste un alias todavía no confirmado: si Keycloak lo rechaza,
+    // guardarlo aquí haría que el siguiente `check-sso` repita el scope
+    // inválido y deje la aplicación atrapada en la pantalla de carga. El alias
+    // se guarda arriba únicamente después de recibir exactamente una
+    // organización en el access token.
+    localStorage.removeItem(orgAliasKey)
     setAuthError('')
     await keycloak.login({
       redirectUri: window.location.origin,
