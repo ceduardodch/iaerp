@@ -1,6 +1,5 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { motion } from 'framer-motion'
 import type { Lead } from '../../api'
 
 /**
@@ -22,28 +21,25 @@ interface LeadCardProps {
 }
 
 /**
- * Gradient colors según hotness del lead
+ * Colores semánticos según temperatura del lead.
  */
 const HOTNESS_COLORS = {
   COLD: {
-    gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-    bg: 'blue',
+    tone: 'info',
     text: 'Frío',
   },
   WARM: {
-    gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    bg: 'orange',
+    tone: 'warning',
     text: 'Tibio',
   },
   HOT: {
-    gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-    bg: 'red',
+    tone: 'danger',
     text: 'Caliente',
   },
 }
 
 /**
- * Colores de badge según etapa del pipeline
+ * Se conserva el valor para compatibilidad con los estilos de arrastre.
  */
 const STAGE_COLORS = {
   NEW: '#3b82f6',
@@ -106,7 +102,7 @@ export function LeadCard({
   )
 
   return (
-    <motion.article
+    <article
       ref={setNodeRef}
       className={`kanban-card ${isDragging || isSortableDragging ? 'is-dragging' : ''} ${
         selected ? 'is-selected' : ''
@@ -114,17 +110,6 @@ export function LeadCard({
       style={style}
       data-lead-id={lead.id}
       data-active={isActive}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{
-        type: 'spring',
-        stiffness: 300,
-        damping: 20,
-        delay: index * 0.05,
-      }}
-      whileHover={{ scale: 1.02, boxShadow: '0 8px 22px rgba(23, 52, 45, 0.15)' }}
-      whileTap={{ scale: 0.98 }}
     >
       {/* Checkbox de selección múltiple: fuera del botón draggable para no
           disparar drag ni abrir el detalle al marcarlo. */}
@@ -151,12 +136,8 @@ export function LeadCard({
         aria-label={`Ver detalles de ${lead.title}`}
       >
         <div className="lead-card-header">
-          {/* Badge de hotness con gradient */}
           <div
-            className="lead-card-badge"
-            style={{
-              background: hotnessInfo.gradient,
-            }}
+            className={`lead-card-badge lead-card-badge-${hotnessInfo.tone}`}
             aria-label={`Temperatura: ${hotnessInfo.text}`}
           >
             <span>{hotnessInfo.text}</span>
@@ -186,9 +167,6 @@ export function LeadCard({
             <div className="lead-card-avatar">
               <div
                 className="avatar-circle"
-                style={{
-                  background: hotnessInfo.gradient,
-                }}
                 aria-label={`Responsable: ${lead.owner?.displayName ?? 'Sin responsable'}`}
               >
                 {ownerInitials}
@@ -204,7 +182,7 @@ export function LeadCard({
           </footer>
         </div>
       </button>
-    </motion.article>
+    </article>
   )
 }
 
@@ -224,10 +202,7 @@ export function LeadCardCompact({
     <article className="lead-card-compact">
       <button type="button" onClick={onClick} className="lead-card-compact-button">
         <div
-          className="lead-card-compact-badge"
-          style={{
-            background: hotnessInfo.gradient,
-          }}
+          className={`lead-card-compact-badge lead-card-badge-${hotnessInfo.tone}`}
         >
           <span>{hotnessInfo.text}</span>
         </div>

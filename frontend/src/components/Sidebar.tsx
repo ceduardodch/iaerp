@@ -38,7 +38,6 @@ export function Sidebar({
 }) {
   const auth = useAuth()
   const [collapsed, setCollapsed] = useState(() => {
-    // Initialize from localStorage
     try {
       return localStorage.getItem(STORAGE_KEY) === 'true'
     } catch {
@@ -46,28 +45,21 @@ export function Sidebar({
     }
   })
 
-  // Sync to localStorage on change
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, String(collapsed))
     } catch {
-      // Ignore localStorage errors
+      // Ignore localStorage errors.
     }
   }, [collapsed])
 
-  // Add/remove collapsed class from app-shell
   useEffect(() => {
     const appShell = document.querySelector('.app-shell')
     if (appShell) {
-      if (collapsed) {
-        appShell.classList.add('sidebar-collapsed')
-      } else {
-        appShell.classList.remove('sidebar-collapsed')
-      }
+      appShell.classList.toggle('sidebar-collapsed', collapsed)
     }
   }, [collapsed])
 
-  // Keyboard shortcut: Cmd/Ctrl + B to toggle sidebar
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key === 'b') {
@@ -88,9 +80,7 @@ export function Sidebar({
     <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <div className="sidebar-header">
         <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true">
-            IA
-          </span>
+          <span className="brand-mark" aria-hidden="true">IA</span>
           {!collapsed ? (
             <div>
               <strong>IAERP</strong>
@@ -105,29 +95,11 @@ export function Sidebar({
           aria-pressed={collapsed}
           title={`${collapsed ? 'Expandir' : 'Contraer'} menú (⌘B)`}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
-            fill="none"
-            aria-hidden="true"
-          >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             {collapsed ? (
-              <path
-                d="M12.5 15L8 10L12.5 5"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <path d="M12.5 15L8 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             ) : (
-              <path
-                d="M7.5 5L12 10L7.5 15"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <path d="M7.5 5L12 10L7.5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             )}
           </svg>
         </button>
@@ -159,11 +131,7 @@ export function Sidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <span
-          className="avatar"
-          aria-hidden="true"
-          title={auth.displayName}
-        >
+        <span className="avatar" aria-hidden="true" title={auth.displayName}>
           {auth.displayName.slice(0, 2).toUpperCase()}
         </span>
         {!collapsed ? (

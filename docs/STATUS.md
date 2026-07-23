@@ -8,11 +8,18 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Fecha: 2026-07-23 `America/Guayaquil`.
-- Rama de trabajo: `release` (CI verde). `main` = producción (Coolify/SRI).
+- Rama de trabajo: `release` (CI `30043763940` verde). `main` = producción
+  (Coolify/SRI).
 - Commit de producción verificado: `2f7f323`.
 - Estado: **plan UI/UX (Sprints 1-9) completo** + cliente SRI real + integración
   Gmail listos. En preparación de **go-live** (faltan pasos de config del
   operador; ver "Go-live" abajo).
+- Rediseño visual IAERP preparado en `release`: sistema slate + azul, KPIs de
+  cobranza/emisión/pipeline y Kanban sin gradientes ni animación. Se conservaron
+  la navegación lateral plegable y los contratos funcionales del catálogo y
+  cartera. Validado localmente con lint, build y Playwright completo
+  (188 aprobadas, 8 omitidas; incluye WCAG AA y reflow móvil) y con CI remoto
+  `30043763940` aprobado.
 - El estado ejecutable descrito aqui debe estar publicado en `release`. Si
   `git status` muestra cambios, una IA debe revisarlos antes de continuar.
 
@@ -25,7 +32,7 @@ alcance y las decisiones.
 | Sprint 2 (backend) | Done | Ciclo SRI simulado completo verificado en vivo |
 | Sprint 3 (backend) | Done | Cartera E5 + E7 MCP; CI verde |
 | CRM MVP | Done | Leads, Activities, Pipeline |
-| UI/UX Sprints 1-9 | **Done** | Kanban, Sidebar, Invoice Spreadsheet, Pagos por cliente, code-splitting, Polish (ErrorBoundary/skeletons/toasts), Testing+Docs. CI verde en `release` |
+| UI/UX Sprints 1-9 | **Done + rediseño visual con CI verde** | Sistema slate/azul compatible con la navegación lateral, Kanban, Invoice Spreadsheet, pagos por cliente, code-splitting, polish y pruebas. |
 | **SRI cliente real** | **Done (código)** | `SoapSRIClient` (recepción+autorización) — falta certificar contra celcer con cert real (operador) |
 | **Integración Gmail** | **Done (código)** | Botón conectar + tokens por tenant — falta OAuth client de Google (operador) |
 | Migración de facturas | No iniciado | Plan en `docs/07-data-migration.md`; requiere data de origen + dry-run |
@@ -38,7 +45,7 @@ credenciales, red del SRI) y por tanto NO se puede completar desde el repo/CI:
 | Ítem | Código | Pendiente del operador |
 | --- | --- | --- |
 | **Facturación electrónica** | Firma XAdES-BES + `SoapSRIClient` (celcer/cel) | Instalar `.p12` + la contraseña del certificado como secreto de entorno; configurar transmisión SOAP en ambiente de pruebas; certificar contra celcer. Ver `docs/SRI_GOLIVE.md` |
-| **Subida del .p12 por UI** | Endpoint `/organization/signing-certificate` | Falla con 500 si faltan la clave de cifrado de secretos o MinIO accesible en el deploy |
+| **Subida del .p12 por UI** | Endpoint `/organization/signing-certificate`; corregida la separación TLS entre MinIO interno (HTTP) y URL pública (HTTPS), con pruebas de configuración | Pendiente confirmar el despliegue de `main` y repetir la carga con certificado de pruebas |
 | **Gmail (cobranza + CRM)** | Botón conectar, tokens cifrados por tenant, envío/sync | Crear OAuth client de Google (1 vez) + `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI`. Ver `docs/GMAIL_SETUP.md` |
 | **Login OIDC** | Solicita un alias sin prellenar una empresa demo, persiste solo la empresa confirmada, evita recuperar SSO sin contexto tenant y libera la UI si la inicialización OIDC queda pendiente | Verificado en producción: alias inválido vuelve al formulario con error recuperable, recarga limpia y servicios web/Keycloak HTTP 200; CI `30034987915` verde |
 | **Migración de facturas** | Plan documentado, sin migrador construido | Entregar data de origen; construir migrador + dry-run con conciliación en staging antes de tocar producción |

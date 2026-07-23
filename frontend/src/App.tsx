@@ -24,6 +24,7 @@ import {
   type InvoiceLineInput,
   type InvoicePreview,
   type IntegrationStatus,
+  type Lead,
   type Operation,
   type OrganizationProfile,
   type Party,
@@ -201,54 +202,65 @@ function LoadingScreen() {
 
 function Overview({
   context,
-  parties,
-  products,
+  token,
 }: {
   context: TenantContext
-  parties: Party[]
-  products: Product[]
+  token: string
 }) {
-  const customers = parties.filter((party) => party.roles.includes('CUSTOMER')).length
-  const suppliers = parties.filter((party) => party.roles.includes('SUPPLIER')).length
+  const [invoicesQuery, receivablesQuery, leadsQuery] = useQueries({
+    queries: [
+      { queryKey: ['invoices', 'overview'], queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices') },
+      { queryKey: ['receivables', 'overview'], queryFn: () => apiRequest<AccountItem[]>(token, '/receivables') },
+      { queryKey: ['crm', 'leads', 'overview'], queryFn: () => apiRequest<Lead[]>(token, '/crm/leads') },
+    ],
+  })
+  const invoices = invoicesQuery.data ?? []
+  const receivables = receivablesQuery.data ?? []
+  const leads = leadsQuery.data ?? []
+  const today = todayInFiscalTimezone().slice(0, 7)
+  const outstanding = receivables.reduce((sum, item) => sum + Number(item.openAmount), 0)
+  const overdue = receivables.filter((item) => item.status === 'OVERDUE').reduce((sum, item) => sum + Number(item.openAmount), 0)
+  const monthlyInvoices = invoices.filter((invoice) => invoice.issueDate.startsWith(today) && invoice.type === 'INVOICE').length
+  const openPipeline = leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).reduce((sum, lead) => sum + Number(lead.estimatedValue ?? 0), 0)
   return (
     <>
       <ErpPageHeader
         eyebrow="Pulso operativo"
         title={context.name}
-        subtitle="Resumen de preparación y datos maestros del tenant activo."
+        subtitle="El pulso de cobranza, emisión y oportunidades de tu empresa."
         meta={<span className="date-chip">RUC {context.ruc}</span>}
       />
-      <section className="metric-grid" aria-label="Indicadores de datos maestros">
-        <article className="metric-card metric-feature">
-          <span className="metric-label">Preparación</span>
-          <strong>{context.automationWritesEnabled ? 'Activa' : 'Supervisada'}</strong>
-          <p>Escrituras autónomas {context.automationWritesEnabled ? 'habilitadas' : 'pausadas'}.</p>
+      <section className="metric-grid" aria-label="Indicadores operativos">
+        <article className="metric-card">
+          <span className="metric-label">Por cobrar</span>
+          <strong>${formatAmount(outstanding)}</strong>
+          <p>{receivables.length} cuentas activas.</p>
         </article>
         <article className="metric-card">
-          <span className="metric-label">Clientes</span>
-          <strong>{customers.toString().padStart(2, '0')}</strong>
-          <p>Contactos listos para facturar.</p>
+          <span className="metric-label">Vencido</span>
+          <strong className={overdue > 0 ? 'metric-danger' : ''}>${formatAmount(overdue)}</strong>
+          <p>Saldo que requiere seguimiento.</p>
         </article>
         <article className="metric-card">
-          <span className="metric-label">Proveedores</span>
-          <strong>{suppliers.toString().padStart(2, '0')}</strong>
-          <p>Contrapartes registradas.</p>
+          <span className="metric-label">Facturas del mes</span>
+          <strong>{monthlyInvoices}</strong>
+          <p>Documentos emitidos este mes.</p>
         </article>
         <article className="metric-card">
-          <span className="metric-label">Catálogo</span>
-          <strong>{products.length.toString().padStart(2, '0')}</strong>
-          <p>Productos con definición tributaria.</p>
+          <span className="metric-label">Pipeline abierto</span>
+          <strong className="metric-success">${formatAmount(openPipeline)}</strong>
+          <p>{leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).length} oportunidades activas.</p>
         </article>
       </section>
       <section className="readiness-panel">
         <div>
           <p className="section-number">Próximo hito</p>
-          <h2>Base fiscal lista para facturación</h2>
+          <h2>Preparación fiscal</h2>
         </div>
         <ol className="readiness-list">
-          <li><span>01</span> Verificar establecimiento y punto de emisión</li>
-          <li><span>02</span> Completar catálogo y contactos</li>
-          <li><span>03</span> Cargar certificado de firma de forma segura</li>
+          <li><span>✓</span> Verificar establecimiento y punto de emisión</li>
+          <li><span>✓</span> Completar catálogo y contactos</li>
+          <li><span>✓</span> Cargar certificado de firma de forma segura</li>
         </ol>
       </section>
     </>
@@ -2097,7 +2109,7 @@ function Workspace() {
       <Sidebar currentSection={section} onNavigate={(newSection) => startTransition(() => setSection(newSection))} />
       <main id="main-content" tabIndex={-1}>
        <div key={section} className="section-fade">
-        {section === 'overview' ? <Overview context={contextQuery.data} parties={parties} products={products} /> : null}
+        {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}
         {section === 'parties' ? <PartiesPage parties={parties} token={token} /> : null}
         {section === 'products' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
         {section === 'invoices' ? (
