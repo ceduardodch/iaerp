@@ -78,9 +78,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         pkceMethod: 'S256',
         checkLoginIframe: false,
         // Con alias guardado se re-pide esa empresa (para que `check-sso` en
-        // cada recarga traiga exactamente una); si no, se piden TODAS
-        // (`organization`) para auto-detectar o poder elegir.
-        scope: savedAlias ? `organization:${savedAlias}` : 'organization',
+        // cada recarga traiga exactamente una); si no, se piden TODAS con
+        // `organization:*` (convención Keycloak, ver scripts/keycloak_poc.py)
+        // para auto-detectar o poder elegir.
+        scope: savedAlias ? `organization:${savedAlias}` : 'organization:*',
       })
       .then((authenticated) => {
         const org = keycloak.tokenParsed?.organization as
@@ -129,11 +130,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [getToken])
 
   async function loginOidc() {
-    // Sin alias: se piden todas las empresas del usuario. La elección (si hay
+    // Sin alias: se piden TODAS las empresas del usuario con `organization:*`
+    // (convención Keycloak, ver scripts/keycloak_poc.py). La elección (si hay
     // más de una) se resuelve después con `selectOrganization`.
     await keycloak.login({
       redirectUri: window.location.origin,
-      scope: 'openid organization',
+      scope: 'openid organization:*',
     })
   }
 
