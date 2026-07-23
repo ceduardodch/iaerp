@@ -305,7 +305,11 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 .erp-status-danger { color: #84251b; background: #f3deda; }
 .erp-status-danger::before { background: var(--danger); }
 .erp-panel-heading-side { display: flex; align-items: center; gap: .75rem; }
-.erp-list-only { grid-template-columns: minmax(0, 1fr); }
+/* `.erp-list-only` debe ganarle a `.split-layout` (definida más abajo, que si no
+   deja una segunda columna vacía a la derecha porque el editor abre a página
+   completa, no en el split). Se usa el selector combinado para más especificidad. */
+.erp-list-only,
+.split-layout.erp-list-only { grid-template-columns: minmax(0, 1fr); }
 .erp-form-panel form { gap: 0; }
 .erp-full-page-form { width: 100%; max-width: 1180px; }
 .erp-form-fields { display: grid; gap: 1rem; }
@@ -381,6 +385,8 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .establishment-list small { margin-top: .3rem; color: var(--muted); }
 
 .lazy-loading { padding: 2rem; color: var(--muted); font-size: .85rem; }
+.org-choices { display: grid; gap: .6rem; }
+.org-choices .primary-button { text-transform: none; letter-spacing: 0; }
 
 /* Skeletons de carga (Sprint 8) */
 .skeleton { display: block; background: linear-gradient(90deg, #e9e6dc 25%, #f4f1e8 50%, #e9e6dc 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s ease-in-out infinite; }

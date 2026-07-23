@@ -397,7 +397,9 @@ export async function apiRequest<T>(
       | { detail?: string; message?: string }
       | null
     throw new ApiError(
-      body?.detail ?? body?.message ?? 'No se pudo completar la solicitud',
+      body?.detail ??
+        body?.message ??
+        `No se pudo completar la solicitud (HTTP ${response.status})`,
       response.status,
     )
   }

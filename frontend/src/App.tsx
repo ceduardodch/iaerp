@@ -137,13 +137,11 @@ function OidcLogin() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function submit() {
     setSubmitting(true)
     setError('')
-    const data = new FormData(event.currentTarget)
     try {
-      await loginOidc(String(data.get('organizationAlias')))
+      await loginOidc()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo iniciar sesión')
       setSubmitting(false)
@@ -157,32 +155,74 @@ function OidcLogin() {
         <p className="kicker">IAERP / Acceso seguro</p>
         <h1 id="login-title">Una empresa activa. Ningún dato cruzado.</h1>
         <p className="login-copy">
-          Selecciona el alias de la empresa antes de autenticarte. El token
-          quedará ligado únicamente a esa organización.
+          Inicia sesión con tu usuario y contraseña. Si perteneces a más de una
+          empresa, podrás elegir cuál usar después de autenticarte.
         </p>
       </section>
       <section className="login-panel" aria-labelledby="access-title">
         <p className="section-number">OAuth 2.1 + PKCE</p>
-        <h2 id="access-title">Elegir empresa</h2>
-        <form onSubmit={submit}>
-          <label>
-            Alias de empresa
-            <input
-              name="organizationAlias"
-              defaultValue="iaerp-norte"
-              pattern="[a-z0-9][a-z0-9-]{1,62}"
-              autoComplete="organization"
-              required
-            />
-          </label>
-          {error ? <p className="form-error" role="alert">{error}</p> : null}
-          <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? 'Redirigiendo…' : 'Continuar con Keycloak'}
-          </button>
-        </form>
+        <h2 id="access-title">Acceso</h2>
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        <button
+          className="primary-button"
+          type="button"
+          onClick={submit}
+          disabled={submitting}
+        >
+          {submitting ? 'Redirigiendo…' : 'Continuar con Keycloak'}
+        </button>
         <p className="fine-print">
-          Usa `iaerp-norte` o `iaerp-sur` para el entorno local.
+          Te llevaremos a la pantalla de autenticación corporativa segura.
         </p>
+      </section>
+    </main>
+  )
+}
+
+function OrgPicker() {
+  const { organizationChoices, selectOrganization } = useAuth()
+  const [submitting, setSubmitting] = useState('')
+  const [error, setError] = useState('')
+
+  async function choose(alias: string) {
+    setSubmitting(alias)
+    setError('')
+    try {
+      await selectOrganization(alias)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo seleccionar la empresa')
+      setSubmitting('')
+    }
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-story" aria-labelledby="picker-title">
+        <div className="brand-mark" aria-hidden="true">IA</div>
+        <p className="kicker">IAERP / Acceso seguro</p>
+        <h1 id="picker-title">Elige la empresa</h1>
+        <p className="login-copy">
+          Perteneces a más de una empresa. Selecciona con cuál quieres trabajar en
+          esta sesión.
+        </p>
+      </section>
+      <section className="login-panel" aria-labelledby="picker-heading">
+        <p className="section-number">Empresas disponibles</p>
+        <h2 id="picker-heading">Seleccionar empresa</h2>
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        <div className="org-choices">
+          {organizationChoices.map((alias) => (
+            <button
+              key={alias}
+              type="button"
+              className="primary-button"
+              onClick={() => void choose(alias)}
+              disabled={submitting !== ''}
+            >
+              {submitting === alias ? 'Redirigiendo…' : alias}
+            </button>
+          ))}
+        </div>
       </section>
     </main>
   )
@@ -2128,5 +2168,6 @@ export default function App() {
   const auth = useAuth()
   if (auth.loading) return <LoadingScreen />
   if (auth.authenticated) return <Workspace />
+  if (auth.mode === 'oidc' && auth.organizationChoices.length > 0) return <OrgPicker />
   return auth.mode === 'dev' ? <DevLogin /> : <OidcLogin />
 }
