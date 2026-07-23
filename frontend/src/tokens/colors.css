@@ -8,7 +8,7 @@
   --red-50: #fef2f2; --red-100: #fee2e2; --red-200: #fecaca; --red-600: #dc2626; --red-700: #b91c1c; --red-800: #991b1b;
   --surface-page: var(--slate-100); --surface-card: #fff; --surface-inset: var(--slate-50); --surface-code: var(--slate-100);
   --border-card: var(--slate-200); --border-divider: var(--slate-100); --border-input: var(--slate-300); --border-empty: var(--slate-300);
-  --text-heading: var(--slate-900); --text-subheading: var(--slate-800); --text-body: var(--slate-700); --text-secondary: var(--slate-600); --text-muted: var(--slate-500); --text-faint: var(--slate-400);
+  --text-heading: var(--slate-900); --text-subheading: var(--slate-800); --text-body: var(--slate-700); --text-secondary: var(--slate-600); --text-muted: var(--slate-600); --text-faint: var(--slate-500);
   --accent: var(--blue-600); --accent-hover: var(--blue-700); --accent-soft: var(--blue-50); --accent-soft-text: var(--blue-700);
   --success: var(--emerald-600); --success-hover: var(--emerald-700); --success-text: var(--emerald-700); --danger-text: var(--red-600); --warning-text: var(--amber-700);
   --badge-info-bg: var(--blue-100); --badge-info-text: var(--blue-800); --badge-success-bg: var(--emerald-100); --badge-success-text: var(--emerald-800); --badge-warning-bg: var(--amber-100); --badge-warning-text: var(--amber-900); --badge-danger-bg: var(--red-100); --badge-danger-text: var(--red-800); --badge-neutral-bg: var(--slate-100); --badge-neutral-text: var(--slate-700);

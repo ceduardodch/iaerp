@@ -532,20 +532,33 @@ function ProductsPage({
       </ErpToolbar>
       <section className="split-layout erp-list-only">
         <ErpPanel title="Catálogo" count={filtered.length}>
-          <div className="table-wrap" tabIndex={0} aria-label="Listado de productos">
-            <table className="erp-responsive-table">
-              <thead><tr><th>Producto</th><th>Código</th><th>Precio unitario</th><th>Impuesto</th><th>Acciones</th></tr></thead>
-              <tbody>{filtered.map((product) => (
-                <tr key={product.id}>
-                  <td><strong>{product.name}</strong></td>
-                  <td><code>{product.code ?? '—'}</code></td>
-                  <td className="amount-cell">${formatAmount(product.unitPrice)}</td>
-                  <td>{taxes.find((tax) => tax.id === product.taxCategoryId)?.name ?? '—'}</td>
-                  <td><ErpActionCell><ErpButton variant="ghost" aria-label={`Editar ${product.name}`} onClick={() => setEditor(product)}>Editar</ErpButton></ErpActionCell></td>
-                </tr>
-              ))}</tbody>
-            </table>
-            {filtered.length === 0 ? <ErpEmptyState title="No hay productos" description="Crea el primer producto o servicio del catálogo." action={<ErpButton variant="primary" onClick={() => setEditor(null)}>Nuevo producto</ErpButton>} /> : null}
+          <div className="product-grid" aria-label="Productos">
+            {filtered.map((product, index) => (
+              <article className="product-card" key={product.id}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <h2>{product.name}</h2>
+                <p>{product.code ?? 'Sin código interno'}</p>
+                <strong>${formatAmount(product.unitPrice)}</strong>
+                <ErpButton
+                  variant="ghost"
+                  aria-label={`Editar ${product.name}`}
+                  onClick={() => setEditor(product)}
+                >
+                  Editar
+                </ErpButton>
+              </article>
+            ))}
+            {filtered.length === 0 ? (
+              <ErpEmptyState
+                title="No hay productos"
+                description="Crea el primer producto o servicio del catálogo."
+                action={
+                  <ErpButton variant="primary" onClick={() => setEditor(null)}>
+                    Nuevo producto
+                  </ErpButton>
+                }
+              />
+            ) : null}
           </div>
         </ErpPanel>
       </section>
@@ -1783,12 +1796,21 @@ function ReceivablesPage({
         title="Cartera"
         subtitle="Cartera trazable a la factura de origen, con saldo y aging calculados por el servidor."
       />
-      <ErpToolbar ariaLabel="Filtros de cartera">
-        <div className="pill-tabs" role="group" aria-label="Filtrar cartera por estado">
-          {([['', 'Todas'], ['OPEN', 'Abiertas'], ['PARTIAL', 'Parciales'], ['OVERDUE', 'Vencidas'], ['SETTLED', 'Saldadas']] as const).map(([value, label]) => (
-            <button key={value || 'all'} type="button" className={statusFilter === value ? 'active' : ''} onClick={() => setStatusFilter(value)}>{label}</button>
-          ))}
-        </div>
+      <ErpToolbar>
+        <label className="search-field">
+          <span>Filtrar por estado</span>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as '' | AccountItemStatus)}
+          >
+            <option value="">Todos los estados</option>
+            <option value="OPEN">Abierta</option>
+            <option value="PARTIAL">Parcial</option>
+            <option value="OVERDUE">Vencida</option>
+            <option value="SETTLED">Saldada</option>
+            <option value="VOIDED">Anulada</option>
+          </select>
+        </label>
       </ErpToolbar>
       {policyQuery.data && !Array.isArray(policyQuery.data) && Array.isArray(policyQuery.data.offsetsDays) && Array.isArray(policyQuery.data.channels) ? <CollectionPolicyEditor key={policyQuery.data.updatedAt} policy={policyQuery.data} pending={updatePolicy.isPending} error={updatePolicy.error?.message} onSave={(policy) => updatePolicy.mutate(policy)} /> : null}
       <section className="split-layout erp-list-only">
@@ -2084,7 +2106,7 @@ function Workspace() {
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Saltar al contenido</a>
-      <Sidebar currentSection={section} onNavigate={(newSection) => startTransition(() => setSection(newSection))} organizationName={contextQuery.data.name} ruc={contextQuery.data.ruc} />
+      <Sidebar currentSection={section} onNavigate={(newSection) => startTransition(() => setSection(newSection))} />
       <main id="main-content" tabIndex={-1}>
        <div key={section} className="section-fade">
         {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}
