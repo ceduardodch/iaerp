@@ -2,6 +2,8 @@ import uuid
 from datetime import date
 from urllib.parse import urlsplit
 
+from pydantic import SecretStr
+
 from app.core.timezones import today_in_fiscal_timezone
 from app.db.session import SessionFactory
 from app.models.masters import Party
@@ -97,10 +99,45 @@ async def test_whatsapp_routing_can_use_meta_and_evolution_per_operational_purpo
 ):
     from app.services import crm_integrations
 
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: dict[str, object]):
+            self.status_code = status_code
+            self._payload = payload
+
+        @property
+        def is_error(self) -> bool:
+            return self.status_code >= 400
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeEvolutionClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def post(self, url: str, **_kwargs):
+            if url.endswith("/instance/create"):
+                return FakeResponse(201, {"instance": {"instanceName": "tenant-a"}})
+            assert url.endswith("/webhook/set/tenant-a")
+            return FakeResponse(200, {"webhook": {"enabled": True}})
+
+        async def get(self, url: str, **_kwargs):
+            assert url.endswith("/instance/connect/tenant-a")
+            return FakeResponse(200, {"base64": "data:image/png;base64,qr-test"})
+
     monkeypatch.setattr(
         crm_integrations.settings, "EVOLUTION_API_BASE_URL", "https://evo.example"
     )
+    monkeypatch.setattr(
+        crm_integrations.settings, "EVOLUTION_API_KEY", SecretStr("evolution-platform-key")
+    )
     monkeypatch.setattr(crm_integrations.settings, "PUBLIC_API_URL", "https://api.example/api/v1")
+    monkeypatch.setattr(
+        crm_integrations.httpx, "AsyncClient", lambda **_kwargs: FakeEvolutionClient()
+    )
     token = await token_for(
         client,
         "a@iaerp.local",
@@ -114,11 +151,12 @@ async def test_whatsapp_routing_can_use_meta_and_evolution_per_operational_purpo
         json={
             "instanceName": "tenant-a",
             "displayPhoneNumber": "+593999000111",
-            "apiKey": "evolution-api-key-for-tests",  # pragma: allowlist secret
         },
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["connected"] is True
+    assert saved.json()["qrCode"] == "data:image/png;base64,qr-test"
+    assert saved.json()["qrExpiresInSeconds"] == 30
     assert saved.json()["webhookUrl"].startswith(
         "https://api.example/api/v1/crm/webhooks/whatsapp/evolution/"
     )

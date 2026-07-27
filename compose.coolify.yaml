@@ -30,6 +30,7 @@ x-backend-environment: &backend-environment
   # Evolution remains private to this Compose project.  Tenant credentials are
   # encrypted in IAERP; this platform key is only used to create/link instances.
   EVOLUTION_API_BASE_URL: http://evolution:8080
+  EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
   PUBLIC_API_URL: https://iaerp.b2b.com.ec/api/v1
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}

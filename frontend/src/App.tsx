@@ -1915,10 +1915,12 @@ function OrganizationPage({
     onSuccess: (status) => queryClient.setQueryData(['crm', 'integrations'], status),
   })
   const [evolutionWebhookUrl, setEvolutionWebhookUrl] = useState<string | null>(null)
+  const [evolutionQrCode, setEvolutionQrCode] = useState<string | null>(null)
   const saveEvolutionWhatsApp = useMutation({
     mutationFn: (data: object) => apiRequest<EvolutionWhatsAppIntegration>(token, '/crm/integrations/whatsapp/evolution', { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: (integration) => {
       setEvolutionWebhookUrl(integration.webhookUrl)
+      setEvolutionQrCode(integration.qrCode ?? null)
       queryClient.invalidateQueries({ queryKey: ['crm', 'integrations'] })
     },
   })
@@ -1983,7 +1985,6 @@ function OrganizationPage({
     saveEvolutionWhatsApp.mutate({
       instanceName: data.get('instanceName'),
       displayPhoneNumber: data.get('displayPhoneNumber') || null,
-      apiKey: data.get('apiKey'),
     })
   }
 
@@ -2122,10 +2123,11 @@ function OrganizationPage({
             {integrationsQuery.data?.whatsappEvolutionConnected ? <p>Número activo: <strong>{integrationsQuery.data.whatsappEvolutionPhone ?? 'Configurado'}</strong></p> : null}
             <label>Nombre de instancia<input name="instanceName" pattern="[A-Za-z0-9_-]+" required /></label>
             <label>Número visible<input name="displayPhoneNumber" placeholder="+593…" /></label>
-            <label>API Key de Evolution<input name="apiKey" type="password" autoComplete="new-password" required /></label>
-            {evolutionWebhookUrl ? <label>Webhook de Evolution<input value={evolutionWebhookUrl} readOnly onFocus={(event) => event.currentTarget.select()} /></label> : <p className="fine-print">Al guardar se generará la URL de webhook para pegarla en la instancia Evolution.</p>}
+            <p className="fine-print">La clave de Evolution queda protegida en la plataforma. Al continuar se crea o recupera la instancia, configura el webhook y muestra el QR aquí.</p>
+            {evolutionQrCode ? <div className="evolution-qr" role="status"><strong>Escanea este QR desde WhatsApp → Dispositivos vinculados.</strong><img src={evolutionQrCode} alt="Código QR para vincular WhatsApp con Evolution" /><small>El código vence pronto. Si vence, usa “Generar otro QR”.</small></div> : null}
+            {evolutionWebhookUrl ? <p className="fine-print">Webhook configurado automáticamente.</p> : null}
             {saveEvolutionWhatsApp.error ? <p className="form-error">{saveEvolutionWhatsApp.error.message}</p> : null}
-            <ErpButton variant="primary" type="submit" disabled={!integrationsQuery.data?.evolutionConfigurationAvailable || saveEvolutionWhatsApp.isPending}>{saveEvolutionWhatsApp.isPending ? 'Guardando…' : 'Guardar conexión Evolution'}</ErpButton>
+            <ErpButton variant="primary" type="submit" disabled={!integrationsQuery.data?.evolutionConfigurationAvailable || saveEvolutionWhatsApp.isPending}>{saveEvolutionWhatsApp.isPending ? 'Preparando QR…' : evolutionQrCode ? 'Generar otro QR' : 'Generar QR y conectar WhatsApp'}</ErpButton>
           </form>
         </ErpPanel>
       </section>

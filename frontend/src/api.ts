@@ -356,6 +356,8 @@ export type EvolutionWhatsAppIntegration = {
   connected: boolean
   displayPhoneNumber?: string | null
   webhookUrl: string
+  qrCode?: string | null
+  qrExpiresInSeconds?: number | null
 }
 
 export type OrganizationProfile = {

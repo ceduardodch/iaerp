@@ -564,6 +564,9 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .invoice-grand-total dt, .invoice-grand-total dd { font-size: 1.15rem; font-weight: 800; }
 .fiscal-settings-panel { min-width: 0; }
 .fiscal-panel-body { display: grid; gap: 1rem; padding: 1.5rem; }
+.evolution-qr { display: grid; gap: .75rem; justify-items: start; padding: 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface-subtle); }
+.evolution-qr img { width: min(100%, 18rem); aspect-ratio: 1; image-rendering: pixelated; background: #fff; padding: .5rem; }
+.evolution-qr small { color: var(--muted-foreground); }
 .fiscal-panel-copy { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.6; }
 .environment-warning { margin: 0; padding: .85rem; color: #745513; background: #f4e9c5; border-left: 4px solid #c18b1d; font-size: .72rem; line-height: 1.5; }
 .certificate-form { display: grid; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
