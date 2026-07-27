@@ -19,6 +19,7 @@ import {
   type DiscountInput,
   type DocumentArtifact,
   type EmissionPoint,
+  type EvolutionWhatsAppIntegration,
   type Establishment,
   type FiscalSettings,
   type InvoiceLineInput,
@@ -1913,6 +1914,18 @@ function OrganizationPage({
     mutationFn: (data: object) => apiRequest<IntegrationStatus>(token, '/crm/integrations/whatsapp', { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: (status) => queryClient.setQueryData(['crm', 'integrations'], status),
   })
+  const [evolutionWebhookUrl, setEvolutionWebhookUrl] = useState<string | null>(null)
+  const saveEvolutionWhatsApp = useMutation({
+    mutationFn: (data: object) => apiRequest<EvolutionWhatsAppIntegration>(token, '/crm/integrations/whatsapp/evolution', { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: (integration) => {
+      setEvolutionWebhookUrl(integration.webhookUrl)
+      queryClient.invalidateQueries({ queryKey: ['crm', 'integrations'] })
+    },
+  })
+  const saveWhatsAppRouting = useMutation({
+    mutationFn: (data: object) => apiRequest<IntegrationStatus>(token, '/crm/integrations/whatsapp/routing', { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: (status) => queryClient.setQueryData(['crm', 'integrations'], status),
+  })
   const updateEnvironment = useMutation({
     mutationFn: (sriEnvironment: '1' | '2') =>
       apiRequest<FiscalSettings>(token, '/organization/fiscal-settings', {
@@ -1961,6 +1974,25 @@ function OrganizationPage({
       accessToken: data.get('accessToken'),
       appSecret: data.get('appSecret'),
       verifyToken: data.get('verifyToken'),
+    })
+  }
+
+  function submitEvolutionWhatsApp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    saveEvolutionWhatsApp.mutate({
+      instanceName: data.get('instanceName'),
+      displayPhoneNumber: data.get('displayPhoneNumber') || null,
+      apiKey: data.get('apiKey'),
+    })
+  }
+
+  function submitWhatsAppRouting(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    saveWhatsAppRouting.mutate({
+      crmProvider: data.get('crmProvider'),
+      collectionsProvider: data.get('collectionsProvider'),
     })
   }
 
@@ -2061,9 +2093,18 @@ function OrganizationPage({
             <ErpButton variant="primary" disabled={!integrationsQuery.data?.googleConfigurationAvailable || connectGoogle.isPending} onClick={() => connectGoogle.mutate()}>{integrationsQuery.data?.googleConnected ? 'Reconectar Google' : 'Conectar Google Workspace'}</ErpButton>
           </div>
         </ErpPanel>
-        <ErpPanel title="WhatsApp Business" actions={<ErpStatusBadge tone={integrationsQuery.data?.whatsappConnected ? 'success' : 'warning'}>{integrationsQuery.data?.whatsappConnected ? 'Conectado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
+        <ErpPanel title="WhatsApp · Enrutamiento" actions={<ErpStatusBadge tone={integrationsQuery.data?.whatsappConnected || integrationsQuery.data?.whatsappEvolutionConnected ? 'success' : 'warning'}>{integrationsQuery.data?.whatsappConnected || integrationsQuery.data?.whatsappEvolutionConnected ? 'Configurado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
+          <form className="fiscal-panel-body" onSubmit={submitWhatsAppRouting}>
+            <p className="fiscal-panel-copy">Elige el proveedor por uso. Puedes conservar Meta para cobranza y usar Evolution para CRM o soporte.</p>
+            <label>Mensajes de CRM<select name="crmProvider" defaultValue={integrationsQuery.data?.whatsappCrmProvider ?? 'META'}><option value="META">Meta Cloud API</option><option value="EVOLUTION">Evolution API</option></select></label>
+            <label>Recordatorios de cobranza<select name="collectionsProvider" defaultValue={integrationsQuery.data?.whatsappCollectionsProvider ?? 'META'}><option value="META">Meta Cloud API</option><option value="EVOLUTION">Evolution API</option></select></label>
+            {saveWhatsAppRouting.error ? <p className="form-error">{saveWhatsAppRouting.error.message}</p> : null}
+            <ErpButton variant="secondary" type="submit" disabled={saveWhatsAppRouting.isPending}>{saveWhatsAppRouting.isPending ? 'Guardando…' : 'Guardar enrutamiento'}</ErpButton>
+          </form>
+        </ErpPanel>
+        <ErpPanel title="WhatsApp Business · Meta" actions={<ErpStatusBadge tone={integrationsQuery.data?.whatsappMetaConnected ? 'success' : 'warning'}>{integrationsQuery.data?.whatsappMetaConnected ? 'Conectado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
           <form className="fiscal-panel-body" onSubmit={submitWhatsApp}>
-            {integrationsQuery.data?.whatsappConnected ? <p>Número activo: <strong>{integrationsQuery.data.whatsappPhone ?? 'Configurado'}</strong></p> : null}
+            {integrationsQuery.data?.whatsappMetaConnected ? <p>Número activo: <strong>{integrationsQuery.data.whatsappPhone ?? 'Configurado'}</strong></p> : null}
             <label>WhatsApp Business Account ID<input name="businessAccountId" required /></label>
             <label>Phone Number ID<input name="phoneNumberId" required /></label>
             <label>Número visible<input name="displayPhoneNumber" placeholder="+593…" /></label>
@@ -2073,6 +2114,18 @@ function OrganizationPage({
             <p className="fine-print">Webhook: {window.location.origin}/api/v1/crm/webhooks/whatsapp</p>
             {saveWhatsApp.error ? <p className="form-error">{saveWhatsApp.error.message}</p> : null}
             <ErpButton variant="primary" type="submit" disabled={saveWhatsApp.isPending}>{saveWhatsApp.isPending ? 'Validando…' : 'Guardar conexión'}</ErpButton>
+          </form>
+        </ErpPanel>
+        <ErpPanel title="WhatsApp · Evolution API" actions={<ErpStatusBadge tone={integrationsQuery.data?.whatsappEvolutionConnected ? 'success' : 'warning'}>{integrationsQuery.data?.whatsappEvolutionConnected ? 'Conectado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
+          <form className="fiscal-panel-body" onSubmit={submitEvolutionWhatsApp}>
+            {!integrationsQuery.data?.evolutionConfigurationAvailable ? <p className="environment-warning">Falta configurar EVOLUTION_API_BASE_URL y PUBLIC_API_URL en Coolify.</p> : null}
+            {integrationsQuery.data?.whatsappEvolutionConnected ? <p>Número activo: <strong>{integrationsQuery.data.whatsappEvolutionPhone ?? 'Configurado'}</strong></p> : null}
+            <label>Nombre de instancia<input name="instanceName" pattern="[A-Za-z0-9_-]+" required /></label>
+            <label>Número visible<input name="displayPhoneNumber" placeholder="+593…" /></label>
+            <label>API Key de Evolution<input name="apiKey" type="password" autoComplete="new-password" required /></label>
+            {evolutionWebhookUrl ? <label>Webhook de Evolution<input value={evolutionWebhookUrl} readOnly onFocus={(event) => event.currentTarget.select()} /></label> : <p className="fine-print">Al guardar se generará la URL de webhook para pegarla en la instancia Evolution.</p>}
+            {saveEvolutionWhatsApp.error ? <p className="form-error">{saveEvolutionWhatsApp.error.message}</p> : null}
+            <ErpButton variant="primary" type="submit" disabled={!integrationsQuery.data?.evolutionConfigurationAvailable || saveEvolutionWhatsApp.isPending}>{saveEvolutionWhatsApp.isPending ? 'Guardando…' : 'Guardar conexión Evolution'}</ErpButton>
           </form>
         </ErpPanel>
       </section>

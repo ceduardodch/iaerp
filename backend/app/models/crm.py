@@ -158,3 +158,32 @@ class WhatsAppIntegration(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin
     app_secret_encrypted: Mapped[str] = mapped_column(Text)
     verify_token_encrypted: Mapped[str] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(default=True)
+
+
+class EvolutionWhatsAppIntegration(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
+    """Conexión Evolution API aislada por tenant.
+
+    La URL del servidor es una configuración de plataforma, no un dato editable
+    por tenant, para no convertir esta integración en un vector SSRF.
+    """
+
+    __tablename__ = "crm_evolution_whatsapp_integrations"
+    __table_args__ = (UniqueConstraint("tenant_id", name="uq_crm_evolution_whatsapp_tenant"),)
+
+    instance_name: Mapped[str] = mapped_column(String(100))
+    display_phone_number: Mapped[str | None] = mapped_column(String(40))
+    api_key_encrypted: Mapped[str] = mapped_column(Text)
+    webhook_token_encrypted: Mapped[str] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(default=True)
+
+
+class WhatsAppRoutingPolicy(TimestampMixin, Base):
+    """Proveedor de WhatsApp elegido por uso operativo del tenant."""
+
+    __tablename__ = "crm_whatsapp_routing_policies"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    crm_provider: Mapped[str] = mapped_column(String(20), default="META")
+    collections_provider: Mapped[str] = mapped_column(String(20), default="META")

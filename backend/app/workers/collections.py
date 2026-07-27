@@ -170,6 +170,7 @@ async def handle_collection_reminder_due(
                 recipient=reminder.recipient,
                 message="Recordatorio de pago pendiente",
                 template_id=reminder.template_id,
+                purpose="COLLECTIONS",
             )
     except Exception as exc:
         detail = getattr(exc, "detail", str(exc))

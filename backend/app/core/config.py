@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: SecretStr | None = None
     GOOGLE_OAUTH_REDIRECT_URI: str | None = None
     WHATSAPP_GRAPH_VERSION: str = "v23.0"
+    # Evolution se hospeda/controla a nivel de plataforma. Nunca se acepta una
+    # URL de backend enviada por un tenant.
+    EVOLUTION_API_BASE_URL: str | None = None
+    PUBLIC_API_URL: str | None = None
 
     # Simulador SRI (ver app/integrations/sri/simulator.py). Solo se monta el
     # router `/sri-sim` si esta habilitado; NUNCA puede habilitarse fuera de

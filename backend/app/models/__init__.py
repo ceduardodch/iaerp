@@ -8,11 +8,13 @@ from app.models.billing import (
     SRITransmission,
 )
 from app.models.crm import (
+    EvolutionWhatsAppIntegration,
     GmailIntegration,
     Lead,
     LeadActivity,
     LeadStatus,
     WhatsAppIntegration,
+    WhatsAppRoutingPolicy,
 )
 from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag, TaxCategory
 from app.models.platform import (
@@ -44,7 +46,9 @@ __all__ = [
     "EmissionPoint",
     "Establishment",
     "GmailIntegration",
+    "EvolutionWhatsAppIntegration",
     "WhatsAppIntegration",
+    "WhatsAppRoutingPolicy",
     "CollectionPolicy",
     "IdempotencyRecord",
     "Lead",

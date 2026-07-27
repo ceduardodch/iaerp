@@ -344,6 +344,18 @@ export type IntegrationStatus = {
   googleConfigurationAvailable: boolean
   whatsappConnected: boolean
   whatsappPhone?: string | null
+  whatsappMetaConnected: boolean
+  whatsappEvolutionConnected: boolean
+  whatsappEvolutionPhone?: string | null
+  evolutionConfigurationAvailable: boolean
+  whatsappCrmProvider: 'META' | 'EVOLUTION'
+  whatsappCollectionsProvider: 'META' | 'EVOLUTION'
+}
+
+export type EvolutionWhatsAppIntegration = {
+  connected: boolean
+  displayPhoneNumber?: string | null
+  webhookUrl: string
 }
 
 export type OrganizationProfile = {

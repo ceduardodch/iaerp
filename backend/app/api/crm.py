@@ -9,6 +9,8 @@ from app.core.auth import AuthContext, require_scopes
 from app.db.session import get_session
 from app.models.crm import LeadStatus
 from app.schemas.crm import (
+    EvolutionWhatsAppIntegrationRead,
+    EvolutionWhatsAppIntegrationUpdate,
     GmailSyncResult,
     GoogleAuthorizationRead,
     IntegrationStatusRead,
@@ -21,6 +23,7 @@ from app.schemas.crm import (
     LeadUpdate,
     LeadWithPartyCreate,
     WhatsAppIntegrationUpdate,
+    WhatsAppRoutingUpdate,
 )
 from app.services import crm, crm_integrations
 from app.services.unit_of_work import execute_idempotent
@@ -93,6 +96,38 @@ async def delete_whatsapp_integration(
     return await crm_integrations.integration_status(session, context)
 
 
+@router.put("/integrations/whatsapp/evolution", response_model=EvolutionWhatsAppIntegrationRead)
+async def put_evolution_whatsapp_integration(
+    data: EvolutionWhatsAppIntegrationUpdate,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("communications:write"))],
+) -> EvolutionWhatsAppIntegrationRead:
+    result = await crm_integrations.save_evolution_whatsapp(session, context, data)
+    await session.commit()
+    return result
+
+
+@router.delete("/integrations/whatsapp/evolution", response_model=IntegrationStatusRead)
+async def delete_evolution_whatsapp_integration(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("communications:write"))],
+) -> IntegrationStatusRead:
+    await crm_integrations.disconnect_evolution_whatsapp(session, context)
+    await session.commit()
+    return await crm_integrations.integration_status(session, context)
+
+
+@router.put("/integrations/whatsapp/routing", response_model=IntegrationStatusRead)
+async def put_whatsapp_routing(
+    data: WhatsAppRoutingUpdate,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("communications:write"))],
+) -> IntegrationStatusRead:
+    await crm_integrations.update_whatsapp_routing(session, context, data)
+    await session.commit()
+    return await crm_integrations.integration_status(session, context)
+
+
 @router.get("/webhooks/whatsapp", include_in_schema=False)
 async def verify_whatsapp_webhook(
     session: Session,
@@ -114,6 +149,26 @@ async def receive_whatsapp_webhook(request: Request, session: Session) -> dict[s
         session,
         raw_body=raw_body,
         signature=signature,
+        payload=payload,
+    )
+    await session.commit()
+    return {"activitiesCreated": created}
+
+
+@router.post(
+    "/webhooks/whatsapp/evolution/{integration_id}/{webhook_token}", include_in_schema=False
+)
+async def receive_evolution_whatsapp_webhook(
+    integration_id: uuid.UUID,
+    webhook_token: str,
+    request: Request,
+    session: Session,
+) -> dict[str, int]:
+    payload = await request.json()
+    created = await crm_integrations.process_evolution_whatsapp_webhook(
+        session,
+        integration_id=integration_id,
+        webhook_token=webhook_token,
         payload=payload,
     )
     await session.commit()
@@ -306,6 +361,7 @@ async def post_lead_message(
                 recipient=lead.party.phone,
                 message=data.message,
                 template_id=data.template_id,
+                purpose="CRM",
             )
         activity = await crm.create_activity(
             session,

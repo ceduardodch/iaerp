@@ -55,7 +55,7 @@ La autorización es por **scopes** granulares. Ejemplos:
 | `invoices:read` / `invoices:write` | Facturación |
 | `receivables:*` | Cartera y cobranza |
 | `leads:read` / `leads:write` | CRM |
-| `communications:read` / `communications:write` | Integración de correo |
+| `communications:read` / `communications:write` | Integraciones de correo y WhatsApp |
 
 ## 6. Cuentas de servicio y agentes IA (MCP)
 
@@ -77,6 +77,24 @@ configura el operador una vez); luego **cada tenant** conecta su propio correo c
 un botón y sus tokens se guardan cifrados por `tenant_id`. Paso a paso completo
 (Google Cloud + variables de entorno + verificación) en
 [`GMAIL_SETUP.md`](GMAIL_SETUP.md).
+
+## 6.2 WhatsApp: Meta y Evolution
+
+En **Empresa → WhatsApp** se configuran los dos proveedores de forma separada
+y se escoge cuál usa cada flujo: **CRM** y **recordatorios de cobranza**. Los
+tenants existentes conservan Meta en ambos flujos hasta que un administrador lo
+cambie.
+
+Para Evolution, el operador de plataforma configura en Coolify:
+
+- `EVOLUTION_API_BASE_URL`: URL privada o pública del servidor Evolution.
+- `PUBLIC_API_URL`: URL pública del API IAERP, incluida la ruta `/api/v1`.
+
+Después el administrador del tenant guarda el nombre de instancia y su API key
+en IAERP, copia el webhook que muestra la pantalla y lo registra en Evolution.
+La clave y el token del webhook se almacenan cifrados. No uses Evolution para
+acciones fiscales ni para ejecutar automáticamente instrucciones recibidas por
+WhatsApp.
 
 ## 7. Zona horaria fiscal
 
