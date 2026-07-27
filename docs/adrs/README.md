@@ -17,3 +17,4 @@ sustituya.
 | 0007 | Un RUC por tenant | Accepted |
 | 0008 | Calculo fiscal y redondeo versionado | Proposed |
 | 0009 | Tenant activo y compatibilidad OAuth MCP | Proposed |
+| 0010 | Enrutamiento de WhatsApp por uso | Accepted |

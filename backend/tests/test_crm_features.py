@@ -1,5 +1,6 @@
 import uuid
 from datetime import date
+from urllib.parse import urlsplit
 
 from app.core.timezones import today_in_fiscal_timezone
 from app.db.session import SessionFactory
@@ -87,6 +88,59 @@ async def test_crm_and_integrations_require_their_declared_scopes(client):
     assert status.status_code == 200
     assert status.json()["googleConnected"] is False
     assert status.json()["whatsappConnected"] is False
+    assert status.json()["whatsappCrmProvider"] == "META"
+    assert status.json()["whatsappCollectionsProvider"] == "META"
+
+
+async def test_whatsapp_routing_can_use_meta_and_evolution_per_operational_purpose(
+    client, monkeypatch
+):
+    from app.services import crm_integrations
+
+    monkeypatch.setattr(
+        crm_integrations.settings, "EVOLUTION_API_BASE_URL", "https://evo.example"
+    )
+    monkeypatch.setattr(crm_integrations.settings, "PUBLIC_API_URL", "https://api.example/api/v1")
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["communications:read", "communications:write"],
+    )
+
+    saved = await client.put(
+        "/api/v1/crm/integrations/whatsapp/evolution",
+        headers=auth(token),
+        json={
+            "instanceName": "tenant-a",
+            "displayPhoneNumber": "+593999000111",
+            "apiKey": "evolution-api-key-for-tests",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["connected"] is True
+    assert saved.json()["webhookUrl"].startswith(
+        "https://api.example/api/v1/crm/webhooks/whatsapp/evolution/"
+    )
+    webhook_path = urlsplit(saved.json()["webhookUrl"]).path
+    webhook = await client.post(
+        webhook_path,
+        json={"event": "MESSAGES_UPSERT", "data": {"key": {"fromMe": True}}},
+    )
+    assert webhook.status_code == 200, webhook.text
+    assert webhook.json() == {"activitiesCreated": 0}
+    rejected_webhook = await client.post(f"{webhook_path}-invalid", json={})
+    assert rejected_webhook.status_code == 401
+
+    routed = await client.put(
+        "/api/v1/crm/integrations/whatsapp/routing",
+        headers=auth(token),
+        json={"crmProvider": "EVOLUTION", "collectionsProvider": "META"},
+    )
+    assert routed.status_code == 200, routed.text
+    assert routed.json()["whatsappEvolutionConnected"] is True
+    assert routed.json()["whatsappCrmProvider"] == "EVOLUTION"
+    assert routed.json()["whatsappCollectionsProvider"] == "META"
 
 
 async def test_invoice_preview_and_collection_policy_are_server_authoritative(client):

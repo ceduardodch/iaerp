@@ -1106,6 +1106,7 @@ async def send_real_reminder(
                 recipient=recipient,
                 message=message,
                 template_id=reminder.template_id,
+                purpose="COLLECTIONS",
             )
         else:
             raise HTTPException(status_code=422, detail="Unsupported reminder channel")

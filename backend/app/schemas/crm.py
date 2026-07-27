@@ -183,6 +183,12 @@ class IntegrationStatusRead(APIModel):
     google_configuration_available: bool
     whatsapp_connected: bool
     whatsapp_phone: str | None = None
+    whatsapp_meta_connected: bool
+    whatsapp_evolution_connected: bool
+    whatsapp_evolution_phone: str | None = None
+    evolution_configuration_available: bool
+    whatsapp_crm_provider: Literal["META", "EVOLUTION"]
+    whatsapp_collections_provider: Literal["META", "EVOLUTION"]
 
 
 class GoogleAuthorizationRead(APIModel):
@@ -196,6 +202,23 @@ class WhatsAppIntegrationUpdate(APIModel):
     access_token: str = Field(min_length=10)
     app_secret: str = Field(min_length=10)
     verify_token: str = Field(min_length=16)
+
+
+class EvolutionWhatsAppIntegrationUpdate(APIModel):
+    instance_name: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
+    display_phone_number: str | None = Field(default=None, max_length=40)
+    api_key: str = Field(min_length=16)
+
+
+class EvolutionWhatsAppIntegrationRead(APIModel):
+    connected: bool
+    display_phone_number: str | None = None
+    webhook_url: str
+
+
+class WhatsAppRoutingUpdate(APIModel):
+    crm_provider: Literal["META", "EVOLUTION"]
+    collections_provider: Literal["META", "EVOLUTION"]
 
 
 class LeadMessageCreate(APIModel):

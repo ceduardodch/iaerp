@@ -20,9 +20,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
 from app.core.config import get_settings
-from app.models.crm import GmailIntegration, Lead, LeadActivity, WhatsAppIntegration
+from app.models.crm import (
+    EvolutionWhatsAppIntegration,
+    GmailIntegration,
+    Lead,
+    LeadActivity,
+    WhatsAppIntegration,
+    WhatsAppRoutingPolicy,
+)
 from app.models.masters import Party
-from app.schemas.crm import GmailSyncResult, IntegrationStatusRead, WhatsAppIntegrationUpdate
+from app.schemas.crm import (
+    EvolutionWhatsAppIntegrationRead,
+    EvolutionWhatsAppIntegrationUpdate,
+    GmailSyncResult,
+    IntegrationStatusRead,
+    WhatsAppIntegrationUpdate,
+    WhatsAppRoutingUpdate,
+)
 from app.services.fiscal_settings import decrypt_secret, encrypt_secret
 
 settings = get_settings()
@@ -31,6 +45,14 @@ GOOGLE_SCOPES = (
     "https://www.googleapis.com/auth/gmail.readonly "
     "https://www.googleapis.com/auth/gmail.send"
 )
+
+
+def _evolution_configured() -> bool:
+    return bool(settings.EVOLUTION_API_BASE_URL)
+
+
+def _public_api_url() -> str:
+    return (settings.PUBLIC_API_URL or f"{settings.PUBLIC_APP_URL.rstrip('/')}/api/v1").rstrip("/")
 
 
 def _google_configured() -> bool:
@@ -74,6 +96,13 @@ async def integration_status(session: AsyncSession, context: AuthContext) -> Int
             WhatsAppIntegration.active.is_(True),
         )
     )
+    evolution = await session.scalar(
+        select(EvolutionWhatsAppIntegration).where(
+            EvolutionWhatsAppIntegration.tenant_id == context.tenant_id,
+            EvolutionWhatsAppIntegration.active.is_(True),
+        )
+    )
+    routing = await _routing_for_tenant(session, context.tenant_id)
     return IntegrationStatusRead(
         google_connected=bool(google and google.refresh_token_encrypted),
         google_email=google.email if google else None,
@@ -81,6 +110,12 @@ async def integration_status(session: AsyncSession, context: AuthContext) -> Int
         google_configuration_available=_google_configured(),
         whatsapp_connected=whatsapp is not None,
         whatsapp_phone=whatsapp.display_phone_number if whatsapp else None,
+        whatsapp_meta_connected=whatsapp is not None,
+        whatsapp_evolution_connected=evolution is not None,
+        whatsapp_evolution_phone=evolution.display_phone_number if evolution else None,
+        evolution_configuration_available=_evolution_configured(),
+        whatsapp_crm_provider=routing.crm_provider,
+        whatsapp_collections_provider=routing.collections_provider,
     )
 
 
@@ -219,6 +254,79 @@ async def disconnect_whatsapp(session: AsyncSession, context: AuthContext) -> No
     if entity:
         entity.active = False
         await session.flush()
+
+
+async def save_evolution_whatsapp(
+    session: AsyncSession,
+    context: AuthContext,
+    data: EvolutionWhatsAppIntegrationUpdate,
+) -> EvolutionWhatsAppIntegrationRead:
+    if not _evolution_configured():
+        raise HTTPException(
+            status_code=503, detail="Evolution API is not configured by the platform"
+        )
+    entity = await session.scalar(
+        select(EvolutionWhatsAppIntegration).where(
+            EvolutionWhatsAppIntegration.tenant_id == context.tenant_id
+        )
+    )
+    if entity is None:
+        entity = EvolutionWhatsAppIntegration(
+            tenant_id=context.tenant_id,
+            webhook_token_encrypted=encrypt_secret(secrets.token_urlsafe(32)),
+        )
+        session.add(entity)
+    entity.instance_name = data.instance_name
+    entity.display_phone_number = data.display_phone_number
+    entity.api_key_encrypted = encrypt_secret(data.api_key)
+    entity.active = True
+    await session.flush()
+    return EvolutionWhatsAppIntegrationRead(
+        connected=True,
+        display_phone_number=entity.display_phone_number,
+        webhook_url=_evolution_webhook_url(entity),
+    )
+
+
+async def disconnect_evolution_whatsapp(session: AsyncSession, context: AuthContext) -> None:
+    entity = await session.scalar(
+        select(EvolutionWhatsAppIntegration).where(
+            EvolutionWhatsAppIntegration.tenant_id == context.tenant_id
+        )
+    )
+    if entity:
+        entity.active = False
+        await session.flush()
+
+
+async def update_whatsapp_routing(
+    session: AsyncSession,
+    context: AuthContext,
+    data: WhatsAppRoutingUpdate,
+) -> None:
+    routing = await session.get(WhatsAppRoutingPolicy, context.tenant_id)
+    if routing is None:
+        routing = WhatsAppRoutingPolicy(tenant_id=context.tenant_id)
+        session.add(routing)
+    routing.crm_provider = data.crm_provider
+    routing.collections_provider = data.collections_provider
+    await session.flush()
+
+
+async def _routing_for_tenant(
+    session: AsyncSession, tenant_id: uuid.UUID
+) -> WhatsAppRoutingPolicy:
+    routing = await session.get(WhatsAppRoutingPolicy, tenant_id)
+    return routing or WhatsAppRoutingPolicy(
+        tenant_id=tenant_id,
+        crm_provider="META",
+        collections_provider="META",
+    )
+
+
+def _evolution_webhook_url(entity: EvolutionWhatsAppIntegration) -> str:
+    token = decrypt_secret(entity.webhook_token_encrypted)
+    return f"{_public_api_url()}/crm/webhooks/whatsapp/evolution/{entity.id}/{token}"
 
 
 async def _google_access_token(
@@ -406,6 +514,33 @@ async def send_whatsapp_message(
     recipient: str,
     message: str,
     template_id: str | None,
+    purpose: str,
+) -> str:
+    routing = await _routing_for_tenant(session, context.tenant_id)
+    provider = routing.collections_provider if purpose == "COLLECTIONS" else routing.crm_provider
+    if provider == "EVOLUTION":
+        return await _send_evolution_whatsapp_message(
+            session,
+            context,
+            recipient=recipient,
+            message=message,
+        )
+    return await _send_meta_whatsapp_message(
+        session,
+        context,
+        recipient=recipient,
+        message=message,
+        template_id=template_id,
+    )
+
+
+async def _send_meta_whatsapp_message(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    recipient: str,
+    message: str,
+    template_id: str | None,
 ) -> str:
     entity = await session.scalar(
         select(WhatsAppIntegration).where(
@@ -439,6 +574,42 @@ async def send_whatsapp_message(
     if response.is_error:
         raise HTTPException(status_code=502, detail="Meta could not send the WhatsApp message")
     return str(response.json()["messages"][0]["id"])
+
+
+async def _send_evolution_whatsapp_message(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    recipient: str,
+    message: str,
+) -> str:
+    if not _evolution_configured():
+        raise HTTPException(
+            status_code=503, detail="Evolution API is not configured by the platform"
+        )
+    entity = await session.scalar(
+        select(EvolutionWhatsAppIntegration).where(
+            EvolutionWhatsAppIntegration.tenant_id == context.tenant_id,
+            EvolutionWhatsAppIntegration.active.is_(True),
+        )
+    )
+    if entity is None:
+        raise HTTPException(status_code=422, detail="Evolution WhatsApp is not connected")
+    number = "".join(character for character in recipient if character.isdigit())
+    if not number:
+        raise HTTPException(status_code=422, detail="WhatsApp recipient has no valid phone number")
+    base_url = str(settings.EVOLUTION_API_BASE_URL).rstrip("/")
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            f"{base_url}/message/sendText/{entity.instance_name}",
+            headers={"apikey": decrypt_secret(entity.api_key_encrypted)},
+            json={"number": number, "text": message},
+        )
+    if response.is_error:
+        raise HTTPException(status_code=502, detail="Evolution could not send the WhatsApp message")
+    payload = response.json()
+    key = payload.get("key") if isinstance(payload, dict) else None
+    return str(key.get("id") if isinstance(key, dict) else payload.get("id") or "evolution-message")
 
 
 def valid_meta_signature(raw_body: bytes, signature: str, app_secret: str) -> bool:
@@ -542,3 +713,97 @@ async def process_whatsapp_webhook(
         created += 1
     await session.flush()
     return created
+
+
+async def process_evolution_whatsapp_webhook(
+    session: AsyncSession,
+    *,
+    integration_id: uuid.UUID,
+    webhook_token: str,
+    payload: dict[str, object],
+) -> int:
+    """Registra mensajes entrantes Evolution; los payloads son datos no confiables."""
+    integration = await session.scalar(
+        select(EvolutionWhatsAppIntegration).where(
+            EvolutionWhatsAppIntegration.id == integration_id,
+            EvolutionWhatsAppIntegration.active.is_(True),
+        )
+    )
+    if integration is None or not hmac.compare_digest(
+        decrypt_secret(integration.webhook_token_encrypted), webhook_token
+    ):
+        raise HTTPException(status_code=401, detail="Invalid Evolution webhook token")
+    if payload.get("event") != "MESSAGES_UPSERT":
+        return 0
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return 0
+    key = data.get("key")
+    if not isinstance(key, dict) or bool(key.get("fromMe")):
+        return 0
+    source_message_id = str(key.get("id") or "")
+    if not source_message_id:
+        return 0
+    existing = await session.scalar(
+        select(LeadActivity.id).where(
+            LeadActivity.tenant_id == integration.tenant_id,
+            LeadActivity.source_email_id == source_message_id,
+        )
+    )
+    if existing is not None:
+        return 0
+    sender = "".join(
+        character for character in str(key.get("remoteJid") or "").split("@", 1)[0]
+        if character.isdigit()
+    )
+    if not sender:
+        return 0
+    parties = list(
+        await session.scalars(
+            select(Party).where(
+                Party.tenant_id == integration.tenant_id,
+                Party.active.is_(True),
+            )
+        )
+    )
+    party = next(
+        (
+            candidate
+            for candidate in parties
+            if "".join(character for character in (candidate.phone or "") if character.isdigit())
+            == sender
+        ),
+        None,
+    )
+    if party is None:
+        return 0
+    lead = await session.scalar(
+        select(Lead)
+        .where(Lead.tenant_id == integration.tenant_id, Lead.party_id == party.id)
+        .order_by(Lead.created_at.desc())
+        .limit(1)
+    )
+    if lead is None:
+        return 0
+    message = data.get("message")
+    description = "Mensaje recibido por WhatsApp"
+    if isinstance(message, dict):
+        description = str(
+            message.get("conversation")
+            or (message.get("extendedTextMessage") or {}).get("text")
+            or description
+        )
+    session.add(
+        LeadActivity(
+            tenant_id=integration.tenant_id,
+            lead_id=lead.id,
+            actor_id="evolution-webhook",
+            activity_type="WHATSAPP",
+            subject="WhatsApp entrante",
+            description=description,
+            outcome="PENDING",
+            source_email_id=source_message_id,
+        )
+    )
+    await session.flush()
+    return 1

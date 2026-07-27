@@ -14,6 +14,12 @@ alcance y las decisiones.
 - Estado: **plan UI/UX (Sprints 1-9) completo** + cliente SRI real + integración
   Gmail listos. En preparación de **go-live** (faltan pasos de config del
   operador; ver "Go-live" abajo).
+- WhatsApp multi-proveedor preparado en `release`: Meta y Evolution coexisten
+  por tenant, con selector independiente para CRM y cobranza; Meta es el
+  valor por defecto. La migración `e8f9a0b1c2d3` y el ciclo PostgreSQL
+  upgrade/downgrade/check fueron verificados. Pendiente de operador: definir
+  `EVOLUTION_API_BASE_URL` y `PUBLIC_API_URL` en Coolify, registrar la
+  instancia y probar un número dedicado.
 - Rediseño visual IAERP preparado en `release`: sistema slate + azul sobrio,
   cabecera superior con navegación visible, KPIs de cobranza/emisión/pipeline
   y Kanban sin gradientes ni animación. Se preservaron los contratos
