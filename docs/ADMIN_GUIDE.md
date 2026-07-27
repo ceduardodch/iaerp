@@ -87,8 +87,12 @@ cambie.
 
 Para Evolution, el operador de plataforma configura en Coolify:
 
-- `EVOLUTION_API_BASE_URL`: URL privada o pública del servidor Evolution.
+- `EVOLUTION_API_BASE_URL`: URL privada o pública del servidor Evolution. En
+  el despliegue integrado queda como `http://evolution:8080` y no se expone a
+  Internet.
 - `PUBLIC_API_URL`: URL pública del API IAERP, incluida la ruta `/api/v1`.
+- `EVOLUTION_API_KEY` y `EVOLUTION_POSTGRES_PASSWORD`: secretos de plataforma
+  administrados solo en Coolify; no se versionan ni se comparten con tenants.
 
 Después el administrador del tenant guarda el nombre de instancia y su API key
 en IAERP, copia el webhook que muestra la pantalla y lo registra en Evolution.

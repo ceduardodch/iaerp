@@ -27,12 +27,75 @@ x-backend-environment: &backend-environment
   IAERP_SIGNING_CERT_PASSWORD: ${IAERP_SIGNING_CERT_PASSWORD}
   IAERP_SECRETS_ENCRYPTION_KEY: ${IAERP_SECRETS_ENCRYPTION_KEY}
   PUBLIC_APP_URL: https://iaerp.b2b.com.ec
+  # Evolution remains private to this Compose project.  Tenant credentials are
+  # encrypted in IAERP; this platform key is only used to create/link instances.
+  EVOLUTION_API_BASE_URL: http://evolution:8080
+  PUBLIC_API_URL: https://iaerp.b2b.com.ec/api/v1
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
   GOOGLE_OAUTH_REDIRECT_URI: https://iaerp.b2b.com.ec/api/v1/crm/integrations/google/callback
   WHATSAPP_GRAPH_VERSION: ${WHATSAPP_GRAPH_VERSION:-v23.0}
 
 services:
+  evolution-postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_POSTGRES_PASSWORD}
+    volumes:
+      - evolution-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  evolution-redis:
+    image: redis:7.4.5-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - evolution-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.0
+    restart: unless-stopped
+    environment:
+      SERVER_URL: http://evolution:8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_POSTGRES_PASSWORD}@evolution-postgres:5432/evolution?schema=evolution_api
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: iaerp-evolution
+      CACHE_LOCAL_ENABLED: "false"
+      CONFIG_SESSION_PHONE_CLIENT: IAERP
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      QRCODE_LIMIT: "30"
+      LOG_LEVEL: ERROR,WARN,INFO
+      LOG_BAILEYS: error
+      TELEMETRY_ENABLED: "false"
+    volumes:
+      - evolution-instances:/evolution/instances
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+      evolution-redis:
+        condition: service_healthy
+
   postgres:
     container_name: iaerp-staging-postgres
     build:
@@ -267,6 +330,9 @@ services:
       retries: 10
 
 volumes:
+  evolution-postgres-data:
+  evolution-redis-data:
+  evolution-instances:
   iaerp-postgres-data:
   iaerp-redis-data:
   iaerp-minio-data:
