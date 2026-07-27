@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     # Evolution se hospeda/controla a nivel de plataforma. Nunca se acepta una
     # URL de backend enviada por un tenant.
     EVOLUTION_API_BASE_URL: str | None = None
+    EVOLUTION_API_KEY: SecretStr | None = None
     PUBLIC_API_URL: str | None = None
 
     # Simulador SRI (ver app/integrations/sri/simulator.py). Solo se monta el

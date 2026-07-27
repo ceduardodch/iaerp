@@ -207,13 +207,14 @@ class WhatsAppIntegrationUpdate(APIModel):
 class EvolutionWhatsAppIntegrationUpdate(APIModel):
     instance_name: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
     display_phone_number: str | None = Field(default=None, max_length=40)
-    api_key: str = Field(min_length=16)
 
 
 class EvolutionWhatsAppIntegrationRead(APIModel):
     connected: bool
     display_phone_number: str | None = None
     webhook_url: str
+    qr_code: str | None = None
+    qr_expires_in_seconds: int | None = None
 
 
 class WhatsAppRoutingUpdate(APIModel):

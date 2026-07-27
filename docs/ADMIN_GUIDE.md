@@ -94,11 +94,12 @@ Para Evolution, el operador de plataforma configura en Coolify:
 - `EVOLUTION_API_KEY` y `EVOLUTION_POSTGRES_PASSWORD`: secretos de plataforma
   administrados solo en Coolify; no se versionan ni se comparten con tenants.
 
-Después el administrador del tenant guarda el nombre de instancia y su API key
-en IAERP, copia el webhook que muestra la pantalla y lo registra en Evolution.
-La clave y el token del webhook se almacenan cifrados. No uses Evolution para
-acciones fiscales ni para ejecutar automáticamente instrucciones recibidas por
-WhatsApp.
+Después el administrador del tenant indica el nombre de instancia y número en
+IAERP, y selecciona **Generar QR y conectar WhatsApp**. IAERP crea o reutiliza
+la instancia, configura el webhook y muestra el QR; la API key de plataforma no
+se expone al navegador. El token del webhook se almacena cifrado. No uses
+Evolution para acciones fiscales ni para ejecutar automáticamente instrucciones
+recibidas por WhatsApp.
 
 ## 7. Zona horaria fiscal
 

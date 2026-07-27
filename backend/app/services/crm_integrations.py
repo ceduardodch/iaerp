@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -48,7 +49,19 @@ GOOGLE_SCOPES = (
 
 
 def _evolution_configured() -> bool:
-    return bool(settings.EVOLUTION_API_BASE_URL)
+    return bool(settings.EVOLUTION_API_BASE_URL and settings.EVOLUTION_API_KEY)
+
+
+def _evolution_api_key() -> str:
+    if not settings.EVOLUTION_API_KEY:
+        raise HTTPException(
+            status_code=503, detail="Evolution API is not configured by the platform"
+        )
+    return settings.EVOLUTION_API_KEY.get_secret_value()
+
+
+def _evolution_headers() -> dict[str, str]:
+    return {"apikey": _evolution_api_key()}
 
 
 def _public_api_url() -> str:
@@ -278,13 +291,18 @@ async def save_evolution_whatsapp(
         session.add(entity)
     entity.instance_name = data.instance_name
     entity.display_phone_number = data.display_phone_number
-    entity.api_key_encrypted = encrypt_secret(data.api_key)
+    # Esta es una credencial de plataforma. Nunca se recibe ni devuelve al
+    # navegador; el valor cifrado solo preserva compatibilidad con el modelo.
+    entity.api_key_encrypted = encrypt_secret(_evolution_api_key())
     entity.active = True
     await session.flush()
+    qr_code = await _configure_evolution_instance(entity)
     return EvolutionWhatsAppIntegrationRead(
         connected=True,
         display_phone_number=entity.display_phone_number,
         webhook_url=_evolution_webhook_url(entity),
+        qr_code=qr_code,
+        qr_expires_in_seconds=30 if qr_code else None,
     )
 
 
@@ -327,6 +345,52 @@ async def _routing_for_tenant(
 def _evolution_webhook_url(entity: EvolutionWhatsAppIntegration) -> str:
     token = decrypt_secret(entity.webhook_token_encrypted)
     return f"{_public_api_url()}/crm/webhooks/whatsapp/evolution/{entity.id}/{token}"
+
+
+async def _configure_evolution_instance(entity: EvolutionWhatsAppIntegration) -> str | None:
+    """Crea/reutiliza una instancia y deja el webhook tenant-safe configurado."""
+    base_url = str(settings.EVOLUTION_API_BASE_URL).rstrip("/")
+    headers = _evolution_headers()
+    create_payload = {
+        "instanceName": entity.instance_name,
+        "integration": "WHATSAPP-BAILEYS",
+        "qrcode": True,
+    }
+    webhook_payload = {
+        "webhook": {
+            "enabled": True,
+            "url": _evolution_webhook_url(entity),
+            "byEvents": False,
+            "base64": False,
+            "events": ["MESSAGES_UPSERT"],
+        }
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        created = await client.post(
+            f"{base_url}/instance/create", headers=headers, json=create_payload
+        )
+        if created.status_code not in {200, 201, 409}:
+            raise HTTPException(
+                status_code=502, detail="Evolution could not create the WhatsApp instance"
+            )
+        webhook = await client.post(
+            f"{base_url}/webhook/set/{entity.instance_name}",
+            headers=headers,
+            json=webhook_payload,
+        )
+        if webhook.is_error:
+            raise HTTPException(status_code=502, detail="Evolution could not configure the webhook")
+        for attempt in range(3):
+            qr_response = await client.get(
+                f"{base_url}/instance/connect/{entity.instance_name}", headers=headers
+            )
+            if not qr_response.is_error:
+                payload = qr_response.json()
+                if isinstance(payload, dict) and isinstance(payload.get("base64"), str):
+                    return payload["base64"]
+            if attempt < 2:
+                await asyncio.sleep(1)
+    return None
 
 
 async def _google_access_token(
@@ -602,7 +666,7 @@ async def _send_evolution_whatsapp_message(
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
             f"{base_url}/message/sendText/{entity.instance_name}",
-            headers={"apikey": decrypt_secret(entity.api_key_encrypted)},
+            headers=_evolution_headers(),
             json={"number": number, "text": message},
         )
     if response.is_error:
