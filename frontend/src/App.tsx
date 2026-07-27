@@ -1740,18 +1740,6 @@ function ReceivablesPage({
         statusFilter ? `/receivables?status=${statusFilter}` : '/receivables',
       ),
   })
-  const policyQuery = useQuery({
-    queryKey: ['receivables', 'collection-policy'],
-    queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
-  })
-  const updatePolicy = useMutation({
-    mutationFn: (policy: Omit<CollectionPolicy, 'updatedAt'>) => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy', {
-      method: 'PUT',
-      headers: { 'Idempotency-Key': idempotencyKey('web-collection-policy') },
-      body: JSON.stringify(policy),
-    }),
-    onSuccess: (policy) => queryClient.setQueryData(['receivables', 'collection-policy'], policy),
-  })
   const receivables = receivablesQuery.data ?? []
 
   function openPanel(next: ReceivablePanel, trigger?: HTMLElement) {
@@ -1812,7 +1800,6 @@ function ReceivablesPage({
           </select>
         </label>
       </ErpToolbar>
-      {policyQuery.data && !Array.isArray(policyQuery.data) && Array.isArray(policyQuery.data.offsetsDays) && Array.isArray(policyQuery.data.channels) ? <CollectionPolicyEditor key={policyQuery.data.updatedAt} policy={policyQuery.data} pending={updatePolicy.isPending} error={updatePolicy.error?.message} onSave={(policy) => updatePolicy.mutate(policy)} /> : null}
       <section className="split-layout erp-list-only">
         <ErpPanel title="Cuentas por cobrar" count={receivables.length}>
           <div className="table-wrap" tabIndex={0} aria-label="Listado de cuentas por cobrar">
@@ -1889,6 +1876,18 @@ function OrganizationPage({
   const integrationsQuery = useQuery({
     queryKey: ['crm', 'integrations'],
     queryFn: () => apiRequest<IntegrationStatus>(token, '/crm/integrations'),
+  })
+  const collectionPolicyQuery = useQuery({
+    queryKey: ['receivables', 'collection-policy'],
+    queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
+  })
+  const updateCollectionPolicy = useMutation({
+    mutationFn: (policy: Omit<CollectionPolicy, 'updatedAt'>) => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy', {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': idempotencyKey('web-collection-policy') },
+      body: JSON.stringify(policy),
+    }),
+    onSuccess: (policy) => queryClient.setQueryData(['receivables', 'collection-policy'], policy),
   })
   const updateProfile = useMutation({
     mutationFn: (data: Omit<OrganizationProfile, 'tenantId'>) =>
@@ -2041,6 +2040,18 @@ function OrganizationPage({
               </ErpButton>
             </form>
           </div>
+        </ErpPanel>
+        <ErpPanel title="Automatizaciones de cobranza" className="fiscal-settings-panel">
+          <p className="fiscal-panel-copy">Define aquí las plantillas, canales y reglas automáticas. La pantalla de Cartera queda reservada para gestionar saldos y cobros.</p>
+          {collectionPolicyQuery.data && Array.isArray(collectionPolicyQuery.data.offsetsDays) && Array.isArray(collectionPolicyQuery.data.channels) ? (
+            <CollectionPolicyEditor
+              key={collectionPolicyQuery.data.updatedAt}
+              policy={collectionPolicyQuery.data}
+              pending={updateCollectionPolicy.isPending}
+              error={updateCollectionPolicy.error?.message}
+              onSave={(policy) => updateCollectionPolicy.mutate(policy)}
+            />
+          ) : null}
         </ErpPanel>
         <ErpPanel title="Google Workspace" actions={<ErpStatusBadge tone={integrationsQuery.data?.googleConnected ? 'success' : 'warning'}>{integrationsQuery.data?.googleConnected ? 'Conectado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
           <div className="fiscal-panel-body">
