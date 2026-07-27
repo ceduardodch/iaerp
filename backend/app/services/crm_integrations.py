@@ -386,8 +386,9 @@ async def _configure_evolution_instance(entity: EvolutionWhatsAppIntegration) ->
             )
             if not qr_response.is_error:
                 payload = qr_response.json()
-                if isinstance(payload, dict) and isinstance(payload.get("base64"), str):
-                    return payload["base64"]
+                qr_code = payload.get("base64") if isinstance(payload, dict) else None
+                if isinstance(qr_code, str):
+                    return qr_code
             if attempt < 2:
                 await asyncio.sleep(1)
     return None
