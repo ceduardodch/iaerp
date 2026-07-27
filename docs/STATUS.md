@@ -7,6 +7,14 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización: 2026-07-27 `America/Guayaquil`.
+- Producción: `main` en commit `1ec404c` desplegado por Coolify tras CI
+  `30293169564` (backend, frontend, OIDC, migraciones, contratos, seguridad y
+  despliegue aprobados). La aplicación y OIDC responden HTTP 200 públicamente.
+- Evolution: se incorpora como servicio interno de Coolify con PostgreSQL,
+  Redis y volúmenes persistentes; falta promover esta configuración y enlazar
+  el primer número mediante QR.
+
 - Fecha: 2026-07-23 `America/Guayaquil`.
 - Rama de trabajo: `release` (CI `30043763940` verde). `main` = producción
   (Coolify/SRI).
