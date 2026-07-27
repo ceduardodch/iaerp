@@ -114,7 +114,7 @@ async def test_whatsapp_routing_can_use_meta_and_evolution_per_operational_purpo
         json={
             "instanceName": "tenant-a",
             "displayPhoneNumber": "+593999000111",
-            "apiKey": "evolution-api-key-for-tests",
+            "apiKey": "evolution-api-key-for-tests",  # pragma: allowlist secret
         },
     )
     assert saved.status_code == 200, saved.text

@@ -9,8 +9,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "e8f9a0b1c2d3"
-down_revision: str | None = "d7e8f9a0b1c2"
+revision: str = "e8f9a0b1c2d3"  # pragma: allowlist secret
+down_revision: str | None = "d7e8f9a0b1c2"  # pragma: allowlist secret
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
