@@ -15,6 +15,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY app ./app
+COPY scripts ./scripts
 RUN uv sync --frozen --no-dev
 RUN rm -rf /tmp/uv-cache
 RUN groupadd --gid 65532 iaerp \

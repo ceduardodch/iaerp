@@ -8,11 +8,12 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-28 `America/Guayaquil`.
-- Provisionamiento de primer tenant: se incorporó al worktree (aún no promovido)
-  el comando `backend/scripts/provision_tenant_owner.py`. Reconcilia una
-  organización y un usuario ya creados en Keycloak con `Tenant`, `User`,
-  `Membership` Owner/Admin, automatizaciones desactivadas y auditoría. No usa
-  SQL libre ni se ejecutó contra producción. Pruebas focalizadas, Ruff y mypy
+- Provisionamiento de primer tenant: el comando `backend/scripts/provision_tenant_owner.py`
+  fue promovido a `main` el 2026-07-28. Reconcilia una organización y un
+  usuario ya creados en Keycloak con `Tenant`, `User`, `Membership` Owner/Admin,
+  automatizaciones desactivadas y auditoría. La imagen backend incluye
+  `scripts/` para ejecutarlo desde el servicio desplegado; no usa SQL libre.
+  Pendiente: finalizar el despliegue y ejecutar el alta productiva autorizada.
   aprobados; la suite backend completa conserva una falla preexistente de
   SQLite en `tests/test_billing_api.py` (`emission_points` ausente).
 
