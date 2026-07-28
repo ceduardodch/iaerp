@@ -7,6 +7,15 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización local: 2026-07-28 `America/Guayaquil`.
+- Provisionamiento de primer tenant: se incorporó al worktree (aún no promovido)
+  el comando `backend/scripts/provision_tenant_owner.py`. Reconcilia una
+  organización y un usuario ya creados en Keycloak con `Tenant`, `User`,
+  `Membership` Owner/Admin, automatizaciones desactivadas y auditoría. No usa
+  SQL libre ni se ejecutó contra producción. Pruebas focalizadas, Ruff y mypy
+  aprobados; la suite backend completa conserva una falla preexistente de
+  SQLite en `tests/test_billing_api.py` (`emission_points` ausente).
+
 - Actualización: 2026-07-27 `America/Guayaquil`.
 - Producción: `main` en commit `1ec404c` desplegado por Coolify tras CI
   `30293169564` (backend, frontend, OIDC, migraciones, contratos, seguridad y
