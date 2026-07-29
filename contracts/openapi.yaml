@@ -1512,6 +1512,21 @@ components:
           type: [string, "null"]
         address:
           type: [string, "null"]
+        paymentTermsDays:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 365
+        expectedIvaWithholdingRate:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 100
+        expectedIncomeWithholdingRate:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 100
+        withholdingProfileValidFrom:
+          type: [string, "null"]
+          format: date
     Party:
       type: object
       additionalProperties: false
@@ -1538,6 +1553,15 @@ components:
           type: [string, "null"]
         address:
           type: [string, "null"]
+        paymentTermsDays:
+          type: [integer, "null"]
+        expectedIvaWithholdingRate:
+          type: [number, "null"]
+        expectedIncomeWithholdingRate:
+          type: [number, "null"]
+        withholdingProfileValidFrom:
+          type: [string, "null"]
+          format: date
     ProductInput:
       type: object
       additionalProperties: false
@@ -1822,7 +1846,7 @@ components:
     RetentionInput:
       type: object
       additionalProperties: false
-      required: [kind, amount, reason]
+      required: [kind, amount, reason, documentReference]
       properties:
         kind:
           type: string
@@ -1833,7 +1857,8 @@ components:
           type: string
           minLength: 3
         documentReference:
-          type: [string, "null"]
+          type: string
+          minLength: 3
     DiscountInput:
       type: object
       additionalProperties: false

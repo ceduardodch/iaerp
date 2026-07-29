@@ -183,7 +183,12 @@ async def test_get_receivable_movements_lists_history(client) -> None:
             "cashAmount": "20.00",
             "paymentDate": "2026-07-10",
             "retentions": [
-                {"kind": "RETENTION_IVA", "amount": "5.00", "reason": "Retencion IVA 5%"}
+                {
+                    "kind": "RETENTION_IVA",
+                    "amount": "5.00",
+                    "reason": "Retencion IVA 5%",
+                    "documentReference": "001-009-000014275",
+                }
             ],
             "discounts": [],
         },

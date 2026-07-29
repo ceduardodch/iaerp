@@ -62,7 +62,7 @@ class RetentionInput(APIModel):
     kind: RetentionKind
     amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
     reason: str = Field(min_length=3)
-    document_reference: str | None = None
+    document_reference: str = Field(min_length=3, max_length=120)
 
 
 class DiscountInput(APIModel):

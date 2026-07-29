@@ -676,7 +676,9 @@ async def record_payment(
                     installment_id=first_installment.id,
                     movement_type="RETENTION",
                     amount=retention.amount,
-                    support_reference=f"{retention.kind}: {retention.reason}",
+                    support_reference=(
+                        f"{retention.document_reference} | {retention.kind}: {retention.reason}"
+                    ),
                     actor_id=context.actor_id,
                 )
             )

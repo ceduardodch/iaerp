@@ -18,6 +18,9 @@ export type Party = {
   phone?: string
   address?: string
   paymentTermsDays?: number | null
+  expectedIvaWithholdingRate?: string | null
+  expectedIncomeWithholdingRate?: string | null
+  withholdingProfileValidFrom?: string | null
 }
 
 export type Product = {
@@ -189,7 +192,7 @@ export type RetentionInput = {
   kind: 'RETENTION_IVA' | 'RETENTION_RENTA' | 'OTHER'
   amount: string
   reason: string
-  documentReference?: string | null
+  documentReference: string
 }
 
 export type DiscountInput = {

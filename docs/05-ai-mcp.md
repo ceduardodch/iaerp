@@ -55,6 +55,11 @@ u otro servicio.
 No existen herramientas `query_sql`, `execute_code`, acceso a filesystem o
 actualizacion generica de tablas.
 
+Los perfiles de retención de un cliente son una ayuda de cálculo para la
+conciliación, no una instrucción fiscal autónoma. Una escritura de retención
+exige la referencia de su comprobante y queda auditada; un extracto bancario
+sin ese respaldo solo puede generar una propuesta de revisión.
+
 ## Flujo de una escritura
 
 1. Validar token, client, tenant, rol y scope.
