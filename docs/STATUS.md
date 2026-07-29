@@ -8,6 +8,14 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-28 `America/Guayaquil`.
+- Migración Sky Franquicia / BTOB: se agregó localmente el primer gate
+  `backend/scripts/dry_run_sky_franquicia_migration.py`; usa una URL de origen
+  solo lectura por variable de entorno, no imprime datos personales y no
+  escribe en origen ni destino. El inventario productivo de BTOB detectó 15
+  facturas (12 `AUTHORIZED`, 3 `CANCELLED`), sin cobros; el dry-run debe
+  resolver una brecha de XML autorizado y una diferencia de subtotal antes de
+  habilitar la carga. Pendiente construir/aprobar la fase de carga idempotente
+  y la conciliación final.
 - Provisionamiento de primer tenant: el comando `backend/scripts/provision_tenant_owner.py`
   fue promovido a `main` el 2026-07-28. Reconcilia una organización y un
   usuario ya creados en Keycloak con `Tenant`, `User`, `Membership` Owner/Admin,
