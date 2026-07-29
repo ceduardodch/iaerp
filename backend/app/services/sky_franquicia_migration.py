@@ -96,9 +96,12 @@ def validate_source_invoices(rows: list[dict[str, Any]]) -> list[MigrationIssue]
                 )
             )
         try:
+            # Sky stores ``subtotal_15`` and ``subtotal_0`` after discount.
+            # ``discount`` is a separate informational total and must not be
+            # subtracted again during reconciliation.
             source_subtotal = _decimal(row.get("subtotal_15")) + _decimal(
                 row.get("subtotal_0")
-            ) - _decimal(row.get("discount"))
+            )
             line_subtotal = _decimal(row.get("line_subtotal"))
         except ValueError as error:
             issues.append(

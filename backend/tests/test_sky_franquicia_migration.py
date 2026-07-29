@@ -22,6 +22,21 @@ def test_valid_source_invoice_has_no_validation_issues() -> None:
     assert validate_source_invoices([_row()]) == []
 
 
+def test_validation_does_not_subtract_a_discount_twice() -> None:
+    assert (
+        validate_source_invoices(
+            [
+                _row(
+                    subtotal_15="90.00",
+                    discount="10.00",
+                    line_subtotal="90.00",
+                )
+            ]
+        )
+        == []
+    )
+
+
 def test_validation_rejects_unreconciled_or_incomplete_documents() -> None:
     issues = validate_source_invoices(
         [
