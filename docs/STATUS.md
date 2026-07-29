@@ -8,6 +8,16 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-29 `America/Guayaquil`.
+  Contactos puede guardar un perfil esperado de retención de IVA/renta, con
+  vigencia, para facilitar cobros recurrentes como UASB. Cartera puede
+  precargar ese perfil en una cuenta sin movimientos, pero exige la referencia
+  del comprobante antes de registrar una retención que reduzca saldo. No hay
+  importación automática de banco/SRI ni se crean retenciones por la mera
+  coincidencia de un extracto; esa conciliación permanece como candidato
+  revisable. Validado localmente con Ruff, mypy, pruebas focalizadas, contrato,
+  lint y build; falta validación de migración contra PostgreSQL/CI y promoción.
+
+- Actualización local: 2026-07-29 `America/Guayaquil`.
   Catálogos incorpora el alta tenant-scoped e idempotente de categorías
   tributarias (código SRI, tarifa y vigencia) y agrupa Productos y categorías
   en una sola entrada de navegación. Cartera inicia mostrando únicamente

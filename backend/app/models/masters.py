@@ -112,6 +112,11 @@ class Party(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     address: Mapped[str | None] = mapped_column(String(500))
     consent_opt_out: Mapped[bool] = mapped_column(Boolean, default=False)
     payment_terms_days: Mapped[int | None] = mapped_column(Integer)
+    # Este perfil solo anticipa el neto de cobro. El comprobante emitido por el
+    # cliente sigue siendo el único sustento para registrar una retención.
+    expected_iva_withholding_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    expected_income_withholding_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    withholding_profile_valid_from: Mapped[date | None] = mapped_column(Date)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 

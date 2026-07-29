@@ -236,7 +236,12 @@ async def test_record_payment_with_retention_and_discount_reduces_balance_by_typ
         cash_amount=Decimal("60.00"),
         payment_date=date(2026, 7, 10),
         retentions=[
-            RetentionInput(kind="RETENTION_IVA", amount=Decimal("10.00"), reason="Retencion IVA")
+            RetentionInput(
+                kind="RETENTION_IVA",
+                amount=Decimal("10.00"),
+                reason="Retencion IVA",
+                document_reference="001-009-000014275",
+            )
         ],
         discounts=[DiscountInput(amount=Decimal("5.00"), reason="Pronto pago")],
     )

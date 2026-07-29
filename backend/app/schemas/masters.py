@@ -72,6 +72,13 @@ class PartyCreate(APIModel):
     phone: str | None = Field(default=None, max_length=40)
     address: str | None = Field(default=None, max_length=500)
     payment_terms_days: int | None = Field(default=None, ge=0, le=365)
+    expected_iva_withholding_rate: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=5, decimal_places=2
+    )
+    expected_income_withholding_rate: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=5, decimal_places=2
+    )
+    withholding_profile_valid_from: date | None = None
 
     @field_validator("roles")
     @classmethod

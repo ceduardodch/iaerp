@@ -294,6 +294,9 @@ function PartiesPage({
       phone: FormDataEntryValue | null
       address: FormDataEntryValue | null
       paymentTermsDays: FormDataEntryValue | null
+      expectedIvaWithholdingRate: FormDataEntryValue | null
+      expectedIncomeWithholdingRate: FormDataEntryValue | null
+      withholdingProfileValidFrom: FormDataEntryValue | null
     }) =>
       apiRequest<Party>(token, data.id ? `/parties/${data.id}` : '/parties', {
         method: data.id ? 'PUT' : 'POST',
@@ -307,6 +310,9 @@ function PartiesPage({
           phone: data.phone || null,
           address: data.address || null,
           paymentTermsDays: data.paymentTermsDays === '' ? null : Number(data.paymentTermsDays),
+          expectedIvaWithholdingRate: data.expectedIvaWithholdingRate === '' ? null : String(data.expectedIvaWithholdingRate),
+          expectedIncomeWithholdingRate: data.expectedIncomeWithholdingRate === '' ? null : String(data.expectedIncomeWithholdingRate),
+          withholdingProfileValidFrom: data.withholdingProfileValidFrom || null,
         }),
       }),
     onSuccess: () => {
@@ -330,6 +336,9 @@ function PartiesPage({
         phone: data.get('phone'),
         address: data.get('address'),
         paymentTermsDays: data.get('paymentTermsDays'),
+        expectedIvaWithholdingRate: data.get('expectedIvaWithholdingRate'),
+        expectedIncomeWithholdingRate: data.get('expectedIncomeWithholdingRate'),
+        withholdingProfileValidFrom: data.get('withholdingProfileValidFrom'),
       },
     )
   }
@@ -363,6 +372,15 @@ function PartiesPage({
           </div>
           <label>Dirección<textarea name="address" rows={3} defaultValue={editor?.address ?? ''} /></label>
           <label>Condición de pago predeterminada<select name="paymentTermsDays" defaultValue={editor?.paymentTermsDays ?? ''}><option value="">Usar valor de la empresa</option><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="45">45 días</option><option value="60">60 días</option><option value="90">90 días</option></select></label>
+          <fieldset className="invoice-lines">
+            <legend>Perfil esperado de retención</legend>
+            <p className="fine-print">Solo ayuda a calcular el cobro esperado. Registra una retención únicamente con su comprobante.</p>
+            <div className="field-row">
+              <label>IVA %<input name="expectedIvaWithholdingRate" type="number" min="0" max="100" step="0.01" defaultValue={editor?.expectedIvaWithholdingRate ?? ''} /></label>
+              <label>Renta %<input name="expectedIncomeWithholdingRate" type="number" min="0" max="100" step="0.01" defaultValue={editor?.expectedIncomeWithholdingRate ?? ''} /></label>
+            </div>
+            <label>Vigente desde<input name="withholdingProfileValidFrom" type="date" defaultValue={editor?.withholdingProfileValidFrom ?? ''} /></label>
+          </fieldset>
         </ErpFormPanel>
       </>
     )
@@ -1489,14 +1507,21 @@ function emptyDiscount(): DiscountInput & { key: string } {
 function RegisterPaymentForm({
   token,
   receivable,
+  party,
   onSaved,
   onCancel,
 }: {
   token: string
   receivable: AccountItem
+  party: Party | undefined
   onSaved: (updated: AccountItem) => void
   onCancel: () => void
 }) {
+  const profileIsAvailable = party?.expectedIvaWithholdingRate != null || party?.expectedIncomeWithholdingRate != null
+  const expectedIva = profileIsAvailable ? Number(receivable.originalAmount) * Number(party?.expectedIvaWithholdingRate ?? 0) / 100 : 0
+  const expectedIncome = profileIsAvailable ? Number(receivable.originalAmount) * Number(party?.expectedIncomeWithholdingRate ?? 0) / 100 : 0
+  const expectedRetentionTotal = expectedIva + expectedIncome
+  const canPrefill = profileIsAvailable && Number(receivable.openAmount) === Number(receivable.originalAmount) && expectedRetentionTotal <= Number(receivable.openAmount)
   const [cashAmount, setCashAmount] = useState('0.00')
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [method, setMethod] = useState<'' | PaymentInput['method']>('')
@@ -1526,6 +1551,15 @@ function RegisterPaymentForm({
     registerPayment.mutate()
   }
 
+  function applyExpectedProfile() {
+    if (!canPrefill) return
+    const suggested: Array<RetentionInput & { key: string }> = []
+    if (expectedIva > 0) suggested.push({ key: crypto.randomUUID(), kind: 'RETENTION_IVA', amount: expectedIva.toFixed(2), reason: `Perfil esperado de ${party?.name ?? 'cliente'}`, documentReference: '' })
+    if (expectedIncome > 0) suggested.push({ key: crypto.randomUUID(), kind: 'RETENTION_RENTA', amount: expectedIncome.toFixed(2), reason: `Perfil esperado de ${party?.name ?? 'cliente'}`, documentReference: '' })
+    setRetentions(suggested)
+    setCashAmount((Number(receivable.openAmount) - expectedRetentionTotal).toFixed(2))
+  }
+
   return (
     <ErpFormPanel
       eyebrow="Cobro"
@@ -1537,6 +1571,7 @@ function RegisterPaymentForm({
       onCancel={onCancel}
     >
       <p className="fine-print">Saldo actual ${formatAmount(receivable.openAmount)}. El saldo final lo calcula el servidor.</p>
+      {profileIsAvailable ? <div className="fine-print">Perfil esperado de {party?.name}: IVA {party?.expectedIvaWithholdingRate ?? '0'}% + renta {party?.expectedIncomeWithholdingRate ?? '0'}%. {canPrefill ? <><span> Neto estimado ${formatAmount((Number(receivable.openAmount) - expectedRetentionTotal).toFixed(2))}.</span><ErpButton variant="secondary" onClick={applyExpectedProfile}>Usar perfil y adjuntar comprobante</ErpButton></> : ' No se precarga porque este cobro es parcial o el saldo ya cambió.'}</div> : null}
       <div className="field-row">
         <label>
           Monto en efectivo
@@ -1630,6 +1665,15 @@ function RegisterPaymentForm({
                       ),
                     )
                   }
+                  required
+                />
+              </label>
+              <label>
+                Comprobante de retención
+                <input
+                  value={retention.documentReference}
+                  minLength={3}
+                  onChange={(event) => setRetentions((current) => current.map((item) => item.key === retention.key ? { ...item, documentReference: event.target.value } : item))}
                   required
                 />
               </label>
@@ -1887,7 +1931,7 @@ function ReceivablesPage({
     return (
       <>
         <ErpPageHeader eyebrow="Cuentas por cobrar" title="Registrar cobro" subtitle={`Saldo actual: $${formatAmount(panel.receivable.openAmount)}`} />
-        <RegisterPaymentForm key={panel.receivable.id} token={token} receivable={panel.receivable} onSaved={applyUpdatedReceivable} onCancel={closePanel} />
+        <RegisterPaymentForm key={panel.receivable.id} token={token} receivable={panel.receivable} party={partiesById.get(panel.receivable.partyId)} onSaved={applyUpdatedReceivable} onCancel={closePanel} />
       </>
     )
   }
