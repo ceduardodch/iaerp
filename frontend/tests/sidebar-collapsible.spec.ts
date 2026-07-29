@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const navigationLabels = ['Resumen', 'Contactos', 'Productos', 'Facturas', 'Empresa', 'Cartera', 'CRM']
+const navigationLabels = ['Resumen', 'Contactos', 'Catálogos', 'Facturas', 'Empresa', 'Cartera', 'CRM']
 
 test.describe('Navegación principal', () => {
   test.beforeEach(async ({ page }) => {
@@ -26,11 +26,11 @@ test.describe('Navegación principal', () => {
     const overview = navigation.getByRole('button', { name: 'Resumen', exact: true })
     await expect(overview).toHaveAttribute('aria-current', 'page')
 
-    const products = navigation.getByRole('button', { name: 'Productos', exact: true })
+    const products = navigation.getByRole('button', { name: 'Catálogos', exact: true })
     await products.click()
     await expect(products).toHaveAttribute('aria-current', 'page')
     await expect(overview).not.toHaveAttribute('aria-current')
-    await expect(page.getByRole('heading', { name: 'Productos' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Productos y servicios' })).toBeVisible()
   })
 
   test('permite navegar con teclado y conserva un foco visible', async ({ page }) => {

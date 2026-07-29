@@ -154,16 +154,17 @@ test('receivables list passes WCAG 2.1 AA automated checks', async ({ page }) =>
   await expectNoA11yViolations(page)
 })
 
-test('receivables status badges and aging are visible per account', async ({ page }) => {
+test('receivables defaults to pending accounts and keeps their aging visible', async ({ page }) => {
   await loginAndOpenReceivables(page)
   await expect(page.getByText('VENCIDA', { exact: true })).toBeVisible()
   await expect(page.getByText('PARCIAL', { exact: true })).toBeVisible()
-  await expect(page.getByText('SALDADA', { exact: true })).toBeVisible()
+  await expect(page.getByText('SALDADA', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Más de 90 días', { exact: true })).toBeVisible()
 })
 
-test('settled receivable disables collection actions', async ({ page }) => {
+test('settled receivable is available only when explicitly requested', async ({ page }) => {
   await loginAndOpenReceivables(page)
+  await page.getByLabel('Filtrar por estado').selectOption('SETTLED')
   const settledRow = page.getByRole('row', {
     name: /\$80,00/,
   })

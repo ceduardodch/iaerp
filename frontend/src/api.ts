@@ -33,7 +33,16 @@ export type TaxCategory = {
   sriCode: string
   name: string
   rate: string
+  validFrom: string
+  validTo?: string | null
   active: boolean
+}
+
+export type TaxCategoryInput = {
+  sriCode: string
+  name: string
+  rate: string
+  validFrom: string
 }
 
 export type Establishment = {

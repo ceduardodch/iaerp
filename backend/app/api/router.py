@@ -39,6 +39,7 @@ from app.schemas.masters import (
     ProductRead,
     TagCreate,
     TagRead,
+    TaxCategoryCreate,
     TaxCategoryRead,
 )
 from app.schemas.platform import (
@@ -447,6 +448,34 @@ async def get_tax_categories(
         TaxCategoryRead.model_validate(entity)
         for entity in await masters.list_tax_categories(session, context)
     ]
+
+
+@router.post("/tax-categories", response_model=TaxCategoryRead, status_code=201)
+async def post_tax_category(
+    data: TaxCategoryCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+) -> dict[str, object]:
+    """Da de alta una categoría tributaria con fecha de vigencia."""
+
+    async def create() -> tuple[str, dict[str, object]]:
+        entity = await masters.create_tax_category(session, context, data)
+        return (
+            str(entity.id),
+            TaxCategoryRead.model_validate(entity).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax_categories.create",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="tax_category.created",
+        entity_type="tax_category",
+        callback=create,
+    )
 
 
 @router.get("/tags", response_model=list[TagRead])

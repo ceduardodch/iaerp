@@ -65,7 +65,7 @@ test('creates a product through the real API and refreshes the catalog', async (
   const productName = `Producto E2E ${suffix}`
 
   await login(page, tenantNorte)
-  await page.getByRole('button', { name: 'Productos' }).click()
+  await page.getByRole('button', { name: 'Catálogos' }).click()
   await page.getByRole('button', { name: 'Nuevo producto' }).click()
   await page.getByLabel('Nombre').fill(productName)
   await page.getByLabel('Código interno').fill(`E2E-${suffix}`)

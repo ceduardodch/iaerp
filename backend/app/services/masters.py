@@ -18,6 +18,7 @@ from app.schemas.masters import (
     PartyCreate,
     ProductCreate,
     TagCreate,
+    TaxCategoryCreate,
 )
 from app.schemas.platform import AutomationSettingsUpdate, ServiceAccountCreate
 from app.services.identity import (
@@ -119,6 +120,22 @@ async def list_tax_categories(
             )
         ).all()
     )
+
+
+async def create_tax_category(
+    session: AsyncSession,
+    context: AuthContext,
+    data: TaxCategoryCreate,
+) -> TaxCategory:
+    """Crea una tarifa fiscal para el tenant activo.
+
+    La combinación código SRI + inicio de vigencia es única por tenant; la
+    restricción de base de datos protege además contra altas concurrentes.
+    """
+    entity = TaxCategory(tenant_id=context.tenant_id, **data.model_dump(by_alias=False))
+    session.add(entity)
+    await session.flush()
+    return entity
 
 
 async def list_tags(session: AsyncSession, context: AuthContext) -> list[Tag]:
