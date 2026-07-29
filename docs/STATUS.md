@@ -7,6 +7,14 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización local: 2026-07-29 `America/Guayaquil`.
+  Catálogos incorpora el alta tenant-scoped e idempotente de categorías
+  tributarias (código SRI, tarifa y vigencia) y agrupa Productos y categorías
+  en una sola entrada de navegación. Cartera inicia mostrando únicamente
+  cuentas pendientes (abiertas, parciales y vencidas); saldadas y anuladas se
+  consultan mediante el filtro. Validado localmente con Ruff, mypy, pruebas
+  API focalizadas, lint y build; pendiente CI y promoción autorizada.
+
 - Actualización local: 2026-07-28 `America/Guayaquil`.
 - Migración Sky Franquicia / BTOB: se agregó localmente el primer gate
   `backend/scripts/dry_run_sky_franquicia_migration.py`; usa una URL de origen

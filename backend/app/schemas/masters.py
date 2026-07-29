@@ -39,6 +39,20 @@ class TaxCategoryRead(APIModel):
     active: bool
 
 
+class TaxCategoryCreate(APIModel):
+    """Nueva categoría tributaria con vigencia fiscal explícita.
+
+    Las categorías no se corrigen sobre registros históricos: si cambia una
+    tarifa se registra una nueva vigencia para conservar la trazabilidad de
+    los productos y comprobantes ya emitidos.
+    """
+
+    sri_code: str = Field(min_length=1, max_length=20)
+    name: str = Field(min_length=1, max_length=120)
+    rate: Decimal = Field(ge=0, le=100, max_digits=9, decimal_places=6)
+    valid_from: date
+
+
 class TagCreate(APIModel):
     name: str = Field(min_length=1, max_length=64)
     color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")

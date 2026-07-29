@@ -91,6 +91,38 @@ async def test_tenant_isolation_and_composite_reference_checks(client):
     assert cross_tenant_product.status_code == 404
 
 
+async def test_tax_category_creation_is_tenant_scoped_and_idempotent(client):
+    token_a = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["organization:read", "organization:write"]
+    )
+    token_b = await token_for(client, "b@iaerp.local", TENANT_B, ["organization:read"])
+    payload = {
+        "sriCode": "2",
+        "name": "IVA 5%",
+        "rate": "5.000000",
+        "validFrom": "2026-08-01",
+    }
+
+    created = await client.post(
+        "/api/v1/tax-categories",
+        headers=auth(token_a, "tax-category-create-0001"),
+        json=payload,
+    )
+    replay = await client.post(
+        "/api/v1/tax-categories",
+        headers=auth(token_a, "tax-category-create-0001"),
+        json=payload,
+    )
+    assert created.status_code == 201
+    assert replay.status_code == 201
+    assert created.json() == replay.json()
+
+    tenant_a_taxes = await client.get("/api/v1/tax-categories", headers=auth(token_a))
+    tenant_b_taxes = await client.get("/api/v1/tax-categories", headers=auth(token_b))
+    assert any(item["id"] == created.json()["id"] for item in tenant_a_taxes.json())
+    assert all(item["id"] != created.json()["id"] for item in tenant_b_taxes.json())
+
+
 async def test_idempotency_audit_and_outbox_are_atomic(client):
     token = await token_for(client, "a@iaerp.local", TENANT_A)
     headers = auth(token, "party-idempotency-0001")

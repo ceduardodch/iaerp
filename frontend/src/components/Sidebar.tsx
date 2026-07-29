@@ -1,11 +1,11 @@
 import { useAuth } from '../auth'
 
-type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' | 'organization' | 'crm'
+type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'crm'
 
 const sections: Array<{ id: Section; label: string }> = [
   { id: 'overview', label: 'Resumen' },
   { id: 'parties', label: 'Contactos' },
-  { id: 'products', label: 'Productos' },
+  { id: 'catalogs', label: 'Catálogos' },
   { id: 'invoices', label: 'Facturas' },
   { id: 'organization', label: 'Empresa' },
   { id: 'receivables', label: 'Cartera' },

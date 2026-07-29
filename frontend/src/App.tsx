@@ -36,6 +36,7 @@ import {
   type SalesDocument,
   type SalesDocumentStatus,
   type TaxCategory,
+  type TaxCategoryInput,
   type TenantContext,
 } from './api'
 import { useAuth } from './auth'
@@ -61,7 +62,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionLoadingSkeleton } from './components/LoadingSkeleton'
 import { useToast } from './components/Toast'
 
-type Section = 'overview' | 'parties' | 'products' | 'invoices' | 'receivables' | 'organization' | 'crm'
+type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'crm'
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
   minimumFractionDigits: 2,
@@ -441,6 +442,7 @@ function ProductsPage({
   token: string
 }) {
   const queryClient = useQueryClient()
+  const [catalogView, setCatalogView] = useState<'products' | 'taxes'>('products')
   const [query, setQuery] = useState('')
   const [editor, setEditor] = useState<Product | null | undefined>(undefined)
   const deferredQuery = useDeferredValue(query.toLocaleLowerCase())
@@ -486,7 +488,27 @@ function ProductsPage({
     )
   }
 
+  if (catalogView === 'taxes') {
+    return <TaxCategoriesPage taxes={taxes} token={token} onBack={() => setCatalogView('products')} />
+  }
+
   if (editor !== undefined) {
+    if (taxes.length === 0) {
+      return (
+        <>
+          <ErpPageHeader
+            eyebrow="Catálogos"
+            title="Primero crea una categoría tributaria"
+            subtitle="Cada producto necesita una categoría vigente para calcular y reportar sus impuestos correctamente."
+          />
+          <ErpEmptyState
+            title="No hay categorías tributarias vigentes"
+            description="Crea una categoría con su código SRI, tarifa y fecha de vigencia antes de registrar el producto."
+            action={<ErpButton variant="primary" onClick={() => setCatalogView('taxes')}>Crear categoría tributaria</ErpButton>}
+          />
+        </>
+      )
+    }
     return (
       <>
         <ErpPageHeader
@@ -515,13 +537,14 @@ function ProductsPage({
   return (
     <>
       <ErpPageHeader
-        eyebrow="Catálogo comercial"
-        title="Productos"
+        eyebrow="Catálogos"
+        title="Productos y servicios"
         subtitle="Productos y servicios con precio e impuestos vigentes."
         actions={
-          <ErpButton variant="primary" onClick={() => setEditor(null)}>
-            Nuevo producto
-          </ErpButton>
+          <>
+            <ErpButton variant="secondary" onClick={() => setCatalogView('taxes')}>Categorías tributarias</ErpButton>
+            <ErpButton variant="primary" onClick={() => setEditor(null)}>Nuevo producto</ErpButton>
+          </>
         }
       />
       <ErpToolbar>
@@ -560,6 +583,101 @@ function ProductsPage({
                 }
               />
             ) : null}
+          </div>
+        </ErpPanel>
+      </section>
+    </>
+  )
+}
+
+function TaxCategoriesPage({
+  taxes,
+  token,
+  onBack,
+}: {
+  taxes: TaxCategory[]
+  token: string
+  onBack: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [creating, setCreating] = useState(false)
+  const createTaxCategory = useMutation({
+    mutationFn: (data: TaxCategoryInput) =>
+      apiRequest<TaxCategory>(token, '/tax-categories', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-tax-category') },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      setCreating(false)
+      return queryClient.invalidateQueries({ queryKey: ['taxes'] })
+    },
+  })
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    createTaxCategory.mutate({
+      sriCode: String(data.get('sriCode')).trim(),
+      name: String(data.get('name')).trim(),
+      rate: String(data.get('rate')),
+      validFrom: String(data.get('validFrom')),
+    })
+  }
+
+  if (creating) {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Catálogos" title="Nueva categoría tributaria" subtitle="Registra la tarifa con su vigencia; los comprobantes ya emitidos conservan su cálculo original." />
+        <ErpFormPanel
+          eyebrow="Dato fiscal maestro"
+          title="Categoría tributaria"
+          pending={createTaxCategory.isPending}
+          error={createTaxCategory.error?.message}
+          onSubmit={submit}
+          onCancel={() => setCreating(false)}
+        >
+          <div className="field-row">
+            <label>Código SRI<input name="sriCode" maxLength={20} placeholder="4" required /></label>
+            <label>Tarifa (%)<input name="rate" type="number" min="0" max="100" step="0.000001" placeholder="15" required /></label>
+          </div>
+          <label>Nombre<input name="name" maxLength={120} placeholder="IVA 15%" required /></label>
+          <label>Vigente desde<input name="validFrom" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></label>
+        </ErpFormPanel>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <ErpPageHeader
+        eyebrow="Catálogos"
+        title="Categorías tributarias"
+        subtitle="Tarifas disponibles al crear productos y servicios."
+        actions={
+          <>
+            <ErpButton variant="secondary" onClick={onBack}>Productos y servicios</ErpButton>
+            <ErpButton variant="primary" onClick={() => setCreating(true)}>Nueva categoría</ErpButton>
+          </>
+        }
+      />
+      <section className="split-layout erp-list-only">
+        <ErpPanel title="Tarifas vigentes" count={taxes.length}>
+          <div className="table-wrap" tabIndex={0} aria-label="Listado de categorías tributarias">
+            <table className="erp-responsive-table">
+              <thead><tr><th>Código SRI</th><th>Nombre</th><th>Tarifa</th><th>Vigente desde</th></tr></thead>
+              <tbody>
+                {taxes.map((tax) => (
+                  <tr key={tax.id}>
+                    <td>{tax.sriCode}</td>
+                    <td><strong>{tax.name}</strong></td>
+                    <td>{formatPercent(tax.rate)}</td>
+                    <td>{new Date(`${tax.validFrom}T00:00:00`).toLocaleDateString('es-EC')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {taxes.length === 0 ? <ErpEmptyState title="No hay categorías tributarias" description="Registra la primera tarifa para habilitar la creación de productos." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nueva categoría</ErpButton>} /> : null}
           </div>
         </ErpPanel>
       </section>
@@ -1728,7 +1846,7 @@ function ReceivablesPage({
   parties: Party[]
 }) {
   const queryClient = useQueryClient()
-  const [statusFilter, setStatusFilter] = useState<'' | AccountItemStatus>('')
+  const [statusFilter, setStatusFilter] = useState<'' | 'OUTSTANDING' | AccountItemStatus>('OUTSTANDING')
   const [panel, setPanel] = useState<ReceivablePanel | undefined>(undefined)
   const lastTriggerRef = useRef<HTMLElement | null>(null)
   const partiesById = new Map(parties.map((party) => [party.id, party]))
@@ -1738,10 +1856,14 @@ function ReceivablesPage({
     queryFn: () =>
       apiRequest<AccountItem[]>(
         token,
-        statusFilter ? `/receivables?status=${statusFilter}` : '/receivables',
+        statusFilter && statusFilter !== 'OUTSTANDING' ? `/receivables?status=${statusFilter}` : '/receivables',
       ),
   })
-  const receivables = receivablesQuery.data ?? []
+  const receivables = (receivablesQuery.data ?? []).filter((item) =>
+    statusFilter === 'OUTSTANDING'
+      ? ['OPEN', 'PARTIAL', 'OVERDUE'].includes(item.status)
+      : true,
+  )
 
   function openPanel(next: ReceivablePanel, trigger?: HTMLElement) {
     lastTriggerRef.current = trigger ?? null
@@ -1790,14 +1912,15 @@ function ReceivablesPage({
           <span>Filtrar por estado</span>
           <select
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as '' | AccountItemStatus)}
+            onChange={(event) => setStatusFilter(event.target.value as '' | 'OUTSTANDING' | AccountItemStatus)}
           >
-            <option value="">Todos los estados</option>
+            <option value="OUTSTANDING">Pendientes (abiertas, parciales y vencidas)</option>
             <option value="OPEN">Abierta</option>
             <option value="PARTIAL">Parcial</option>
             <option value="OVERDUE">Vencida</option>
             <option value="SETTLED">Saldada</option>
             <option value="VOIDED">Anulada</option>
+            <option value="">Todos los estados</option>
           </select>
         </label>
       </ErpToolbar>
@@ -2182,7 +2305,7 @@ function Workspace() {
        <div key={section} className="section-fade">
         {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}
         {section === 'parties' ? <PartiesPage parties={parties} token={token} /> : null}
-        {section === 'products' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
+        {section === 'catalogs' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
         {section === 'invoices' ? (
           <InvoicesPage
             token={token}
