@@ -28,6 +28,16 @@ from app.schemas.billing import (
     InvoicePreviewRead,
     SalesDocumentRead,
 )
+from app.schemas.legal_commercial import (
+    AwsConsumptionCutCreate,
+    AwsConsumptionCutRead,
+    BillingProposalCreate,
+    BillingProposalRead,
+    CommercialContractCreate,
+    CommercialContractRead,
+    ContractVersionCreate,
+    ContractVersionRead,
+)
 from app.schemas.masters import (
     EmissionPointCreate,
     EmissionPointRead,
@@ -71,7 +81,7 @@ from app.schemas.receivables import (
     ReminderRead,
     ReversalInput,
 )
-from app.services import billing, fiscal_settings, masters, receivables
+from app.services import billing, fiscal_settings, legal_commercial, masters, receivables
 from app.services.unit_of_work import append_audit, execute_idempotent
 
 router = APIRouter()
@@ -104,6 +114,8 @@ ALL_DEV_SCOPES = {
     "leads:write",
     "communications:read",
     "communications:write",
+    "commercial:read",
+    "commercial:write",
 }
 
 IdempotencyKey = Annotated[
@@ -575,6 +587,113 @@ async def put_party(
         action="party.updated",
         entity_type="party",
         callback=update,
+    )
+
+
+@router.post("/commercial/contracts", response_model=CommercialContractRead, status_code=201)
+async def post_commercial_contract(
+    data: CommercialContractCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    async def create() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.create_contract(session, context, data)
+        return str(entity.id), CommercialContractRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.contracts.create",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="commercial_contract.created",
+        entity_type="commercial_contract",
+        callback=create,
+    )
+
+
+@router.post(
+    "/commercial/contracts/{contract_id}/versions",
+    response_model=ContractVersionRead,
+    status_code=201,
+)
+async def post_contract_version(
+    contract_id: uuid.UUID,
+    data: ContractVersionCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    async def create() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.create_contract_version(session, context, contract_id, data)
+        return str(entity.id), ContractVersionRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.contract_versions.create",
+        idempotency_key=idempotency_key,
+        request_payload={"contract_id": str(contract_id), **data.model_dump(mode="json")},
+        action="commercial_contract_version.created",
+        entity_type="commercial_contract_version",
+        callback=create,
+    )
+
+
+@router.post(
+    "/commercial/aws-consumption-cuts", response_model=AwsConsumptionCutRead, status_code=201
+)
+async def post_aws_consumption_cut(
+    data: AwsConsumptionCutCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    async def create() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.create_aws_cut(session, context, data)
+        return str(entity.id), AwsConsumptionCutRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.aws_cuts.create",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="aws_consumption_cut.created",
+        entity_type="aws_consumption_cut",
+        callback=create,
+    )
+
+
+@router.post("/commercial/billing-proposals", response_model=BillingProposalRead, status_code=201)
+async def post_billing_proposal(
+    data: BillingProposalCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    async def create() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.create_billing_proposal(session, context, data)
+        return str(entity.id), BillingProposalRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.billing_proposals.create",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="commercial_billing_proposal.created",
+        entity_type="commercial_billing_proposal",
+        callback=create,
     )
 
 

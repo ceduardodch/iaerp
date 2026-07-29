@@ -16,6 +16,12 @@ from app.models.crm import (
     WhatsAppIntegration,
     WhatsAppRoutingPolicy,
 )
+from app.models.legal_commercial import (
+    AwsConsumptionCut,
+    BillingProposal,
+    CommercialContract,
+    ContractVersion,
+)
 from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag, TaxCategory
 from app.models.platform import (
     AuditEvent,
@@ -39,6 +45,9 @@ from app.models.receivables import (
 
 __all__ = [
     "AuditEvent",
+    "AwsConsumptionCut",
+    "BillingProposal",
+    "CommercialContract",
     "AutomationSettings",
     "CustomerCredit",
     "DocumentArtifact",
@@ -50,6 +59,7 @@ __all__ = [
     "WhatsAppIntegration",
     "WhatsAppRoutingPolicy",
     "CollectionPolicy",
+    "ContractVersion",
     "IdempotencyRecord",
     "Lead",
     "LeadActivity",

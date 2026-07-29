@@ -18,3 +18,4 @@ sustituya.
 | 0008 | Calculo fiscal y redondeo versionado | Proposed |
 | 0009 | Tenant activo y compatibilidad OAuth MCP | Proposed |
 | 0010 | Enrutamiento de WhatsApp por uso | Accepted |
+| 0011 | Expediente legal-comercial y evidencia AWS | Proposed |

@@ -77,6 +77,15 @@ Salida: flujo autonomo controlado, auditable y reconciliado.
 
 Salida: checklist de produccion aprobado y despliegue desde `main` por Coolify.
 
+## Sprint 7 - Expediente legal-comercial
+
+- Contratos/versiones, PDF firmado privado, adendas y cliente 360.
+- Cortes AWS conciliados desde carga o conector de solo lectura.
+- Propuesta comercial fija, variable o mixta con snapshot en la factura.
+- Consultas MCP de solo lectura, controles de evidencia y pruebas de seguridad.
+
+Salida: facturas comerciales trazables a contrato y evidencia, sin alterar SRI.
+
 ## Puertas
 
 - No inicia Sprint 1 sin aprobar Sprint 0.

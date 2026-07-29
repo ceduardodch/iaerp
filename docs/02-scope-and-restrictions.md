@@ -39,6 +39,15 @@
 - Interruptor global y por tenant.
 - OpenAI como primer adaptador; el dominio no depende del proveedor.
 
+### Expediente legal-comercial
+
+- Contratos de clientes versionados, PDF firmado privado, adendas y evidencia
+  comercial asociada al cliente.
+- Cortes de consumo AWS por carga o consulta autorizada de solo lectura,
+  conciliados antes de una propuesta de facturación.
+- Propuestas comerciales de cargo fijo, consumo variable o ambas, vinculables
+  a factura y cartera sin sustituir el comprobante SRI.
+
 ## Restricciones vinculantes
 
 - Pais Ecuador, moneda USD y zona `America/Guayaquil`.
@@ -59,7 +68,9 @@
 - Conciliacion o integracion bancaria.
 - Ejecucion de transferencias.
 - Inventario, compras con ordenes y logistica.
-- Nomina, RRHH, contratos y comunidad.
+- Nomina, RRHH y comunidad.
+- Firma electrónica integrada, asesoría/validación jurídica automatizada y
+  administración de infraestructura AWS.
 - Marketing, promociones y Telegram.
 - Farmacias, franquicias, metas y proyecciones especificas.
 - Operacion fiscal multi-pais o varias monedas funcionales.
