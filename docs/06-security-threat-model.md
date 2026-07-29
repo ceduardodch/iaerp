@@ -6,6 +6,7 @@
 - RUC, datos personales y contactos.
 - Certificados de firma y sus contrasenas.
 - Facturas, notas de credito, XML y PDF.
+- Contratos firmados, adendas, evidencia AWS y snapshots comerciales.
 - Saldos, cobros, obligaciones y pagos.
 - Tokens OAuth, API keys de proveedores y webhooks.
 - Historial de agentes, politicas y auditoria.
@@ -34,6 +35,8 @@
 | Agente fuera de control | Limites, presupuesto, rate limit y kill switch global/tenant |
 | Archivo malicioso | Limite de tamano, MIME real, antivirus, sandbox de parser y checksum |
 | Abuso de URLs firmadas | Expiracion corta, objeto privado y autorizacion antes de emitir URL |
+| Alteracion de contrato/evidencia | Version inmutable, SHA-256, adenda enlazada y auditoria |
+| Cobro AWS no sustentado | Corte único por periodo, conciliación, revisión y snapshot |
 
 ## Reglas de secretos
 
@@ -66,6 +69,8 @@ Auditoria no equivale a logs. Los eventos tienen retencion y permisos propios.
 - Permitir exportacion y eliminacion conforme a obligaciones legales, preservando
   documentos fiscales y auditoria que deban conservarse.
 - Definir contrato de tratamiento de datos antes del piloto.
+- No enviar contratos completos ni evidencia AWS al proveedor de IA; conservar
+  solo extracción estructurada, referencia de evidencia y confianza.
 
 ## Validacion de seguridad
 

@@ -393,27 +393,29 @@ async def list_receivables(
     entities = await session.scalars(stmt)
 
     items: list[AccountItemRead] = []
+    effective_as_of = as_of if as_of is not None else today_in_fiscal_timezone()
     for entity in entities:
-        open_amount = await compute_receivable_balance(
-            session, tenant_id=tenant_id, receivable=entity
+        summary = await to_receivable_summary(
+            session,
+            tenant_id=tenant_id,
+            receivable=entity,
+            as_of=effective_as_of,
         )
-        item_status = _map_status(entity.status, open_amount, entity.original_amount)
-
-        aging: AgingRead | None = None
-        if as_of is not None:
-            aging = await _compute_worst_aging(
-                session, tenant_id=tenant_id, receivable_id=entity.id, as_of=as_of
-            )
+        aging = (
+            AgingRead(bucket=summary.aging_bucket, days_overdue=summary.aging_days_overdue)
+            if summary.aging_bucket is not None and summary.aging_days_overdue is not None
+            else None
+        )
 
         items.append(
             AccountItemRead(
                 id=entity.id,
                 party_id=entity.party_id,
-                status=item_status,
+                status=summary.status,
                 original_amount=entity.original_amount,
-                open_amount=open_amount,
+                open_amount=summary.open_amount,
                 currency=entity.currency,
-                due_date=None,
+                due_date=summary.due_date,
                 aging=aging,
             )
         )

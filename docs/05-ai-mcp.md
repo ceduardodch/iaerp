@@ -33,6 +33,10 @@ u otro servicio.
 - `receivables.list`: cartera vencida o por vencer.
 - `payables.list`: obligaciones y pagos programados.
 - `finance.summary`: ventas, cobros, pagos y flujo proyectado.
+- `commercial.dossier.get`: resumen contractual, facturas, cartera y evidencia
+  mínima autorizada de un cliente.
+- `commercial.contracts.list`: vigencias, renovaciones y condiciones extraídas.
+- `commercial.obligations.list`: obligaciones contractuales y alertas.
 
 ### Escritura
 
@@ -92,6 +96,8 @@ guardar secretos ni documentos completos en trazas.
 
 - XML se valida contra esquema y reglas fiscales.
 - PDF se trata como evidencia, no como fuente definitiva.
+- CSV/XLSX de consumo AWS se tratan como evidencia no confiable y se
+  reconcilian antes de afectar una propuesta comercial.
 - Texto extraido se marca como untrusted y no se mezcla con instrucciones del
   sistema.
 - El modelo solo devuelve un esquema de extraccion.

@@ -15,6 +15,14 @@ alcance y las decisiones.
   consultan mediante el filtro. Validado localmente con Ruff, mypy, pruebas
   API focalizadas, lint y build; pendiente CI y promoción autorizada.
 
+- Expediente legal-comercial / AWS: diseño preparado en
+  `docs/sprints/sprint-07-legal-commercial.md`, ADR 0011 en estado
+  `Proposed`, skill y perfil experto. Primer corte local: migración,
+  contratos/versiones, cortes AWS y propuestas comerciales tenant-scoped con
+  API idempotente, auditoría y pruebas focalizadas. Pendiente: custodia/carga
+  de PDF, conciliación real Cost Explorer/CSV, activación de versiones,
+  snapshot en la factura, MCP de lectura y UI Cliente 360.
+
 - Actualización local: 2026-07-28 `America/Guayaquil`.
 - Migración Sky Franquicia / BTOB: se agregó localmente el primer gate
   `backend/scripts/dry_run_sky_franquicia_migration.py`; usa una URL de origen

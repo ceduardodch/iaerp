@@ -103,6 +103,18 @@ Prioridades:
 | E7-07 | P0 | Resistir prompt injection | Fixtures maliciosos no ejecutan tools |
 | E7-08 | P1 | Resumen operativo | Metricas no contables con definicion y ventana |
 
+## Epic E10 - Expediente legal-comercial
+
+| ID | Pri | Historia | Aceptacion |
+| --- | --- | --- | --- |
+| E10-01 | P0 | Versionar contratos de cliente | Firmados inmutables, adendas enlazadas y aislamiento tenant |
+| E10-02 | P0 | Custodiar evidencia legal | Objeto privado, hash, descarga autorizada y auditoria |
+| E10-03 | P0 | Conciliar consumo AWS | Corte único por cliente/periodo desde carga o conector de solo lectura |
+| E10-04 | P0 | Proponer facturación comercial | Cargo fijo, variable o mixto reproducible con Decimal |
+| E10-05 | P0 | Conservar snapshot comercial | Factura ligada a contrato/evidencia o excepción auditada |
+| E10-06 | P1 | Ver cliente 360 | Contratos, renovaciones, cortes, facturas, cartera y documentos |
+| E10-07 | P1 | Consultar expediente con IA/MCP | Solo lectura, evidencia mínima y resistencia a inyección |
+
 ## Epic E8 - Migracion y produccion
 
 | ID | Pri | Historia | Aceptacion |

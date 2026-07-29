@@ -62,6 +62,21 @@ Estados alternos:
 Una factura autorizada no se edita. Una nota de credito siempre referencia un
 documento autorizado y no puede exceder su saldo acreditable.
 
+### Expediente legal-comercial
+
+- `CommercialContract`: contrato de cliente y estado comercial.
+- `ContractVersion`: vigencia, firmantes, renovación, condiciones y reglas de
+  precio; una versión firmada es inmutable.
+- `LegalArtifact`: PDF firmado, adenda, propuesta o evidencia, con objeto
+  privado, checksum y versión.
+- `AwsConsumptionCut`: consumo por cliente y periodo, con fuente, conciliación
+  y estado de revisión.
+- `BillingProposal`: snapshot de contrato, corte y regla comercial previo a
+  crear un borrador de factura.
+
+Contrato firmado, evidencia AWS y factura SRI son entidades diferentes. El
+snapshot comercial respalda la factura pero nunca modifica sus totales fiscales.
+
 ### Cuentas por cobrar
 
 - `Receivable`: saldo exigible, moneda y origen.
@@ -110,13 +125,17 @@ superar el total acreditable de la factura.
 5. Una aplicacion no puede superar el saldo disponible del pago ni del documento.
 6. Un documento financiero contabilizado no se elimina fisicamente.
 7. Un agente no puede ampliar sus propios scopes o politicas.
-8. La idempotency key es unica por tenant, actor, operacion y ventana definida.
-9. Los hashes de archivos se validan al cargar y descargar.
-10. Una accion de otro tenant se responde como no encontrada, evitando filtracion.
-11. Cuotas de cobro o pago suman exactamente el monto original.
-12. Pagos, retenciones, descuentos y creditos son montos no negativos y no
+8. Una versión contractual firmada y su hash no se editan; una corrección crea
+   nueva versión o adenda enlazada.
+9. Un corte AWS es único por tenant, cliente y periodo; su total debe
+   reconciliarse antes de convertirse en propuesta facturable.
+10. La idempotency key es unica por tenant, actor, operacion y ventana definida.
+11. Los hashes de archivos se validan al cargar y descargar.
+12. Una accion de otro tenant se responde como no encontrada, evitando filtracion.
+13. Cuotas de cobro o pago suman exactamente el monto original.
+14. Pagos, retenciones, descuentos y creditos son montos no negativos y no
     sobreaplican un documento.
-13. `OVERDUE` es un estado derivado del saldo, vencimiento y fecha local; no es
+15. `OVERDUE` es un estado derivado del saldo, vencimiento y fecha local; no es
     una transicion persistida.
 
 ## Eventos de dominio iniciales
