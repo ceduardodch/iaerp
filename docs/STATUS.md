@@ -16,6 +16,13 @@ alcance y las decisiones.
   líneas y subtotal. El dry-run bloquea una factura autorizada cuyo XML falta
   en Sky y no fue devuelto por SRI en la consulta puntual. Pendiente construir
   y aprobar la fase de carga idempotente y la conciliación final.
+- Carga de autorizadas Sky Franquicia / BTOB: se agregó localmente un cargador
+  transaccional e idempotente para las facturas `AUTHORIZED` con XML y número
+  de autorización. Conserva clave de acceso, XML, autorización, líneas,
+  secuencia y una cuenta por cobrar sin pagos (vencimiento = fecha histórica);
+  no llama al SRI ni agenda recordatorios. La autorizada sin XML se excluye
+  explícitamente. Pendiente promover a producción y ejecutar el corte con
+  conciliación de conteos/totales.
 - Provisionamiento de primer tenant: el comando `backend/scripts/provision_tenant_owner.py`
   fue promovido a `main` el 2026-07-28. Reconcilia una organización y un
   usuario ya creados en Keycloak con `Tenant`, `User`, `Membership` Owner/Admin,
