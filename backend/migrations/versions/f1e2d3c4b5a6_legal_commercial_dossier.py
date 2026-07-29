@@ -54,6 +54,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_commercial_contracts_tenant_party", "commercial_contracts", ["tenant_id", "party_id"]
     )
+    op.create_index("ix_commercial_contracts_tenant_id", "commercial_contracts", ["tenant_id"])
     op.create_table(
         "commercial_contract_versions",
         sa.Column("contract_id", sa.Uuid(), nullable=False),
@@ -100,6 +101,9 @@ def upgrade() -> None:
         "commercial_contract_versions",
         ["tenant_id", "contract_id"],
     )
+    op.create_index(
+        "ix_commercial_contract_versions_tenant_id", "commercial_contract_versions", ["tenant_id"]
+    )
     op.create_table(
         "aws_consumption_cuts",
         sa.Column("party_id", sa.Uuid(), nullable=False),
@@ -131,6 +135,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_aws_cuts_tenant_party", "aws_consumption_cuts", ["tenant_id", "party_id"])
+    op.create_index("ix_aws_consumption_cuts_tenant_id", "aws_consumption_cuts", ["tenant_id"])
     op.create_table(
         "commercial_billing_proposals",
         sa.Column("party_id", sa.Uuid(), nullable=False),
@@ -169,14 +174,27 @@ def upgrade() -> None:
         "commercial_billing_proposals",
         ["tenant_id", "party_id"],
     )
+    op.create_index(
+        "ix_commercial_billing_proposals_tenant_id",
+        "commercial_billing_proposals",
+        ["tenant_id"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_commercial_billing_proposals_tenant_id", table_name="commercial_billing_proposals"
+    )
     op.drop_index("ix_billing_proposals_tenant_party", table_name="commercial_billing_proposals")
     op.drop_table("commercial_billing_proposals")
+    op.drop_index("ix_aws_consumption_cuts_tenant_id", table_name="aws_consumption_cuts")
     op.drop_index("ix_aws_cuts_tenant_party", table_name="aws_consumption_cuts")
     op.drop_table("aws_consumption_cuts")
+    op.drop_index(
+        "ix_commercial_contract_versions_tenant_id", table_name="commercial_contract_versions"
+    )
     op.drop_index("ix_contract_versions_tenant_contract", table_name="commercial_contract_versions")
     op.drop_table("commercial_contract_versions")
+    op.drop_index("ix_commercial_contracts_tenant_id", table_name="commercial_contracts")
     op.drop_index("ix_commercial_contracts_tenant_party", table_name="commercial_contracts")
     op.drop_table("commercial_contracts")
