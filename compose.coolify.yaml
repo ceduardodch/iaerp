@@ -1,7 +1,7 @@
 name: iaerp-staging
 
 x-backend-environment: &backend-environment
-  APP_ENV: staging
+  APP_ENV: production
   AUTH_MODE: oidc
   DATABASE_URL: postgresql+asyncpg://iaerp:${POSTGRES_PASSWORD}@iaerp-staging-postgres:5432/iaerp
   OIDC_ISSUER_URL: https://iaerp-auth.b2b.com.ec/realms/iaerp
@@ -15,16 +15,16 @@ x-backend-environment: &backend-environment
   OIDC_ADMIN_CLIENT_SECRET: ${OIDC_ADMIN_CLIENT_SECRET}
   REDIS_URL: redis://iaerp-staging-redis:6379/0
   CORS_ORIGINS: https://iaerp.b2b.com.ec
-  SRI_SIMULATOR_ENABLED: "true"
-  SYNTHETIC_SEED_ENABLED: "true"
+  SRI_SIMULATOR_ENABLED: "false"
+  SYNTHETIC_SEED_ENABLED: "false"
+  SRI_TRANSMISSION_MODE: soap
+  SRI_ENVIRONMENT: "2"
   MINIO_ENDPOINT: iaerp-staging-minio:9000
   MINIO_PUBLIC_ENDPOINT: iaerp-files.b2b.com.ec
   MINIO_PUBLIC_SECURE: "true"
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
   MINIO_SECURE: "false"
-  IAERP_SIGNING_CERT_PATH: /home/iaerp/certs/test-signing.p12
-  IAERP_SIGNING_CERT_PASSWORD: ${IAERP_SIGNING_CERT_PASSWORD}
   IAERP_SECRETS_ENCRYPTION_KEY: ${IAERP_SECRETS_ENCRYPTION_KEY}
   PUBLIC_APP_URL: https://iaerp.b2b.com.ec
   # Evolution remains private to this Compose project.  Tenant credentials are
@@ -230,7 +230,7 @@ services:
       [
         "sh",
         "-c",
-        "uv run --no-sync alembic upgrade head && uv run --no-sync python -m app.initial_data && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000"
+        "uv run --no-sync alembic upgrade head && if [ \"$$SYNTHETIC_SEED_ENABLED\" = \"true\" ]; then uv run --no-sync python -m app.initial_data; fi && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000"
       ]
     environment: *backend-environment
     volumes:

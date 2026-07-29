@@ -66,7 +66,9 @@ verdad** al ambiente de pruebas del SRI.
 
 ## Paso 4 — Pasar a PRODUCCIÓN
 
-Solo cuando pruebas esté validado:
+Solo cuando pruebas esté validado, despliega el backend con `APP_ENV=production`,
+`SRI_SIMULATOR_ENABLED=false` y `SYNTHETIC_SEED_ENABLED=false`. El seed sintético
+no debe ejecutarse en la instancia que emite comprobantes reales.
 
 ```
 SRI_ENVIRONMENT=2        # 2 = producción (cel.sri.gob.ec)
