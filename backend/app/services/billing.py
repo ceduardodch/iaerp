@@ -30,6 +30,7 @@ from app.models.billing import (
     SRITransmission,
 )
 from app.models.masters import EmissionPoint, Establishment, Party, Product, TaxCategory
+from app.models.receivables import Receivable
 from app.schemas.billing import (
     ArtifactDownloadRead,
     CreditNoteInput,
@@ -988,6 +989,12 @@ async def to_sales_document_read(
     lines = await list_sales_document_lines(session, context, document.id)
     installments = await list_sales_document_installments(session, context, document.id)
     transmission = await _get_latest_sri_transmission(session, context, document.id)
+    receivable = await session.scalar(
+        select(Receivable.status).where(
+            Receivable.tenant_id == context.tenant_id,
+            Receivable.sales_document_id == document.id,
+        )
+    )
     sri_transmission = (
         SRITransmissionRead(
             status=transmission.status,
@@ -1017,6 +1024,7 @@ async def to_sales_document_read(
         authorization_number=document.authorization_number,
         authorized_at=document.authorized_at,
         sri_transmission=sri_transmission,
+        collection_status=receivable,
         lines=[
             SalesDocumentLineRead(
                 id=line.id,

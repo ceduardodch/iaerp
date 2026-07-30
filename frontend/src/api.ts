@@ -145,6 +145,7 @@ export type SalesDocument = {
   reason: string | null
   lines: SalesDocumentLine[]
   sriTransmission?: SriTransmission | null
+  collectionStatus?: AccountItemStatus | null
   installments?: Array<{ dueDate: string; amount: string }>
 }
 

@@ -158,6 +158,7 @@ class SalesDocumentRead(APIModel):
     authorization_number: str | None = None
     authorized_at: datetime | None = None
     sri_transmission: SRITransmissionRead | None = None
+    collection_status: Literal["OPEN", "PARTIAL", "OVERDUE", "SETTLED", "VOIDED"] | None = None
     lines: list[SalesDocumentLineRead] = Field(default_factory=list)
     installments: list[InstallmentInput] = Field(default_factory=list)
 

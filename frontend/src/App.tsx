@@ -881,6 +881,17 @@ function InvoiceStatusBadge({ status }: { status: SalesDocumentStatus }) {
   return <ErpStatusBadge tone={invoiceStatusTone[status]}>{invoiceStatusLabels[status]}</ErpStatusBadge>
 }
 
+function CollectionStatusBadge({ status }: { status: AccountItemStatus | null | undefined }) {
+  if (!status) return <span className="fine-print">—</span>
+  const labels: Record<AccountItemStatus, string> = {
+    OPEN: 'Pendiente', PARTIAL: 'Parcial', OVERDUE: 'Vencida', SETTLED: '✓ Pagada', VOIDED: 'Anulada',
+  }
+  const tones: Record<AccountItemStatus, 'neutral' | 'success' | 'warning' | 'danger'> = {
+    OPEN: 'neutral', PARTIAL: 'warning', OVERDUE: 'danger', SETTLED: 'success', VOIDED: 'danger',
+  }
+  return <ErpStatusBadge tone={tones[status]}>{labels[status]}</ErpStatusBadge>
+}
+
 const sriTransmissionStatusLabels: Record<string, string> = {
   PENDING: 'PENDIENTE DE ENVÍO',
   RECEIVED: 'RECIBIDA POR SRI',
@@ -1585,6 +1596,11 @@ function InvoicesPage({
     queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices'),
   })
   const invoices = invoicesQuery.data ?? []
+  const invoiceMonths = invoices.reduce<Record<string, SalesDocument[]>>((groups, invoice) => {
+    const key = invoice.issueDate.slice(0, 7)
+    ;(groups[key] ??= []).push(invoice)
+    return groups
+  }, {})
   const partiesById = new Map(customers.map((party) => [party.id, party]))
   const archiveInvoice = useMutation({
     mutationFn: () => {
@@ -1649,6 +1665,8 @@ function InvoicesPage({
       <section className="split-layout erp-list-only">
         <ErpPanel title="Documentos" count={invoices.length}>
           <div className="table-wrap" tabIndex={0} aria-label="Listado de facturas">
+            {Object.entries(invoiceMonths).map(([month, monthInvoices]) => <section key={month} aria-label={`Facturas de ${month}`}>
+              <h3 className="month-heading">{new Date(`${month}-01T12:00:00`).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })} <span>{monthInvoices.length} factura{monthInvoices.length === 1 ? '' : 's'} · ${formatAmount(monthInvoices.reduce((total, invoice) => total + Number(invoice.total), 0))}</span></h3>
             <table className="erp-responsive-table">
               <thead>
                 <tr>
@@ -1656,17 +1674,19 @@ function InvoicesPage({
                   <th>Cliente</th>
                   <th>Fecha</th>
                   <th>Estado</th>
+                  <th>Cobro</th>
                   <th>Total</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {invoices.map((invoice) => (
+                {monthInvoices.map((invoice) => (
                   <tr key={invoice.id}>
                     <td><strong>{invoice.sequential}</strong></td>
                     <td>{partiesById.get(invoice.partyId)?.name ?? '—'}</td>
                     <td>{invoice.issueDate}</td>
                     <td><InvoiceStatusBadge status={invoice.status} /></td>
+                    <td><CollectionStatusBadge status={invoice.collectionStatus} /></td>
                     <td>${formatAmount(invoice.total)}</td>
                     <td>
                       <ErpActionCell>
@@ -1690,6 +1710,7 @@ function InvoicesPage({
                 ))}
               </tbody>
             </table>
+            </section>)}
             {invoices.length === 0 ? (
               <ErpEmptyState
                 title="No hay facturas"
