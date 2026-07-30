@@ -51,6 +51,14 @@ class ContractVersionRead(ContractVersionCreate):
     signed_artifact_sha256: str | None
 
 
+class ContractArtifactDownloadRead(APIModel):
+    """Enlace temporal a un contrato firmado, nunca una URL publica fija."""
+
+    download_url: str
+    expires_in_seconds: int
+    file_name: str
+
+
 class AwsConsumptionCutCreate(APIModel):
     party_id: uuid.UUID
     period_start: date

@@ -36,6 +36,7 @@ from app.schemas.legal_commercial import (
     BillingProposalRead,
     CommercialContractCreate,
     CommercialContractRead,
+    ContractArtifactDownloadRead,
     ContractVersionCreate,
     ContractVersionRead,
 )
@@ -651,6 +652,18 @@ async def post_commercial_contract(
     )
 
 
+@router.get("/commercial/contracts", response_model=list[CommercialContractRead])
+async def get_commercial_contracts(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:read"))],
+    party_id: uuid.UUID | None = None,
+) -> list[CommercialContractRead]:
+    return [
+        CommercialContractRead.model_validate(entity)
+        for entity in await legal_commercial.list_contracts(session, context, party_id)
+    ]
+
+
 @router.post(
     "/commercial/contracts/{contract_id}/versions",
     response_model=ContractVersionRead,
@@ -678,6 +691,80 @@ async def post_contract_version(
         action="commercial_contract_version.created",
         entity_type="commercial_contract_version",
         callback=create,
+    )
+
+
+@router.get(
+    "/commercial/contracts/{contract_id}/versions", response_model=list[ContractVersionRead]
+)
+async def get_contract_versions(
+    contract_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:read"))],
+) -> list[ContractVersionRead]:
+    return [
+        ContractVersionRead.model_validate(entity)
+        for entity in await legal_commercial.list_contract_versions(session, context, contract_id)
+    ]
+
+
+@router.post(
+    "/commercial/contracts/{contract_id}/versions/{version_id}/signed-pdf",
+    response_model=ContractVersionRead,
+)
+async def post_signed_contract_pdf(
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    file: Annotated[UploadFile, File()],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    data = await file.read(legal_commercial.MAX_SIGNED_CONTRACT_BYTES + 1)
+
+    async def upload() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.upload_signed_contract(
+            session,
+            context,
+            contract_id=contract_id,
+            version_id=version_id,
+            filename=file.filename,
+            data=data,
+        )
+        return (
+            str(entity.id),
+            ContractVersionRead.model_validate(entity).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session, context=context, operation="commercial.contract_versions.signed_pdf.upload",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "contract_id": str(contract_id),
+            "version_id": str(version_id),
+            "filename": file.filename,
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+        action="commercial_contract_version.signed_pdf_uploaded",
+        entity_type="commercial_contract_version", callback=upload,
+    )
+
+
+@router.get(
+    "/commercial/contracts/{contract_id}/versions/{version_id}/signed-pdf",
+    response_model=ContractArtifactDownloadRead,
+)
+async def get_signed_contract_pdf(
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:read"))],
+) -> ContractArtifactDownloadRead:
+    download_url, file_name = await legal_commercial.signed_contract_download(
+        session, context, contract_id=contract_id, version_id=version_id
+    )
+    return ContractArtifactDownloadRead(
+        download_url=download_url, expires_in_seconds=300, file_name=file_name
     )
 
 

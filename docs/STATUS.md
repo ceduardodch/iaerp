@@ -8,6 +8,14 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-30 `America/Guayaquil`.
+  Contratos ya tiene interfaz: menú propio, filtro por cliente, alta de
+  contrato, versiones comerciales y carga privada de PDF firmado con checksum
+  SHA-256 y descarga temporal autorizada. Las versiones firmadas quedan
+  inmutables; una nueva condición se registra como otra versión. No crea ni
+  emite comprobantes SRI. Validado con Ruff, mypy, pruebas API focalizadas,
+  lint, build y Playwright desktop/móvil; pendiente CI y promoción autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
   Cartera permite corregir el vencimiento de una factura histórica de una sola
   cuota, con motivo obligatorio. Sin cambiar XML, autorización ni RIDE SRI,
   actualiza tanto la cuota de cartera como el plan comercial que muestra la
