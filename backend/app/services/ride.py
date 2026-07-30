@@ -17,7 +17,7 @@ import io
 from decimal import ROUND_HALF_UP, Decimal
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import (
@@ -115,14 +115,31 @@ def build_ride_pdf(
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=letter,
-        leftMargin=1.5 * cm,
-        rightMargin=1.5 * cm,
-        topMargin=1.5 * cm,
-        bottomMargin=1.5 * cm,
+        pagesize=A4,
+        leftMargin=1.25 * cm,
+        rightMargin=1.25 * cm,
+        topMargin=1.1 * cm,
+        bottomMargin=1.1 * cm,
     )
     styles = getSampleStyleSheet()
-    small_style = ParagraphStyle("small", parent=styles["Normal"], fontSize=8, leading=10)
+    navy = colors.HexColor("#16324F")
+    blue = colors.HexColor("#1E5A88")
+    mist = colors.HexColor("#EEF3F7")
+    border = colors.HexColor("#C8D3DD")
+    small_style = ParagraphStyle(
+        "ride-small", parent=styles["Normal"], fontSize=7.5, leading=9.5, textColor=navy
+    )
+    body_style = ParagraphStyle(
+        "ride-body", parent=styles["Normal"], fontSize=8.5, leading=11, textColor=navy
+    )
+    title_style = ParagraphStyle(
+        "ride-title",
+        parent=styles["Title"],
+        fontSize=17,
+        leading=20,
+        textColor=navy,
+        spaceAfter=3,
+    )
 
     document_type_label = _DOCUMENT_TYPE_LABEL.get(
         document.document_type, document.document_type
@@ -130,37 +147,67 @@ def build_ride_pdf(
     full_number = _full_document_number(establishment, emission_point, document)
 
     story = []
-    story.append(Paragraph(f"<b>{tenant_legal_name}</b>", styles["Title"]))
-    story.append(Paragraph(f"RUC: {tenant_ruc}", styles["Normal"]))
-    story.append(Spacer(1, 0.3 * cm))
-    story.append(Paragraph(f"<b>{document_type_label}</b> No. {full_number}", styles["Heading2"]))
+    issuer = Table(
+        [
+            [Paragraph(f"<b>{tenant_legal_name}</b>", title_style)],
+            [Paragraph(f"RUC: {tenant_ruc}", body_style)],
+            [Paragraph(f"Dirección matriz: {establishment.address}", small_style)],
+        ],
+        colWidths=[10.6 * cm],
+    )
+    issuer.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    document_box = Table(
+        [
+            [Paragraph(f"<b>{document_type_label}</b>", body_style)],
+            [Paragraph(f"No. {full_number}", body_style)],
+            [Paragraph("CLAVE DE ACCESO", small_style)],
+            [Paragraph(_access_key_as_text_groups(document.access_key), small_style)],
+        ],
+        colWidths=[7.1 * cm],
+    )
+    document_box.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), mist),
+                ("BOX", (0, 0), (-1, -1), 0.75, navy),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    header = Table([[issuer, document_box]], colWidths=[10.8 * cm, 7.2 * cm])
+    header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(header)
+    story.append(Spacer(1, 0.45 * cm))
     issue_date_text = document.issue_date.strftime("%d/%m/%Y")
-    story.append(Paragraph(f"Fecha de emision: {issue_date_text}", styles["Normal"]))
-    story.append(
-        Paragraph(
-            f"Clave de acceso: {document.access_key}",
-            small_style,
+    buyer_table = Table(
+        [
+            ["COMPRADOR", "IDENTIFICACIÓN", "FECHA DE EMISIÓN"],
+            [buyer.name, buyer.identification_number, issue_date_text],
+        ],
+        colWidths=[9.2 * cm, 4.5 * cm, 4.3 * cm],
+    )
+    buyer_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), mist),
+                ("TEXTCOLOR", (0, 0), (-1, 0), navy),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 7),
+                ("FONTSIZE", (0, 1), (-1, -1), 8.5),
+                ("GRID", (0, 0), (-1, -1), 0.25, border),
+                ("LEFTPADDING", (0, 0), (-1, -1), 7),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
         )
     )
-    story.append(
-        Paragraph(
-            f"({_access_key_as_text_groups(document.access_key)})",
-            small_style,
-        )
-    )
+    story.append(buyer_table)
     story.append(Spacer(1, 0.4 * cm))
 
-    story.append(Paragraph("<b>Comprador</b>", styles["Heading3"]))
-    story.append(Paragraph(f"Nombre/Razon social: {buyer.name}", styles["Normal"]))
-    story.append(
-        Paragraph(
-            f"Identificacion ({buyer.identification_type}): {buyer.identification_number}",
-            styles["Normal"],
-        )
-    )
-    story.append(Spacer(1, 0.4 * cm))
-
-    story.append(Paragraph("<b>Detalle</b>", styles["Heading3"]))
     line_rows: list[list[str]] = [
         ["Descripcion", "Cant.", "P. Unitario", "Descuento", "Subtotal"]
     ]
@@ -174,22 +221,26 @@ def build_ride_pdf(
                 _format_amount(line.base_amount),
             ]
         )
-    line_column_widths = [7 * cm, 2 * cm, 2.7 * cm, 2.3 * cm, 2.5 * cm]
+    line_column_widths = [8.8 * cm, 2 * cm, 2.65 * cm, 2.45 * cm, 2.65 * cm]
     line_table = Table(line_rows, hAlign="LEFT", colWidths=line_column_widths)
     line_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("BACKGROUND", (0, 0), (-1, 0), navy),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                ("GRID", (0, 0), (-1, -1), 0.25, border),
                 ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
             ]
         )
     )
     story.append(line_table)
     story.append(Spacer(1, 0.4 * cm))
 
-    story.append(Paragraph("<b>Impuestos por tarifa</b>", styles["Heading3"]))
     tax_rows: list[list[str]] = [["Tarifa", "Base imponible", "Valor"]]
     for tax_label, base_amount, tax_amount in _tax_summary(lines):
         tax_rows.append([tax_label, _format_amount(base_amount), _format_amount(tax_amount)])
@@ -197,9 +248,9 @@ def build_ride_pdf(
     tax_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("BACKGROUND", (0, 0), (-1, 0), mist),
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                ("GRID", (0, 0), (-1, -1), 0.25, border),
                 ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
             ]
         )
@@ -219,7 +270,9 @@ def build_ride_pdf(
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
                 ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
-                ("LINEABOVE", (0, -1), (-1, -1), 0.5, colors.black),
+                ("BACKGROUND", (0, -1), (-1, -1), blue),
+                ("TEXTCOLOR", (0, -1), (-1, -1), colors.white),
+                ("GRID", (0, 0), (-1, -1), 0.25, border),
             ]
         )
     )

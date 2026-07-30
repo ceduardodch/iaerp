@@ -1117,6 +1117,7 @@ function InvoiceDetail({
   emissionPoints,
   onClose,
   onOpenCreditNote,
+  onDuplicated,
 }: {
   token: string
   invoiceId: string
@@ -1125,6 +1126,7 @@ function InvoiceDetail({
   emissionPoints: EmissionPoint[]
   onClose: () => void
   onOpenCreditNote: (invoice: SalesDocument) => void
+  onDuplicated: (invoiceId: string) => void
 }) {
   const queryClient = useQueryClient()
   const invoiceQuery = useQuery({
@@ -1152,6 +1154,18 @@ function InvoiceDetail({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       void invoiceQuery.refetch()
+    },
+  })
+
+  const duplicateInvoice = useMutation({
+    mutationFn: () =>
+      apiRequest<SalesDocument>(token, `/invoices/${invoiceId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-duplicate-invoice') },
+      }),
+    onSuccess: (duplicate) => {
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      onDuplicated(duplicate.id)
     },
   })
 
@@ -1270,6 +1284,9 @@ function InvoiceDetail({
       {issueInvoice.error ? (
         <p className="form-error" role="alert">{issueInvoice.error.message}</p>
       ) : null}
+      {duplicateInvoice.error ? (
+        <p className="form-error" role="alert">{duplicateInvoice.error.message}</p>
+      ) : null}
 
       <section aria-labelledby="invoice-artifacts-title">
         <p className="section-number" id="invoice-artifacts-title">Artefactos</p>
@@ -1299,6 +1316,13 @@ function InvoiceDetail({
             Nota de crédito
           </ErpButton>
         ) : null}
+        <ErpButton
+          variant="secondary"
+          disabled={duplicateInvoice.isPending}
+          onClick={() => duplicateInvoice.mutate()}
+        >
+          {duplicateInvoice.isPending ? 'Duplicando…' : 'Duplicar'}
+        </ErpButton>
         <ErpButton
           variant="primary"
           disabled={!canIssue || issueInvoice.isPending}
@@ -1356,7 +1380,7 @@ function InvoicesPage({
     )
   }
   if (panel?.view === 'detail') {
-    return <InvoiceDetail key={panel.id} token={token} invoiceId={panel.id} customers={customers} establishments={establishments} emissionPoints={emissionPoints} onClose={closePanel} onOpenCreditNote={(invoice) => setPanel({ view: 'credit-note', invoice })} />
+    return <InvoiceDetail key={panel.id} token={token} invoiceId={panel.id} customers={customers} establishments={establishments} emissionPoints={emissionPoints} onClose={closePanel} onOpenCreditNote={(invoice) => setPanel({ view: 'credit-note', invoice })} onDuplicated={(invoiceId) => setPanel({ view: 'detail', id: invoiceId })} />
   }
   if (panel?.view === 'credit-note') {
     return (

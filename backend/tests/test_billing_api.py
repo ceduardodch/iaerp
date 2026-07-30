@@ -184,6 +184,48 @@ async def test_create_invoice_draft_ignores_client_supplied_totals(client):
     assert response.json()["subtotal"] == "100.00"
 
 
+async def test_duplicate_invoice_creates_a_new_draft_without_fiscal_artifacts(client):
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(client, token, key_prefix="duplicate-invoice")
+    token_invoices = await token_for(client, "a@iaerp.local", TENANT_A, ["invoices:write"])
+    original = await client.post(
+        "/api/v1/invoices",
+        headers=auth(token_invoices, "duplicate-invoice-source"),
+        json=_invoice_payload(
+            masters,
+            installments=[
+                {"dueDate": "2026-08-04", "amount": "60.00"},
+                {"dueDate": "2026-09-04", "amount": "55.00"},
+            ],
+        ),
+    )
+    assert original.status_code == 201, original.text
+
+    duplicate = await client.post(
+        f"/api/v1/invoices/{original.json()['id']}/duplicate",
+        headers=auth(token_invoices, "duplicate-invoice-copy"),
+    )
+    assert duplicate.status_code == 201, duplicate.text
+    copied = duplicate.json()
+    assert copied["id"] != original.json()["id"]
+    assert copied["status"] == "DRAFT"
+    assert copied["sequential"] != original.json()["sequential"]
+    assert copied["accessKey"] is None
+    assert copied["total"] == original.json()["total"]
+    assert len(copied["lines"]) == len(original.json()["lines"])
+    assert copied["lines"][0]["description"] == original.json()["lines"][0]["description"]
+    assert copied["lines"][0]["baseAmount"] == original.json()["lines"][0]["baseAmount"]
+    assert copied["installments"] == [
+        {"dueDate": "2026-08-29", "amount": "60.00"},
+        {"dueDate": "2026-09-29", "amount": "55.00"},
+    ]
+
+
 async def test_create_invoice_draft_persists_installments(client):
     """Sprint 3 Fase 2: ``installments`` persiste en ``sales_document_installments``.
 

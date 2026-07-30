@@ -45,8 +45,9 @@ SRI_ENVIRONMENT=1        # 1 = pruebas (celcer)
 ```
 
 Y en la app, el **ambiente fiscal del tenant** debe ser también `1` (Empresa →
-ajustes fiscales), para que el `ambiente` del XML coincida con el endpoint. Si no
-coinciden, el SRI devuelve el comprobante.
+ajustes fiscales), para que el `ambiente` del XML coincida con el endpoint. La
+aplicación bloquea la firma con error `409` cuando detecta una diferencia; no la
+ignores ni intentes reenviar un XML ya firmado.
 
 Reinicia el backend. A partir de aquí, emitir una factura la transmite **de
 verdad** al ambiente de pruebas del SRI.
@@ -76,6 +77,15 @@ SRI_ENVIRONMENT=2        # 2 = producción (cel.sri.gob.ec)
 
 Y el ambiente fiscal del tenant a `2`. Reinicia. Las primeras facturas reales
 conviene monitorearlas de cerca.
+
+### Si el SRI devuelve un comprobante por ambiente distinto
+
+`DEVUELTA` en recepción es un rechazo terminal: el XML, su clave de acceso y
+sus artefactos quedan inmutables como evidencia. Corrige primero el ambiente de
+**Empresa → ajustes fiscales** para que coincida con `SRI_ENVIRONMENT`, y luego
+usa **Duplicar** sobre la factura rechazada: crea un borrador nuevo, con
+secuencial y clave de acceso nuevos al emitir. Nunca se edita ni se retransmite
+el XML rechazado; revisa el borrador antes de emitirlo.
 
 ## Referencia técnica
 
