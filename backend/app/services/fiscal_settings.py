@@ -62,8 +62,11 @@ async def get_or_create(
 
 
 def to_read(entity: TenantFiscalSettings) -> FiscalSettingsRead:
+    settings = get_settings()
     return FiscalSettingsRead(
         sri_environment=entity.sri_environment,
+        electronic_invoicing_provider_name=settings.ELECTRONIC_INVOICING_PROVIDER_NAME,
+        electronic_invoicing_provider_ruc=settings.ELECTRONIC_INVOICING_PROVIDER_RUC,
         certificate_configured=bool(
             entity.certificate_object_key and entity.certificate_password_encrypted
         ),

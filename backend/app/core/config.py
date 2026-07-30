@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     # None se usan las URLs oficiales del SRI segun `SRI_ENVIRONMENT`.
     SRI_RECEPTION_URL: str | None = None
     SRI_AUTHORIZATION_URL: str | None = None
+    # Identidad central del creador/proveedor de IAERP. No pertenece al tenant
+    # emisor ni se acepta desde la UI; la resolución NAC-DGERCGC26-00000027
+    # exige su RUC en los comprobantes cuando el SRI publique el campo técnico.
+    ELECTRONIC_INVOICING_PROVIDER_NAME: str = "BTOB SAS"
+    ELECTRONIC_INVOICING_PROVIDER_RUC: str = "1793113192001"
     # Dataset sintetico para ambientes de prueba compartidos. Debe habilitarse
     # de forma explicita y nunca puede ejecutarse en release/production.
     SYNTHETIC_SEED_ENABLED: bool = False

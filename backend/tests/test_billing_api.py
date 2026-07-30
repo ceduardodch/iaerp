@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.db.session import SessionFactory, engine
-from app.models.billing import Sequence
+from app.models.billing import SalesDocument, Sequence
 from app.models.platform import AuditEvent, OutboxEvent
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
@@ -183,6 +183,98 @@ async def test_create_invoice_draft_ignores_client_supplied_totals(client):
     assert response.status_code == 201, response.text
     assert response.json()["total"] == "115.00"
     assert response.json()["subtotal"] == "100.00"
+
+
+@pytest.mark.parametrize("failed_status", ["REJECTED", "NOT_AUTHORIZED"])
+async def test_archive_failed_invoice_hides_it_from_operational_listing(
+    client, failed_status: str
+):
+    """Un rechazo se archiva con trazabilidad, no se elimina ni se confunde con autorizado."""
+
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(
+        client, token, key_prefix=f"archive-{failed_status.lower()}"
+    )
+    token_invoices = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["invoices:write", "invoices:read"]
+    )
+    created = await client.post(
+        "/api/v1/invoices",
+        headers=auth(token_invoices, f"archive-{failed_status.lower()}-draft"),
+        json=_invoice_payload(masters),
+    )
+    assert created.status_code == 201, created.text
+    invoice_id = uuid.UUID(created.json()["id"])
+
+    async with SessionFactory() as session:
+        document = await session.get(SalesDocument, invoice_id)
+        assert document is not None
+        document.status = failed_status
+        await session.commit()
+
+    archived = await client.post(
+        f"/api/v1/invoices/{invoice_id}/archive",
+        headers=auth(token_invoices, f"archive-{failed_status.lower()}-request"),
+        json={"reason": "Prueba de emisión SRI; comprobante no autorizado."},
+    )
+    assert archived.status_code == 200, archived.text
+    assert archived.json()["status"] == failed_status
+
+    listed = await client.get("/api/v1/invoices", headers=auth(token_invoices))
+    assert listed.status_code == 200
+    assert str(invoice_id) not in {item["id"] for item in listed.json()}
+
+    # La consulta directa mantiene el registro disponible para fiscalización.
+    detail = await client.get(f"/api/v1/invoices/{invoice_id}", headers=auth(token_invoices))
+    assert detail.status_code == 200
+
+    async with SessionFactory() as session:
+        audit = await session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.tenant_id == TENANT_A,
+                AuditEvent.entity_id == str(invoice_id),
+                AuditEvent.action == "invoice.archived",
+            )
+        )
+        assert audit is not None
+
+
+async def test_archive_refuses_an_authorized_invoice(client):
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(client, token, key_prefix="archive-authorized")
+    token_invoices = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["invoices:write", "invoices:read"]
+    )
+    created = await client.post(
+        "/api/v1/invoices",
+        headers=auth(token_invoices, "archive-authorized-draft"),
+        json=_invoice_payload(masters),
+    )
+    assert created.status_code == 201, created.text
+    invoice_id = uuid.UUID(created.json()["id"])
+
+    async with SessionFactory() as session:
+        document = await session.get(SalesDocument, invoice_id)
+        assert document is not None
+        document.status = "AUTHORIZED"
+        await session.commit()
+
+    response = await client.post(
+        f"/api/v1/invoices/{invoice_id}/archive",
+        headers=auth(token_invoices, "archive-authorized-request"),
+        json={"reason": "No debe ser posible."},
+    )
+    assert response.status_code == 409
 
 
 async def test_duplicate_invoice_creates_a_new_draft_without_fiscal_artifacts(client):

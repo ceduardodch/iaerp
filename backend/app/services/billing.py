@@ -10,7 +10,7 @@ dispara la transmision SRI (``workers/sri_transmission.py``).
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException
@@ -866,6 +866,30 @@ async def get_sales_document(
     return document
 
 
+async def archive_failed_sales_document(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+    *,
+    reason: str,
+) -> SalesDocument:
+    """Archiva un rechazo SRI sin alterar la evidencia fiscal conservada."""
+
+    document = await get_sales_document(session, context, document_id)
+    if document.status not in {"REJECTED", "NOT_AUTHORIZED"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Only rejected or not authorized sales documents can be archived",
+        )
+    if document.archived_at is not None:
+        raise HTTPException(status_code=409, detail="Sales document is already archived")
+
+    document.archived_at = datetime.now(UTC)
+    document.archived_reason = reason.strip()
+    await session.flush()
+    return document
+
+
 async def list_sales_document_lines(
     session: AsyncSession,
     context: AuthContext,
@@ -908,7 +932,10 @@ async def list_sales_documents(
     ``search_products``), y se aplica siempre aunque el llamador pida mas.
     """
 
-    statement = select(SalesDocument).where(SalesDocument.tenant_id == context.tenant_id)
+    statement = select(SalesDocument).where(
+        SalesDocument.tenant_id == context.tenant_id,
+        SalesDocument.archived_at.is_(None),
+    )
     if document_type is not None:
         statement = statement.where(SalesDocument.document_type == document_type)
     if status is not None:
@@ -1169,6 +1196,9 @@ async def issue_document(
             tenant_commercial_address=establishment.address,
             buyer=party,
             environment_code=fiscal.sri_environment,
+            electronic_invoicing_provider_ruc=(
+                runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
+            ),
         )
     else:
         (
@@ -1193,6 +1223,9 @@ async def issue_document(
             related_invoice_access_key=related_invoice.access_key or "",
             reason=document.reason or "",
             environment_code=fiscal.sri_environment,
+            electronic_invoicing_provider_ruc=(
+                runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
+            ),
         )
 
     signing_result = signing.sign_xml(

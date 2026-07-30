@@ -314,6 +314,18 @@ class CollectionPolicy(TimestampMixin, Base):
     send_hour: Mapped[int] = mapped_column(Integer, default=9)
     email_template_id: Mapped[str] = mapped_column(String(100), default="payment_reminder")
     whatsapp_template_id: Mapped[str] = mapped_column(String(100), default="payment_reminder")
+    email_subject: Mapped[str] = mapped_column(
+        String(200), default="Recordatorio de pago - {{empresa}}"
+    )
+    email_body: Mapped[str] = mapped_column(
+        String(5000),
+        default=(
+            "Estimado/a {{cliente}},\n\n"
+            "Le recordamos que mantiene un saldo pendiente. "
+            "Revise el detalle y realice el pago hasta {{vencimiento}}."
+        ),
+    )
+    payment_instructions: Mapped[str] = mapped_column(String(1500), default="")
 
 
 __all__ = [

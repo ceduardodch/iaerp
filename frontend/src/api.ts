@@ -167,6 +167,8 @@ export type ArtifactDownload = {
 
 export type FiscalSettings = {
   sriEnvironment: '1' | '2'
+  electronicInvoicingProviderName: string
+  electronicInvoicingProviderRuc: string
   certificateConfigured: boolean
   rideLogoConfigured: boolean
   certificateFingerprintSha256?: string | null
@@ -197,6 +199,18 @@ export type RetentionInput = {
   documentReference: string
 }
 
+export type RetentionXmlPreview = {
+  authorizationNumber: string
+  supportingDocument: string
+  retentions: Array<{
+    kind: RetentionInput['kind']
+    amount: string
+    baseAmount: string
+    rate: string
+    sriRetentionCode: string
+  }>
+}
+
 export type DiscountInput = {
   amount: string
   reason: string
@@ -209,6 +223,11 @@ export type PaymentInput = {
   reference?: string | null
   retentions: RetentionInput[]
   discounts: DiscountInput[]
+}
+
+export type ReceivableDueDateUpdate = {
+  dueDate: string
+  reason: string
 }
 
 export type ReminderInput = {
@@ -225,6 +244,9 @@ export type CollectionPolicy = {
   sendHour: number
   emailTemplateId: string
   whatsappTemplateId: string
+  emailSubject: string
+  emailBody: string
+  paymentInstructions: string
   updatedAt: string
 }
 

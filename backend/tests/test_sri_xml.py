@@ -196,6 +196,9 @@ def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
     assert info_factura.findtext("razonSocialComprador") == "Cliente Facturable"
     assert info_factura.findtext("identificacionComprador") == "1790000001"
 
+    provider_field = root.find("infoAdicional/campoAdicional")
+    assert provider_field is None
+
     # ADR 0008 vector 3: precioTotalSinImpuesto por linea 1.05, informativo
     # 0.16 por linea, pero el totalImpuesto de grupo es 0.47 (no 0.48).
     assert info_factura.findtext("totalSinImpuestos") == "3.15"
@@ -389,3 +392,37 @@ def test_mixed_tax_groups_produce_multiple_total_impuesto_entries() -> None:
         entry.findtext("codigoPorcentaje"): entry.findtext("valor") for entry in total_impuestos
     }
     assert values_by_code == {"4": "15.00", "0": "0.00", "5": "4.23"}
+
+
+@pytest.mark.parametrize("document_type", ["INVOICE", "CREDIT_NOTE"])
+def test_electronic_invoicing_provider_is_in_additional_information(document_type: str) -> None:
+    document, lines = _build_document_and_lines(document_type=document_type)
+    establishment, emission_point = _establishment_and_point()
+    common = {
+        "document": document,
+        "lines": lines,
+        "establishment": establishment,
+        "emission_point": emission_point,
+        "tenant_ruc": "1799999999001",
+        "tenant_legal_name": "IAERP Demo S.A.",
+        "tenant_commercial_address": "Av. Amazonas N30",
+        "buyer": _buyer(),
+        "environment_code": "2",
+        "electronic_invoicing_provider_ruc": "1793113192001",
+    }
+    result = (
+        build_invoice_xml(**common)
+        if document_type == "INVOICE"
+        else build_credit_note_xml(
+            **common,
+            related_invoice_sequential_full="001-001-000000001",
+            related_invoice_issue_date=date(2026, 7, 4),
+            related_invoice_access_key="1" * 49,
+            reason="Corrección comercial",
+        )
+    )
+
+    provider_field = result.root.find("infoAdicional/campoAdicional")
+    assert provider_field is not None
+    assert provider_field.get("nombre") == "RUC proveedor de facturación electrónica"
+    assert provider_field.text == "1793113192001"

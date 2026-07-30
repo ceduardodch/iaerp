@@ -30,7 +30,9 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Literal
+from xml.etree.ElementTree import Element
 
+from defusedxml.ElementTree import fromstring as safe_fromstring  # type: ignore[import-untyped]
 from fastapi import HTTPException
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +40,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthContext
 from app.core.timezones import today_in_fiscal_timezone
 from app.integrations.notifications.protocol import Notifier, ReminderRequest
-from app.models.billing import SalesDocument
+from app.models.billing import SalesDocument, SalesDocumentInstallment
+from app.models.masters import EmissionPoint, Establishment, Party
+from app.models.platform import Tenant
 from app.models.receivables import (
     CollectionReminder,
     CustomerCredit,
@@ -55,7 +59,12 @@ from app.schemas.receivables import (
     PartyAgingBucketTotalRead,
     PaymentInput,
     ReminderInput,
+    RetentionXmlPreviewItem,
+    RetentionXmlPreviewRead,
 )
+from app.services.unit_of_work import append_audit
+
+MAX_RETENTION_XML_BYTES = 2 * 1024 * 1024
 
 # Estados de AccountItem (contrato) -> filtros sobre Receivable.status persistido
 _ACCOUNT_STATUS_TO_RECEIVABLE_STATUSES: dict[str, tuple[str, ...]] = {
@@ -120,6 +129,187 @@ class ReceivableSummary:
     due_date: date | None = None
     aging_bucket: str | None = None
     aging_days_overdue: int | None = None
+
+
+def _xml_text(parent: Element, path: str) -> str | None:
+    """Devuelve texto XML limpio sin registrar el documento no confiable."""
+    element = parent.find(path)
+    if element is None or element.text is None:
+        return None
+    value = element.text.strip()
+    return value or None
+
+
+def _decimal_xml(value: str | None, *, field: str) -> Decimal:
+    try:
+        parsed = Decimal(value or "")
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid retention XML {field}") from exc
+    if not parsed.is_finite():
+        raise HTTPException(status_code=422, detail=f"Invalid retention XML {field}")
+    return parsed
+
+
+def _parse_authorized_retention_xml(
+    xml_bytes: bytes,
+) -> tuple[str, str, list[RetentionXmlPreviewItem], str]:
+    """Lee el sobre SRI y su comprobante interno sin ejecutar contenido XML.
+
+    Solo admite comprobantes de retención autorizados. El archivo se procesa
+    en memoria, no se persiste ni se envía a un proveedor externo.
+    """
+    if not xml_bytes or len(xml_bytes) > MAX_RETENTION_XML_BYTES:
+        raise HTTPException(status_code=422, detail="Retention XML must be between 1 byte and 2 MB")
+    try:
+        envelope = safe_fromstring(xml_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Invalid retention XML") from exc
+    if envelope.tag.rsplit("}", 1)[-1] != "autorizacion":
+        raise HTTPException(
+            status_code=422, detail="Retention XML must use the SRI authorization envelope"
+        )
+    if _xml_text(envelope, "estado") != "AUTORIZADO":
+        raise HTTPException(status_code=422, detail="Retention XML is not authorized by SRI")
+    authorization_number = _xml_text(envelope, "numeroAutorizacion")
+    comprobante = _xml_text(envelope, "comprobante")
+    if not authorization_number or not authorization_number.isdigit() or not comprobante:
+        raise HTTPException(
+            status_code=422, detail="Retention XML lacks SRI authorization evidence"
+        )
+    try:
+        retention_xml = safe_fromstring(comprobante.encode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Invalid embedded retention receipt") from exc
+    if retention_xml.tag.rsplit("}", 1)[-1] != "comprobanteRetencion":
+        raise HTTPException(status_code=422, detail="XML is not a retention receipt")
+    access_key = _xml_text(retention_xml, "infoTributaria/claveAcceso")
+    issuer_ruc = _xml_text(retention_xml, "infoTributaria/ruc")
+    retained_ruc = _xml_text(retention_xml, "infoCompRetencion/identificacionSujetoRetenido")
+    if access_key != authorization_number or not issuer_ruc or not retained_ruc:
+        raise HTTPException(
+            status_code=422, detail="Retention XML authorization evidence is inconsistent"
+        )
+
+    entries: list[tuple[Element, str | None]] = []
+    for support in retention_xml.findall("docsSustento/docSustento"):
+        supporting_document = _xml_text(support, "numDocSustento")
+        entries.extend(
+            (item, supporting_document) for item in support.findall("retenciones/retencion")
+        )
+    entries.extend(
+        (item, _xml_text(item, "numDocSustento"))
+        for item in retention_xml.findall("impuestos/impuesto")
+    )
+    if not entries:
+        raise HTTPException(
+            status_code=422, detail="Retention XML has no supported retention items"
+        )
+
+    items: list[RetentionXmlPreviewItem] = []
+    supporting_documents: set[str] = set()
+    for item, supporting_document in entries:
+        tax_kind = _xml_text(item, "codigo")
+        if tax_kind not in {"1", "2"}:
+            continue
+        if not supporting_document:
+            raise HTTPException(status_code=422, detail="Retention XML lacks supporting document")
+        amount = _decimal_xml(_xml_text(item, "valorRetenido"), field="withheld amount")
+        base_amount = _decimal_xml(_xml_text(item, "baseImponible"), field="tax base")
+        rate = _decimal_xml(_xml_text(item, "porcentajeRetener"), field="withholding rate")
+        if amount <= 0 or base_amount < 0 or rate < 0:
+            raise HTTPException(status_code=422, detail="Retention XML has invalid amounts")
+        code = _xml_text(item, "codigoRetencion")
+        if not code:
+            raise HTTPException(status_code=422, detail="Retention XML lacks SRI retention code")
+        supporting_documents.add(
+            "".join(character for character in supporting_document if character.isdigit())
+        )
+        items.append(
+            RetentionXmlPreviewItem(
+                kind="RETENTION_RENTA" if tax_kind == "1" else "RETENTION_IVA",
+                amount=amount.quantize(Decimal("0.01")),
+                base_amount=base_amount.quantize(Decimal("0.01")),
+                rate=rate,
+                sri_retention_code=code,
+            )
+        )
+    if not items or len(supporting_documents) != 1:
+        raise HTTPException(
+            status_code=422, detail="Retention XML has unsupported or inconsistent retentions"
+        )
+    return (
+        authorization_number,
+        next(iter(supporting_documents)),
+        items,
+        f"{issuer_ruc}|{retained_ruc}",
+    )
+
+
+async def preview_retention_xml(
+    session: AsyncSession,
+    *,
+    context: AuthContext,
+    receivable_id: uuid.UUID,
+    xml_bytes: bytes,
+) -> RetentionXmlPreviewRead:
+    """Valida que un XML SRI autorizado respalda retenciones de esta factura."""
+    authorization_number, supporting_document, items, parties = _parse_authorized_retention_xml(
+        xml_bytes
+    )
+    issuer_ruc, retained_ruc = parties.split("|", maxsplit=1)
+    receivable = await get_receivable(
+        session, tenant_id=context.tenant_id, receivable_id=receivable_id
+    )
+    document = await session.scalar(
+        select(SalesDocument).where(
+            SalesDocument.tenant_id == context.tenant_id,
+            SalesDocument.id == receivable.sales_document_id,
+        )
+    )
+    party = await session.scalar(
+        select(Party).where(Party.tenant_id == context.tenant_id, Party.id == receivable.party_id)
+    )
+    tenant = await session.scalar(select(Tenant).where(Tenant.id == context.tenant_id))
+    if document is None or party is None or tenant is None:
+        raise HTTPException(status_code=422, detail="Receivable fiscal context is incomplete")
+    establishment = await session.scalar(
+        select(Establishment).where(
+            Establishment.tenant_id == context.tenant_id,
+            Establishment.id == document.establishment_id,
+        )
+    )
+    emission_point = await session.scalar(
+        select(EmissionPoint).where(
+            EmissionPoint.tenant_id == context.tenant_id,
+            EmissionPoint.id == document.emission_point_id,
+        )
+    )
+    expected_support = (
+        f"{establishment.code}{emission_point.code}{document.sequential}"
+        if establishment is not None and emission_point is not None
+        else None
+    )
+    if issuer_ruc != party.identification_number:
+        raise HTTPException(status_code=422, detail="Retention issuer does not match this customer")
+    if retained_ruc != tenant.ruc:
+        raise HTTPException(status_code=422, detail="Retention subject does not match this company")
+    if supporting_document != expected_support:
+        raise HTTPException(
+            status_code=422, detail="Retention supporting document does not match this invoice"
+        )
+    total = sum((item.amount for item in items), Decimal("0.00"))
+    open_balance = await compute_receivable_balance(
+        session, tenant_id=context.tenant_id, receivable=receivable
+    )
+    if total > open_balance:
+        raise HTTPException(
+            status_code=422, detail="Retention total exceeds this invoice open balance"
+        )
+    return RetentionXmlPreviewRead(
+        authorization_number=authorization_number,
+        supporting_document=supporting_document,
+        retentions=items,
+    )
 
 
 # --- Aging (E5-05): función pura y agregados ----------------------------------
@@ -431,6 +621,74 @@ async def list_receivable_installments(
         ReceivableInstallment.receivable_id == receivable_id,
     )
     return list(await session.scalars(stmt))
+
+
+async def correct_receivable_due_date(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    receivable_id: uuid.UUID,
+    due_date: date,
+    reason: str,
+    correlation_id: str,
+    idempotency_key: str,
+) -> ReceivableSummary:
+    """Corrige el vencimiento comercial de una cuenta de una sola cuota.
+
+    No modifica el XML, autorización ni importes SRI. Ajusta en conjunto la
+    cuota de cartera y el plan comercial mostrado en la factura, y conserva el
+    antes/después en auditoría.
+    """
+    locked = await lock_receivable(
+        session, tenant_id=context.tenant_id, receivable_id=receivable_id
+    )
+    installments = list(
+        await session.scalars(
+            select(ReceivableInstallment)
+            .where(
+                ReceivableInstallment.tenant_id == context.tenant_id,
+                ReceivableInstallment.receivable_id == receivable_id,
+            )
+            .order_by(ReceivableInstallment.sequence)
+        )
+    )
+    if len(installments) != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="This account has multiple installments and needs a payment plan adjustment",
+        )
+    document_installment = await session.scalar(
+        select(SalesDocumentInstallment).where(
+            SalesDocumentInstallment.tenant_id == context.tenant_id,
+            SalesDocumentInstallment.sales_document_id == locked.sales_document_id,
+            SalesDocumentInstallment.sequence == installments[0].sequence,
+        )
+    )
+    previous_due_date = installments[0].due_date
+    installments[0].due_date = due_date
+    if document_installment is not None:
+        document_installment.due_date = due_date
+    await append_audit(
+        session,
+        context=context,
+        action="receivable.due_date_corrected",
+        entity_type="receivable",
+        entity_id=str(receivable_id),
+        correlation_id=correlation_id,
+        idempotency_key=idempotency_key,
+        details={
+            "previous_due_date": previous_due_date.isoformat(),
+            "due_date": due_date.isoformat(),
+            "reason": reason.strip(),
+        },
+    )
+    await session.flush()
+    return await to_receivable_summary(
+        session,
+        tenant_id=context.tenant_id,
+        receivable=locked,
+        as_of=today_in_fiscal_timezone(),
+    )
 
 
 async def list_movements(
@@ -1140,6 +1398,8 @@ __all__ = [
     "list_receivables",
     "list_receivable_installments",
     "list_movements",
+    "correct_receivable_due_date",
+    "preview_retention_xml",
     "to_receivable_summary",
     # Lock
     "lock_receivable",

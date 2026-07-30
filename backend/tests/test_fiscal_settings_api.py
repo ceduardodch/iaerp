@@ -107,6 +107,8 @@ async def test_update_sri_environment_never_exposes_secret(client) -> None:
     assert response.status_code == 200, response.text
     assert response.json() == {
         "sriEnvironment": "2",
+        "electronicInvoicingProviderName": "BTOB SAS",
+        "electronicInvoicingProviderRuc": "1793113192001",
         "certificateConfigured": False,
         "rideLogoConfigured": False,
         "certificateFingerprintSha256": None,

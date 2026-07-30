@@ -94,6 +94,12 @@ class CreditNoteInput(APIModel):
     lines: list[InvoiceLineInput] = Field(min_length=1)
 
 
+class SalesDocumentArchiveInput(APIModel):
+    """Motivo obligatorio para retirar un comprobante fallido del trabajo operativo."""
+
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class SalesDocumentLineRead(APIModel):
     id: uuid.UUID
     line_number: int

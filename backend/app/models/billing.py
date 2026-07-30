@@ -59,6 +59,7 @@ class SalesDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base
         UniqueConstraint("access_key", name="uq_sales_documents_access_key"),
         Index("ix_sales_documents_tenant_status", "tenant_id", "status"),
         Index("ix_sales_documents_tenant_issue_date", "tenant_id", "issue_date"),
+        Index("ix_sales_documents_tenant_archived_at", "tenant_id", "archived_at"),
     )
 
     document_type: Mapped[str] = mapped_column(String(20))
@@ -83,6 +84,10 @@ class SalesDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base
     # transmision (workers/sri_transmission.py) recibe AUTHORIZED.
     authorization_number: Mapped[str | None] = mapped_column(String(49))
     authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Archivar retira del trabajo operativo un comprobante fallido, sin borrar
+    # su evidencia, XML/RIDE ni rastro de transmision con el SRI.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_reason: Mapped[str | None] = mapped_column(String(500))
 
 
 class SalesDocumentLine(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):

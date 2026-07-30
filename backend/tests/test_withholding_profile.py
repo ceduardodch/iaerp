@@ -24,3 +24,23 @@ def test_party_accepts_expected_withholding_profile() -> None:
 def test_retention_requires_document_reference() -> None:
     with pytest.raises(ValueError):
         RetentionInput(kind="RETENTION_IVA", amount=Decimal("10.00"), reason="Retención")
+
+
+def test_party_normalizes_ecuador_whatsapp_to_required_format() -> None:
+    party = PartyCreate(
+        name="Cliente WhatsApp",
+        identification_type="RUC",
+        identification_number="1791233417001",
+        roles=["CUSTOMER"],
+        phone="0991041297",
+    )
+    assert party.phone == "+593991041297"
+
+    with pytest.raises(ValueError, match=r"\+593991041297"):
+        PartyCreate(
+            name="Cliente WhatsApp inválido",
+            identification_type="RUC",
+            identification_number="1791233417002",
+            roles=["CUSTOMER"],
+            phone="099104129",
+        )

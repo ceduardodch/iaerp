@@ -48,6 +48,7 @@ _IDENTIFICATION_TYPE_TO_SRI_CODE = {
     "FINAL_CONSUMER": "07",
 }
 _FINAL_CONSUMER_IDENTIFICATION = "9999999999999"
+_ELECTRONIC_INVOICING_PROVIDER_FIELD_NAME = "RUC proveedor de facturación electrónica"
 
 
 @dataclass(frozen=True)
@@ -152,6 +153,22 @@ def _buyer_identification_code(identification_type: str) -> str:
     return _IDENTIFICATION_TYPE_TO_SRI_CODE.get(identification_type, "07")
 
 
+def _append_electronic_invoicing_provider(
+    root: etree._Element,
+    provider_ruc: str | None,
+) -> None:
+    """Incluye el proveedor de facturación en ``infoAdicional`` cuando aplique."""
+
+    if provider_ruc is None:
+        return
+    if not provider_ruc.isdecimal() or len(provider_ruc) != 13:
+        raise ValueError("Electronic invoicing provider RUC must be a 13-digit number")
+
+    info_adicional = _sub(root, "infoAdicional")
+    campo_adicional = _sub(info_adicional, "campoAdicional", provider_ruc)
+    campo_adicional.set("nombre", _ELECTRONIC_INVOICING_PROVIDER_FIELD_NAME)
+
+
 def build_invoice_xml(
     *,
     document: SalesDocument,
@@ -163,6 +180,7 @@ def build_invoice_xml(
     tenant_commercial_address: str,
     buyer: Party,
     environment_code: str,
+    electronic_invoicing_provider_ruc: str | None = None,
     emission_type_code: str = "1",
 ) -> SriXmlBuildResult:
     """Construye el XML de factura (esquema 1.1.0) desde datos ya persistidos.
@@ -222,6 +240,7 @@ def build_invoice_xml(
     _sub(info_factura, "moneda", document.currency)
 
     root.append(_build_detalles(lines))
+    _append_electronic_invoicing_provider(root, electronic_invoicing_provider_ruc)
 
     xml_bytes = etree.tostring(
         root,
@@ -247,6 +266,7 @@ def build_credit_note_xml(
     related_invoice_access_key: str,
     reason: str,
     environment_code: str,
+    electronic_invoicing_provider_ruc: str | None = None,
     emission_type_code: str = "1",
 ) -> SriXmlBuildResult:
     """Construye el XML de nota de credito (esquema 1.1.0).
@@ -316,6 +336,7 @@ def build_credit_note_xml(
     _sub(info_nota_credito, "motivo", reason)
 
     root.append(_build_detalles(lines))
+    _append_electronic_invoicing_provider(root, electronic_invoicing_provider_ruc)
 
     xml_bytes = etree.tostring(
         root,
