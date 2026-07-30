@@ -341,6 +341,16 @@
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
     },
     {
+      "name": "commercial:read",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "commercial:write",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
       "name": "receivables:read",
       "protocol": "openid-connect",
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
@@ -398,6 +408,8 @@
         "leads:write",
         "communications:read",
         "communications:write",
+        "commercial:read",
+        "commercial:write",
         "receivables:read",
         "receivables:write",
         "receivables:notify"
