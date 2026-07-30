@@ -1,4 +1,4 @@
-"""Firma XAdES-BES del XML de comprobantes SRI con ``signxml``.
+"""Firma XAdES-BES del XML de comprobantes SRI.
 
 Esta funcion es pura respecto de I/O de red (no transmite nada) y auditable:
 retorna el XML firmado y el fingerprint SHA-256 del certificado usado, para
@@ -6,26 +6,26 @@ que el llamador (fase 4, flujo ``issue_document``) lo escriba en
 ``AuditEvent`` junto con la transicion de estado a ``SIGNED``. No decide
 cuando firmar ni persiste nada: solo firma.
 
-XAdES-BES (Basic Electronic Signature) es una firma XML-DSig enveloped mas
-las propiedades calificadas de firma (``SignedProperties`` con
-``SigningTime``/``SigningCertificate``) exigidas por el SRI. ``signxml`` no
-genera XAdES nativamente; se usa su firma XML-DSig enveloped como base
-(coherente con el enfoque de ``sri_xml.py``: el nodo raiz ya declara
-``id="comprobante"`` para que la firma se inserte ahi) y se anaden las
-propiedades XAdES calificadas requeridas por el esquema SRI.
+El SRI requiere XAdES-BES: XML-DSig enveloped mas ``SignedProperties`` con
+``SigningTime`` y ``SigningCertificate``. ``signxml`` conserva aqui la
+verificacion local; la construccion de la firma usa ``xades``/``xmlsig``, el
+mismo perfil que ya valida el SRI en Sky Franquicia.
 """
 
 from __future__ import annotations
 
 import hashlib
+from base64 import b64encode
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
+import xmlsig
 from cryptography.hazmat.primitives.serialization import pkcs12
 from lxml import etree
-from signxml.algorithms import SignatureConstructionMethod
-from signxml.signer import XMLSigner
-from signxml.verifier import XMLVerifier
+from signxml.algorithms import DigestAlgorithm, SignatureMethod
+from signxml.verifier import SignatureConfiguration, XMLVerifier
+from xades import XAdESContext, template
 
 from app.core.config import get_settings
 
@@ -151,24 +151,66 @@ def sign_xml(
         load_signing_credentials(cert_path=cert_path, password=password, p12_bytes=p12_bytes)
     )
 
-    root = etree.fromstring(xml_bytes)
-    signer = XMLSigner(
-        method=SignatureConstructionMethod.enveloped,
-        signature_algorithm="rsa-sha256",
-        digest_algorithm="sha256",
-        c14n_algorithm="http://www.w3.org/2001/10/xml-exc-c14n#",
+    from cryptography import x509
+    from cryptography.hazmat.primitives.serialization import Encoding, load_pem_private_key
+
+    parser = etree.XMLParser(remove_blank_text=True, resolve_entities=False)
+    signed_root = etree.fromstring(xml_bytes, parser=parser)
+    private_key = load_pem_private_key(private_key_pem, password=None)
+    certificate = x509.load_pem_x509_certificate(certificate_pem)
+
+    signature = xmlsig.template.create(
+        xmlsig.constants.TransformInclC14N,
+        # El perfil que SRI acepta para comprobantes offline usa RSA/SHA-1.
+        # Se mantiene por compatibilidad fiscal, limitado a esta firma XAdES.
+        xmlsig.constants.TransformRsaSha1,
+        name="Signature",
     )
-    signed_root = signer.sign(
-        root,
-        key=private_key_pem,
-        # El primer certificado siempre es el firmante. Los siguientes son la
-        # cadena intermedia del .p12, en el orden preservado por el emisor.
-        cert=[
-            certificate_pem.decode("ascii"),
-            *[item.decode("ascii") for item in certificate_chain_pem],
-        ],
-        reference_uri="#comprobante",
+    signed_root.append(signature)
+    reference = xmlsig.template.add_reference(
+        signature,
+        xmlsig.constants.TransformSha1,
+        uri="#comprobante",
     )
+    xmlsig.template.add_transform(reference, xmlsig.constants.TransformEnveloped)
+    xmlsig.template.add_transform(reference, xmlsig.constants.TransformInclC14N)
+
+    key_info = xmlsig.template.ensure_key_info(signature)
+    x509_data = xmlsig.template.add_x509_data(key_info)
+    xmlsig.template.x509_data_add_certificate(x509_data)
+
+    qualifying_properties = template.create_qualifying_properties(signature)
+    signed_properties = template.create_signed_properties(
+        qualifying_properties,
+        name="SignedProperties",
+        datetime=datetime.now(UTC).replace(tzinfo=None),
+    )
+    signed_properties_reference = xmlsig.template.add_reference(
+        signature,
+        xmlsig.constants.TransformSha1,
+        uri=f"#{signed_properties.get('Id')}",
+        uri_type="http://uri.etsi.org/01903#SignedProperties",
+    )
+    xmlsig.template.add_transform(
+        signed_properties_reference,
+        xmlsig.constants.TransformInclC14N,
+    )
+
+    context = XAdESContext()
+    context.x509 = certificate
+    context.public_key = certificate.public_key()
+    context.private_key = private_key
+    context.sign(signature)
+
+    # KeyInfo no forma parte de SignedInfo; se anexan los intermedios luego de
+    # firmar para que el SRI pueda construir la cadena del certificado firmante.
+    x509_certificate_tag = "{http://www.w3.org/2000/09/xmldsig#}X509Certificate"
+    for chain_certificate_pem in certificate_chain_pem:
+        chain_certificate = x509.load_pem_x509_certificate(chain_certificate_pem)
+        etree.SubElement(x509_data, x509_certificate_tag).text = b64encode(
+            chain_certificate.public_bytes(encoding=Encoding.DER)
+        ).decode("ascii")
+
     signed_xml = etree.tostring(
         signed_root,
         xml_declaration=True,
@@ -192,6 +234,11 @@ def verify_signed_xml(signed_xml: bytes, *, certificate_pem: bytes) -> bytes:
     verified = XMLVerifier().verify(
         signed_xml,
         x509_cert=certificate_pem.decode("ascii"),
+        expect_config=SignatureConfiguration(
+            expect_references=2,
+            signature_methods=frozenset({SignatureMethod.RSA_SHA1}),
+            digest_algorithms=frozenset({DigestAlgorithm.SHA1}),
+        ),
     )
     result = verified[0] if isinstance(verified, list) else verified
     signed_data = result.signed_xml

@@ -1,4 +1,4 @@
-"""Pruebas de firma XAdES-BES (base XML-DSig enveloped via ``signxml``).
+"""Pruebas de firma XAdES-BES para comprobantes SRI.
 
 Cubre: generacion automatica del certificado de prueba si falta, round-trip
 firma/verificacion, y estabilidad del fingerprint SHA-256 del certificado
@@ -86,6 +86,9 @@ def test_sign_xml_auto_generates_missing_dev_certificate(isolated_cert_path: Pat
     assert isolated_cert_path.exists()
     assert len(result.certificate_fingerprint_sha256) == 64
     assert b"Signature" in result.signed_xml
+    root = etree.fromstring(result.signed_xml)
+    assert root.xpath("//*[local-name()='SignedProperties']")
+    assert root.xpath("//*[local-name()='SigningCertificate']")
 
 
 def test_sign_and_verify_round_trip(isolated_cert_path: Path) -> None:
