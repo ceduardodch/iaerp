@@ -166,6 +166,7 @@ def test_build_ride_pdf_is_not_empty_and_contains_access_key() -> None:
     assert "CLAVE DE ACCESO" in text
     assert "AMBIENTE: PRUEBAS" in text
     assert "PENDIENTE DE AUTORIZACIÓN" in text
+    assert "Estado SRI: Firmada y pendiente de envío" in text
 
 
 def test_build_ride_pdf_reflects_same_totals_as_document_without_recalculating() -> None:

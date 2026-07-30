@@ -8,6 +8,14 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-30 `America/Guayaquil`.
+  Los estados técnicos de comprobante y transmisión ahora se traducen a nombres
+  legibles en Facturas y en el RIDE: por ejemplo, `SIGNED` pasa a “Firmada y
+  pendiente de envío” y `NOT_AUTHORIZED` a “No autorizada”. Un estado futuro
+  desconocido mantiene una etiqueta segura de pendiente de clasificación, sin
+  dejar la interfaz vacía. Validado con pruebas del RIDE, lint y build
+  frontend; pendiente CI y promoción autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
   La firma XAdES conserva e incorpora en el XML los certificados intermedios
   incluidos en el PKCS#12, en vez de descartarlos al cargarlo. Esto permite al
   SRI construir la cadena de confianza del certificado firmante. Se validó con

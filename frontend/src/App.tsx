@@ -710,6 +710,7 @@ const invoiceStatusLabels: Record<SalesDocumentStatus, string> = {
   RECEIVED: 'ENVIADA',
   PENDING_AUTHORIZATION: 'ENVIADA',
   AUTHORIZED: 'AUTORIZADA',
+  NOT_AUTHORIZED: 'NO AUTORIZADA',
   REJECTED: 'RECHAZADA',
   FAILED: 'FALLIDA',
   VOIDED: 'NO AUTORIZADA',
@@ -722,6 +723,7 @@ const invoiceStatusTone: Record<SalesDocumentStatus, 'neutral' | 'success' | 'wa
   RECEIVED: 'warning',
   PENDING_AUTHORIZATION: 'warning',
   AUTHORIZED: 'success',
+  NOT_AUTHORIZED: 'danger',
   REJECTED: 'danger',
   FAILED: 'danger',
   VOIDED: 'danger',
@@ -729,6 +731,20 @@ const invoiceStatusTone: Record<SalesDocumentStatus, 'neutral' | 'success' | 'wa
 
 function InvoiceStatusBadge({ status }: { status: SalesDocumentStatus }) {
   return <ErpStatusBadge tone={invoiceStatusTone[status]}>{invoiceStatusLabels[status]}</ErpStatusBadge>
+}
+
+const sriTransmissionStatusLabels: Record<string, string> = {
+  PENDING: 'PENDIENTE DE ENVÍO',
+  RECEIVED: 'RECIBIDA POR SRI',
+  PENDING_AUTHORIZATION: 'EN PROCESO DE AUTORIZACIÓN',
+  AUTHORIZED: 'AUTORIZADA',
+  NOT_AUTHORIZED: 'NO AUTORIZADA',
+  REJECTED: 'RECHAZADA',
+  FAILED: 'ERROR DE TRANSMISIÓN',
+}
+
+function sriTransmissionStatusLabel(status: string) {
+  return sriTransmissionStatusLabels[status] ?? 'ESTADO PENDIENTE DE CLASIFICACIÓN'
 }
 
 type DraftLine = {
@@ -1270,7 +1286,7 @@ function InvoiceDetail({
         <p className="section-number" id="sri-status-title">Estado SRI</p>
         {transmission ? (
           <dl className="invoice-summary">
-            <div><dt>Estado</dt><dd>{transmission.status}</dd></div>
+            <div><dt>Estado</dt><dd>{sriTransmissionStatusLabel(transmission.status)}</dd></div>
             {transmission.message ? <div><dt>Mensaje</dt><dd>{transmission.message}</dd></div> : null}
             {transmission.authorizationNumber ? (
               <div><dt>Número de autorización</dt><dd>{transmission.authorizationNumber}</dd></div>

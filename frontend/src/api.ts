@@ -70,6 +70,7 @@ export type SalesDocumentStatus =
   | 'RECEIVED'
   | 'PENDING_AUTHORIZATION'
   | 'AUTHORIZED'
+  | 'NOT_AUTHORIZED'
   | 'REJECTED'
   | 'FAILED'
   | 'VOIDED'

@@ -40,6 +40,19 @@ _DOCUMENT_TYPE_LABEL = {
     "CREDIT_NOTE": "NOTA DE CREDITO",
 }
 
+_DOCUMENT_STATUS_LABEL = {
+    "DRAFT": "Borrador",
+    "READY": "Lista para emitir",
+    "SIGNED": "Firmada y pendiente de envío",
+    "RECEIVED": "Recibida por SRI",
+    "PENDING_AUTHORIZATION": "En proceso de autorización",
+    "AUTHORIZED": "Autorizada por SRI",
+    "NOT_AUTHORIZED": "No autorizada por SRI",
+    "REJECTED": "Rechazada por SRI",
+    "FAILED": "Error de transmisión",
+    "VOIDED": "Anulada",
+}
+
 
 def _format_amount(value: Decimal) -> str:
     return format(value.quantize(Decimal("0.01")), "f")
@@ -107,6 +120,12 @@ def _paragraph(value: str, style: ParagraphStyle) -> Paragraph:
 
 def _environment_label(environment_code: str) -> str:
     return "PRODUCCIÓN" if environment_code == "2" else "PRUEBAS"
+
+
+def _document_status_label(status: str) -> str:
+    """Texto legible, conservando el estado técnico en el modelo y API."""
+
+    return _DOCUMENT_STATUS_LABEL.get(status, "Estado pendiente de clasificación")
 
 
 def _format_authorized_at(value: datetime | None) -> str:
@@ -309,7 +328,9 @@ def build_ride_pdf(
     additional_rows: list[list[object]] = [[Paragraph("Información adicional", body_style)]]
     if buyer.email:
         additional_rows.append([_paragraph(f"Email: {buyer.email}", small_style)])
-    additional_rows.append([Paragraph(f"Estado SRI: {document.status}", small_style)])
+    additional_rows.append(
+        [Paragraph(f"Estado SRI: {_document_status_label(document.status)}", small_style)]
+    )
     additional_table = Table(
         additional_rows,
         colWidths=[9.8 * cm],
