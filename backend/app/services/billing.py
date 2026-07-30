@@ -75,6 +75,31 @@ _CREDIT_NOTE_STATUSES_RESERVING_BALANCE = frozenset(
 INVOICE_SIGNED_EVENT = "invoice.signed"
 
 
+def _validate_sri_environment_alignment(
+    *,
+    fiscal_environment: str,
+    transmission_mode: str,
+    transmission_environment: str,
+) -> None:
+    """Evita firmar un XML para un ambiente distinto al SOAP configurado.
+
+    La clave de acceso y el XML son inmutables desde que se firma. Por eso la
+    validación vive antes de crear ambos artefactos, no en el worker cuando ya
+    sería demasiado tarde para corregir el comprobante.
+    """
+
+    if transmission_mode == "soap" and fiscal_environment != transmission_environment:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "SRI environment mismatch: the organization is configured for "
+                f"environment {fiscal_environment}, but SOAP transmission uses "
+                f"environment {transmission_environment}. Update the fiscal settings "
+                "before issuing a new document."
+            ),
+        )
+
+
 async def preview_invoice(
     session: AsyncSession,
     context: AuthContext,
@@ -992,6 +1017,11 @@ async def issue_document(
     tenant = await masters.get_active_tenant(session, context.tenant_id)
     fiscal = await fiscal_settings.get_or_create(session, context.tenant_id)
     runtime_settings = get_settings()
+    _validate_sri_environment_alignment(
+        fiscal_environment=fiscal.sri_environment,
+        transmission_mode=runtime_settings.SRI_TRANSMISSION_MODE,
+        transmission_environment=runtime_settings.SRI_ENVIRONMENT,
+    )
     if fiscal.sri_environment == "2" and runtime_settings.APP_ENV not in {
         "release",
         "production",

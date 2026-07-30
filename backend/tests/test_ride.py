@@ -155,11 +155,13 @@ def test_build_ride_pdf_is_not_empty_and_contains_access_key() -> None:
     assert pdf_bytes.startswith(b"%PDF")
 
     text = _extract_text(pdf_bytes)
-    assert document.access_key in text.replace(" ", "")
+    assert document.access_key in "".join(text.split())
     assert "1799999999001" in text
     assert "Cliente Facturable" in text
     assert "115.00" in text  # importeTotal, mismo dato que el XML
     assert "001-001-000000001" in text
+    assert "COMPRADOR" in text
+    assert "CLAVE DE ACCESO" in text
 
 
 def test_build_ride_pdf_reflects_same_totals_as_document_without_recalculating() -> None:
