@@ -10,6 +10,7 @@ dispara la transmision SRI (``workers/sri_transmission.py``).
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException
@@ -421,6 +422,90 @@ async def create_invoice_draft(
 
     await session.flush()
     return document
+
+
+async def duplicate_invoice_draft(
+    session: AsyncSession,
+    context: AuthContext,
+    source_invoice_id: uuid.UUID,
+) -> SalesDocument:
+    """Duplica una factura como borrador nuevo, sin rastros fiscales previos.
+
+    La copia conserva cliente, establecimiento, líneas y - cuando el total no
+    cambia con la política vigente - el calendario de cuotas desplazado a la
+    nueva fecha. Nunca conserva secuencial, clave de acceso, XML, RIDE,
+    transmisión, autorización ni cobros: todos pertenecen exclusivamente al
+    comprobante de origen.
+    """
+
+    source = await get_sales_document(session, context, source_invoice_id)
+    if source.document_type != _INVOICE_DOCUMENT_TYPE:
+        raise HTTPException(status_code=409, detail="Only invoices can be duplicated")
+
+    source_lines = list(
+        (
+            await session.scalars(
+                select(SalesDocumentLine)
+                .where(
+                    SalesDocumentLine.tenant_id == context.tenant_id,
+                    SalesDocumentLine.sales_document_id == source.id,
+                )
+                .order_by(SalesDocumentLine.line_number)
+            )
+        ).all()
+    )
+    if not source_lines:
+        raise HTTPException(status_code=409, detail="Invoice has no lines to duplicate")
+
+    source_installments = await list_sales_document_installments(session, context, source.id)
+    copied = await create_invoice_draft(
+        session,
+        context,
+        InvoiceInput(
+            customer_id=source.party_id,
+            establishment_id=source.establishment_id,
+            emission_point_id=source.emission_point_id,
+            issue_date=today_in_fiscal_timezone(),
+            installments=[],
+            lines=[
+                {
+                    "product_id": line.product_id,
+                    "description": line.description,
+                    "quantity": line.quantity,
+                    "unit_price": line.unit_price,
+                    "discount": line.discount,
+                    "tax_code": line.tax_sri_code,
+                }
+                for line in source_lines
+            ],
+        ),
+    )
+
+    # Mantener condiciones de pago solo si la política vigente deja intacto el
+    # total. Si cambió IVA/tarifa, queda una cuota por el nuevo total para que
+    # el operador la revise antes de emitir, nunca una suma que no cuadre.
+    if source_installments and copied.total == source.total:
+        copied_installments = await list_sales_document_installments(session, context, copied.id)
+        for installment in copied_installments:
+            await session.delete(installment)
+        # Libera la secuencia de cuota por documento antes de insertar el
+        # calendario copiado; de otro modo SQL puede intentar el INSERT antes
+        # del DELETE y violar su clave única.
+        await session.flush()
+        for sequence, source_installment in enumerate(source_installments, start=1):
+            due_offset = max((source_installment.due_date - source.issue_date).days, 0)
+            session.add(
+                SalesDocumentInstallment(
+                    tenant_id=context.tenant_id,
+                    sales_document_id=copied.id,
+                    sequence=sequence,
+                    due_date=copied.issue_date + timedelta(days=due_offset),
+                    amount=source_installment.amount,
+                )
+            )
+        await session.flush()
+
+    return copied
 
 
 async def list_sales_document_installments(

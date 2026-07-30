@@ -83,8 +83,9 @@ conviene monitorearlas de cerca.
 `DEVUELTA` en recepción es un rechazo terminal: el XML, su clave de acceso y
 sus artefactos quedan inmutables como evidencia. Corrige primero el ambiente de
 **Empresa → ajustes fiscales** para que coincida con `SRI_ENVIRONMENT`, y luego
-emite un comprobante nuevo con un secuencial y clave de acceso nuevos. Nunca se
-edita ni se retransmite el XML rechazado.
+usa **Duplicar** sobre la factura rechazada: crea un borrador nuevo, con
+secuencial y clave de acceso nuevos al emitir. Nunca se edita ni se retransmite
+el XML rechazado; revisa el borrador antes de emitirlo.
 
 ## Referencia técnica
 

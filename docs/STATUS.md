@@ -15,6 +15,11 @@ alcance y las decisiones.
   discrepancia de ambiente. Validado localmente con Ruff y seis pruebas
   focalizadas; pendiente CI y promoción autorizada. Los documentos históricos
   no se alteran y un rechazo SRI se reemite únicamente como comprobante nuevo.
+  Facturas incorpora **Duplicar**: copia una factura del tenant como borrador
+  nuevo, recalcula con la política vigente y nunca arrastra XML/RIDE, clave de
+  acceso, autorización, transmisión ni cobros. Conserva las cuotas relativas
+  solo si el total permanece igual; de otro modo deja el nuevo total para
+  revisión antes de emitir.
 
 - Actualización local: 2026-07-29 `America/Guayaquil`.
   Contactos puede guardar un perfil esperado de retención de IVA/renta, con

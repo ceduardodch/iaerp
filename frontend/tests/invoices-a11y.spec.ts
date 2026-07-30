@@ -102,6 +102,15 @@ const rejectedInvoice = {
   },
 }
 
+const duplicatedInvoice = {
+  ...rejectedInvoice,
+  id: '51515151-5151-4515-8515-515151515151',
+  sequential: '001001000000004',
+  status: 'DRAFT',
+  accessKey: null,
+  sriTransmission: null,
+}
+
 async function mockApi(page: Page) {
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
@@ -151,6 +160,12 @@ async function mockApi(page: Page) {
   )
   await page.route(`**/api/v1/invoices/${rejectedInvoice.id}`, (route) =>
     route.fulfill({ json: rejectedInvoice }),
+  )
+  await page.route(`**/api/v1/invoices/${duplicatedInvoice.id}`, (route) =>
+    route.fulfill({ json: duplicatedInvoice }),
+  )
+  await page.route('**/api/v1/invoices/*/duplicate', (route) =>
+    route.fulfill({ status: 201, json: duplicatedInvoice }),
   )
   await page.route('**/api/v1/invoices/*/artifacts', (route) => {
     if (route.request().url().includes(authorizedInvoice.id)) {
@@ -307,6 +322,20 @@ test('rejected invoice shows an accessible SRI message', async ({ page }) => {
   const detail = page.getByLabel(`Factura ${rejectedInvoice.sequential}`, { exact: true })
   await expect(detail.getByText('RECHAZADA', { exact: true })).toBeVisible()
   await expect(detail.getByText('RUC del cliente no encontrado')).toBeVisible()
+})
+
+test('duplicate creates a separate draft from a rejected invoice', async ({ page }) => {
+  await loginAndOpenInvoices(page)
+  await page
+    .getByRole('row', { name: new RegExp(rejectedInvoice.sequential) })
+    .getByRole('button', { name: 'Ver' })
+    .click()
+
+  await page.getByRole('button', { name: 'Duplicar' }).click()
+  await expect(page.getByRole('heading', { name: `Factura ${duplicatedInvoice.sequential}` })).toBeVisible()
+  await expect(page.getByText('BORRADOR', { exact: true })).toBeVisible()
+  await expect(page.getByText('RUC del cliente no encontrado')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Emitir' })).toBeEnabled()
 })
 
 test('invoices screens reflow at 320 CSS px and at 200% zoom without horizontal scroll', async ({
