@@ -2444,6 +2444,7 @@ function OrganizationPage({
   token: string
 }) {
   const queryClient = useQueryClient()
+  const [settingsSection, setSettingsSection] = useState<'fiscal' | 'collections' | 'integrations'>('fiscal')
   const fiscalQuery = useQuery({
     queryKey: ['organization', 'fiscal-settings'],
     queryFn: () => apiRequest<FiscalSettings>(token, '/organization/fiscal-settings'),
@@ -2596,7 +2597,13 @@ function OrganizationPage({
         subtitle="Datos del contribuyente y estructura de emisión."
         meta={<ErpStatusBadge tone="success">Tenant activo</ErpStatusBadge>}
       />
+      <ErpToolbar ariaLabel="Secciones de empresa">
+        <ErpButton variant={settingsSection === 'fiscal' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('fiscal')}>Datos fiscales</ErpButton>
+        <ErpButton variant={settingsSection === 'collections' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('collections')}>Cobranza automática</ErpButton>
+        <ErpButton variant={settingsSection === 'integrations' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('integrations')}>Canales e integraciones</ErpButton>
+      </ErpToolbar>
       <section className="company-grid company-grid-expanded">
+        {settingsSection === 'fiscal' ? <>
         <article className="company-identity company-profile-editor">
           <p className="section-number">Contribuyente</p>
           <form onSubmit={submitProfile}>
@@ -2689,6 +2696,8 @@ function OrganizationPage({
             </form>
           </div>
         </ErpPanel>
+        </> : null}
+        {settingsSection === 'collections' ? <>
         <ErpPanel title="Automatizaciones de cobranza" className="fiscal-settings-panel">
           <p className="fiscal-panel-copy">Define aquí las plantillas, canales y reglas automáticas. La pantalla de Cartera queda reservada para gestionar saldos y cobros.</p>
           {collectionPolicyQuery.data && Array.isArray(collectionPolicyQuery.data.offsetsDays) && Array.isArray(collectionPolicyQuery.data.channels) ? (
@@ -2701,6 +2710,8 @@ function OrganizationPage({
             />
           ) : null}
         </ErpPanel>
+        </> : null}
+        {settingsSection === 'integrations' ? <>
         <ErpPanel title="Google Workspace" actions={<ErpStatusBadge tone={integrationsQuery.data?.googleConnected ? 'success' : 'warning'}>{integrationsQuery.data?.googleConnected ? 'Conectado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
           <div className="fiscal-panel-body">
             {integrationsQuery.data?.googleConnected ? <p>Cuenta conectada: <strong>{integrationsQuery.data.googleEmail}</strong></p> : <p className="fiscal-panel-copy">Conecta tu cuenta para enviar correos y sincronizar conversaciones del CRM.</p>}
@@ -2745,6 +2756,7 @@ function OrganizationPage({
             <ErpButton variant="primary" type="submit" disabled={!integrationsQuery.data?.evolutionConfigurationAvailable || saveEvolutionWhatsApp.isPending}>{saveEvolutionWhatsApp.isPending ? 'Preparando QR…' : evolutionQrCode ? 'Generar otro QR' : 'Generar QR y conectar WhatsApp'}</ErpButton>
           </form>
         </ErpPanel>
+        </> : null}
       </section>
     </>
   )
