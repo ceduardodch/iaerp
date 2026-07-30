@@ -43,7 +43,7 @@
 | --- | --- | --- | --- |
 | Claude (orquestador) | 🟢 ACTIVA | Calidad de tests a11y RESTAURADA; próximo: Sprint 4 (facturas) | 2026-07-21 |
 | Codex (GPT-5.6, vía Claude) | ⚪ detenido | Se colgó por `approval_mode="approve"` en modo no interactivo; para usarlo hay que invocarlo con `--full-auto`/`-a never`. Alcanzó a hacer 2 mejoras menores (auth.tsx, ErpModal.tsx) que se conservaron | 2026-07-21 |
-| Codex (este hilo) | ⚪ detenido | Rediseño visual y configuración de cobranza promovidos; agregó selector WhatsApp Meta/Evolution por tenant para CRM y cobranza, con migración PostgreSQL y pruebas focalizadas verificadas; pendiente configuración Evolution del operador | 2026-07-27 |
+| Codex (este hilo) | ⚪ detenido | Archivo seguro de comprobantes SRI rechazados/no autorizados, visor del RIDE, XML de retención, cobranza, métricas sin rechazos y teléfonos WhatsApp E.164; validado localmente, pendiente migración y promoción | 2026-07-30 |
 | Otra sesión (Sonnet 4.6) | ⚠️ ¿activa? | Venía haciendo Sprints UI/UX (sidebar, forms) y muteando tests | reciente |
 
 > Si eres una IA nueva y esta tabla muestra a alguien 🟢 ACTIVA, **no toques su

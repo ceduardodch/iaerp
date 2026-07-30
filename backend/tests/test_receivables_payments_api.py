@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import select
 
 from app.db.session import SessionFactory, engine
+from app.models.platform import AuditEvent
 from app.models.receivables import CustomerCredit, Movement, Receivable
 from app.workers.receivables import handle_credit_note_authorized, handle_invoice_authorized
 from app.workers.sri_transmission import CREDIT_NOTE_AUTHORIZED_EVENT
@@ -82,6 +83,34 @@ async def test_record_payment_partial_via_api_updates_open_amount(client) -> Non
     body = response.json()
     assert body["openAmount"] == "60.00"
     assert body["status"] == "PARTIAL"
+
+
+async def test_correct_historical_receivable_due_date_updates_aging_source_and_audit(
+    client,
+) -> None:
+    setup = await _create_receivable_via_event(
+        key_prefix="api-due-date", sequential="000000952", total=Decimal("100.00")
+    )
+    receivable_id, _masters = await setup(client)
+    token = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["receivables:write", "receivables:read"]
+    )
+    response = await client.put(
+        f"/api/v1/receivables/{receivable_id}/due-date",
+        headers=auth(token, "due-date-correction-0001"),
+        json={"dueDate": "2026-12-31", "reason": "Se acordó crédito a 30 días."},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["dueDate"] == "2026-12-31"
+    async with SessionFactory() as session:
+        audit = await session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.tenant_id == TENANT_A,
+                AuditEvent.action == "receivable.due_date_corrected",
+            )
+        )
+    assert audit is not None
+    assert audit.details["due_date"] == "2026-12-31"
 
 
 async def test_record_payment_idempotency_key_replay_does_not_duplicate_movement(client) -> None:

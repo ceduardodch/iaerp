@@ -139,6 +139,21 @@ async def test_full_cycle_draft_issue_consume_authorized(client) -> None:
     assert final_body["sriTransmission"]["status"] == "AUTHORIZED"
     assert final_body["sriTransmission"]["authorizationNumber"] == final_body["accessKey"]
 
+    async with SessionFactory() as session:
+        ride_versions = list(
+            (
+                await session.scalars(
+                    select(DocumentArtifact.version)
+                    .where(
+                        DocumentArtifact.sales_document_id == uuid.UUID(invoice_id),
+                        DocumentArtifact.artifact_type == "ride-pdf",
+                    )
+                    .order_by(DocumentArtifact.version)
+                )
+            ).all()
+        )
+    assert ride_versions == [1, 2]
+
 
 async def test_full_cycle_returned_scenario_marks_document_rejected(client) -> None:
     invoice_id, token = await _create_draft(client, "issue-returned")
@@ -164,9 +179,7 @@ async def test_full_cycle_not_authorized_scenario(client) -> None:
     await _issue(client, token, invoice_id, "issue-notauth-0001")
 
     signed = (await client.get(f"/api/v1/invoices/{invoice_id}", headers=auth(token))).json()
-    get_store().set_scenario(
-        signed["accessKey"], "NOT_AUTHORIZED", reason="Error en diferencias"
-    )
+    get_store().set_scenario(signed["accessKey"], "NOT_AUTHORIZED", reason="Error en diferencias")
 
     message = await _claim_signed_event(invoice_id)
     async with SessionFactory() as session:

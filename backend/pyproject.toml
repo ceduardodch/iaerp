@@ -25,6 +25,8 @@ dependencies = [
     "signxml>=5.0,<6",
     "sqlalchemy[asyncio]>=2.0.36,<3",
     "uvicorn[standard]>=0.34,<1",
+    "xades==1.0.0",
+    "xmlsig==1.0.1",
 ]
 
 [dependency-groups]
@@ -58,7 +60,18 @@ module = ["celery", "celery.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["signxml", "signxml.*", "minio", "minio.*", "reportlab", "reportlab.*"]
+module = [
+    "minio",
+    "minio.*",
+    "reportlab",
+    "reportlab.*",
+    "signxml",
+    "signxml.*",
+    "xades",
+    "xades.*",
+    "xmlsig",
+    "xmlsig.*",
+]
 ignore_missing_imports = true
 
 [build-system]

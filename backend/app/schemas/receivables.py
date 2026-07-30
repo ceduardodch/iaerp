@@ -65,6 +65,28 @@ class RetentionInput(APIModel):
     document_reference: str = Field(min_length=3, max_length=120)
 
 
+class RetentionXmlPreviewItem(APIModel):
+    """Retención leída de un comprobante SRI autorizado, sin registrar cobro."""
+
+    kind: RetentionKind
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    base_amount: Decimal = Field(ge=0, max_digits=18, decimal_places=2)
+    rate: Decimal = Field(ge=0, max_digits=9, decimal_places=6)
+    sri_retention_code: str = Field(min_length=1, max_length=20)
+
+
+class RetentionXmlPreviewRead(APIModel):
+    """Resultado verificable de leer un XML de retención autorizado.
+
+    El endpoint no persiste el archivo ni crea movimientos: la persona revisa
+    el resultado y confirma el cobro en el flujo normal.
+    """
+
+    authorization_number: str = Field(min_length=1, max_length=49)
+    supporting_document: str = Field(min_length=1, max_length=20)
+    retentions: list[RetentionXmlPreviewItem] = Field(min_length=1)
+
+
 class DiscountInput(APIModel):
     """Descuento aplicado dentro de un cobro (``PaymentInput.discounts``).
 
@@ -115,6 +137,13 @@ class ReversalInput(APIModel):
     """
 
     reason: str = Field(min_length=3)
+
+
+class ReceivableDueDateUpdate(APIModel):
+    """Corrección comercial del vencimiento de una cuenta histórica."""
+
+    due_date: date
+    reason: str = Field(min_length=3, max_length=500)
 
 
 class AgingBucketTotalRead(APIModel):
@@ -190,6 +219,19 @@ class CollectionPolicyUpdate(APIModel):
     send_hour: int = Field(default=9, ge=0, le=23)
     email_template_id: str = Field(default="payment_reminder", max_length=100)
     whatsapp_template_id: str = Field(default="payment_reminder", max_length=100)
+    email_subject: str = Field(
+        default="Recordatorio de pago - {{empresa}}", min_length=3, max_length=200
+    )
+    email_body: str = Field(
+        default=(
+            "Estimado/a {{cliente}},\n\n"
+            "Le recordamos que mantiene un saldo pendiente. "
+            "Revise el detalle y realice el pago hasta {{vencimiento}}."
+        ),
+        min_length=3,
+        max_length=5000,
+    )
+    payment_instructions: str = Field(default="", max_length=1500)
 
 
 class CollectionPolicyRead(CollectionPolicyUpdate):
@@ -214,6 +256,9 @@ __all__ = [
     "CollectionPolicyRead",
     "CollectionPolicyUpdate",
     "ReversalInput",
+    "ReceivableDueDateUpdate",
     "RetentionInput",
+    "RetentionXmlPreviewItem",
+    "RetentionXmlPreviewRead",
     "RetentionKind",
 ]

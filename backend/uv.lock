@@ -461,6 +461,8 @@ dependencies = [
     { name = "signxml" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "xades" },
+    { name = "xmlsig" },
 ]
 
 [package.dev-dependencies]
@@ -496,6 +498,8 @@ requires-dist = [
     { name = "signxml", specifier = ">=5.0,<6" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36,<3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34,<1" },
+    { name = "xades", specifier = "==1.0.0" },
+    { name = "xmlsig", specifier = "==1.0.1" },
 ]
 
 [package.metadata.requires-dev]
@@ -961,6 +965,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pytz"
+version = "2026.3.post1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/48/fb042503b6ca6cd271261dc559fd6432f7d8c713153e9ec5c591af4dfc1c/pytz-2026.3.post1.tar.gz", hash = "sha256:2211d3fcf9a797d3405cac96ac7f61d80e6a644f72a3309607282fe8a2010c5d", size = 319745, upload-time = "2026-07-25T15:12:07.385Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/7b/39c34ca613b0b198cb866466651b26b045e2009864c5183c979a3b83f383/pytz-2026.3.post1-py2.py3-none-any.whl", hash = "sha256:dd95840dd199baea12d9cc096a1d452caa6596a1c1e4b5f3dbd1541855d5e815", size = 508283, upload-time = "2026-07-25T15:12:05.782Z" },
+]
+
+[[package]]
 name = "pywin32"
 version = "312"
 source = { registry = "https://pypi.org/simple" }
@@ -1297,4 +1310,30 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/91/d6/7d4553ad4bf1c0421e1ebd4b18de5d9098383b5caa1d937b63df8d04b565/websockets-16.0-cp312-cp312-win32.whl", hash = "sha256:eaded469f5e5b7294e2bdca0ab06becb6756ea86894a47806456089298813c89", size = 178261, upload-time = "2026-01-10T09:22:56.251Z" },
     { url = "https://files.pythonhosted.org/packages/c3/f0/f3a17365441ed1c27f850a80b2bc680a0fa9505d733fe152fdf5e98c1c0b/websockets-16.0-cp312-cp312-win_amd64.whl", hash = "sha256:5569417dc80977fc8c2d43a86f78e0a5a22fee17565d78621b6bb264a115d4ea", size = 178693, upload-time = "2026-01-10T09:22:57.478Z" },
     { url = "https://files.pythonhosted.org/packages/6f/28/258ebab549c2bf3e64d2b0217b973467394a9cea8c42f70418ca2c5d0d2e/websockets-16.0-py3-none-any.whl", hash = "sha256:1637db62fad1dc833276dded54215f2c7fa46912301a24bd94d45d46a011ceec", size = 171598, upload-time = "2026-01-10T09:23:45.395Z" },
+]
+
+[[package]]
+name = "xades"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytz" },
+    { name = "xmlsig" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/4e/8361278d21f2243cc170640f680326b7fcf9f34beb8b006b54d9d3cc22f4/xades-1.0.0.tar.gz", hash = "sha256:0462ee0fc06f4db8cc98b5394755760a21623b3b48b686382bb327cd61b69034", size = 15164, upload-time = "2023-02-08T16:30:16.631Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/6b/cac537b2612349aff2e1fac7199843a62f20d400e5e292f04b3fbbaf99d6/xades-1.0.0-py2.py3-none-any.whl", hash = "sha256:16812cf690729a1fc40d104967873f71efb0921492e1eaabad9f03ab43396e13", size = 16454, upload-time = "2023-02-08T16:30:14.94Z" },
+]
+
+[[package]]
+name = "xmlsig"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "lxml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/20/39/aabbad1b836f6ac1f1618e65aa5bacc54057552d5f2eef9285e8947efe5c/xmlsig-1.0.1.tar.gz", hash = "sha256:19cdd6ff49e0427033217da9fea057b45bb94c7d6ddad6a348984afceace3eb8", size = 15020, upload-time = "2023-05-10T13:50:51.915Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5e/93/c19755cf920693c2dfdf4346856ace1b4e24e36966873f6e740378d6e26a/xmlsig-1.0.1-py2.py3-none-any.whl", hash = "sha256:37ad948592b6e132841744ad3c1be308d1491a0733e5f3da03bc6a68e5d4eab0", size = 16966, upload-time = "2023-05-10T13:50:47.505Z" },
 ]

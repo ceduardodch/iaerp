@@ -23,7 +23,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Literal
 
 from lxml import etree
 
@@ -49,6 +48,7 @@ _IDENTIFICATION_TYPE_TO_SRI_CODE = {
     "FINAL_CONSUMER": "07",
 }
 _FINAL_CONSUMER_IDENTIFICATION = "9999999999999"
+_ELECTRONIC_INVOICING_PROVIDER_FIELD_NAME = "RUC proveedor de facturación electrónica"
 
 
 @dataclass(frozen=True)
@@ -117,7 +117,7 @@ def _build_detalles(lines: list[SalesDocumentLine]) -> etree._Element:
     detalles = etree.Element("detalles")
     for line in lines:
         detalle = _sub(detalles, "detalle")
-        _sub(detalle, "codigoPrincipal", str(line.product_id) if line.product_id else "S/N")
+        _sub(detalle, "codigoPrincipal", _sri_principal_code(line))
         _sub(detalle, "descripcion", line.description)
         _sub(detalle, "cantidad", _format_quantity_or_price(line.quantity))
         _sub(detalle, "precioUnitario", _format_quantity_or_price(line.unit_price))
@@ -133,8 +133,40 @@ def _build_detalles(lines: list[SalesDocumentLine]) -> etree._Element:
     return detalles
 
 
+def _sri_principal_code(line: SalesDocumentLine) -> str:
+    """Devuelve un código SRI válido sin filtrar el UUID interno.
+
+    Se conserva el código de producto que existía al facturar. Para documentos
+    históricos sin snapshot, o códigos comerciales fuera del límite SRI, se
+    usa un identificador técnico corto, estable y trazable al producto.
+    """
+
+    product_code = (line.product_code or "").strip()
+    if 1 <= len(product_code) <= 25:
+        return product_code
+    if line.product_id is not None:
+        return f"ITEM-{str(line.product_id).split('-', maxsplit=1)[0].upper()}"
+    return "S/N"
+
+
 def _buyer_identification_code(identification_type: str) -> str:
     return _IDENTIFICATION_TYPE_TO_SRI_CODE.get(identification_type, "07")
+
+
+def _append_electronic_invoicing_provider(
+    root: etree._Element,
+    provider_ruc: str | None,
+) -> None:
+    """Incluye el proveedor de facturación en ``infoAdicional`` cuando aplique."""
+
+    if provider_ruc is None:
+        return
+    if not provider_ruc.isdecimal() or len(provider_ruc) != 13:
+        raise ValueError("Electronic invoicing provider RUC must be a 13-digit number")
+
+    info_adicional = _sub(root, "infoAdicional")
+    campo_adicional = _sub(info_adicional, "campoAdicional", provider_ruc)
+    campo_adicional.set("nombre", _ELECTRONIC_INVOICING_PROVIDER_FIELD_NAME)
 
 
 def build_invoice_xml(
@@ -147,7 +179,8 @@ def build_invoice_xml(
     tenant_legal_name: str,
     tenant_commercial_address: str,
     buyer: Party,
-    environment_code: Literal["1", "2"] = "1",
+    environment_code: str,
+    electronic_invoicing_provider_ruc: str | None = None,
     emission_type_code: str = "1",
 ) -> SriXmlBuildResult:
     """Construye el XML de factura (esquema 1.1.0) desde datos ya persistidos.
@@ -207,6 +240,7 @@ def build_invoice_xml(
     _sub(info_factura, "moneda", document.currency)
 
     root.append(_build_detalles(lines))
+    _append_electronic_invoicing_provider(root, electronic_invoicing_provider_ruc)
 
     xml_bytes = etree.tostring(
         root,
@@ -231,7 +265,8 @@ def build_credit_note_xml(
     related_invoice_issue_date: date,
     related_invoice_access_key: str,
     reason: str,
-    environment_code: Literal["1", "2"] = "1",
+    environment_code: str,
+    electronic_invoicing_provider_ruc: str | None = None,
     emission_type_code: str = "1",
 ) -> SriXmlBuildResult:
     """Construye el XML de nota de credito (esquema 1.1.0).
@@ -301,6 +336,7 @@ def build_credit_note_xml(
     _sub(info_nota_credito, "motivo", reason)
 
     root.append(_build_detalles(lines))
+    _append_electronic_invoicing_provider(root, electronic_invoicing_provider_ruc)
 
     xml_bytes = etree.tostring(
         root,

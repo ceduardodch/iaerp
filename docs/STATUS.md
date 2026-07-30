@@ -7,6 +7,152 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Cartera permite corregir el vencimiento de una factura histórica de una sola
+  cuota, con motivo obligatorio. Sin cambiar XML, autorización ni RIDE SRI,
+  actualiza tanto la cuota de cartera como el plan comercial que muestra la
+  factura; aging y cobranza usan de inmediato la fecha corregida. El antes y
+  después queda en auditoría. Pruebas de cartera/facturación, Ruff, mypy,
+  lint y build pasan; pendiente promoción autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Contactos exige y guarda móviles de WhatsApp en formato ecuatoriano E.164:
+  `+593991041297`. También normaliza una entrada local de diez dígitos antes
+  de guardarla. Meta y Evolution reciben el número internacional sin el signo
+  `+`, como requieren sus APIs; un formato inválido se rechaza antes de enviar.
+  Pruebas de contactos/CRM y build pasan; pendiente promoción autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Resumen cuenta únicamente facturas `AUTHORIZED` del mes; rechazos y no
+  autorizadas no afectan ese indicador. Por cobrar y vencido continúan
+  partiendo de cartera creada al autorizarse una factura. Pipeline abierto se
+  identifica explícitamente como oportunidades CRM, separado de facturación.
+  Facturas muestra `Archivar` directamente en cada comprobante `REJECTED` o
+  `NOT_AUTHORIZED`; exige motivo, conserva evidencia y lo retira de la lista.
+  Pruebas de facturación, Ruff, mypy, lint y build pasan; pendiente promoción
+  autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Cartera muestra ahora la configuración visible de cobranza automática. Cada
+  tenant puede definir asunto, texto y datos para pago del correo; admite
+  `{{cliente}}`, `{{empresa}}`, `{{saldo}}`, `{{vencimiento}}`,
+  `{{dias_atraso}}` y `{{cuenta_bancaria}}`. Al vencimiento programado el
+  correo agrega una tabla HTML con el saldo abierto de la cuota, vencimiento,
+  días de atraso y los datos de pago. El envío sigue exigiendo política activa,
+  contacto con consentimiento y Google Workspace conectado. Pruebas de
+  plantilla, scheduler, cartera y frontend pasan; pendiente migración y
+  promoción autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Registrar cobro puede leer un XML de comprobante de retención autorizado por
+  SRI y proponer sus valores exactos de IVA/renta, base, porcentaje, código y
+  autorización. Antes de cargar los valores valida el estado `AUTORIZADO`, la
+  clave, el RUC del cliente, el RUC de la empresa y la factura sustentada. El
+  XML se procesa solo en memoria: no se guarda, no crea movimientos y exige la
+  confirmación humana con Guardar. Pruebas sintéticas cubren lectura y rechazo
+  de XML no autorizado o de otro cliente; pendiente promoción autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Empresa identifica a BTOB SAS (RUC 1793113192001) como creador y proveedor
+  central de IAERP. Es un dato de plataforma, separado del RUC de cada emisor
+  y no editable por tenants. En comprobantes nuevos, antes de su firma, el XML
+  agrega el RUC en `infoAdicional/campoAdicional`; aplica a facturas y notas de
+  crédito, sin alterar el RIDE ni documentos ya firmados. Pruebas de
+  configuración fiscal/XML, lint, build, Ruff y mypy pasan. Pendiente
+  promoción autorizada y alta/actualización de las actividades J62021002 o
+  J62021003 en el RUC de BTOB.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Al abrir “Registrar cobro”, una cuenta sin movimientos precarga las
+  retenciones de IVA/renta configuradas en el cliente y calcula el monto neto.
+  La persona puede corregir los valores, pero debe adjuntar la referencia del
+  comprobante de retención antes de guardar; cobros parciales o con saldo ya
+  modificado no se rellenan automáticamente. Pruebas de retenciones/cobros,
+  lint, build, Ruff y mypy pasan. Pendiente promoción autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Facturas incorpora un archivado operativo para comprobantes `REJECTED` y
+  `NOT_AUTHORIZED`: exige motivo, permiso de escritura, idempotencia y
+  auditoría; los retira de Facturas sin eliminar XML, RIDE ni la respuesta del
+  SRI. Un comprobante `AUTHORIZED` no se puede archivar. También se conserva
+  una sola versión vigente por tipo de artefacto en la interfaz y el RIDE se
+  puede visualizar sin descargar. Pruebas API focalizadas, Ruff, mypy, lint y
+  build pasan. Pendiente promover y archivar las pruebas en producción.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  La firma de comprobantes se sustituyó por XAdES-BES con `xades`/`xmlsig`,
+  el mismo perfil funcional de Sky Franquicia: conserva `SignedProperties`,
+  `SigningCertificate` y los certificados intermedios del PKCS#12. Las
+  pruebas de firma, carga de certificado y facturación pasan (27 pruebas
+  focalizadas); Ruff y mypy pasan. La suite completa local queda bloqueada por
+  el chequeo de salud local (`/health/ready` devuelve 503 por dependencias no
+  levantadas), ajeno a la firma; la puerta CI completa (backend, migraciones,
+  frontend, OIDC y seguridad) y Coolify finalizaron correctamente. Las
+  facturas rechazadas se mantienen inmutables y se duplican para reemisión.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  CI clasifica el impacto de cada cambio antes de ejecutar jobs: documentación,
+  pruebas y flujo no despliegan la aplicación; UI, backend y OIDC ejecutan solo
+  sus puertas aplicables; firma SRI, facturación, migraciones e infraestructura
+  fuerzan el recorrido completo. Producción solo se activa tras las puertas
+  requeridas y no se cancela un despliegue activo para publicar este control.
+  Validación de sintaxis YAML local; pendiente CI.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Los estados técnicos de comprobante y transmisión ahora se traducen a nombres
+  legibles en Facturas y en el RIDE: por ejemplo, `SIGNED` pasa a “Firmada y
+  pendiente de envío” y `NOT_AUTHORIZED` a “No autorizada”. Un estado futuro
+  desconocido mantiene una etiqueta segura de pendiente de clasificación, sin
+  dejar la interfaz vacía. Validado con pruebas del RIDE, lint y build
+  frontend; pendiente CI y promoción autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  La firma XAdES conserva e incorpora en el XML los certificados intermedios
+  incluidos en el PKCS#12, en vez de descartarlos al cargarlo. Esto permite al
+  SRI construir la cadena de confianza del certificado firmante. Se validó con
+  un PKCS#12 sintético de emisor + firmante, pruebas de firma, emisión y
+  configuración fiscal; pendiente CI y promoción autorizada. Un comprobante
+  rechazado por firma se conserva inmutable y se duplica/emite como nuevo tras
+  confirmar que el certificado cargado proviene de una entidad certificadora
+  acreditada y contiene su cadena.
+
+- Actualización local: 2026-07-29 `America/Guayaquil`.
+  El detalle y el cuadro de totales del RIDE comparten ahora el mismo ancho y
+  borde derecho; se verificó mediante renderizado visual del PDF y pruebas
+  del servicio. Pendiente CI y promoción autorizada.
+
+- Actualización local: 2026-07-29 `America/Guayaquil`.
+  La generación XML ya no usa el UUID interno como `codigoPrincipal`: conserva
+  el código comercial facturado y, para históricos o códigos mayores a 25
+  caracteres, emite un identificador corto compatible con SRI. Empresa permite
+  cargar de forma privada el logo PNG/JPEG para los nuevos RIDE; se conserva
+  el respaldo textual cuando no exista logo. Validado con Ruff, mypy, pruebas
+  de XML/Empresa/RIDE, pruebas de emisión y lint/build frontend; pendiente CI
+  y promoción autorizada. Un comprobante ya rechazado no se modifica: debe
+  duplicarse/reemitirse como documento nuevo tras la promoción.
+
+- Actualización local: 2026-07-29 `America/Guayaquil`.
+  El RIDE se rediseñó a partir de la referencia fiscal entregada: cabecera
+  compacta, bloque de RUC/documento, clave de acceso, ambiente, comprador,
+  detalle y totales alineados. Al autorizarse un comprobante se conserva el
+  RIDE inicial y se genera la versión 2 con número y fecha/hora de
+  autorización SRI. Validado con Ruff, mypy, pruebas del RIDE y revisión
+  visual renderizada; pendiente de la puerta CI antes de promoción.
+
+- Actualización local: 2026-07-29 `America/Guayaquil`.
+  El RIDE de nuevos comprobantes adopta formato A4 con cabecera fiscal, bloque
+  de clave de acceso, comprador, detalle y totales consistentes. La emisión
+  SOAP ahora bloquea antes de firmar si el ambiente fiscal del tenant no
+  coincide con `SRI_ENVIRONMENT`, evitando XML que el SRI devolvería por
+  discrepancia de ambiente. Validado localmente con Ruff y seis pruebas
+  focalizadas; pendiente CI y promoción autorizada. Los documentos históricos
+  no se alteran y un rechazo SRI se reemite únicamente como comprobante nuevo.
+  Facturas incorpora **Duplicar**: copia una factura del tenant como borrador
+  nuevo, recalcula con la política vigente y nunca arrastra XML/RIDE, clave de
+  acceso, autorización, transmisión ni cobros. Conserva las cuotas relativas
+  solo si el total permanece igual; de otro modo deja el nuevo total para
+  revisión antes de emitir.
+
 - Actualización local: 2026-07-29 `America/Guayaquil`.
   El RIDE de nuevos comprobantes adopta formato A4 con cabecera fiscal, bloque
   de clave de acceso, comprador, detalle y totales consistentes. La emisión

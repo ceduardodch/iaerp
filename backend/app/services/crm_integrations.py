@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
 from app.core.config import get_settings
+from app.core.phone import normalize_ecuador_whatsapp
 from app.models.crm import (
     EvolutionWhatsAppIntegration,
     GmailIntegration,
@@ -445,6 +446,7 @@ async def send_google_email(
     recipient: str,
     subject: str,
     message: str,
+    html_message: str | None = None,
 ) -> str:
     entity, token = await _google_access_token(session, context)
     email = EmailMessage()
@@ -452,6 +454,8 @@ async def send_google_email(
     email["From"] = entity.email or "me"
     email["Subject"] = subject
     email.set_content(message)
+    if html_message:
+        email.add_alternative(html_message, subtype="html")
     raw = base64.urlsafe_b64encode(email.as_bytes()).decode().rstrip("=")
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
@@ -581,19 +585,23 @@ async def send_whatsapp_message(
     template_id: str | None,
     purpose: str,
 ) -> str:
+    try:
+        recipient_digits = normalize_ecuador_whatsapp(recipient).lstrip("+")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     routing = await _routing_for_tenant(session, context.tenant_id)
     provider = routing.collections_provider if purpose == "COLLECTIONS" else routing.crm_provider
     if provider == "EVOLUTION":
         return await _send_evolution_whatsapp_message(
             session,
             context,
-            recipient=recipient,
+            recipient=recipient_digits,
             message=message,
         )
     return await _send_meta_whatsapp_message(
         session,
         context,
-        recipient=recipient,
+        recipient=recipient_digits,
         message=message,
         template_id=template_id,
     )
@@ -660,9 +668,7 @@ async def _send_evolution_whatsapp_message(
     )
     if entity is None:
         raise HTTPException(status_code=422, detail="Evolution WhatsApp is not connected")
-    number = "".join(character for character in recipient if character.isdigit())
-    if not number:
-        raise HTTPException(status_code=422, detail="WhatsApp recipient has no valid phone number")
+    number = recipient
     base_url = str(settings.EVOLUTION_API_BASE_URL).rstrip("/")
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(

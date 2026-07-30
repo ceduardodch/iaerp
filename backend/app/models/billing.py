@@ -59,6 +59,7 @@ class SalesDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base
         UniqueConstraint("access_key", name="uq_sales_documents_access_key"),
         Index("ix_sales_documents_tenant_status", "tenant_id", "status"),
         Index("ix_sales_documents_tenant_issue_date", "tenant_id", "issue_date"),
+        Index("ix_sales_documents_tenant_archived_at", "tenant_id", "archived_at"),
     )
 
     document_type: Mapped[str] = mapped_column(String(20))
@@ -83,6 +84,10 @@ class SalesDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base
     # transmision (workers/sri_transmission.py) recibe AUTHORIZED.
     authorization_number: Mapped[str | None] = mapped_column(String(49))
     authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Archivar retira del trabajo operativo un comprobante fallido, sin borrar
+    # su evidencia, XML/RIDE ni rastro de transmision con el SRI.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_reason: Mapped[str | None] = mapped_column(String(500))
 
 
 class SalesDocumentLine(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):
@@ -111,6 +116,10 @@ class SalesDocumentLine(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):
     sales_document_id: Mapped[uuid.UUID]
     line_number: Mapped[int] = mapped_column(Integer)
     product_id: Mapped[uuid.UUID | None]
+    # Snapshot del código comercial para ``codigoPrincipal`` del XML SRI. El
+    # UUID interno nunca se serializa porque el esquema SRI limita este campo
+    # a 25 caracteres.
+    product_code: Mapped[str | None] = mapped_column(String(80))
     description: Mapped[str] = mapped_column(String(500))
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6))
     unit_price: Mapped[Decimal] = mapped_column(Numeric(18, 6))
@@ -152,9 +161,7 @@ class SalesDocumentInstallment(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):
             "sequence",
             name="uq_sales_document_installments_tenant_document_sequence",
         ),
-        CheckConstraint(
-            "amount > 0", name="ck_sales_document_installments_amount_positive"
-        ),
+        CheckConstraint("amount > 0", name="ck_sales_document_installments_amount_positive"),
         Index(
             "ix_sales_document_installments_document",
             "tenant_id",

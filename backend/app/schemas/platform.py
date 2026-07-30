@@ -45,7 +45,10 @@ class FiscalSettingsUpdate(APIModel):
 
 
 class FiscalSettingsRead(FiscalSettingsUpdate):
+    electronic_invoicing_provider_name: str
+    electronic_invoicing_provider_ruc: str
     certificate_configured: bool
+    ride_logo_configured: bool
     certificate_fingerprint_sha256: str | None = None
     certificate_subject: str | None = None
     certificate_valid_from: datetime | None = None

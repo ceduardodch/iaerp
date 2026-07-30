@@ -1,20 +1,44 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import select
 
 from app.db.session import SessionFactory
 from app.models.masters import Party
 from app.models.platform import OutboxEvent
-from app.models.receivables import CollectionReminder
+from app.models.receivables import CollectionPolicy, CollectionReminder
 from app.workers.collections import (
     COLLECTION_REMINDER_DUE_EVENT,
+    _render_collection_email,
     dispatch_due_reminders_once,
     handle_collection_reminder_due,
 )
 from app.workers.outbox import OutboxMessage
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
+
+
+def test_collection_email_renders_tenant_template_and_payment_table() -> None:
+    policy = CollectionPolicy(
+        tenant_id=TENANT_A,
+        email_subject="Cobro {{empresa}} - {{cliente}}",
+        email_body="Saldo {{saldo}}; atraso {{dias_atraso}} días.",
+        payment_instructions="Banco ejemplo\nCuenta 123456",
+    )
+    subject, plain, html = _render_collection_email(
+        policy=policy,
+        company_name="Empresa prueba",
+        party_name="Cliente prueba",
+        open_amount=Decimal("123.45"),
+        due_date=date(2026, 7, 1),
+        as_of=date(2026, 7, 5),
+    )
+    assert subject == "Cobro Empresa prueba - Cliente prueba"
+    assert "Saldo $123.45; atraso 4 días." in plain
+    assert "Banco ejemplo" in plain
+    assert "Fecha de vencimiento" in html
+    assert "Días de atraso" in html
 
 
 async def test_due_reminder_is_queued_once_and_failure_is_visible() -> None:

@@ -132,6 +132,7 @@ def test_build_invoice_xml_requires_access_key() -> None:
             tenant_legal_name="IAERP Demo S.A.",
             tenant_commercial_address="Av. Amazonas N30",
             buyer=_buyer(),
+            environment_code="1",
         )
 
 
@@ -148,11 +149,18 @@ def test_build_invoice_xml_rejects_credit_note_document() -> None:
             tenant_legal_name="IAERP Demo S.A.",
             tenant_commercial_address="Av. Amazonas N30",
             buyer=_buyer(),
+            environment_code="1",
         )
 
 
 def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
     document, lines = _build_document_and_lines()
+    lines[0].product_id = uuid.UUID("9dc7444d-7752-4add-ab05-52339e82678b")
+    lines[0].product_code = "AWS-CLOUDAWS-202607"
+    lines[1].product_id = uuid.UUID("f52e599b-0bfb-43d4-a752-9bf85b3070db")
+    # El codigo comercial puede ser mayor al limite de SRI; el XML debe
+    # degradar a un identificador tecnico corto, nunca al UUID completo.
+    lines[1].product_code = "CODIGO-COMERCIAL-DEMASIADO-LARGO-PARA-SRI"
     establishment, emission_point = _establishment_and_point()
     buyer = _buyer()
 
@@ -165,6 +173,7 @@ def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
         tenant_legal_name="IAERP Demo S.A.",
         tenant_commercial_address="Av. Amazonas N30",
         buyer=buyer,
+        environment_code="2",
     )
 
     root = result.root
@@ -173,6 +182,7 @@ def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
 
     info_tributaria = root.find("infoTributaria")
     assert info_tributaria is not None
+    assert info_tributaria.findtext("ambiente") == "2"
     assert info_tributaria.findtext("claveAcceso") == document.access_key
     assert info_tributaria.findtext("ruc") == "1799999999001"
     assert info_tributaria.findtext("estab") == "001"
@@ -185,6 +195,9 @@ def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
     assert info_factura.findtext("fechaEmision") == "04/07/2026"
     assert info_factura.findtext("razonSocialComprador") == "Cliente Facturable"
     assert info_factura.findtext("identificacionComprador") == "1790000001"
+
+    provider_field = root.find("infoAdicional/campoAdicional")
+    assert provider_field is None
 
     # ADR 0008 vector 3: precioTotalSinImpuesto por linea 1.05, informativo
     # 0.16 por linea, pero el totalImpuesto de grupo es 0.47 (no 0.48).
@@ -199,7 +212,10 @@ def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
 
     detalles = root.findall("detalles/detalle")
     assert len(detalles) == 3
+    assert detalles[0].findtext("codigoPrincipal") == "AWS-CLOUDAWS-202607"
+    assert detalles[1].findtext("codigoPrincipal") == "ITEM-F52E599B"
     for detalle in detalles:
+        assert len(detalle.findtext("codigoPrincipal") or "") <= 25
         assert detalle.findtext("cantidad") == "1.000000"
         assert detalle.findtext("precioUnitario") == "1.050000"
         assert detalle.findtext("precioTotalSinImpuesto") == "1.05"
@@ -224,6 +240,7 @@ def test_invoice_xml_final_consumer_uses_generic_identification() -> None:
         tenant_legal_name="IAERP Demo S.A.",
         tenant_commercial_address="Av. Amazonas N30",
         buyer=buyer,
+        environment_code="1",
     )
     info_factura = result.root.find("infoFactura")
     assert info_factura is not None
@@ -245,6 +262,7 @@ def test_build_credit_note_xml_structure() -> None:
         tenant_legal_name="IAERP Demo S.A.",
         tenant_commercial_address="Av. Amazonas N30",
         buyer=buyer,
+        environment_code="1",
         related_invoice_sequential_full="001-001-000000042",
         related_invoice_issue_date=date(2024, 3, 15),
         related_invoice_access_key="1" * 49,
@@ -279,6 +297,7 @@ def test_build_credit_note_xml_rejects_invoice_document() -> None:
             tenant_legal_name="IAERP Demo S.A.",
             tenant_commercial_address="Av. Amazonas N30",
             buyer=_buyer(),
+            environment_code="1",
             related_invoice_sequential_full="001-001-000000042",
             related_invoice_issue_date=date(2024, 3, 15),
             related_invoice_access_key="1" * 49,
@@ -362,6 +381,7 @@ def test_mixed_tax_groups_produce_multiple_total_impuesto_entries() -> None:
         tenant_legal_name="IAERP Demo S.A.",
         tenant_commercial_address="Av. Amazonas N30",
         buyer=_buyer(),
+        environment_code="1",
     )
     info_factura = result.root.find("infoFactura")
     assert info_factura is not None
@@ -372,3 +392,37 @@ def test_mixed_tax_groups_produce_multiple_total_impuesto_entries() -> None:
         entry.findtext("codigoPorcentaje"): entry.findtext("valor") for entry in total_impuestos
     }
     assert values_by_code == {"4": "15.00", "0": "0.00", "5": "4.23"}
+
+
+@pytest.mark.parametrize("document_type", ["INVOICE", "CREDIT_NOTE"])
+def test_electronic_invoicing_provider_is_in_additional_information(document_type: str) -> None:
+    document, lines = _build_document_and_lines(document_type=document_type)
+    establishment, emission_point = _establishment_and_point()
+    common = {
+        "document": document,
+        "lines": lines,
+        "establishment": establishment,
+        "emission_point": emission_point,
+        "tenant_ruc": "1799999999001",
+        "tenant_legal_name": "IAERP Demo S.A.",
+        "tenant_commercial_address": "Av. Amazonas N30",
+        "buyer": _buyer(),
+        "environment_code": "2",
+        "electronic_invoicing_provider_ruc": "1793113192001",
+    }
+    result = (
+        build_invoice_xml(**common)
+        if document_type == "INVOICE"
+        else build_credit_note_xml(
+            **common,
+            related_invoice_sequential_full="001-001-000000001",
+            related_invoice_issue_date=date(2026, 7, 4),
+            related_invoice_access_key="1" * 49,
+            reason="Corrección comercial",
+        )
+    )
+
+    provider_field = result.root.find("infoAdicional/campoAdicional")
+    assert provider_field is not None
+    assert provider_field.get("nombre") == "RUC proveedor de facturación electrónica"
+    assert provider_field.text == "1793113192001"

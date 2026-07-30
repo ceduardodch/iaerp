@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import EmailStr, Field, field_validator
 
+from app.core.phone import normalize_ecuador_whatsapp
 from app.schemas.base import APIModel
 
 
@@ -63,7 +64,7 @@ class TagRead(TagCreate):
     active: bool
 
 
-class PartyCreate(APIModel):
+class PartyFields(APIModel):
     name: str = Field(min_length=1, max_length=200)
     identification_type: Literal["RUC", "CEDULA", "PASSPORT", "FINAL_CONSUMER"]
     identification_number: str = Field(min_length=1, max_length=30)
@@ -88,7 +89,17 @@ class PartyCreate(APIModel):
         return value
 
 
-class PartyRead(PartyCreate):
+
+class PartyCreate(PartyFields):
+    @field_validator("phone")
+    @classmethod
+    def normalize_whatsapp_phone(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return normalize_ecuador_whatsapp(value)
+
+
+class PartyRead(PartyFields):
     id: uuid.UUID
 
 

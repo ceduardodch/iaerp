@@ -32,7 +32,9 @@ import {
   type PaymentInput,
   type Product,
   type ReminderInput,
+  type ReceivableDueDateUpdate,
   type RetentionInput,
+  type RetentionXmlPreview,
   type SalesDocument,
   type SalesDocumentStatus,
   type TaxCategory,
@@ -50,6 +52,7 @@ import {
   ErpStatusBadge,
   ErpToolbar,
 } from './components/erp'
+import { ErpModal } from './components/erp/ErpModal'
 // Code-splitting (Sprint 7): la sección CRM arrastra dependencias pesadas
 // (@dnd-kit + framer-motion) y es la menos usada en el arranque; se carga
 // bajo demanda para reducir el bundle inicial.
@@ -222,7 +225,9 @@ function Overview({
   const today = todayInFiscalTimezone().slice(0, 7)
   const outstanding = receivables.reduce((sum, item) => sum + Number(item.openAmount), 0)
   const overdue = receivables.filter((item) => item.status === 'OVERDUE').reduce((sum, item) => sum + Number(item.openAmount), 0)
-  const monthlyInvoices = invoices.filter((invoice) => invoice.issueDate.startsWith(today) && invoice.type === 'INVOICE').length
+  const monthlyInvoices = invoices.filter((invoice) =>
+    invoice.issueDate.startsWith(today) && invoice.type === 'INVOICE' && invoice.status === 'AUTHORIZED',
+  ).length
   const openPipeline = leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).reduce((sum, lead) => sum + Number(lead.estimatedValue ?? 0), 0)
   return (
     <>
@@ -244,14 +249,14 @@ function Overview({
           <p>Saldo que requiere seguimiento.</p>
         </article>
         <article className="metric-card">
-          <span className="metric-label">Facturas del mes</span>
+          <span className="metric-label">Facturas autorizadas del mes</span>
           <strong>{monthlyInvoices}</strong>
-          <p>Documentos emitidos este mes.</p>
+          <p>No incluye rechazos ni documentos no autorizados.</p>
         </article>
         <article className="metric-card">
           <span className="metric-label">Pipeline abierto</span>
           <strong className="metric-success">${formatAmount(openPipeline)}</strong>
-          <p>{leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).length} oportunidades activas.</p>
+          <p>{leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).length} oportunidades CRM activas.</p>
         </article>
       </section>
       <section className="readiness-panel">
@@ -368,7 +373,7 @@ function PartiesPage({
           <label>Rol<select name="role" defaultValue={editor?.roles[0] ?? 'CUSTOMER'}><option value="CUSTOMER">Cliente</option><option value="SUPPLIER">Proveedor</option></select></label>
           <div className="field-row">
             <label>Correo<input name="email" type="email" defaultValue={editor?.email ?? ''} /></label>
-            <label>Teléfono<input name="phone" type="tel" defaultValue={editor?.phone ?? ''} /></label>
+            <label>WhatsApp<input name="phone" type="tel" defaultValue={editor?.phone ?? ''} placeholder="+593991041297" pattern="\+5939[0-9]{8}" title="Usa el formato +593991041297" required /></label>
           </div>
           <label>Dirección<textarea name="address" rows={3} defaultValue={editor?.address ?? ''} /></label>
           <label>Condición de pago predeterminada<select name="paymentTermsDays" defaultValue={editor?.paymentTermsDays ?? ''}><option value="">Usar valor de la empresa</option><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="45">45 días</option><option value="60">60 días</option><option value="90">90 días</option></select></label>
@@ -710,6 +715,7 @@ const invoiceStatusLabels: Record<SalesDocumentStatus, string> = {
   RECEIVED: 'ENVIADA',
   PENDING_AUTHORIZATION: 'ENVIADA',
   AUTHORIZED: 'AUTORIZADA',
+  NOT_AUTHORIZED: 'NO AUTORIZADA',
   REJECTED: 'RECHAZADA',
   FAILED: 'FALLIDA',
   VOIDED: 'NO AUTORIZADA',
@@ -722,6 +728,7 @@ const invoiceStatusTone: Record<SalesDocumentStatus, 'neutral' | 'success' | 'wa
   RECEIVED: 'warning',
   PENDING_AUTHORIZATION: 'warning',
   AUTHORIZED: 'success',
+  NOT_AUTHORIZED: 'danger',
   REJECTED: 'danger',
   FAILED: 'danger',
   VOIDED: 'danger',
@@ -729,6 +736,20 @@ const invoiceStatusTone: Record<SalesDocumentStatus, 'neutral' | 'success' | 'wa
 
 function InvoiceStatusBadge({ status }: { status: SalesDocumentStatus }) {
   return <ErpStatusBadge tone={invoiceStatusTone[status]}>{invoiceStatusLabels[status]}</ErpStatusBadge>
+}
+
+const sriTransmissionStatusLabels: Record<string, string> = {
+  PENDING: 'PENDIENTE DE ENVÍO',
+  RECEIVED: 'RECIBIDA POR SRI',
+  PENDING_AUTHORIZATION: 'EN PROCESO DE AUTORIZACIÓN',
+  AUTHORIZED: 'AUTORIZADA',
+  NOT_AUTHORIZED: 'NO AUTORIZADA',
+  REJECTED: 'RECHAZADA',
+  FAILED: 'ERROR DE TRANSMISIÓN',
+}
+
+function sriTransmissionStatusLabel(status: string) {
+  return sriTransmissionStatusLabels[status] ?? 'ESTADO PENDIENTE DE CLASIFICACIÓN'
 }
 
 type DraftLine = {
@@ -1129,6 +1150,9 @@ function InvoiceDetail({
   onDuplicated: (invoiceId: string) => void
 }) {
   const queryClient = useQueryClient()
+  const [ridePreview, setRidePreview] = useState<ArtifactDownload | null>(null)
+  const [archiving, setArchiving] = useState(false)
+  const [archiveReason, setArchiveReason] = useState('Prueba de emisión SRI; comprobante no autorizado.')
   const invoiceQuery = useQuery({
     queryKey: ['invoices', invoiceId],
     queryFn: () => apiRequest<SalesDocument>(token, `/invoices/${invoiceId}`),
@@ -1169,12 +1193,33 @@ function InvoiceDetail({
     },
   })
 
+  const archiveInvoice = useMutation({
+    mutationFn: () =>
+      apiRequest<SalesDocument>(token, `/invoices/${invoiceId}/archive`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-archive-invoice') },
+        body: JSON.stringify({ reason: archiveReason.trim() }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      onClose()
+    },
+  })
+
   async function downloadArtifact(artifactId: string) {
     const download = await apiRequest<ArtifactDownload>(
       token,
       `/invoices/${invoiceId}/artifacts/${artifactId}/download`,
     )
     window.open(download.downloadUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  async function previewRide(artifactId: string) {
+    const download = await apiRequest<ArtifactDownload>(
+      token,
+      `/invoices/${invoiceId}/artifacts/${artifactId}/download`,
+    )
+    setRidePreview(download)
   }
 
   if (invoiceQuery.isPending) {
@@ -1270,7 +1315,7 @@ function InvoiceDetail({
         <p className="section-number" id="sri-status-title">Estado SRI</p>
         {transmission ? (
           <dl className="invoice-summary">
-            <div><dt>Estado</dt><dd>{transmission.status}</dd></div>
+            <div><dt>Estado</dt><dd>{sriTransmissionStatusLabel(transmission.status)}</dd></div>
             {transmission.message ? <div><dt>Mensaje</dt><dd>{transmission.message}</dd></div> : null}
             {transmission.authorizationNumber ? (
               <div><dt>Número de autorización</dt><dd>{transmission.authorizationNumber}</dd></div>
@@ -1287,16 +1332,26 @@ function InvoiceDetail({
       {duplicateInvoice.error ? (
         <p className="form-error" role="alert">{duplicateInvoice.error.message}</p>
       ) : null}
+      {archiveInvoice.error ? (
+        <p className="form-error" role="alert">{archiveInvoice.error.message}</p>
+      ) : null}
 
       <section aria-labelledby="invoice-artifacts-title">
         <p className="section-number" id="invoice-artifacts-title">Artefactos</p>
         {artifactsQuery.data && artifactsQuery.data.length > 0 ? (
           <ul className="establishment-list">
-            {artifactsQuery.data.map((artifact) => (
+            {Object.values(artifactsQuery.data.reduce<Record<string, DocumentArtifact>>((latest, artifact) => {
+              const current = latest[artifact.artifactType]
+              if (!current || artifact.version > current.version) latest[artifact.artifactType] = artifact
+              return latest
+            }, {})).map((artifact) => (
               <li key={artifact.id}>
                 <span>{artifact.artifactType === 'xml-signed' ? 'XML' : 'RIDE'}</span>
                 <div>
-                  <strong>{artifact.artifactType === 'xml-signed' ? 'XML firmado' : 'RIDE PDF'} · Versión {artifact.version}</strong>
+                  <strong>{artifact.artifactType === 'xml-signed' ? 'XML firmado' : 'RIDE PDF vigente'}</strong>
+                  {artifact.artifactType === 'ride-pdf' ? (
+                    <ErpButton variant="ghost" onClick={() => void previewRide(artifact.id)}>Ver RIDE</ErpButton>
+                  ) : null}
                   <ErpButton variant="ghost" onClick={() => void downloadArtifact(artifact.id)}>
                     {artifact.artifactType === 'xml-signed' ? 'Descargar XML firmado' : 'Descargar RIDE PDF'}
                   </ErpButton>
@@ -1308,6 +1363,28 @@ function InvoiceDetail({
           <p className="fine-print">Los archivos estarán disponibles después de firmar la factura.</p>
         )}
       </section>
+
+      {ridePreview ? (
+        <ErpModal title="RIDE autorizado" size="lg" onClose={() => setRidePreview(null)}>
+          <iframe className="ride-preview-frame" src={ridePreview.downloadUrl} title={ridePreview.fileName} />
+        </ErpModal>
+      ) : null}
+
+      {archiving ? (
+        <ErpModal title="Archivar comprobante de prueba" size="sm" onClose={() => setArchiving(false)}>
+          <p className="fine-print">Se ocultará de Facturas y Cartera. El XML, RIDE, respuesta SRI y auditoría se conservarán.</p>
+          <label>
+            Motivo de archivo
+            <textarea value={archiveReason} onChange={(event) => setArchiveReason(event.target.value)} minLength={3} maxLength={500} required />
+          </label>
+          <div className="erp-form-actions">
+            <ErpButton variant="secondary" onClick={() => setArchiving(false)} disabled={archiveInvoice.isPending}>Cancelar</ErpButton>
+            <ErpButton variant="danger" disabled={archiveInvoice.isPending || archiveReason.trim().length < 3} onClick={() => archiveInvoice.mutate()}>
+              {archiveInvoice.isPending ? 'Archivando…' : 'Archivar'}
+            </ErpButton>
+          </div>
+        </ErpModal>
+      ) : null}
 
       <div className="erp-form-actions">
         <ErpButton variant="secondary" onClick={onClose}>Volver al listado</ErpButton>
@@ -1323,6 +1400,9 @@ function InvoiceDetail({
         >
           {duplicateInvoice.isPending ? 'Duplicando…' : 'Duplicar'}
         </ErpButton>
+        {invoice.status === 'REJECTED' || invoice.status === 'NOT_AUTHORIZED' ? (
+          <ErpButton variant="danger" onClick={() => setArchiving(true)}>Archivar</ErpButton>
+        ) : null}
         <ErpButton
           variant="primary"
           disabled={!canIssue || issueInvoice.isPending}
@@ -1352,7 +1432,10 @@ function InvoicesPage({
   emissionPoints: EmissionPoint[]
   defaultPaymentTermsDays: number
 }) {
+  const queryClient = useQueryClient()
   const [panel, setPanel] = useState<InvoicePanel | undefined>(undefined)
+  const [archiveTarget, setArchiveTarget] = useState<SalesDocument | null>(null)
+  const [archiveReason, setArchiveReason] = useState('Prueba de emisión SRI; comprobante no autorizado.')
   const lastTriggerRef = useRef<HTMLElement | null>(null)
   const invoicesQuery = useQuery({
     queryKey: ['invoices'],
@@ -1360,6 +1443,20 @@ function InvoicesPage({
   })
   const invoices = invoicesQuery.data ?? []
   const partiesById = new Map(customers.map((party) => [party.id, party]))
+  const archiveInvoice = useMutation({
+    mutationFn: () => {
+      if (!archiveTarget) throw new Error('No hay comprobante seleccionado para archivar.')
+      return apiRequest<SalesDocument>(token, `/invoices/${archiveTarget.id}/archive`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-archive-invoice') },
+        body: JSON.stringify({ reason: archiveReason.trim() }),
+      })
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      setArchiveTarget(null)
+    },
+  })
 
   function openPanel(next: InvoicePanel, trigger?: HTMLElement) {
     lastTriggerRef.current = trigger ?? null
@@ -1439,6 +1536,11 @@ function InvoicesPage({
                         >
                           Ver
                         </ErpButton>
+                        {invoice.status === 'REJECTED' || invoice.status === 'NOT_AUTHORIZED' ? (
+                          <ErpButton variant="danger" onClick={() => setArchiveTarget(invoice)}>
+                            Archivar
+                          </ErpButton>
+                        ) : null}
                       </ErpActionCell>
                     </td>
                   </tr>
@@ -1462,6 +1564,22 @@ function InvoicesPage({
           </div>
         </ErpPanel>
       </section>
+      {archiveTarget ? (
+        <ErpModal title={`Archivar comprobante ${archiveTarget.sequential}`} size="sm" onClose={() => setArchiveTarget(null)}>
+          <p className="fine-print">Se ocultará de Facturas y conservará XML, RIDE, respuesta SRI y auditoría.</p>
+          <label>
+            Motivo de archivo
+            <textarea value={archiveReason} onChange={(event) => setArchiveReason(event.target.value)} minLength={3} maxLength={500} required />
+          </label>
+          {archiveInvoice.error ? <p className="form-error" role="alert">{archiveInvoice.error.message}</p> : null}
+          <div className="erp-form-actions">
+            <ErpButton variant="secondary" onClick={() => setArchiveTarget(null)} disabled={archiveInvoice.isPending}>Cancelar</ErpButton>
+            <ErpButton variant="danger" onClick={() => archiveInvoice.mutate()} disabled={archiveInvoice.isPending || archiveReason.trim().length < 3}>
+              {archiveInvoice.isPending ? 'Archivando…' : 'Archivar'}
+            </ErpButton>
+          </div>
+        </ErpModal>
+      ) : null}
     </>
   )
 }
@@ -1518,7 +1636,10 @@ function AgingChip({ dueDate }: { dueDate: string | null | undefined }) {
   )
 }
 
-type ReceivablePanel = { view: 'payment'; receivable: AccountItem } | { view: 'reminder'; receivable: AccountItem }
+type ReceivablePanel =
+  | { view: 'payment'; receivable: AccountItem }
+  | { view: 'reminder'; receivable: AccountItem }
+  | { view: 'due-date'; receivable: AccountItem }
 
 function emptyRetention(): RetentionInput & { key: string } {
   return { key: crypto.randomUUID(), kind: 'RETENTION_IVA', amount: '0.00', reason: '', documentReference: '' }
@@ -1526,6 +1647,36 @@ function emptyRetention(): RetentionInput & { key: string } {
 
 function emptyDiscount(): DiscountInput & { key: string } {
   return { key: crypto.randomUUID(), amount: '0.00', reason: '' }
+}
+
+function EditReceivableDueDateForm({
+  token,
+  receivable,
+  onSaved,
+  onCancel,
+}: {
+  token: string
+  receivable: AccountItem
+  onSaved: (updated: AccountItem) => void
+  onCancel: () => void
+}) {
+  const [dueDate, setDueDate] = useState(receivable.dueDate ?? '')
+  const [reason, setReason] = useState('Corrección de condición de pago de factura histórica.')
+  const updateDueDate = useMutation({
+    mutationFn: () => apiRequest<AccountItem>(token, `/receivables/${receivable.id}/due-date`, {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': idempotencyKey('web-receivable-due-date') },
+      body: JSON.stringify({ dueDate, reason } satisfies ReceivableDueDateUpdate),
+    }),
+    onSuccess: onSaved,
+  })
+  return (
+    <ErpFormPanel eyebrow="Cartera" title="Corregir vencimiento" submitLabel="Guardar vencimiento" pending={updateDueDate.isPending} error={updateDueDate.error?.message} onSubmit={(event) => { event.preventDefault(); updateDueDate.mutate() }} onCancel={onCancel}>
+      <p className="fine-print">Corrige el plan comercial y la cartera. No modifica XML, autorización ni RIDE SRI.</p>
+      <label>Nuevo vencimiento<input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} required /></label>
+      <label>Motivo<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={500} required /></label>
+    </ErpFormPanel>
+  )
 }
 
 function RegisterPaymentForm({
@@ -1546,12 +1697,60 @@ function RegisterPaymentForm({
   const expectedIncome = profileIsAvailable ? Number(receivable.originalAmount) * Number(party?.expectedIncomeWithholdingRate ?? 0) / 100 : 0
   const expectedRetentionTotal = expectedIva + expectedIncome
   const canPrefill = profileIsAvailable && Number(receivable.openAmount) === Number(receivable.originalAmount) && expectedRetentionTotal <= Number(receivable.openAmount)
-  const [cashAmount, setCashAmount] = useState('0.00')
+  const [cashAmount, setCashAmount] = useState(() =>
+    canPrefill ? (Number(receivable.openAmount) - expectedRetentionTotal).toFixed(2) : '0.00',
+  )
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [method, setMethod] = useState<'' | PaymentInput['method']>('')
   const [reference, setReference] = useState('')
-  const [retentions, setRetentions] = useState<Array<RetentionInput & { key: string }>>([])
+  const [retentions, setRetentions] = useState<Array<RetentionInput & { key: string }>>(() => {
+    if (!canPrefill) return []
+    const suggested: Array<RetentionInput & { key: string }> = []
+    if (expectedIva > 0) {
+      suggested.push({
+        key: crypto.randomUUID(),
+        kind: 'RETENTION_IVA',
+        amount: expectedIva.toFixed(2),
+        reason: `Perfil esperado de ${party?.name ?? 'cliente'}`,
+        documentReference: '',
+      })
+    }
+    if (expectedIncome > 0) {
+      suggested.push({
+        key: crypto.randomUUID(),
+        kind: 'RETENTION_RENTA',
+        amount: expectedIncome.toFixed(2),
+        reason: `Perfil esperado de ${party?.name ?? 'cliente'}`,
+        documentReference: '',
+      })
+    }
+    return suggested
+  })
   const [discounts, setDiscounts] = useState<Array<DiscountInput & { key: string }>>([])
+  const [retentionXmlFile, setRetentionXmlFile] = useState<File | null>(null)
+
+  const previewRetentionXml = useMutation({
+    mutationFn: async () => {
+      if (!retentionXmlFile) throw new Error('Selecciona el XML de retención autorizado.')
+      const formData = new FormData()
+      formData.append('file', retentionXmlFile)
+      return apiRequest<RetentionXmlPreview>(token, `/receivables/${receivable.id}/retention-preview`, {
+        method: 'POST',
+        body: formData,
+      })
+    },
+    onSuccess: (preview) => {
+      const total = preview.retentions.reduce((sum, retention) => sum + Number(retention.amount), 0)
+      setRetentions(preview.retentions.map((retention) => ({
+        key: crypto.randomUUID(),
+        kind: retention.kind,
+        amount: retention.amount,
+        reason: `Código SRI ${retention.sriRetentionCode}: ${retention.rate}% sobre $${retention.baseAmount}`,
+        documentReference: preview.authorizationNumber,
+      })))
+      setCashAmount((Number(receivable.openAmount) - total).toFixed(2))
+    },
+  })
 
   const registerPayment = useMutation({
     mutationFn: () =>
@@ -1575,15 +1774,6 @@ function RegisterPaymentForm({
     registerPayment.mutate()
   }
 
-  function applyExpectedProfile() {
-    if (!canPrefill) return
-    const suggested: Array<RetentionInput & { key: string }> = []
-    if (expectedIva > 0) suggested.push({ key: crypto.randomUUID(), kind: 'RETENTION_IVA', amount: expectedIva.toFixed(2), reason: `Perfil esperado de ${party?.name ?? 'cliente'}`, documentReference: '' })
-    if (expectedIncome > 0) suggested.push({ key: crypto.randomUUID(), kind: 'RETENTION_RENTA', amount: expectedIncome.toFixed(2), reason: `Perfil esperado de ${party?.name ?? 'cliente'}`, documentReference: '' })
-    setRetentions(suggested)
-    setCashAmount((Number(receivable.openAmount) - expectedRetentionTotal).toFixed(2))
-  }
-
   return (
     <ErpFormPanel
       eyebrow="Cobro"
@@ -1595,7 +1785,7 @@ function RegisterPaymentForm({
       onCancel={onCancel}
     >
       <p className="fine-print">Saldo actual ${formatAmount(receivable.openAmount)}. El saldo final lo calcula el servidor.</p>
-      {profileIsAvailable ? <div className="fine-print">Perfil esperado de {party?.name}: IVA {party?.expectedIvaWithholdingRate ?? '0'}% + renta {party?.expectedIncomeWithholdingRate ?? '0'}%. {canPrefill ? <><span> Neto estimado ${formatAmount((Number(receivable.openAmount) - expectedRetentionTotal).toFixed(2))}.</span><ErpButton variant="secondary" onClick={applyExpectedProfile}>Usar perfil y adjuntar comprobante</ErpButton></> : ' No se precarga porque este cobro es parcial o el saldo ya cambió.'}</div> : null}
+      {profileIsAvailable ? <div className="fine-print">Perfil esperado de {party?.name}: IVA {party?.expectedIvaWithholdingRate ?? '0'}% + renta {party?.expectedIncomeWithholdingRate ?? '0'}%. {canPrefill ? <>Valores y neto precargados. Revisa los montos y registra el comprobante de retención antes de guardar.</> : ' No se precarga porque este cobro es parcial o el saldo ya cambió.'}</div> : null}
       <div className="field-row">
         <label>
           Monto en efectivo
@@ -1635,6 +1825,32 @@ function RegisterPaymentForm({
           <input value={reference} onChange={(event) => setReference(event.target.value)} />
         </label>
       </div>
+
+      <fieldset className="invoice-lines">
+        <legend>Leer XML de retención</legend>
+        <p className="fine-print">Carga el XML autorizado por SRI. Validamos que pertenece a este cliente y a esta factura; luego puedes revisar y guardar el cobro.</p>
+        <div className="field-row">
+          <label>
+            XML autorizado
+            <input
+              type="file"
+              accept=".xml,text/xml,application/xml"
+              onChange={(event) => setRetentionXmlFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+          <div className="field-actions">
+            <ErpButton
+              variant="secondary"
+              disabled={!retentionXmlFile || previewRetentionXml.isPending}
+              onClick={() => previewRetentionXml.mutate()}
+            >
+              {previewRetentionXml.isPending ? 'Leyendo XML…' : 'Leer XML'}
+            </ErpButton>
+          </div>
+        </div>
+        {previewRetentionXml.error ? <p className="form-error">{previewRetentionXml.error.message}</p> : null}
+        {previewRetentionXml.data ? <p className="fine-print">XML autorizado leído. Se cargaron {previewRetentionXml.data.retentions.length} retención(es); aún debes confirmar con Guardar.</p> : null}
+      </fieldset>
 
       <fieldset className="invoice-lines">
         <legend>Retenciones</legend>
@@ -1853,6 +2069,9 @@ function CollectionPolicyEditor({
   const [sendHour, setSendHour] = useState(policy.sendHour)
   const [emailTemplateId, setEmailTemplateId] = useState(policy.emailTemplateId)
   const [whatsappTemplateId, setWhatsAppTemplateId] = useState(policy.whatsappTemplateId)
+  const [emailSubject, setEmailSubject] = useState(policy.emailSubject)
+  const [emailBody, setEmailBody] = useState(policy.emailBody)
+  const [paymentInstructions, setPaymentInstructions] = useState(policy.paymentInstructions)
 
   function toggleChannel(channel: 'EMAIL' | 'WHATSAPP', checked: boolean) {
     setChannels((current) => checked
@@ -1874,6 +2093,9 @@ function CollectionPolicyEditor({
       sendHour,
       emailTemplateId,
       whatsappTemplateId,
+      emailSubject,
+      emailBody,
+      paymentInstructions,
     })
   }
 
@@ -1895,9 +2117,13 @@ function CollectionPolicyEditor({
           <label><input type="checkbox" checked={channels.includes('WHATSAPP')} onChange={(event) => toggleChannel('WHATSAPP', event.target.checked)} /> WhatsApp</label>
         </fieldset>
         <div className="field-row">
-          <label>Plantilla de correo<input value={emailTemplateId} onChange={(event) => setEmailTemplateId(event.target.value)} required /></label>
-          <label>Plantilla de WhatsApp<input value={whatsappTemplateId} onChange={(event) => setWhatsAppTemplateId(event.target.value)} required /></label>
+          <label>Identificador de correo<input value={emailTemplateId} onChange={(event) => setEmailTemplateId(event.target.value)} required /></label>
+          <label>Identificador de WhatsApp<input value={whatsappTemplateId} onChange={(event) => setWhatsAppTemplateId(event.target.value)} required /></label>
         </div>
+        <label>Asunto del correo<input value={emailSubject} onChange={(event) => setEmailSubject(event.target.value)} required /></label>
+        <label>Mensaje del correo<textarea value={emailBody} onChange={(event) => setEmailBody(event.target.value)} rows={6} required /></label>
+        <label>Datos para pago<textarea value={paymentInstructions} onChange={(event) => setPaymentInstructions(event.target.value)} rows={4} placeholder="Banco, tipo y número de cuenta, titular y RUC" /></label>
+        <p className="fine-print">Puedes usar {'{{cliente}}'}, {'{{empresa}}'}, {'{{saldo}}'}, {'{{vencimiento}}'}, {'{{dias_atraso}}'} y {'{{cuenta_bancaria}}'}. El correo agrega una tabla con saldo, vencimiento, días de atraso y datos para pago.</p>
         <p className="fine-print">Usa valores negativos antes del vencimiento, 0 el día de pago y positivos después.</p>
         {error ? <p className="form-error" role="alert">{error}</p> : null}
         <ErpButton variant="primary" type="submit" disabled={pending || channels.length === 0}>{pending ? 'Guardando…' : 'Guardar reglas'}</ErpButton>
@@ -1918,6 +2144,18 @@ function ReceivablesPage({
   const [panel, setPanel] = useState<ReceivablePanel | undefined>(undefined)
   const lastTriggerRef = useRef<HTMLElement | null>(null)
   const partiesById = new Map(parties.map((party) => [party.id, party]))
+  const collectionPolicyQuery = useQuery({
+    queryKey: ['receivables', 'collection-policy'],
+    queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
+  })
+  const updateCollectionPolicy = useMutation({
+    mutationFn: (policy: Omit<CollectionPolicy, 'updatedAt'>) => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy', {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': idempotencyKey('web-collection-policy') },
+      body: JSON.stringify(policy),
+    }),
+    onSuccess: (policy) => queryClient.setQueryData(['receivables', 'collection-policy'], policy),
+  })
 
   const receivablesQuery = useQuery({
     queryKey: ['receivables', statusFilter],
@@ -1967,6 +2205,14 @@ function ReceivablesPage({
       </>
     )
   }
+  if (panel?.view === 'due-date') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Corregir vencimiento" subtitle={`Vencimiento actual: ${panel.receivable.dueDate ?? 'Sin fecha'}`} />
+        <EditReceivableDueDateForm key={panel.receivable.id} token={token} receivable={panel.receivable} onSaved={applyUpdatedReceivable} onCancel={closePanel} />
+      </>
+    )
+  }
 
   return (
     <>
@@ -1975,6 +2221,15 @@ function ReceivablesPage({
         title="Cartera"
         subtitle="Cartera trazable a la factura de origen, con saldo y aging calculados por el servidor."
       />
+      {collectionPolicyQuery.data ? (
+        <CollectionPolicyEditor
+          key={collectionPolicyQuery.data.updatedAt}
+          policy={collectionPolicyQuery.data}
+          pending={updateCollectionPolicy.isPending}
+          error={updateCollectionPolicy.error?.message}
+          onSave={(policy) => updateCollectionPolicy.mutate(policy)}
+        />
+      ) : null}
       <ErpToolbar>
         <label className="search-field">
           <span>Filtrar por estado</span>
@@ -2031,6 +2286,13 @@ function ReceivablesPage({
                           disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
                           Recordatorio
+                        </ErpButton>
+                        <ErpButton
+                          variant="ghost"
+                          onClick={(event) => openPanel({ view: 'due-date', receivable }, event.currentTarget)}
+                          disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
+                        >
+                          Editar vencimiento
                         </ErpButton>
                       </ErpActionCell>
                     </td>
@@ -2141,10 +2403,26 @@ function OrganizationPage({
       queryClient.setQueryData(['organization', 'fiscal-settings'], settings)
     },
   })
+  const uploadRideLogo = useMutation({
+    mutationFn: (formData: FormData) =>
+      apiRequest<FiscalSettings>(token, '/organization/ride-logo', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-ride-logo') },
+        body: formData,
+      }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['organization', 'fiscal-settings'], settings)
+    },
+  })
 
   function submitCertificate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     uploadCertificate.mutate(new FormData(event.currentTarget))
+  }
+
+  function submitRideLogo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    uploadRideLogo.mutate(new FormData(event.currentTarget))
   }
 
   function submitProfile(event: FormEvent<HTMLFormElement>) {
@@ -2240,6 +2518,15 @@ function OrganizationPage({
             </div>
           ) : null}
         </ErpPanel>
+        <ErpPanel title="Proveedor de facturación electrónica" className="fiscal-settings-panel">
+          {fiscal ? (
+            <div className="fiscal-panel-body">
+              <p><strong>{fiscal.electronicInvoicingProviderName}</strong></p>
+              <p className="fiscal-panel-copy">RUC del creador de IAERP: {fiscal.electronicInvoicingProviderRuc}</p>
+              <p className="fine-print">Este dato pertenece a la plataforma; no cambia la razón social ni el RUC del emisor.</p>
+            </div>
+          ) : null}
+        </ErpPanel>
         <ErpPanel
           title="Firma electrónica"
           actions={fiscal?.certificateConfigured ? <ErpStatusBadge tone="success">Configurada</ErpStatusBadge> : <ErpStatusBadge tone="warning">Pendiente</ErpStatusBadge>}
@@ -2261,6 +2548,22 @@ function OrganizationPage({
               {uploadCertificate.error ? <p className="form-error" role="alert">{uploadCertificate.error.message}</p> : null}
               <ErpButton variant="primary" type="submit" disabled={uploadCertificate.isPending}>
                 {uploadCertificate.isPending ? 'Validando y guardando…' : fiscal?.certificateConfigured ? 'Reemplazar certificado' : 'Guardar certificado'}
+              </ErpButton>
+            </form>
+          </div>
+        </ErpPanel>
+        <ErpPanel
+          title="Logo en factura (RIDE)"
+          actions={fiscal?.rideLogoConfigured ? <ErpStatusBadge tone="success">Configurado</ErpStatusBadge> : <ErpStatusBadge tone="neutral">Opcional</ErpStatusBadge>}
+          className="fiscal-settings-panel"
+        >
+          <div className="fiscal-panel-body">
+            <p className="fiscal-panel-copy">Carga el logo que debe aparecer en los nuevos RIDE. Se almacena de forma privada y no modifica documentos ya emitidos.</p>
+            <form className="certificate-form" onSubmit={submitRideLogo}>
+              <label>Logo PNG o JPG (máx. 1 MB)<input name="file" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" required /></label>
+              {uploadRideLogo.error ? <p className="form-error" role="alert">{uploadRideLogo.error.message}</p> : null}
+              <ErpButton variant="primary" type="submit" disabled={uploadRideLogo.isPending}>
+                {uploadRideLogo.isPending ? 'Validando y guardando…' : fiscal?.rideLogoConfigured ? 'Reemplazar logo' : 'Guardar logo'}
               </ErpButton>
             </form>
           </div>
