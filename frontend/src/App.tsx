@@ -2765,6 +2765,7 @@ function OrganizationPage({
 function Workspace() {
   const auth = useAuth()
   const [section, setSection] = useState<Section>('overview')
+  const [navigationVersion, setNavigationVersion] = useState(0)
   const [contractPartyId, setContractPartyId] = useState<string | undefined>()
   const tokenQuery = useQueries({
     queries: [{
@@ -2804,13 +2805,16 @@ function Workspace() {
         currentSection={section}
         onNavigate={(newSection) => {
           if (newSection !== 'contracts') setContractPartyId(undefined)
-          startTransition(() => setSection(newSection))
+          startTransition(() => {
+            setSection(newSection)
+            setNavigationVersion((current) => current + 1)
+          })
         }}
         organizationName={contextQuery.data.name}
         ruc={contextQuery.data.ruc}
       />
       <main id="main-content" tabIndex={-1}>
-       <div key={section} className="section-fade">
+       <div key={`${section}-${navigationVersion}`} className="section-fade">
         {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}
         {section === 'parties' ? <PartiesPage parties={parties} token={token} onOpenContracts={(partyId) => { setContractPartyId(partyId); startTransition(() => setSection('contracts')) }} /> : null}
         {section === 'catalogs' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
