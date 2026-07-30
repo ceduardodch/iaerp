@@ -378,7 +378,7 @@ function PartiesPage({
           <label>Rol<select name="role" defaultValue={editor?.roles[0] ?? 'CUSTOMER'}><option value="CUSTOMER">Cliente</option><option value="SUPPLIER">Proveedor</option></select></label>
           <div className="field-row">
             <label>Correo<input name="email" type="email" defaultValue={editor?.email ?? ''} /></label>
-            <label>WhatsApp<input name="phone" type="tel" defaultValue={editor?.phone ?? ''} placeholder="+593991041297" pattern="\+5939[0-9]{8}" title="Usa el formato +593991041297" required /></label>
+            <label>WhatsApp<input name="phone" type="tel" defaultValue={editor?.phone ?? ''} placeholder="+593991041297" pattern="\+5939[0-9]{8}" title="Usa el formato +593991041297" /></label>
           </div>
           <label>Dirección<textarea name="address" rows={3} defaultValue={editor?.address ?? ''} /></label>
           <label>Condición de pago predeterminada<select name="paymentTermsDays" defaultValue={editor?.paymentTermsDays ?? ''}><option value="">Usar valor de la empresa</option><option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option><option value="45">45 días</option><option value="60">60 días</option><option value="90">90 días</option></select></label>
