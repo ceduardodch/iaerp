@@ -12,9 +12,10 @@ alcance y las decisiones.
   el mismo perfil funcional de Sky Franquicia: conserva `SignedProperties`,
   `SigningCertificate` y los certificados intermedios del PKCS#12. Las
   pruebas de firma, carga de certificado y facturación pasan (27 pruebas
-  focalizadas); Ruff y mypy pasan. La suite completa queda bloqueada por el
-  chequeo de salud local (`/health/ready` devuelve 503 por dependencias no
-  levantadas), ajeno a la firma. Pendiente CI y promoción autorizada. Las
+  focalizadas); Ruff y mypy pasan. La suite completa local queda bloqueada por
+  el chequeo de salud local (`/health/ready` devuelve 503 por dependencias no
+  levantadas), ajeno a la firma; la puerta CI completa (backend, migraciones,
+  frontend, OIDC y seguridad) y Coolify finalizaron correctamente. Las
   facturas rechazadas se mantienen inmutables y se duplican para reemisión.
 
 - Actualización local: 2026-07-30 `America/Guayaquil`.
