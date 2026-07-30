@@ -8,6 +8,12 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-30 `America/Guayaquil`.
+  Cartera queda limitada a cuentas por cobrar, aging, cobros y recordatorios.
+  La política de mensajes automáticos se configura únicamente en Empresa →
+  Automatizaciones de cobranza. Validado con lint, build y Playwright de
+  Cartera en escritorio y móvil.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
   Contratos ya tiene interfaz: menú propio, filtro por cliente, alta de
   contrato, versiones comerciales y carga privada de PDF firmado con checksum
   SHA-256 y descarga temporal autorizada. Las versiones firmadas quedan

@@ -2287,19 +2287,6 @@ function ReceivablesPage({
   const [panel, setPanel] = useState<ReceivablePanel | undefined>(undefined)
   const lastTriggerRef = useRef<HTMLElement | null>(null)
   const partiesById = new Map(parties.map((party) => [party.id, party]))
-  const collectionPolicyQuery = useQuery({
-    queryKey: ['receivables', 'collection-policy'],
-    queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
-  })
-  const updateCollectionPolicy = useMutation({
-    mutationFn: (policy: Omit<CollectionPolicy, 'updatedAt'>) => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy', {
-      method: 'PUT',
-      headers: { 'Idempotency-Key': idempotencyKey('web-collection-policy') },
-      body: JSON.stringify(policy),
-    }),
-    onSuccess: (policy) => queryClient.setQueryData(['receivables', 'collection-policy'], policy),
-  })
-
   const receivablesQuery = useQuery({
     queryKey: ['receivables', statusFilter],
     queryFn: () =>
@@ -2364,15 +2351,6 @@ function ReceivablesPage({
         title="Cartera"
         subtitle="Cartera trazable a la factura de origen, con saldo y aging calculados por el servidor."
       />
-      {collectionPolicyQuery.data ? (
-        <CollectionPolicyEditor
-          key={collectionPolicyQuery.data.updatedAt}
-          policy={collectionPolicyQuery.data}
-          pending={updateCollectionPolicy.isPending}
-          error={updateCollectionPolicy.error?.message}
-          onSave={(policy) => updateCollectionPolicy.mutate(policy)}
-        />
-      ) : null}
       <ErpToolbar>
         <label className="search-field">
           <span>Filtrar por estado</span>
