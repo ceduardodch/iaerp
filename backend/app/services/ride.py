@@ -14,7 +14,9 @@ nativos como Pango/Cairo (WeasyPrint), lo que simplifica el Dockerfile.
 from __future__ import annotations
 
 import io
+from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
+from zoneinfo import ZoneInfo
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -93,6 +95,24 @@ def _tax_summary(lines: list[SalesDocumentLine]) -> list[tuple[str, Decimal, Dec
     ]
 
 
+def _paragraph(value: str, style: ParagraphStyle) -> Paragraph:
+    """Escapa el contenido externo antes de insertarlo en el markup de ReportLab."""
+
+    from xml.sax.saxutils import escape
+
+    return Paragraph(escape(value or "-"), style)
+
+
+def _environment_label(environment_code: str) -> str:
+    return "PRODUCCIÓN" if environment_code == "2" else "PRUEBAS"
+
+
+def _format_authorized_at(value: datetime | None) -> str:
+    if value is None:
+        return "PENDIENTE DE AUTORIZACIÓN"
+    return value.astimezone(ZoneInfo("America/Guayaquil")).strftime("%d/%m/%Y %H:%M:%S %Z")
+
+
 def build_ride_pdf(
     *,
     document: SalesDocument,
@@ -102,6 +122,7 @@ def build_ride_pdf(
     tenant_ruc: str,
     tenant_legal_name: str,
     buyer: Party,
+    environment_code: str,
 ) -> bytes:
     """Genera el RIDE en PDF a partir de los mismos datos que el XML firmado.
 
@@ -112,171 +133,220 @@ def build_ride_pdf(
     if document.access_key is None:
         raise ValueError("Cannot build RIDE before the access key is assigned")
 
+    if environment_code not in {"1", "2"}:
+        raise ValueError("RIDE environment code must be '1' or '2'")
+
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        leftMargin=1.25 * cm,
-        rightMargin=1.25 * cm,
-        topMargin=1.1 * cm,
-        bottomMargin=1.1 * cm,
+        leftMargin=1.1 * cm,
+        rightMargin=1.1 * cm,
+        topMargin=0.9 * cm,
+        bottomMargin=0.9 * cm,
     )
     styles = getSampleStyleSheet()
-    navy = colors.HexColor("#16324F")
-    blue = colors.HexColor("#1E5A88")
-    mist = colors.HexColor("#EEF3F7")
-    border = colors.HexColor("#C8D3DD")
+    ink = colors.HexColor("#18233A")
+    blue = colors.HexColor("#263A72")
+    medium_gray = colors.HexColor("#D1D5DB")
+    border = colors.HexColor("#80858D")
+    tiny_style = ParagraphStyle(
+        "ride-tiny", parent=styles["Normal"], fontSize=6.7, leading=8.2, textColor=ink
+    )
     small_style = ParagraphStyle(
-        "ride-small", parent=styles["Normal"], fontSize=7.5, leading=9.5, textColor=navy
+        "ride-small", parent=styles["Normal"], fontSize=7.8, leading=9.7, textColor=ink
     )
     body_style = ParagraphStyle(
-        "ride-body", parent=styles["Normal"], fontSize=8.5, leading=11, textColor=navy
+        "ride-body", parent=styles["Normal"], fontSize=8.8, leading=11, textColor=ink
     )
-    title_style = ParagraphStyle(
-        "ride-title",
-        parent=styles["Title"],
-        fontSize=17,
-        leading=20,
-        textColor=navy,
-        spaceAfter=3,
+    heading_style = ParagraphStyle(
+        "ride-heading", parent=styles["Normal"], fontSize=10, leading=12, textColor=ink
+    )
+    brand_style = ParagraphStyle(
+        "ride-brand", parent=styles["Title"], fontSize=26, leading=28, textColor=blue
+    )
+    document_type_style = ParagraphStyle(
+        "ride-document", parent=styles["Normal"], fontSize=13, leading=16, textColor=ink
     )
 
-    document_type_label = _DOCUMENT_TYPE_LABEL.get(
-        document.document_type, document.document_type
-    )
+    document_type_label = _DOCUMENT_TYPE_LABEL.get(document.document_type, document.document_type)
     full_number = _full_document_number(establishment, emission_point, document)
+    authorization_number = document.authorization_number or "PENDIENTE DE AUTORIZACIÓN"
 
-    story = []
     issuer = Table(
         [
-            [Paragraph(f"<b>{tenant_legal_name}</b>", title_style)],
-            [Paragraph(f"RUC: {tenant_ruc}", body_style)],
-            [Paragraph(f"Dirección matriz: {establishment.address}", small_style)],
+            [Paragraph("<b>B<span color='#A6C737'>2</span>B</b>", brand_style)],
+            [_paragraph(tenant_legal_name, heading_style)],
+            [_paragraph(f"Emisor: {tenant_legal_name}", body_style)],
+            [_paragraph(f"Matriz: {establishment.address}", body_style)],
+            [Paragraph("Obligado a llevar contabilidad: SI", body_style)],
         ],
-        colWidths=[10.6 * cm],
+        colWidths=[10.3 * cm],
     )
-    issuer.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    issuer.setStyle(
+        TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)])
+    )
+
     document_box = Table(
         [
-            [Paragraph(f"<b>{document_type_label}</b>", body_style)],
+            [Paragraph(f"R.U.C.: {tenant_ruc}", heading_style)],
+            [Paragraph(f"<b>{document_type_label}</b>", document_type_style)],
             [Paragraph(f"No. {full_number}", body_style)],
+            [Paragraph("NÚMERO DE AUTORIZACIÓN", small_style)],
+            [_paragraph(authorization_number, tiny_style)],
+            [
+                Paragraph(
+                    f"FECHA AUTORIZACIÓN: {_format_authorized_at(document.authorized_at)}",
+                    small_style,
+                )
+            ],
+            [Paragraph(f"AMBIENTE: {_environment_label(environment_code)}", small_style)],
+            [Paragraph("EMISIÓN: NORMAL", small_style)],
             [Paragraph("CLAVE DE ACCESO", small_style)],
-            [Paragraph(_access_key_as_text_groups(document.access_key), small_style)],
+            [_paragraph(_access_key_as_text_groups(document.access_key), tiny_style)],
         ],
-        colWidths=[7.1 * cm],
+        colWidths=[8.1 * cm],
     )
     document_box.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), mist),
-                ("BOX", (0, 0), (-1, -1), 0.75, navy),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+                ("LEFTPADDING", (0, 0), (-1, -1), 7),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+                ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+                ("TOPPADDING", (0, 3), (-1, 3), 6),
+                ("TOPPADDING", (0, 8), (-1, 8), 6),
             ]
         )
     )
-    header = Table([[issuer, document_box]], colWidths=[10.8 * cm, 7.2 * cm])
+    header = Table([[issuer, document_box]], colWidths=[10.5 * cm, 8.2 * cm])
     header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story.append(header)
-    story.append(Spacer(1, 0.45 * cm))
-    issue_date_text = document.issue_date.strftime("%d/%m/%Y")
-    buyer_table = Table(
+
+    buyer_rows = [
         [
-            ["COMPRADOR", "IDENTIFICACIÓN", "FECHA DE EMISIÓN"],
-            [buyer.name, buyer.identification_number, issue_date_text],
+            _paragraph(f"COMPRADOR · Razón social / Nombres y apellidos: {buyer.name}", body_style),
+            _paragraph(f"Identificación: {buyer.identification_number}", body_style),
         ],
-        colWidths=[9.2 * cm, 4.5 * cm, 4.3 * cm],
-    )
+        [
+            _paragraph(f"Dirección: {buyer.address or '-'}", small_style),
+            _paragraph(f"Fecha emisión: {document.issue_date.strftime('%d/%m/%Y')}", small_style),
+        ],
+    ]
+    buyer_table = Table(buyer_rows, colWidths=[12.0 * cm, 6.7 * cm])
     buyer_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), mist),
-                ("TEXTCOLOR", (0, 0), (-1, 0), navy),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, 0), 7),
-                ("FONTSIZE", (0, 1), (-1, -1), 8.5),
-                ("GRID", (0, 0), (-1, -1), 0.25, border),
-                ("LEFTPADDING", (0, 0), (-1, -1), 7),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+                ("LINEABOVE", (0, 0), (-1, 0), 0.8, colors.black),
+                ("LINEBELOW", (0, -1), (-1, -1), 0.25, medium_gray),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
                 ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ]
         )
     )
-    story.append(buyer_table)
-    story.append(Spacer(1, 0.4 * cm))
 
-    line_rows: list[list[str]] = [
-        ["Descripcion", "Cant.", "P. Unitario", "Descuento", "Subtotal"]
+    line_rows: list[list[object]] = [
+        ["Cod.", "Cant.", "Descripción", "Precio unitario", "Descuento", "Precio total"]
     ]
     for line in lines:
         line_rows.append(
             [
-                line.description,
+                "-",
                 _format_quantity_or_price(line.quantity),
-                _format_quantity_or_price(line.unit_price),
+                _paragraph(line.description, small_style),
+                _format_amount(line.unit_price),
                 _format_amount(line.discount),
                 _format_amount(line.base_amount),
             ]
         )
-    line_column_widths = [8.8 * cm, 2 * cm, 2.65 * cm, 2.45 * cm, 2.65 * cm]
-    line_table = Table(line_rows, hAlign="LEFT", colWidths=line_column_widths)
+    line_table = Table(
+        line_rows,
+        hAlign="LEFT",
+        colWidths=[1.5 * cm, 1.5 * cm, 7.7 * cm, 2.35 * cm, 2.0 * cm, 2.35 * cm],
+        repeatRows=1,
+    )
     line_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), navy),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("BACKGROUND", (0, 0), (-1, 0), medium_gray),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
                 ("GRID", (0, 0), (-1, -1), 0.25, border),
-                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("ALIGN", (0, 0), (1, -1), "CENTER"),
+                ("ALIGN", (3, 0), (-1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
             ]
         )
     )
-    story.append(line_table)
-    story.append(Spacer(1, 0.4 * cm))
 
-    tax_rows: list[list[str]] = [["Tarifa", "Base imponible", "Valor"]]
-    for tax_label, base_amount, tax_amount in _tax_summary(lines):
-        tax_rows.append([tax_label, _format_amount(base_amount), _format_amount(tax_amount)])
-    tax_table = Table(tax_rows, hAlign="LEFT", colWidths=[3 * cm, 4 * cm, 4 * cm])
-    tax_table.setStyle(
+    additional_rows: list[list[object]] = [[Paragraph("Información adicional", body_style)]]
+    if buyer.email:
+        additional_rows.append([_paragraph(f"Email: {buyer.email}", small_style)])
+    additional_rows.append([Paragraph(f"Estado SRI: {document.status}", small_style)])
+    additional_table = Table(
+        additional_rows,
+        colWidths=[9.8 * cm],
+        rowHeights=[0.75 * cm, *([0.62 * cm] * (len(additional_rows) - 1))],
+    )
+    additional_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), mist),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("GRID", (0, 0), (-1, -1), 0.25, border),
-                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("BOX", (0, 0), (-1, -1), 0.7, colors.black),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ]
         )
     )
-    story.append(tax_table)
-    story.append(Spacer(1, 0.4 * cm))
 
-    totals_rows = [
-        ["Subtotal sin impuestos", _format_amount(document.subtotal)],
-        ["Total impuestos", _format_amount(document.tax_total)],
-        ["IMPORTE TOTAL", _format_amount(document.total)],
-    ]
-    totals_table = Table(totals_rows, hAlign="RIGHT", colWidths=[6 * cm, 3 * cm])
+    totals_rows: list[list[str]] = []
+    for tax_label, base_amount, _tax_amount in _tax_summary(lines):
+        totals_rows.append([f"SUBTOTAL {tax_label}", _format_amount(base_amount)])
+    totals_rows.extend(
+        [
+            ["SUBTOTAL SIN IMPUESTOS", _format_amount(document.subtotal)],
+            ["DESCUENTO", _format_amount(sum((line.discount for line in lines), Decimal("0.00")))],
+            ["IVA", _format_amount(document.tax_total)],
+            ["PROPINA", "0.00"],
+            ["VALOR TOTAL", _format_amount(document.total)],
+        ]
+    )
+    totals_table = Table(totals_rows, colWidths=[4.2 * cm, 2.6 * cm])
     totals_table.setStyle(
         TableStyle(
             [
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
-                ("BACKGROUND", (0, -1), (-1, -1), blue),
-                ("TEXTCOLOR", (0, -1), (-1, -1), colors.white),
                 ("GRID", (0, 0), (-1, -1), 0.25, border),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("BACKGROUND", (0, -1), (-1, -1), medium_gray),
+                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ]
         )
     )
-    story.append(totals_table)
+
+    story = [
+        header,
+        Spacer(1, 0.45 * cm),
+        buyer_table,
+        Spacer(1, 0.55 * cm),
+        line_table,
+        Spacer(1, 0.55 * cm),
+    ]
+    lower = Table([[additional_table, totals_table]], colWidths=[11.7 * cm, 7.0 * cm])
+    lower.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(lower)
 
     doc.build(story)
     return buffer.getvalue()

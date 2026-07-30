@@ -1212,6 +1212,7 @@ async def issue_document(
         tenant_ruc=tenant.ruc,
         tenant_legal_name=tenant.name,
         buyer=party,
+        environment_code=fiscal.sri_environment,
     )
 
     xml_upload = await storage.upload_artifact(

@@ -8,7 +8,7 @@ parten de los mismos campos persistidos en ``SalesDocument``/``SalesDocumentLine
 
 import io
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -135,6 +135,7 @@ def test_build_ride_pdf_requires_access_key() -> None:
             tenant_ruc="1799999999001",
             tenant_legal_name="IAERP Demo S.A.",
             buyer=buyer,
+            environment_code="1",
         )
 
 
@@ -149,6 +150,7 @@ def test_build_ride_pdf_is_not_empty_and_contains_access_key() -> None:
         tenant_ruc="1799999999001",
         tenant_legal_name="IAERP Demo S.A.",
         buyer=buyer,
+        environment_code="1",
     )
 
     assert len(pdf_bytes) > 0
@@ -162,6 +164,8 @@ def test_build_ride_pdf_is_not_empty_and_contains_access_key() -> None:
     assert "001-001-000000001" in text
     assert "COMPRADOR" in text
     assert "CLAVE DE ACCESO" in text
+    assert "AMBIENTE: PRUEBAS" in text
+    assert "PENDIENTE DE AUTORIZACIÓN" in text
 
 
 def test_build_ride_pdf_reflects_same_totals_as_document_without_recalculating() -> None:
@@ -174,7 +178,33 @@ def test_build_ride_pdf_reflects_same_totals_as_document_without_recalculating()
         tenant_ruc="1799999999001",
         tenant_legal_name="IAERP Demo S.A.",
         buyer=buyer,
+        environment_code="1",
     )
     text = _extract_text(pdf_bytes)
     assert "100.00" in text  # subtotal
     assert "15.00" in text  # tax_total
+
+
+def test_authorized_ride_includes_production_authorization_data() -> None:
+    document, lines, establishment, emission_point, buyer = _build_fixture()
+    document.status = "AUTHORIZED"
+    document.authorization_number = document.access_key
+    document.authorized_at = datetime(2026, 7, 29, 15, 4, 40, tzinfo=UTC)
+
+    text = _extract_text(
+        build_ride_pdf(
+            document=document,
+            lines=lines,
+            establishment=establishment,
+            emission_point=emission_point,
+            tenant_ruc="1799999999001",
+            tenant_legal_name="IAERP Demo S.A.",
+            buyer=buyer,
+            environment_code="2",
+        )
+    )
+
+    assert "AMBIENTE: PRODUCCIÓN" in text
+    assert "FECHA AUTORIZACIÓN: 29/07/2026 10:04:40 -05" in text
+    assert "NÚMERO DE AUTORIZACIÓN" in text
+    assert document.authorization_number in "".join(text.split())

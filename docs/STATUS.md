@@ -8,6 +8,14 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-29 `America/Guayaquil`.
+  El RIDE se rediseñó a partir de la referencia fiscal entregada: cabecera
+  compacta, bloque de RUC/documento, clave de acceso, ambiente, comprador,
+  detalle y totales alineados. Al autorizarse un comprobante se conserva el
+  RIDE inicial y se genera la versión 2 con número y fecha/hora de
+  autorización SRI. Validado con Ruff, mypy, pruebas del RIDE y revisión
+  visual renderizada; pendiente de la puerta CI antes de promoción.
+
+- Actualización local: 2026-07-29 `America/Guayaquil`.
   El RIDE de nuevos comprobantes adopta formato A4 con cabecera fiscal, bloque
   de clave de acceso, comprador, detalle y totales consistentes. La emisión
   SOAP ahora bloquea antes de firmar si el ambiente fiscal del tenant no

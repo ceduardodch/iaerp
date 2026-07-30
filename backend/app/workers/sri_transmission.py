@@ -60,9 +60,10 @@ from app.integrations.sri.protocol import (
 )
 from app.integrations.sri.simulator import SimulatorSRIClient
 from app.integrations.sri.soap import SoapSRIClient
-from app.models.billing import DocumentArtifact, SalesDocument, SRITransmission
-from app.models.platform import DeadLetter, OutboxEvent
-from app.services import storage
+from app.models.billing import DocumentArtifact, SalesDocument, SalesDocumentLine, SRITransmission
+from app.models.masters import EmissionPoint, Establishment, Party
+from app.models.platform import DeadLetter, OutboxEvent, Tenant
+from app.services import ride, storage
 from app.workers.outbox import OutboxMessage, retry_delay
 
 settings = get_settings()
@@ -82,9 +83,7 @@ CREDIT_NOTE_AUTHORIZED_EVENT = "credit_note.authorized"
 
 # Estados de SRITransmission que indican que la clave ya fue aceptada por el
 # SRI/simulador: retransmitirla violaria la regla E4-05 de reconciliacion.
-_ALREADY_TRANSMITTED_STATUSES = frozenset(
-    {"RECEIVED", "PENDING_AUTHORIZATION", "AUTHORIZED"}
-)
+_ALREADY_TRANSMITTED_STATUSES = frozenset({"RECEIVED", "PENDING_AUTHORIZATION", "AUTHORIZED"})
 
 
 def _default_sri_client() -> SRIClient:
@@ -131,6 +130,91 @@ async def _load_signed_xml(
     if artifact is None:
         raise ValueError(f"No signed XML artifact found for document {document_id}")
     return await storage.download_artifact(object_key=artifact.object_key)
+
+
+async def _create_authorized_ride_version(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    document: SalesDocument,
+) -> None:
+    """Publica una nueva versión del RIDE al recibir la autorización SRI.
+
+    El XML firmado nunca se altera. El RIDE es una representación visual, por
+    lo que se conserva la versión emitida y se agrega una segunda versión con
+    número/fecha de autorización reales para descarga del cliente.
+    """
+
+    if document.access_key is None or document.authorization_number is None:
+        return
+
+    tenant = await session.get(Tenant, tenant_id)
+    establishment = await session.scalar(
+        select(Establishment).where(
+            Establishment.tenant_id == tenant_id,
+            Establishment.id == document.establishment_id,
+        )
+    )
+    emission_point = await session.scalar(
+        select(EmissionPoint).where(
+            EmissionPoint.tenant_id == tenant_id,
+            EmissionPoint.id == document.emission_point_id,
+        )
+    )
+    buyer = await session.scalar(
+        select(Party).where(Party.tenant_id == tenant_id, Party.id == document.party_id)
+    )
+    lines = list(
+        (
+            await session.scalars(
+                select(SalesDocumentLine)
+                .where(
+                    SalesDocumentLine.tenant_id == tenant_id,
+                    SalesDocumentLine.sales_document_id == document.id,
+                )
+                .order_by(SalesDocumentLine.line_number)
+            )
+        ).all()
+    )
+    if tenant is None or establishment is None or emission_point is None or buyer is None:
+        raise ValueError(f"Cannot load RIDE context for authorized document {document.id}")
+
+    current_version = await session.scalar(
+        select(func.max(DocumentArtifact.version)).where(
+            DocumentArtifact.tenant_id == tenant_id,
+            DocumentArtifact.sales_document_id == document.id,
+            DocumentArtifact.artifact_type == "ride-pdf",
+        )
+    )
+    version = int(current_version or 0) + 1
+    pdf_bytes = ride.build_ride_pdf(
+        document=document,
+        lines=lines,
+        establishment=establishment,
+        emission_point=emission_point,
+        tenant_ruc=tenant.ruc,
+        tenant_legal_name=tenant.name,
+        buyer=buyer,
+        environment_code=document.access_key[23],
+    )
+    upload = await storage.upload_artifact(
+        tenant_id=str(tenant_id),
+        document_id=str(document.id),
+        artifact_type="ride-pdf",
+        version=version,
+        data=pdf_bytes,
+    )
+    session.add(
+        DocumentArtifact(
+            tenant_id=tenant_id,
+            sales_document_id=document.id,
+            artifact_type="ride-pdf",
+            object_key=upload.object_key,
+            sha256=upload.sha256,
+            version=version,
+        )
+    )
+    await session.flush()
 
 
 async def _latest_transmission_for_access_key(
@@ -424,20 +508,16 @@ async def _apply_authorization_result(
         document.status = "AUTHORIZED"
         document.authorization_number = result.authorization_number
         document.authorized_at = result.authorized_at
-        if (
-            document.document_type == "INVOICE"
-            and not was_already_authorized
-        ):
-            await _publish_invoice_authorized(
-                session, tenant_id=tenant_id, document=document
+        if not was_already_authorized:
+            await _create_authorized_ride_version(
+                session,
+                tenant_id=tenant_id,
+                document=document,
             )
-        elif (
-            document.document_type == "CREDIT_NOTE"
-            and not was_already_authorized
-        ):
-            await _publish_credit_note_authorized(
-                session, tenant_id=tenant_id, document=document
-            )
+        if document.document_type == "INVOICE" and not was_already_authorized:
+            await _publish_invoice_authorized(session, tenant_id=tenant_id, document=document)
+        elif document.document_type == "CREDIT_NOTE" and not was_already_authorized:
+            await _publish_credit_note_authorized(session, tenant_id=tenant_id, document=document)
     elif result.status == "NOT_AUTHORIZED":
         await _record_transmission_attempt(
             session,
