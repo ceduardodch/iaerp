@@ -8,6 +8,14 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-30 `America/Guayaquil`.
+  CI clasifica el impacto de cada cambio antes de ejecutar jobs: documentación,
+  pruebas y flujo no despliegan la aplicación; UI, backend y OIDC ejecutan solo
+  sus puertas aplicables; firma SRI, facturación, migraciones e infraestructura
+  fuerzan el recorrido completo. Producción solo se activa tras las puertas
+  requeridas y no se cancela un despliegue activo para publicar este control.
+  Validación de sintaxis YAML local; pendiente CI.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
   Los estados técnicos de comprobante y transmisión ahora se traducen a nombres
   legibles en Facturas y en el RIDE: por ejemplo, `SIGNED` pasa a “Firmada y
   pendiente de envío” y `NOT_AUTHORIZED` a “No autorizada”. Un estado futuro

@@ -20,8 +20,84 @@ env:
   NODE_VERSION: "24.13.0"
 
 jobs:
+  changes:
+    name: Detect change impact
+    runs-on: ubuntu-24.04
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      migrations: ${{ steps.filter.outputs.migrations }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      oidc: ${{ steps.filter.outputs.oidc }}
+      contracts: ${{ steps.filter.outputs.contracts }}
+      deployment_config: ${{ steps.filter.outputs.deployment_config }}
+      deploy: ${{ steps.filter.outputs.deploy }}
+    steps:
+      - name: Checkout history needed for comparison
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: filter
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            changed_files=$(git ls-tree -r --name-only HEAD)
+          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
+            changed_files=$(git diff --name-only "$PR_BASE_SHA" HEAD)
+          elif [[ -n "$EVENT_BEFORE" && "$EVENT_BEFORE" != "0000000000000000000000000000000000000000" ]]; then
+            changed_files=$(git diff --name-only "$EVENT_BEFORE" HEAD)
+          else
+            changed_files=$(git ls-tree -r --name-only HEAD)
+          fi
+
+          changed() {
+            grep -Eq "$1" <<<"$changed_files"
+          }
+          set_output() {
+            echo "$1=$2" >> "$GITHUB_OUTPUT"
+          }
+
+          backend=false
+          migrations=false
+          frontend=false
+          oidc=false
+          contracts=false
+          deployment_config=false
+          deploy=false
+
+          # SRI, facturación, migraciones y configuración de plataforma no
+          # pueden tomar atajos: exigen el recorrido completo antes de producción.
+          strict=false
+          if changed '^(backend/(app/services/(access_key|billing|fiscal_settings|signing|sri_xml)\.py|app/integrations/sri/|migrations/)|compose\.ya?ml|compose\.coolify\.yaml|contracts/)'; then
+            strict=true
+          fi
+
+          if changed '^backend/'; then backend=true; fi
+          if changed '^(backend/(migrations/|app/models/)|compose\.ya?ml|compose\.coolify\.yaml)' || [[ "$strict" == true ]]; then migrations=true; fi
+          if changed '^frontend/' || [[ "$strict" == true ]]; then frontend=true; fi
+          if changed '^(backend/app/core/|backend/app/api/auth|backend/app/services/(auth|identity)|frontend/src/(auth|oidc)|compose\.ya?ml|keycloak/)' || [[ "$strict" == true ]]; then oidc=true; fi
+          if changed '^(contracts/|backend/app/(api|mcp)/|\.github/workflows/)'; then contracts=true; fi
+          if changed '^(compose\.coolify\.yaml|compose\.ya?ml|Dockerfile|backend/Dockerfile|frontend/Dockerfile)'; then deployment_config=true; fi
+          if changed '^(backend/app/|frontend/src/|compose\.ya?ml|compose\.coolify\.yaml|backend/Dockerfile|frontend/Dockerfile)' ; then deploy=true; fi
+
+          set_output backend "$backend"
+          set_output migrations "$migrations"
+          set_output frontend "$frontend"
+          set_output oidc "$oidc"
+          set_output contracts "$contracts"
+          set_output deployment_config "$deployment_config"
+          set_output deploy "$deploy"
+
   backend:
     name: Backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -99,6 +175,8 @@ jobs:
 
   migrations:
     name: PostgreSQL migrations
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -147,6 +225,8 @@ jobs:
 
   contracts:
     name: YAML contracts
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -174,6 +254,8 @@ jobs:
 
   frontend:
     name: Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
@@ -283,10 +365,8 @@ jobs:
 
   oidc:
     name: OIDC and full stack
-    if: >-
-      github.event_name == 'pull_request' ||
-      github.ref == 'refs/heads/release' ||
-      github.ref == 'refs/heads/main'
+    needs: changes
+    if: needs.changes.outputs.oidc == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -418,6 +498,8 @@ jobs:
 
   deployment-config:
     name: Coolify deployment config
+    needs: changes
+    if: needs.changes.outputs.deployment_config == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -448,8 +530,17 @@ jobs:
 
   deploy-production:
     name: Deploy production to Coolify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [backend, migrations, contracts, frontend, oidc, security, deployment-config]
+    if: >-
+      always() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.deploy == 'true' &&
+      (needs.backend.result == 'success' || needs.backend.result == 'skipped') &&
+      (needs.migrations.result == 'success' || needs.migrations.result == 'skipped') &&
+      (needs.contracts.result == 'success' || needs.contracts.result == 'skipped') &&
+      (needs.frontend.result == 'success' || needs.frontend.result == 'skipped') &&
+      (needs.oidc.result == 'success' || needs.oidc.result == 'skipped') &&
+      (needs.security.result == 'success' || needs.security.result == 'skipped') &&
+      (needs.deployment-config.result == 'success' || needs.deployment-config.result == 'skipped')
+    needs: [changes, backend, migrations, contracts, frontend, oidc, security, deployment-config]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Legacy secret scope; this job deploys the production app from main only.
