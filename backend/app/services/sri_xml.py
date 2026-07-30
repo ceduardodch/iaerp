@@ -23,7 +23,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Literal
 
 from lxml import etree
 
@@ -147,7 +146,7 @@ def build_invoice_xml(
     tenant_legal_name: str,
     tenant_commercial_address: str,
     buyer: Party,
-    environment_code: Literal["1", "2"] = "1",
+    environment_code: str,
     emission_type_code: str = "1",
 ) -> SriXmlBuildResult:
     """Construye el XML de factura (esquema 1.1.0) desde datos ya persistidos.
@@ -231,7 +230,7 @@ def build_credit_note_xml(
     related_invoice_issue_date: date,
     related_invoice_access_key: str,
     reason: str,
-    environment_code: Literal["1", "2"] = "1",
+    environment_code: str,
     emission_type_code: str = "1",
 ) -> SriXmlBuildResult:
     """Construye el XML de nota de credito (esquema 1.1.0).

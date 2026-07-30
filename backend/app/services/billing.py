@@ -1157,6 +1157,7 @@ async def issue_document(
             tenant_legal_name=tenant.name,
             tenant_commercial_address=establishment.address,
             buyer=party,
+            environment_code=fiscal.sri_environment,
         )
     else:
         (
@@ -1180,6 +1181,7 @@ async def issue_document(
             related_invoice_issue_date=related_invoice.issue_date,
             related_invoice_access_key=related_invoice.access_key or "",
             reason=document.reason or "",
+            environment_code=fiscal.sri_environment,
         )
 
     signing_result = signing.sign_xml(

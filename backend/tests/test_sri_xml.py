@@ -132,6 +132,7 @@ def test_build_invoice_xml_requires_access_key() -> None:
             tenant_legal_name="IAERP Demo S.A.",
             tenant_commercial_address="Av. Amazonas N30",
             buyer=_buyer(),
+            environment_code="1",
         )
 
 
@@ -148,6 +149,7 @@ def test_build_invoice_xml_rejects_credit_note_document() -> None:
             tenant_legal_name="IAERP Demo S.A.",
             tenant_commercial_address="Av. Amazonas N30",
             buyer=_buyer(),
+            environment_code="1",
         )
 
 
@@ -165,6 +167,7 @@ def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
         tenant_legal_name="IAERP Demo S.A.",
         tenant_commercial_address="Av. Amazonas N30",
         buyer=buyer,
+        environment_code="2",
     )
 
     root = result.root
@@ -173,6 +176,7 @@ def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
 
     info_tributaria = root.find("infoTributaria")
     assert info_tributaria is not None
+    assert info_tributaria.findtext("ambiente") == "2"
     assert info_tributaria.findtext("claveAcceso") == document.access_key
     assert info_tributaria.findtext("ruc") == "1799999999001"
     assert info_tributaria.findtext("estab") == "001"
@@ -224,6 +228,7 @@ def test_invoice_xml_final_consumer_uses_generic_identification() -> None:
         tenant_legal_name="IAERP Demo S.A.",
         tenant_commercial_address="Av. Amazonas N30",
         buyer=buyer,
+        environment_code="1",
     )
     info_factura = result.root.find("infoFactura")
     assert info_factura is not None
@@ -245,6 +250,7 @@ def test_build_credit_note_xml_structure() -> None:
         tenant_legal_name="IAERP Demo S.A.",
         tenant_commercial_address="Av. Amazonas N30",
         buyer=buyer,
+        environment_code="1",
         related_invoice_sequential_full="001-001-000000042",
         related_invoice_issue_date=date(2024, 3, 15),
         related_invoice_access_key="1" * 49,
@@ -279,6 +285,7 @@ def test_build_credit_note_xml_rejects_invoice_document() -> None:
             tenant_legal_name="IAERP Demo S.A.",
             tenant_commercial_address="Av. Amazonas N30",
             buyer=_buyer(),
+            environment_code="1",
             related_invoice_sequential_full="001-001-000000042",
             related_invoice_issue_date=date(2024, 3, 15),
             related_invoice_access_key="1" * 49,
@@ -362,6 +369,7 @@ def test_mixed_tax_groups_produce_multiple_total_impuesto_entries() -> None:
         tenant_legal_name="IAERP Demo S.A.",
         tenant_commercial_address="Av. Amazonas N30",
         buyer=_buyer(),
+        environment_code="1",
     )
     info_factura = result.root.find("infoFactura")
     assert info_factura is not None
