@@ -16,6 +16,9 @@ import {
   type AccountItemStatus,
   type ArtifactDownload,
   type CollectionPolicy,
+  type CommercialContract,
+  type ContractArtifactDownload,
+  type ContractVersion,
   type DiscountInput,
   type DocumentArtifact,
   type EmissionPoint,
@@ -65,7 +68,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionLoadingSkeleton } from './components/LoadingSkeleton'
 import { useToast } from './components/Toast'
 
-type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'crm'
+type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'contracts' | 'crm'
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
   minimumFractionDigits: 2,
@@ -277,9 +280,11 @@ function Overview({
 function PartiesPage({
   parties,
   token,
+  onOpenContracts,
 }: {
   parties: Party[]
   token: string
+  onOpenContracts: (partyId: string) => void
 }) {
   const queryClient = useQueryClient()
   const [query, setQuery] = useState('')
@@ -431,6 +436,11 @@ function PartiesPage({
                         >
                           Editar
                         </ErpButton>
+                        {party.roles.includes('CUSTOMER') ? (
+                          <ErpButton variant="ghost" onClick={() => onOpenContracts(party.id)}>
+                            Contratos
+                          </ErpButton>
+                        ) : null}
                       </ErpActionCell>
                     </td>
                   </tr>
@@ -451,6 +461,139 @@ function PartiesPage({
           </div>
         </ErpPanel>
       </section>
+    </>
+  )
+}
+
+function ContractsPage({
+  parties,
+  token,
+  initialPartyId,
+}: {
+  parties: Party[]
+  token: string
+  initialPartyId?: string
+}) {
+  const queryClient = useQueryClient()
+  const customers = parties.filter((party) => party.roles.includes('CUSTOMER'))
+  const [partyId, setPartyId] = useState(initialPartyId ?? '')
+  const [selected, setSelected] = useState<CommercialContract | null>(null)
+  const [creating, setCreating] = useState(false)
+  const contractsQuery = useQuery({
+    queryKey: ['commercial', 'contracts', partyId],
+    queryFn: () => apiRequest<CommercialContract[]>(token, `/commercial/contracts${partyId ? `?party_id=${partyId}` : ''}`),
+  })
+  const versionsQuery = useQuery({
+    queryKey: ['commercial', 'contracts', selected?.id, 'versions'],
+    queryFn: () => apiRequest<ContractVersion[]>(token, `/commercial/contracts/${selected?.id}/versions`),
+    enabled: Boolean(selected),
+  })
+  const createContract = useMutation({
+    mutationFn: (data: { partyId: string; contractNumber: string; title: string }) =>
+      apiRequest<CommercialContract>(token, '/commercial/contracts', {
+        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract') }, body: JSON.stringify(data),
+      }),
+    onSuccess: (contract) => {
+      setCreating(false)
+      setSelected(contract)
+      setPartyId(contract.partyId)
+      return queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts'] })
+    },
+  })
+  const createVersion = useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-version') }, body: JSON.stringify(data),
+    }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts', selected?.id, 'versions'] }),
+  })
+  const uploadSigned = useMutation({
+    mutationFn: async ({ versionId, file }: { versionId: string; file: File }) => {
+      const form = new FormData()
+      form.append('file', file)
+      return apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/signed-pdf`, {
+        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-pdf') }, body: form,
+      })
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts', selected?.id, 'versions'] })
+      void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts'] })
+    },
+  })
+  const downloadSigned = useMutation({
+    mutationFn: (versionId: string) => apiRequest<ContractArtifactDownload>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/signed-pdf`),
+    onSuccess: (artifact) => window.open(artifact.downloadUrl, '_blank', 'noopener,noreferrer'),
+  })
+
+  function submitContract(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    createContract.mutate({ partyId: String(data.get('partyId')), contractNumber: String(data.get('contractNumber')).trim(), title: String(data.get('title')).trim() })
+  }
+  function submitVersion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    createVersion.mutate({
+      validFrom: String(data.get('validFrom')),
+      validTo: String(data.get('validTo')) || null,
+      paymentTermsDays: Number(data.get('paymentTermsDays')),
+      renewalNoticeDays: data.get('renewalNoticeDays') === '' ? null : Number(data.get('renewalNoticeDays')),
+      pricingRules: [{ type: 'FIXED_MONTHLY', amount: String(data.get('amount')), currency: 'USD' }],
+      amendsVersionId: versionsQuery.data?.[0]?.id ?? null,
+    })
+  }
+  function submitPdf(event: FormEvent<HTMLFormElement>, versionId: string) {
+    event.preventDefault()
+    const file = new FormData(event.currentTarget).get('file')
+    if (file instanceof File && file.size > 0) uploadSigned.mutate({ versionId, file })
+  }
+
+  if (creating) return (
+    <>
+      <ErpPageHeader eyebrow="Comercial" title="Nuevo contrato" subtitle="Crea el registro comercial antes de agregar versiones o el PDF firmado." />
+      <ErpFormPanel eyebrow="Contrato" title="Datos del contrato" submitLabel="Guardar contrato" pending={createContract.isPending} error={createContract.error?.message} onSubmit={submitContract} onCancel={() => setCreating(false)}>
+        <label>Cliente<select name="partyId" defaultValue={partyId} required><option value="" disabled>Selecciona un cliente</option>{customers.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label>
+        <label>Número de contrato<input name="contractNumber" maxLength={80} required placeholder="CT-2026-001" /></label>
+        <label>Nombre o asunto<input name="title" maxLength={200} required placeholder="Servicios administrados AWS" /></label>
+      </ErpFormPanel>
+    </>
+  )
+
+  if (selected) return (
+    <>
+      <ErpPageHeader eyebrow="Contrato comercial" title={selected.title} subtitle={`Contrato ${selected.contractNumber}. Las versiones firmadas no se editan: se agrega una nueva versión.`} actions={<ErpButton variant="secondary" onClick={() => setSelected(null)}>Volver al listado</ErpButton>} />
+      <section className="split-layout">
+        <ErpPanel title="Versiones" count={versionsQuery.data?.length ?? 0}>
+          {versionsQuery.isPending ? <p>Cargando versiones…</p> : null}
+          {(versionsQuery.data ?? []).map((version) => (
+            <article key={version.id} className="contract-version">
+              <div><strong>Versión {version.versionNumber}</strong><p>{version.validFrom}{version.validTo ? ` a ${version.validTo}` : ' en adelante'} · {version.paymentTermsDays} días de pago</p></div>
+              <ErpStatusBadge tone={version.status === 'SIGNED' || version.status === 'ACTIVE' ? 'success' : 'warning'}>{version.status === 'SIGNED' ? 'Firmada' : 'Borrador'}</ErpStatusBadge>
+              {version.signedArtifactSha256 ? <><p className="fine-print">PDF privado registrado · SHA-256 {version.signedArtifactSha256.slice(0, 12)}…</p><ErpButton variant="ghost" onClick={() => downloadSigned.mutate(version.id)} disabled={downloadSigned.isPending}>Ver PDF firmado</ErpButton></> : (
+                <form className="inline-form" onSubmit={(event) => submitPdf(event, version.id)}><label>PDF firmado<input name="file" type="file" accept="application/pdf,.pdf" required /></label><ErpButton variant="secondary" type="submit" disabled={uploadSigned.isPending}>{uploadSigned.isPending ? 'Guardando…' : 'Guardar PDF y firmar'}</ErpButton></form>
+              )}
+            </article>
+          ))}
+          {versionsQuery.error ? <p className="form-error" role="alert">{versionsQuery.error.message}</p> : null}
+        </ErpPanel>
+        <ErpFormPanel eyebrow="Nueva versión" title="Términos comerciales" submitLabel="Agregar versión" pending={createVersion.isPending} error={createVersion.error?.message} onSubmit={submitVersion} onCancel={() => setSelected(null)}>
+          <label>Vigente desde<input name="validFrom" type="date" defaultValue={todayInFiscalTimezone()} required /></label>
+          <label>Vigente hasta (opcional)<input name="validTo" type="date" /></label>
+          <div className="field-row"><label>Pago en días<input name="paymentTermsDays" type="number" min="0" max="365" defaultValue="30" required /></label><label>Aviso de renovación (días)<input name="renewalNoticeDays" type="number" min="0" max="365" /></label></div>
+          <label>Valor mensual USD<input name="amount" type="number" min="0" step="0.01" required /></label>
+          <p className="fine-print">Esta versión es comercial. No crea ni emite una factura SRI.</p>
+        </ErpFormPanel>
+      </section>
+    </>
+  )
+
+  return (
+    <>
+      <ErpPageHeader eyebrow="Comercial" title="Contratos" subtitle="Contratos y versiones comerciales por cliente. Los PDF firmados se guardan de forma privada." actions={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} />
+      <ErpToolbar ariaLabel="Filtros de contratos"><label>Cliente<select value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Todos los clientes</option>{customers.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label></ErpToolbar>
+      <ErpPanel title="Listado comercial" count={contractsQuery.data?.length ?? 0}>
+        <div className="table-wrap" tabIndex={0} aria-label="Listado de contratos"><table className="erp-responsive-table"><thead><tr><th>Contrato</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{(contractsQuery.data ?? []).map((contract) => <tr key={contract.id}><td><strong>{contract.contractNumber}</strong><small>{contract.title}</small></td><td>{parties.find((party) => party.id === contract.partyId)?.name ?? 'Cliente'}</td><td><ErpStatusBadge tone={contract.status === 'SIGNED' || contract.status === 'ACTIVE' ? 'success' : 'warning'}>{contract.status === 'SIGNED' ? 'Firmado' : 'Borrador'}</ErpStatusBadge></td><td><ErpActionCell><ErpButton variant="ghost" onClick={() => setSelected(contract)}>Abrir</ErpButton></ErpActionCell></td></tr>)}</tbody></table>{!contractsQuery.isPending && (contractsQuery.data ?? []).length === 0 ? <ErpEmptyState title="No hay contratos" description="Crea un contrato para un cliente y agrega su primera versión." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} /> : null}</div>
+        {contractsQuery.error ? <p className="form-error" role="alert">{contractsQuery.error.message}</p> : null}
+      </ErpPanel>
     </>
   )
 }
@@ -2632,6 +2775,7 @@ function OrganizationPage({
 function Workspace() {
   const auth = useAuth()
   const [section, setSection] = useState<Section>('overview')
+  const [contractPartyId, setContractPartyId] = useState<string | undefined>()
   const tokenQuery = useQueries({
     queries: [{
       queryKey: ['auth-token'],
@@ -2668,14 +2812,17 @@ function Workspace() {
       <a className="skip-link" href="#main-content">Saltar al contenido</a>
       <Sidebar
         currentSection={section}
-        onNavigate={(newSection) => startTransition(() => setSection(newSection))}
+        onNavigate={(newSection) => {
+          if (newSection !== 'contracts') setContractPartyId(undefined)
+          startTransition(() => setSection(newSection))
+        }}
         organizationName={contextQuery.data.name}
         ruc={contextQuery.data.ruc}
       />
       <main id="main-content" tabIndex={-1}>
        <div key={section} className="section-fade">
         {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}
-        {section === 'parties' ? <PartiesPage parties={parties} token={token} /> : null}
+        {section === 'parties' ? <PartiesPage parties={parties} token={token} onOpenContracts={(partyId) => { setContractPartyId(partyId); startTransition(() => setSection('contracts')) }} /> : null}
         {section === 'catalogs' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
         {section === 'invoices' ? (
           <InvoicesPage
@@ -2690,6 +2837,7 @@ function Workspace() {
         ) : null}
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
+        {section === 'contracts' ? <ContractsPage key={contractPartyId ?? 'all-contracts'} parties={parties} token={token} initialPartyId={contractPartyId} /> : null}
         {section === 'crm' ? (
           <ErrorBoundary label="el CRM">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando CRM…" />}>

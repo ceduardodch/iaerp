@@ -48,6 +48,36 @@ export type TaxCategoryInput = {
   validFrom: string
 }
 
+export type CommercialContract = {
+  id: string
+  partyId: string
+  contractNumber: string
+  title: string
+  status: 'DRAFT' | 'PENDING_SIGNATURE' | 'SIGNED' | 'ACTIVE' | 'EXPIRED' | 'SUPERSEDED' | 'CANCELLED'
+  currentVersionId: string | null
+}
+
+export type ContractVersion = {
+  id: string
+  contractId: string
+  versionNumber: number
+  status: CommercialContract['status']
+  validFrom: string
+  validTo: string | null
+  paymentTermsDays: number
+  renewalNoticeDays: number | null
+  pricingRules: Array<Record<string, unknown>>
+  amendsVersionId: string | null
+  signedAt: string | null
+  signedArtifactSha256: string | null
+}
+
+export type ContractArtifactDownload = {
+  downloadUrl: string
+  expiresInSeconds: number
+  fileName: string
+}
+
 export type Establishment = {
   id: string
   code: string

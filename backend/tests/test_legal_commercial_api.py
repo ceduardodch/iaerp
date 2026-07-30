@@ -18,7 +18,7 @@ async def _customer(client, token: str, number: str) -> str:
 
 
 async def test_commercial_contract_version_and_proposal_are_tenant_scoped(client):
-    scopes = ["parties:write", "commercial:write"]
+    scopes = ["parties:write", "commercial:read", "commercial:write"]
     token_a = await token_for(client, "a@iaerp.local", TENANT_A, scopes)
     token_b = await token_for(client, "b@iaerp.local", TENANT_B, scopes)
     customer_a = await _customer(client, token_a, "1790000000101")
@@ -40,6 +40,24 @@ async def test_commercial_contract_version_and_proposal_are_tenant_scoped(client
         },
     )
     assert version.status_code == 201, version.text
+
+    contracts = await client.get(
+        "/api/v1/commercial/contracts", headers={"Authorization": f"Bearer {token_a}"}
+    )
+    assert contracts.status_code == 200, contracts.text
+    assert [item["id"] for item in contracts.json()] == [contract.json()["id"]]
+    versions = await client.get(
+        f"/api/v1/commercial/contracts/{contract.json()['id']}/versions",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert versions.status_code == 200, versions.text
+    assert versions.json()[0]["id"] == version.json()["id"]
+
+    foreign_contracts = await client.get(
+        "/api/v1/commercial/contracts", headers={"Authorization": f"Bearer {token_b}"}
+    )
+    assert foreign_contracts.status_code == 200
+    assert foreign_contracts.json() == []
 
     foreign_proposal = await client.post(
         "/api/v1/commercial/billing-proposals",

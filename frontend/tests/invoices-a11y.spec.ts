@@ -111,12 +111,25 @@ const duplicatedInvoice = {
   sriTransmission: null,
 }
 
+const commercialContract = {
+  id: '61616161-6161-4616-8616-616161616161',
+  partyId: customer.id,
+  contractNumber: 'CT-2026-001',
+  title: 'Servicios administrados AWS',
+  status: 'DRAFT',
+  currentVersionId: null,
+}
+
 async function mockApi(page: Page) {
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
   await page.route('**/api/v1/context', (route) => route.fulfill({ json: context }))
   await page.route('**/api/v1/parties', (route) => route.fulfill({ json: [customer] }))
+  await page.route('**/api/v1/commercial/contracts**', (route) => {
+    if (route.request().url().endsWith('/versions')) return route.fulfill({ json: [] })
+    return route.fulfill({ json: [commercialContract] })
+  })
   await page.route('**/api/v1/products', (route) => route.fulfill({ json: [product] }))
   await page.route('**/api/v1/tax-categories', (route) =>
     route.fulfill({
@@ -336,6 +349,17 @@ test('duplicate creates a separate draft from a rejected invoice', async ({ page
   await expect(page.getByText('BORRADOR', { exact: true })).toBeVisible()
   await expect(page.getByText('RUC del cliente no encontrado')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Emitir' })).toBeEnabled()
+})
+
+test('contracts are reachable from navigation and customer details', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await page.getByRole('button', { name: 'Contratos' }).click()
+  await expect(page.getByRole('heading', { name: 'Contratos', exact: true })).toBeVisible()
+  await expect(page.getByText('CT-2026-001', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Abrir' }).click()
+  await expect(page.getByRole('heading', { name: 'Servicios administrados AWS' })).toBeVisible()
+  await expectNoA11yViolations(page)
 })
 
 test('invoices screens reflow at 320 CSS px and at 200% zoom without horizontal scroll', async ({
