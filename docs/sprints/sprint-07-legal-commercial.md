@@ -33,7 +33,8 @@ Estados: contrato `DRAFT`, `PENDING_SIGNATURE`, `SIGNED`, `ACTIVE`, `EXPIRED`,
 
 ## Contratos públicos previstos
 
-- REST: contratos/versiones/artefactos, cortes, propuestas y `GET /parties/{id}/dossier`.
+- REST: contratos/versiones y PDF firmado privado ya disponibles; cortes,
+  propuestas y `GET /parties/{id}/dossier` siguen pendientes.
 - La creación de factura recibe `billingProposalId` o una excepción explícita;
   el servidor, no el cliente, calcula y persiste el snapshot.
 - MCP de solo lectura: `commercial.dossier.get`, `commercial.contracts.list`

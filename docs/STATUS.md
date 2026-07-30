@@ -8,6 +8,14 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-30 `America/Guayaquil`.
+  Contratos ya tiene interfaz: menú propio, filtro por cliente, alta de
+  contrato, versiones comerciales y carga privada de PDF firmado con checksum
+  SHA-256 y descarga temporal autorizada. Las versiones firmadas quedan
+  inmutables; una nueva condición se registra como otra versión. No crea ni
+  emite comprobantes SRI. Validado con Ruff, mypy, pruebas API focalizadas,
+  lint, build y Playwright desktop/móvil; pendiente CI y promoción autorizada.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
   Cartera permite corregir el vencimiento de una factura histórica de una sola
   cuota, con motivo obligatorio. Sin cambiar XML, autorización ni RIDE SRI,
   actualiza tanto la cuota de cartera como el plan comercial que muestra la
@@ -138,6 +146,20 @@ alcance y las decisiones.
   RIDE inicial y se genera la versión 2 con número y fecha/hora de
   autorización SRI. Validado con Ruff, mypy, pruebas del RIDE y revisión
   visual renderizada; pendiente de la puerta CI antes de promoción.
+
+- Actualización local: 2026-07-29 `America/Guayaquil`.
+  El RIDE de nuevos comprobantes adopta formato A4 con cabecera fiscal, bloque
+  de clave de acceso, comprador, detalle y totales consistentes. La emisión
+  SOAP ahora bloquea antes de firmar si el ambiente fiscal del tenant no
+  coincide con `SRI_ENVIRONMENT`, evitando XML que el SRI devolvería por
+  discrepancia de ambiente. Validado localmente con Ruff y seis pruebas
+  focalizadas; pendiente CI y promoción autorizada. Los documentos históricos
+  no se alteran y un rechazo SRI se reemite únicamente como comprobante nuevo.
+  Facturas incorpora **Duplicar**: copia una factura del tenant como borrador
+  nuevo, recalcula con la política vigente y nunca arrastra XML/RIDE, clave de
+  acceso, autorización, transmisión ni cobros. Conserva las cuotas relativas
+  solo si el total permanece igual; de otro modo deja el nuevo total para
+  revisión antes de emitir.
 
 - Actualización local: 2026-07-29 `America/Guayaquil`.
   El RIDE de nuevos comprobantes adopta formato A4 con cabecera fiscal, bloque
