@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -220,9 +221,16 @@ async def test_duplicate_invoice_creates_a_new_draft_without_fiscal_artifacts(cl
     assert len(copied["lines"]) == len(original.json()["lines"])
     assert copied["lines"][0]["description"] == original.json()["lines"][0]["description"]
     assert copied["lines"][0]["baseAmount"] == original.json()["lines"][0]["baseAmount"]
+    source_issue_date = date.fromisoformat(original.json()["issueDate"])
+    copied_issue_date = date.fromisoformat(copied["issueDate"])
     assert copied["installments"] == [
-        {"dueDate": "2026-08-29", "amount": "60.00"},
-        {"dueDate": "2026-09-29", "amount": "55.00"},
+        {
+            "dueDate": (
+                copied_issue_date + (date.fromisoformat(installment["dueDate"]) - source_issue_date)
+            ).isoformat(),
+            "amount": installment["amount"],
+        }
+        for installment in original.json()["installments"]
     ]
 
 

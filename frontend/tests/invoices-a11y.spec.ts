@@ -297,7 +297,7 @@ test('authorized invoice detail shows SRI transmission, artifacts and credit not
 
   const detail = page.getByLabel(`Factura ${authorizedInvoice.sequential}`, { exact: true })
   await expect(page.getByRole('heading', { name: `Factura ${authorizedInvoice.sequential}` })).toBeVisible()
-  await expect(detail.getByText('AUTORIZADA', { exact: true })).toBeVisible()
+  await expect(detail.getByLabel('Estado SRI').getByText('AUTORIZADA', { exact: true })).toBeVisible()
   await expect(detail.getByText('Comprobante autorizado')).toBeVisible()
   await expect(detail.getByText(authorizedInvoice.sriTransmission.authorizationNumber)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Descargar XML firmado' })).toBeVisible()
@@ -320,7 +320,7 @@ test('rejected invoice shows an accessible SRI message', async ({ page }) => {
     .click()
 
   const detail = page.getByLabel(`Factura ${rejectedInvoice.sequential}`, { exact: true })
-  await expect(detail.getByText('RECHAZADA', { exact: true })).toBeVisible()
+  await expect(detail.getByLabel('Estado SRI').getByText('RECHAZADA', { exact: true })).toBeVisible()
   await expect(detail.getByText('RUC del cliente no encontrado')).toBeVisible()
 })
 
