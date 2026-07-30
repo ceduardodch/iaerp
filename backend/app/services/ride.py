@@ -283,7 +283,9 @@ def build_ride_pdf(
     line_table = Table(
         line_rows,
         hAlign="LEFT",
-        colWidths=[1.5 * cm, 1.5 * cm, 7.7 * cm, 2.35 * cm, 2.0 * cm, 2.35 * cm],
+        # Debe ocupar exactamente el mismo ancho que comprador y el bloque
+        # inferior; así el borde derecho de totales coincide con el detalle.
+        colWidths=[1.5 * cm, 1.5 * cm, 9.0 * cm, 2.35 * cm, 2.0 * cm, 2.35 * cm],
         repeatRows=1,
     )
     line_table.setStyle(
@@ -337,7 +339,7 @@ def build_ride_pdf(
             ["VALOR TOTAL", _format_amount(document.total)],
         ]
     )
-    totals_table = Table(totals_rows, colWidths=[4.2 * cm, 2.6 * cm])
+    totals_table = Table(totals_rows, colWidths=[4.4 * cm, 2.6 * cm])
     totals_table.setStyle(
         TableStyle(
             [

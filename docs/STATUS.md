@@ -8,6 +8,11 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-29 `America/Guayaquil`.
+  El detalle y el cuadro de totales del RIDE comparten ahora el mismo ancho y
+  borde derecho; se verificó mediante renderizado visual del PDF y pruebas
+  del servicio. Pendiente CI y promoción autorizada.
+
+- Actualización local: 2026-07-29 `America/Guayaquil`.
   La generación XML ya no usa el UUID interno como `codigoPrincipal`: conserva
   el código comercial facturado y, para históricos o códigos mayores a 25
   caracteres, emite un identificador corto compatible con SRI. Empresa permite
