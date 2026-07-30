@@ -7,6 +7,16 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  La firma XAdES conserva e incorpora en el XML los certificados intermedios
+  incluidos en el PKCS#12, en vez de descartarlos al cargarlo. Esto permite al
+  SRI construir la cadena de confianza del certificado firmante. Se validó con
+  un PKCS#12 sintético de emisor + firmante, pruebas de firma, emisión y
+  configuración fiscal; pendiente CI y promoción autorizada. Un comprobante
+  rechazado por firma se conserva inmutable y se duplica/emite como nuevo tras
+  confirmar que el certificado cargado proviene de una entidad certificadora
+  acreditada y contiene su cadena.
+
 - Actualización local: 2026-07-29 `America/Guayaquil`.
   El detalle y el cuadro de totales del RIDE comparten ahora el mismo ancho y
   borde derecho; se verificó mediante renderizado visual del PDF y pruebas

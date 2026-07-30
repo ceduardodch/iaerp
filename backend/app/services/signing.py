@@ -85,12 +85,16 @@ def load_signing_credentials(
     cert_path: Path | None = None,
     password: bytes | None = None,
     p12_bytes: bytes | None = None,
-) -> tuple[bytes, bytes, bytes]:
+) -> tuple[bytes, bytes, bytes, list[bytes]]:
     """Carga la clave privada, certificado y bytes DER del certificado desde el .p12.
 
-    Retorna ``(private_key_pem, certificate_pem, certificate_der)``. Genera el
-    certificado de prueba automaticamente en dev/test si el archivo no existe
-    todavia (ver ``_ensure_dev_certificate_exists``).
+    Retorna ``(private_key_pem, certificate_pem, certificate_der,
+    certificate_chain_pem)``. La cadena conserva los certificados intermedios
+    que vienen dentro del PKCS#12, pues el SRI necesita poder construir una
+    cadena de confianza desde el certificado firmante.
+
+    Genera el certificado de prueba automaticamente en dev/test si el archivo
+    no existe todavia (ver ``_ensure_dev_certificate_exists``).
     """
 
     resolved_path = cert_path or _resolve_cert_path()
@@ -102,7 +106,7 @@ def load_signing_credentials(
     from cryptography.hazmat.primitives import serialization
 
     certificate_bytes = p12_bytes if p12_bytes is not None else resolved_path.read_bytes()
-    private_key, certificate, _additional_certs = pkcs12.load_key_and_certificates(
+    private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
         certificate_bytes, resolved_password
     )
     if private_key is None or certificate is None:
@@ -115,7 +119,11 @@ def load_signing_credentials(
     )
     certificate_pem = certificate.public_bytes(serialization.Encoding.PEM)
     certificate_der = certificate.public_bytes(serialization.Encoding.DER)
-    return private_key_pem, certificate_pem, certificate_der
+    certificate_chain_pem = [
+        additional_certificate.public_bytes(serialization.Encoding.PEM)
+        for additional_certificate in additional_certs or []
+    ]
+    return private_key_pem, certificate_pem, certificate_der, certificate_chain_pem
 
 
 def certificate_fingerprint_sha256(certificate_der: bytes) -> str:
@@ -139,8 +147,8 @@ def sign_xml(
     separada). Pura: no hace I/O de red ni persiste nada.
     """
 
-    private_key_pem, certificate_pem, certificate_der = load_signing_credentials(
-        cert_path=cert_path, password=password, p12_bytes=p12_bytes
+    private_key_pem, certificate_pem, certificate_der, certificate_chain_pem = (
+        load_signing_credentials(cert_path=cert_path, password=password, p12_bytes=p12_bytes)
     )
 
     root = etree.fromstring(xml_bytes)
@@ -153,7 +161,12 @@ def sign_xml(
     signed_root = signer.sign(
         root,
         key=private_key_pem,
-        cert=certificate_pem.decode("ascii"),
+        # El primer certificado siempre es el firmante. Los siguientes son la
+        # cadena intermedia del .p12, en el orden preservado por el emisor.
+        cert=[
+            certificate_pem.decode("ascii"),
+            *[item.decode("ascii") for item in certificate_chain_pem],
+        ],
         reference_uri="#comprobante",
     )
     signed_xml = etree.tostring(
