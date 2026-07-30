@@ -63,7 +63,7 @@ from app.integrations.sri.soap import SoapSRIClient
 from app.models.billing import DocumentArtifact, SalesDocument, SalesDocumentLine, SRITransmission
 from app.models.masters import EmissionPoint, Establishment, Party
 from app.models.platform import DeadLetter, OutboxEvent, Tenant
-from app.services import ride, storage
+from app.services import fiscal_settings, ride, storage
 from app.workers.outbox import OutboxMessage, retry_delay
 
 settings = get_settings()
@@ -196,6 +196,7 @@ async def _create_authorized_ride_version(
         tenant_legal_name=tenant.name,
         buyer=buyer,
         environment_code=document.access_key[23],
+        logo_bytes=await fiscal_settings.load_ride_logo(session, tenant_id),
     )
     upload = await storage.upload_artifact(
         tenant_id=str(tenant_id),

@@ -111,6 +111,10 @@ class SalesDocumentLine(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):
     sales_document_id: Mapped[uuid.UUID]
     line_number: Mapped[int] = mapped_column(Integer)
     product_id: Mapped[uuid.UUID | None]
+    # Snapshot del código comercial para ``codigoPrincipal`` del XML SRI. El
+    # UUID interno nunca se serializa porque el esquema SRI limita este campo
+    # a 25 caracteres.
+    product_code: Mapped[str | None] = mapped_column(String(80))
     description: Mapped[str] = mapped_column(String(500))
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6))
     unit_price: Mapped[Decimal] = mapped_column(Numeric(18, 6))
@@ -152,9 +156,7 @@ class SalesDocumentInstallment(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):
             "sequence",
             name="uq_sales_document_installments_tenant_document_sequence",
         ),
-        CheckConstraint(
-            "amount > 0", name="ck_sales_document_installments_amount_positive"
-        ),
+        CheckConstraint("amount > 0", name="ck_sales_document_installments_amount_positive"),
         Index(
             "ix_sales_document_installments_document",
             "tenant_id",

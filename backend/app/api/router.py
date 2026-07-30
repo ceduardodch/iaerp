@@ -388,6 +388,39 @@ async def post_signing_certificate(
     )
 
 
+@router.post("/organization/ride-logo", response_model=FiscalSettingsRead)
+async def post_ride_logo(
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+    file: Annotated[UploadFile, File()],
+) -> dict[str, object]:
+    logo_bytes = await file.read(fiscal_settings.MAX_RIDE_LOGO_SIZE + 1)
+
+    async def upload() -> tuple[str, dict[str, object]]:
+        response = await fiscal_settings.upload_ride_logo(
+            session,
+            context,
+            filename=file.filename,
+            data=logo_bytes,
+        )
+        return str(context.tenant_id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="organization.ride_logo.upload",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "filename": file.filename,
+            "sha256": hashlib.sha256(logo_bytes).hexdigest(),
+        },
+        action="organization.ride_logo.uploaded",
+        entity_type="tenant_fiscal_settings",
+        callback=upload,
+    )
+
+
 @router.post("/establishments", response_model=EstablishmentRead, status_code=201)
 async def post_establishment(
     data: EstablishmentCreate,

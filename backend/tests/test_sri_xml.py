@@ -155,6 +155,12 @@ def test_build_invoice_xml_rejects_credit_note_document() -> None:
 
 def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
     document, lines = _build_document_and_lines()
+    lines[0].product_id = uuid.UUID("9dc7444d-7752-4add-ab05-52339e82678b")
+    lines[0].product_code = "AWS-CLOUDAWS-202607"
+    lines[1].product_id = uuid.UUID("f52e599b-0bfb-43d4-a752-9bf85b3070db")
+    # El codigo comercial puede ser mayor al limite de SRI; el XML debe
+    # degradar a un identificador tecnico corto, nunca al UUID completo.
+    lines[1].product_code = "CODIGO-COMERCIAL-DEMASIADO-LARGO-PARA-SRI"
     establishment, emission_point = _establishment_and_point()
     buyer = _buyer()
 
@@ -203,7 +209,10 @@ def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
 
     detalles = root.findall("detalles/detalle")
     assert len(detalles) == 3
+    assert detalles[0].findtext("codigoPrincipal") == "AWS-CLOUDAWS-202607"
+    assert detalles[1].findtext("codigoPrincipal") == "ITEM-F52E599B"
     for detalle in detalles:
+        assert len(detalle.findtext("codigoPrincipal") or "") <= 25
         assert detalle.findtext("cantidad") == "1.000000"
         assert detalle.findtext("precioUnitario") == "1.050000"
         assert detalle.findtext("precioTotalSinImpuesto") == "1.05"

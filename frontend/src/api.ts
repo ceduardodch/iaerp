@@ -167,6 +167,7 @@ export type ArtifactDownload = {
 export type FiscalSettings = {
   sriEnvironment: '1' | '2'
   certificateConfigured: boolean
+  rideLogoConfigured: boolean
   certificateFingerprintSha256?: string | null
   certificateSubject?: string | null
   certificateValidFrom?: string | null

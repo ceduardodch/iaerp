@@ -1,7 +1,9 @@
 import uuid
+from io import BytesIO
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from app.db.session import SessionFactory
 from app.models.platform import TenantFiscalSettings
@@ -29,6 +31,12 @@ def _headers(token: str, key: str | None = None) -> dict[str, str]:
     if key:
         result["Idempotency-Key"] = key
     return result
+
+
+def _ride_logo_png() -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (240, 80), color="white").save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 @pytest.mark.asyncio
@@ -100,6 +108,7 @@ async def test_update_sri_environment_never_exposes_secret(client) -> None:
     assert response.json() == {
         "sriEnvironment": "2",
         "certificateConfigured": False,
+        "rideLogoConfigured": False,
         "certificateFingerprintSha256": None,
         "certificateSubject": None,
         "certificateValidFrom": None,
@@ -113,6 +122,35 @@ async def test_update_sri_environment_never_exposes_secret(client) -> None:
     )
     assert read.status_code == 200
     assert read.json()["sriEnvironment"] == "2"
+
+
+@pytest.mark.asyncio
+async def test_upload_ride_logo_is_tenant_scoped_and_private(client, monkeypatch) -> None:
+    token = await _token(client, ["organization:write"])
+    logo_bytes = _ride_logo_png()
+    uploaded: dict[str, tuple[bytes, str | None]] = {}
+
+    async def fake_upload(*, object_key: str, data: bytes, content_type: str | None = None):
+        uploaded[object_key] = (data, content_type)
+
+    monkeypatch.setattr(fiscal_settings.storage, "upload_private_object", fake_upload)
+    response = await client.post(
+        "/api/v1/organization/ride-logo",
+        headers=_headers(token, "ride-logo-upload-key"),
+        files={"file": ("empresa.png", logo_bytes, "image/png")},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["rideLogoConfigured"] is True
+    object_key = f"{TENANT_A}/fiscal/ride-logo.png"
+    assert uploaded[object_key] == (logo_bytes, "image/png")
+
+    async with SessionFactory() as session:
+        entity = await session.get(TenantFiscalSettings, TENANT_A)
+        assert entity is not None
+        assert entity.ride_logo_object_key == object_key
+        assert entity.ride_logo_sha256 is not None
+        assert len(entity.ride_logo_sha256) == 64
 
 
 @pytest.mark.asyncio

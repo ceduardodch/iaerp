@@ -22,7 +22,9 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
+    Image,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -113,6 +115,18 @@ def _format_authorized_at(value: datetime | None) -> str:
     return value.astimezone(ZoneInfo("America/Guayaquil")).strftime("%d/%m/%Y %H:%M:%S %Z")
 
 
+def _ride_logo(logo_bytes: bytes | None) -> Image | None:
+    if not logo_bytes:
+        return None
+    try:
+        image_reader = ImageReader(io.BytesIO(logo_bytes))
+        width, height = image_reader.getSize()
+        scale = min((6.0 * cm) / width, (2.7 * cm) / height)
+        return Image(io.BytesIO(logo_bytes), width=width * scale, height=height * scale)
+    except Exception:  # noqa: BLE001 - una imagen inválida no debe impedir facturar
+        return None
+
+
 def build_ride_pdf(
     *,
     document: SalesDocument,
@@ -123,6 +137,7 @@ def build_ride_pdf(
     tenant_legal_name: str,
     buyer: Party,
     environment_code: str,
+    logo_bytes: bytes | None = None,
 ) -> bytes:
     """Genera el RIDE en PDF a partir de los mismos datos que el XML firmado.
 
@@ -173,9 +188,12 @@ def build_ride_pdf(
     full_number = _full_document_number(establishment, emission_point, document)
     authorization_number = document.authorization_number or "PENDIENTE DE AUTORIZACIÓN"
 
+    issuer_brand = _ride_logo(logo_bytes) or Paragraph(
+        "<b>B<span color='#A6C737'>2</span>B</b>", brand_style
+    )
     issuer = Table(
         [
-            [Paragraph("<b>B<span color='#A6C737'>2</span>B</b>", brand_style)],
+            [issuer_brand],
             [_paragraph(tenant_legal_name, heading_style)],
             [_paragraph(f"Emisor: {tenant_legal_name}", body_style)],
             [_paragraph(f"Matriz: {establishment.address}", body_style)],

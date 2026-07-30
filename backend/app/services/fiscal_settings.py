@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import uuid
 from datetime import UTC, datetime
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.serialization import Encoding, pkcs12
 from fastapi import HTTPException
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
@@ -17,6 +19,8 @@ from app.schemas.platform import FiscalSettingsRead, FiscalSettingsUpdate
 from app.services import storage
 
 MAX_CERTIFICATE_SIZE = 2 * 1024 * 1024
+MAX_RIDE_LOGO_SIZE = 1 * 1024 * 1024
+MAX_RIDE_LOGO_PIXELS = 12_000_000
 
 
 def _fernet() -> Fernet:
@@ -63,6 +67,7 @@ def to_read(entity: TenantFiscalSettings) -> FiscalSettingsRead:
         certificate_configured=bool(
             entity.certificate_object_key and entity.certificate_password_encrypted
         ),
+        ride_logo_configured=bool(entity.ride_logo_object_key and entity.ride_logo_sha256),
         certificate_fingerprint_sha256=entity.certificate_fingerprint_sha256,
         certificate_subject=entity.certificate_subject,
         certificate_valid_from=entity.certificate_valid_from,
@@ -87,6 +92,45 @@ async def update_settings(
     entity.sri_environment = data.sri_environment
     await session.flush()
     return to_read(entity)
+
+
+async def upload_ride_logo(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    filename: str | None,
+    data: bytes,
+) -> FiscalSettingsRead:
+    if not filename or not filename.lower().endswith((".png", ".jpg", ".jpeg")):
+        raise HTTPException(status_code=422, detail="RIDE logo must be a PNG or JPEG image")
+    if not data or len(data) > MAX_RIDE_LOGO_SIZE:
+        raise HTTPException(status_code=422, detail="RIDE logo must be between 1 byte and 1 MB")
+    try:
+        image = Image.open(io.BytesIO(data))
+        image.verify()
+        width, height = image.size
+    except (UnidentifiedImageError, OSError) as exc:
+        raise HTTPException(status_code=422, detail="RIDE logo is not a valid image") from exc
+    if width * height > MAX_RIDE_LOGO_PIXELS:
+        raise HTTPException(status_code=422, detail="RIDE logo dimensions are too large")
+
+    extension = "png" if filename.lower().endswith(".png") else "jpg"
+    content_type = "image/png" if extension == "png" else "image/jpeg"
+    object_key = f"{context.tenant_id}/fiscal/ride-logo.{extension}"
+    await storage.upload_private_object(object_key=object_key, data=data, content_type=content_type)
+
+    entity = await get_or_create(session, context.tenant_id)
+    entity.ride_logo_object_key = object_key
+    entity.ride_logo_sha256 = hashlib.sha256(data).hexdigest()
+    await session.flush()
+    return to_read(entity)
+
+
+async def load_ride_logo(session: AsyncSession, tenant_id: uuid.UUID) -> bytes | None:
+    entity = await session.get(TenantFiscalSettings, tenant_id)
+    if entity is None or not entity.ride_logo_object_key:
+        return None
+    return await storage.download_artifact(object_key=entity.ride_logo_object_key)
 
 
 async def upload_signing_certificate(
@@ -158,8 +202,10 @@ __all__ = [
     "decrypt_secret",
     "encrypt_secret",
     "load_tenant_signing_credentials",
+    "load_ride_logo",
     "read_settings",
     "to_read",
     "update_settings",
+    "upload_ride_logo",
     "upload_signing_certificate",
 ]

@@ -2141,10 +2141,26 @@ function OrganizationPage({
       queryClient.setQueryData(['organization', 'fiscal-settings'], settings)
     },
   })
+  const uploadRideLogo = useMutation({
+    mutationFn: (formData: FormData) =>
+      apiRequest<FiscalSettings>(token, '/organization/ride-logo', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-ride-logo') },
+        body: formData,
+      }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['organization', 'fiscal-settings'], settings)
+    },
+  })
 
   function submitCertificate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     uploadCertificate.mutate(new FormData(event.currentTarget))
+  }
+
+  function submitRideLogo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    uploadRideLogo.mutate(new FormData(event.currentTarget))
   }
 
   function submitProfile(event: FormEvent<HTMLFormElement>) {
@@ -2261,6 +2277,22 @@ function OrganizationPage({
               {uploadCertificate.error ? <p className="form-error" role="alert">{uploadCertificate.error.message}</p> : null}
               <ErpButton variant="primary" type="submit" disabled={uploadCertificate.isPending}>
                 {uploadCertificate.isPending ? 'Validando y guardando…' : fiscal?.certificateConfigured ? 'Reemplazar certificado' : 'Guardar certificado'}
+              </ErpButton>
+            </form>
+          </div>
+        </ErpPanel>
+        <ErpPanel
+          title="Logo en factura (RIDE)"
+          actions={fiscal?.rideLogoConfigured ? <ErpStatusBadge tone="success">Configurado</ErpStatusBadge> : <ErpStatusBadge tone="neutral">Opcional</ErpStatusBadge>}
+          className="fiscal-settings-panel"
+        >
+          <div className="fiscal-panel-body">
+            <p className="fiscal-panel-copy">Carga el logo que debe aparecer en los nuevos RIDE. Se almacena de forma privada y no modifica documentos ya emitidos.</p>
+            <form className="certificate-form" onSubmit={submitRideLogo}>
+              <label>Logo PNG o JPG (máx. 1 MB)<input name="file" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" required /></label>
+              {uploadRideLogo.error ? <p className="form-error" role="alert">{uploadRideLogo.error.message}</p> : null}
+              <ErpButton variant="primary" type="submit" disabled={uploadRideLogo.isPending}>
+                {uploadRideLogo.isPending ? 'Validando y guardando…' : fiscal?.rideLogoConfigured ? 'Reemplazar logo' : 'Guardar logo'}
               </ErpButton>
             </form>
           </div>

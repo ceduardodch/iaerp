@@ -8,6 +8,16 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-29 `America/Guayaquil`.
+  La generación XML ya no usa el UUID interno como `codigoPrincipal`: conserva
+  el código comercial facturado y, para históricos o códigos mayores a 25
+  caracteres, emite un identificador corto compatible con SRI. Empresa permite
+  cargar de forma privada el logo PNG/JPEG para los nuevos RIDE; se conserva
+  el respaldo textual cuando no exista logo. Validado con Ruff, mypy, pruebas
+  de XML/Empresa/RIDE, pruebas de emisión y lint/build frontend; pendiente CI
+  y promoción autorizada. Un comprobante ya rechazado no se modifica: debe
+  duplicarse/reemitirse como documento nuevo tras la promoción.
+
+- Actualización local: 2026-07-29 `America/Guayaquil`.
   El RIDE se rediseñó a partir de la referencia fiscal entregada: cabecera
   compacta, bloque de RUC/documento, clave de acceso, ambiente, comprador,
   detalle y totales alineados. Al autorizarse un comprobante se conserva el

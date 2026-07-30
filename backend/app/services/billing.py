@@ -318,13 +318,17 @@ async def create_invoice_draft(
 
     line_inputs: list[LineInput] = []
     line_products: list[uuid.UUID | None] = []
+    line_product_codes: list[str | None] = []
     line_descriptions: list[str] = []
     for line in data.lines:
         tax_category = await _get_tenant_scoped_tax_category_by_code(
             session, context, line.tax_code
         )
-        if line.product_id is not None:
+        product = (
             await _get_tenant_scoped_product(session, context, line.product_id)
+            if line.product_id is not None
+            else None
+        )
         line_inputs.append(
             LineInput(
                 quantity=line.quantity,
@@ -335,6 +339,7 @@ async def create_invoice_draft(
             )
         )
         line_products.append(line.product_id)
+        line_product_codes.append(product.code if product is not None else None)
         line_descriptions.append(line.description)
 
     calculation = policy.calculate_document(line_inputs)
@@ -388,8 +393,8 @@ async def create_invoice_draft(
     session.add(document)
     await session.flush()
 
-    for index, (calculated_line, product_id, description) in enumerate(
-        zip(calculation.lines, line_products, line_descriptions, strict=True),
+    for index, (calculated_line, product_id, product_code, description) in enumerate(
+        zip(calculation.lines, line_products, line_product_codes, line_descriptions, strict=True),
         start=1,
     ):
         session.add(
@@ -398,6 +403,7 @@ async def create_invoice_draft(
                 sales_document_id=document.id,
                 line_number=index,
                 product_id=product_id,
+                product_code=product_code,
                 description=description,
                 quantity=calculated_line.quantity,
                 unit_price=calculated_line.unit_price,
@@ -602,7 +608,7 @@ async def _creditable_balance_reserved(
 def _credit_note_line_inputs(
     credit_note_data: CreditNoteInput,
     invoice_lines: list[SalesDocumentLine],
-) -> tuple[list[LineInput], list[uuid.UUID | None], list[str]]:
+) -> tuple[list[LineInput], list[uuid.UUID | None], list[str | None], list[str]]:
     """Valida y construye las lineas de la NC contra las lineas de la factura.
 
     Cada linea de la NC debe referenciar un ``product_id`` presente en la
@@ -623,6 +629,7 @@ def _credit_note_line_inputs(
 
     line_inputs: list[LineInput] = []
     line_products: list[uuid.UUID | None] = []
+    line_product_codes: list[str | None] = []
     line_descriptions: list[str] = []
 
     for credit_line in credit_note_data.lines:
@@ -680,9 +687,10 @@ def _credit_note_line_inputs(
             )
         )
         line_products.append(credit_line.product_id)
+        line_product_codes.append(source_line.product_code)
         line_descriptions.append(credit_line.description)
 
-    return line_inputs, line_products, line_descriptions
+    return line_inputs, line_products, line_product_codes, line_descriptions
 
 
 async def create_credit_note(
@@ -727,7 +735,9 @@ async def create_credit_note(
     party = await _get_tenant_scoped_party(session, context, invoice.party_id)
 
     invoice_lines = await list_sales_document_lines(session, context, invoice.id)
-    line_inputs, line_products, line_descriptions = _credit_note_line_inputs(data, invoice_lines)
+    line_inputs, line_products, line_product_codes, line_descriptions = _credit_note_line_inputs(
+        data, invoice_lines
+    )
 
     # Punto 3 del docstring: version vigente a la fecha del SUSTENTO, nunca a
     # la fecha de emision de la NC (ADR 0008 #5, vectores 6/7).
@@ -786,8 +796,8 @@ async def create_credit_note(
         )
     )
 
-    for index, (calculated_line, product_id, description) in enumerate(
-        zip(calculation.lines, line_products, line_descriptions, strict=True),
+    for index, (calculated_line, product_id, product_code, description) in enumerate(
+        zip(calculation.lines, line_products, line_product_codes, line_descriptions, strict=True),
         start=1,
     ):
         session.add(
@@ -796,6 +806,7 @@ async def create_credit_note(
                 sales_document_id=document.id,
                 line_number=index,
                 product_id=product_id,
+                product_code=product_code,
                 description=description,
                 quantity=calculated_line.quantity,
                 unit_price=calculated_line.unit_price,
@@ -1213,6 +1224,7 @@ async def issue_document(
         tenant_legal_name=tenant.name,
         buyer=party,
         environment_code=fiscal.sri_environment,
+        logo_bytes=await fiscal_settings.load_ride_logo(session, context.tenant_id),
     )
 
     xml_upload = await storage.upload_artifact(

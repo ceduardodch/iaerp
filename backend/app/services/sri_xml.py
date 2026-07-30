@@ -116,7 +116,7 @@ def _build_detalles(lines: list[SalesDocumentLine]) -> etree._Element:
     detalles = etree.Element("detalles")
     for line in lines:
         detalle = _sub(detalles, "detalle")
-        _sub(detalle, "codigoPrincipal", str(line.product_id) if line.product_id else "S/N")
+        _sub(detalle, "codigoPrincipal", _sri_principal_code(line))
         _sub(detalle, "descripcion", line.description)
         _sub(detalle, "cantidad", _format_quantity_or_price(line.quantity))
         _sub(detalle, "precioUnitario", _format_quantity_or_price(line.unit_price))
@@ -130,6 +130,22 @@ def _build_detalles(lines: list[SalesDocumentLine]) -> etree._Element:
         _sub(impuesto, "baseImponible", _format_amount(line.base_amount))
         _sub(impuesto, "valor", _format_amount(line.tax_amount))
     return detalles
+
+
+def _sri_principal_code(line: SalesDocumentLine) -> str:
+    """Devuelve un código SRI válido sin filtrar el UUID interno.
+
+    Se conserva el código de producto que existía al facturar. Para documentos
+    históricos sin snapshot, o códigos comerciales fuera del límite SRI, se
+    usa un identificador técnico corto, estable y trazable al producto.
+    """
+
+    product_code = (line.product_code or "").strip()
+    if 1 <= len(product_code) <= 25:
+        return product_code
+    if line.product_id is not None:
+        return f"ITEM-{str(line.product_id).split('-', maxsplit=1)[0].upper()}"
+    return "S/N"
 
 
 def _buyer_identification_code(identification_type: str) -> str:
