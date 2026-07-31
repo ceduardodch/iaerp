@@ -915,6 +915,29 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
 .activity-timeline time { font-size: .75rem; color: var(--muted); }
 .lead-detail-empty { color: var(--muted); font-size: .88rem; }
 
+/* Facturas agrupadas por periodo */
+.invoice-month-list { display: grid; gap: .75rem; }
+.invoice-month-accordion { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.invoice-month-accordion > summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; cursor: pointer; list-style: none; color: var(--ink); }
+.invoice-month-accordion > summary::-webkit-details-marker { display: none; }
+.invoice-month-accordion > summary::after { content: '⌄'; flex: 0 0 auto; font-size: 1.2rem; line-height: 1; transition: transform 160ms ease; }
+.invoice-month-accordion[open] > summary { border-bottom: 1px solid var(--line); background: rgba(216, 239, 133, .16); }
+.invoice-month-accordion[open] > summary::after { transform: rotate(180deg); }
+.invoice-month-accordion > summary:focus-visible { outline: 3px solid var(--lime); outline-offset: -3px; }
+.invoice-month-title { font-weight: 700; text-transform: capitalize; }
+.invoice-month-summary { color: var(--muted); font-size: .86rem; white-space: nowrap; }
+.invoice-month-accordion .table-wrap { border: 0; border-radius: 0; }
+.retention-batch-results { display: grid; gap: .8rem; padding-top: .4rem; }
+.retention-batch-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.retention-batch-heading h3 { margin: 0; font-size: .98rem; }
+.retention-batch-heading span { color: var(--muted); font-size: .84rem; }
+@media (max-width: 640px) {
+  .invoice-month-accordion > summary { align-items: flex-start; padding: .8rem; }
+  .invoice-month-accordion > summary::after { order: -1; }
+  .invoice-month-summary { white-space: normal; }
+  .retention-batch-heading { align-items: flex-start; flex-direction: column; gap: .2rem; }
+}
+
 /* Contraste AA (axe): colores del kanban por debajo de 4.5:1 en el fondo
    #edeae1/#f7f5f1. Se oscurecen títulos de columna, totales y score. */
 .kanban-column h2 { color: var(--ink); }

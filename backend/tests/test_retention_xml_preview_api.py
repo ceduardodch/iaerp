@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionFactory
 from app.models.masters import Party
-from app.models.receivables import Receivable
+from app.models.receivables import Movement, Receivable
 from tests.test_billing_api import TENANT_A, auth, token_for
 from tests.test_receivables_payments_api import _create_receivable_via_event
 
@@ -129,6 +129,67 @@ async def test_preview_accepts_legacy_sri_retention_xml(client) -> None:
     )
     assert response.status_code == 200, response.text
     assert response.json()["retentions"][0]["amount"] == "15.00"
+
+
+async def test_batch_preview_then_registers_matched_xml_once(client) -> None:
+    receivable_id, issuer_ruc, support = await _setup_preview_receivable(client)
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:write"])
+    authorization = "4" * 49
+    xml = _retention_xml(
+        authorization=authorization,
+        issuer_ruc=issuer_ruc,
+        retained_ruc="1799999999001",
+        support=support,
+    )
+
+    preview = await client.post(
+        "/api/v1/receivables/retention-batch",
+        headers=auth(token),
+        data={"apply": "false"},
+        files={"files": ("retencion.xml", xml, "application/xml")},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["items"] == [
+        {
+            "fileName": "retencion.xml",
+            "receivableId": receivable_id,
+            "authorizationNumber": authorization,
+            "supportingDocument": support,
+            "invoiceSequential": "000000951",
+            "total": "13.50",
+            "status": "MATCHED",
+            "detail": "Lista para registrar",
+        }
+    ]
+
+    headers = {**auth(token), "Idempotency-Key": "retention-batch-register-0001"}
+    first = await client.post(
+        "/api/v1/receivables/retention-batch",
+        headers=headers,
+        data={"apply": "true"},
+        files={"files": ("retencion.xml", xml, "application/xml")},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["items"][0]["detail"] == "Registrada"
+
+    repeated = await client.post(
+        "/api/v1/receivables/retention-batch",
+        headers=headers,
+        data={"apply": "true"},
+        files={"files": ("retencion.xml", xml, "application/xml")},
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json() == first.json()
+    async with SessionFactory() as session:
+        movements = list(
+            await session.scalars(
+                select(Movement).where(
+                    Movement.receivable_id == uuid.UUID(receivable_id),
+                    Movement.movement_type == "RETENTION",
+                )
+            )
+        )
+    assert len(movements) == 2
 
 
 @pytest.mark.parametrize(

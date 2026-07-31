@@ -37,6 +37,7 @@ import {
   type ReminderInput,
   type ReceivableDueDateUpdate,
   type RetentionInput,
+  type RetentionBatch,
   type RetentionXmlPreview,
   type SalesDocument,
   type SalesDocumentStatus,
@@ -1634,6 +1635,7 @@ function InvoicesPage({
     ;(groups[key] ??= []).push(invoice)
     return groups
   }, {})
+  const invoiceMonthEntries = Object.entries(invoiceMonths).sort(([left], [right]) => right.localeCompare(left))
   const partiesById = new Map(customers.map((party) => [party.id, party]))
   const archiveInvoice = useMutation({
     mutationFn: () => {
@@ -1697,10 +1699,14 @@ function InvoicesPage({
       />
       <section className="split-layout erp-list-only">
         <ErpPanel title="Documentos" count={invoices.length}>
-          <div className="table-wrap" tabIndex={0} aria-label="Listado de facturas">
-            {Object.entries(invoiceMonths).map(([month, monthInvoices]) => <section key={month} aria-label={`Facturas de ${month}`}>
-              <h3 className="month-heading">{new Date(`${month}-01T12:00:00`).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })} <span>{monthInvoices.length} factura{monthInvoices.length === 1 ? '' : 's'} · ${formatAmount(monthInvoices.reduce((total, invoice) => total + Number(invoice.total), 0))}</span></h3>
-            <table className="erp-responsive-table">
+          <div className="invoice-month-list" aria-label="Listado de facturas">
+            {invoiceMonthEntries.map(([month, monthInvoices], index) => <details key={month} className="invoice-month-accordion" open={index === 0}>
+              <summary>
+                <span className="invoice-month-title">{new Date(`${month}-01T12:00:00`).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })}</span>
+                <span className="invoice-month-summary">{monthInvoices.length} factura{monthInvoices.length === 1 ? '' : 's'} · ${formatAmount(monthInvoices.reduce((total, invoice) => total + Number(invoice.total), 0))}</span>
+              </summary>
+            <div className="table-wrap" tabIndex={0} aria-label={`Facturas de ${month}`}>
+              <table className="erp-responsive-table">
               <thead>
                 <tr>
                   <th>Número</th>
@@ -1742,8 +1748,9 @@ function InvoicesPage({
                   </tr>
                 ))}
               </tbody>
-            </table>
-            </section>)}
+              </table>
+            </div>
+            </details>)}
             {invoices.length === 0 ? (
               <ErpEmptyState
                 title="No hay facturas"
@@ -1837,6 +1844,7 @@ type ReceivablePanel =
   | { view: 'payment'; receivable: AccountItem }
   | { view: 'reminder'; receivable: AccountItem }
   | { view: 'due-date'; receivable: AccountItem }
+  | { view: 'retention-batch' }
 
 function emptyRetention(): RetentionInput & { key: string } {
   return { key: crypto.randomUUID(), kind: 'RETENTION_IVA', amount: '0.00', reason: '', documentReference: '' }
@@ -1844,6 +1852,119 @@ function emptyRetention(): RetentionInput & { key: string } {
 
 function emptyDiscount(): DiscountInput & { key: string } {
   return { key: crypto.randomUUID(), amount: '0.00', reason: '' }
+}
+
+function BatchRetentionImportForm({
+  token,
+  onRegistered,
+  onCancel,
+}: {
+  token: string
+  onRegistered: () => void
+  onCancel: () => void
+}) {
+  const [files, setFiles] = useState<File[]>([])
+  const [preview, setPreview] = useState<RetentionBatch | null>(null)
+  const [registered, setRegistered] = useState(false)
+
+  function batchFormData(apply: boolean) {
+    const formData = new FormData()
+    files.forEach((file) => formData.append('files', file))
+    formData.append('apply', String(apply))
+    return formData
+  }
+
+  const previewBatch = useMutation({
+    mutationFn: () => {
+      if (files.length === 0) throw new Error('Selecciona al menos un XML de retención.')
+      return apiRequest<RetentionBatch>(token, '/receivables/retention-batch', {
+        method: 'POST',
+        body: batchFormData(false),
+      })
+    },
+    onSuccess: (result) => {
+      setPreview(result)
+      setRegistered(false)
+    },
+  })
+  const registerBatch = useMutation({
+    mutationFn: () => apiRequest<RetentionBatch>(token, '/receivables/retention-batch', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey('web-retention-batch') },
+      body: batchFormData(true),
+    }),
+    onSuccess: (result) => {
+      setPreview(result)
+      setRegistered(true)
+      onRegistered()
+    },
+  })
+  const matched = preview?.items.filter((item) => item.status === 'MATCHED') ?? []
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    previewBatch.mutate()
+  }
+
+  return (
+    <ErpFormPanel
+      eyebrow="Cobranzas"
+      title="Cargar retenciones XML"
+      submitLabel="Revisar XML"
+      pendingLabel="Revisando…"
+      pending={previewBatch.isPending}
+      error={previewBatch.error?.message}
+      onSubmit={submit}
+      onCancel={onCancel}
+    >
+      <p className="fine-print">Carga hasta 50 XML autorizados por SRI. No guardamos los archivos: leemos sus datos, los cruzamos con la factura y solo registramos los que confirmes.</p>
+      <label>
+        XML de comprobantes de retención
+        <input
+          type="file"
+          accept=".xml,text/xml,application/xml"
+          multiple
+          onChange={(event) => {
+            setFiles(Array.from(event.target.files ?? []))
+            setPreview(null)
+            setRegistered(false)
+          }}
+        />
+      </label>
+      {files.length > 0 ? <p className="fine-print">{files.length} archivo{files.length === 1 ? '' : 's'} seleccionado{files.length === 1 ? '' : 's'}.</p> : null}
+      {preview ? (
+        <section className="retention-batch-results" aria-live="polite">
+          <div className="retention-batch-heading">
+            <h3>Resultado de la revisión</h3>
+            <span>{matched.length} listo{matched.length === 1 ? '' : 's'} · {preview.items.length - matched.length} a revisar</span>
+          </div>
+          <div className="table-wrap" tabIndex={0} aria-label="Resultado de XML de retención">
+            <table className="erp-responsive-table">
+              <thead><tr><th>Archivo</th><th>Factura</th><th>Retención</th><th>Valor</th><th>Resultado</th></tr></thead>
+              <tbody>
+                {preview.items.map((item) => (
+                  <tr key={item.fileName}>
+                    <td>{item.fileName}</td>
+                    <td>{item.invoiceSequential ?? item.supportingDocument ?? '—'}</td>
+                    <td>{item.authorizationNumber ?? '—'}</td>
+                    <td>${formatAmount(item.total)}</td>
+                    <td><ErpStatusBadge tone={item.status === 'MATCHED' ? 'success' : 'warning'}>{item.detail}</ErpStatusBadge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {registerBatch.error ? <p className="form-error" role="alert">{registerBatch.error.message}</p> : null}
+          {registered ? <p className="fine-print">Las retenciones mostradas como registradas ya redujeron el saldo de su factura. Las restantes no se modificaron.</p> : null}
+          {!registered ? (
+            <ErpButton variant="primary" disabled={matched.length === 0 || registerBatch.isPending} onClick={() => registerBatch.mutate()}>
+              {registerBatch.isPending ? 'Registrando…' : `Registrar ${matched.length} retención${matched.length === 1 ? '' : 'es'}`}
+            </ErpButton>
+          ) : null}
+        </section>
+      ) : null}
+    </ErpFormPanel>
+  )
 }
 
 function EditReceivableDueDateForm({
@@ -2397,6 +2518,18 @@ function ReceivablesPage({
       </>
     )
   }
+  if (panel?.view === 'retention-batch') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Cargar retenciones" subtitle="Cruza cada XML autorizado con su factura y registra solo los comprobantes confirmados." />
+        <BatchRetentionImportForm
+          token={token}
+          onRegistered={() => void queryClient.invalidateQueries({ queryKey: ['receivables'] })}
+          onCancel={closePanel}
+        />
+      </>
+    )
+  }
 
   return (
     <>
@@ -2421,6 +2554,9 @@ function ReceivablesPage({
             <option value="">Todos los estados</option>
           </select>
         </label>
+        <ErpButton variant="primary" onClick={(event) => openPanel({ view: 'retention-batch' }, event.currentTarget)}>
+          Cargar retenciones XML
+        </ErpButton>
       </ErpToolbar>
       <section className="split-layout erp-list-only">
         <ErpPanel title="Cuentas por cobrar" count={receivables.length}>

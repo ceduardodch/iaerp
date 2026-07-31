@@ -8,6 +8,18 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-31 `America/Guayaquil`.
+  Cartera permite cargar hasta 50 XML de comprobantes de retención en una sola
+  operación. Primero muestra el cruce verificable de cada archivo con su
+  factura (establecimiento, punto de emisión y secuencial), autorización y
+  valor; después una persona confirma el registro de las coincidencias. Los
+  archivos no se guardan. Cada retención confirmada crea sus movimientos contra
+  la cuenta por cobrar y reduce el saldo de la factura; los XML que no cuadran
+  quedan marcados para revisión sin modificar cartera. La confirmación exige
+  idempotencia, conserva auditoría y no puede duplicar una autorización.
+  Validado con Ruff, mypy, pruebas API de XML/batch y lint/build frontend;
+  pendiente commit, CI y promoción autorizada.
+
+- Actualización local: 2026-07-31 `America/Guayaquil`.
   Todo PDF disponible en IAERP se visualiza dentro de la aplicación: tanto el
   RIDE de Facturas como el PDF firmado de Contratos usan un visor común,
   accesible y con cierre por teclado. La URL privada vence en cinco minutos y

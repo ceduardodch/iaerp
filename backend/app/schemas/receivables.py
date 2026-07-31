@@ -87,6 +87,21 @@ class RetentionXmlPreviewRead(APIModel):
     retentions: list[RetentionXmlPreviewItem] = Field(min_length=1)
 
 
+class RetentionBatchItemRead(APIModel):
+    file_name: str
+    receivable_id: uuid.UUID | None = None
+    authorization_number: str | None = None
+    supporting_document: str | None = None
+    invoice_sequential: str | None = None
+    total: Decimal = Decimal("0.00")
+    status: Literal["MATCHED", "REVIEW_REQUIRED"]
+    detail: str
+
+
+class RetentionBatchRead(APIModel):
+    items: list[RetentionBatchItemRead]
+
+
 class DiscountInput(APIModel):
     """Descuento aplicado dentro de un cobro (``PaymentInput.discounts``).
 

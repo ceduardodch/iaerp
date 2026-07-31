@@ -59,6 +59,8 @@ from app.schemas.receivables import (
     PartyAgingBucketTotalRead,
     PaymentInput,
     ReminderInput,
+    RetentionBatchItemRead,
+    RetentionBatchRead,
     RetentionXmlPreviewItem,
     RetentionXmlPreviewRead,
 )
@@ -310,6 +312,110 @@ async def preview_retention_xml(
         supporting_document=supporting_document,
         retentions=items,
     )
+
+
+async def import_retention_xml_batch(
+    session: AsyncSession,
+    *,
+    context: AuthContext,
+    files: list[tuple[str, bytes]],
+    apply: bool,
+    correlation_id: str,
+    idempotency_key: str,
+) -> RetentionBatchRead:
+    """Relaciona XML SRI con factura y opcionalmente registra retenciones exactas."""
+    results: list[RetentionBatchItemRead] = []
+    for file_name, xml_bytes in files:
+        try:
+            _, support, _, _ = _parse_authorized_retention_xml(xml_bytes)
+            document = await session.scalar(
+                select(SalesDocument)
+                .join(
+                    Establishment,
+                    (Establishment.tenant_id == SalesDocument.tenant_id)
+                    & (Establishment.id == SalesDocument.establishment_id),
+                )
+                .join(
+                    EmissionPoint,
+                    (EmissionPoint.tenant_id == SalesDocument.tenant_id)
+                    & (EmissionPoint.id == SalesDocument.emission_point_id),
+                )
+                .where(
+                    SalesDocument.tenant_id == context.tenant_id,
+                    SalesDocument.document_type == "INVOICE",
+                    SalesDocument.sequential == support[-9:],
+                    Establishment.code == support[:3],
+                    EmissionPoint.code == support[3:6],
+                )
+            )
+            if document is None:
+                raise HTTPException(
+                    status_code=422, detail="No invoice matches the supporting document"
+                )
+            receivable = await session.scalar(
+                select(Receivable).where(
+                    Receivable.tenant_id == context.tenant_id,
+                    Receivable.sales_document_id == document.id,
+                )
+            )
+            if receivable is None:
+                raise HTTPException(status_code=422, detail="Invoice has no open receivable")
+            preview = await preview_retention_xml(
+                session, context=context, receivable_id=receivable.id, xml_bytes=xml_bytes
+            )
+            total = sum((item.amount for item in preview.retentions), Decimal("0.00"))
+            if apply:
+                duplicate = await session.scalar(
+                    select(Movement.id).where(
+                        Movement.tenant_id == context.tenant_id,
+                        Movement.receivable_id == receivable.id,
+                        Movement.movement_type == "RETENTION",
+                        Movement.support_reference.like(f"{preview.authorization_number} |%"),
+                    )
+                )
+                if duplicate is not None:
+                    raise HTTPException(
+                        status_code=422, detail="Retention authorization was already registered"
+                    )
+                await record_payment(
+                    session,
+                    context,
+                    receivable.id,
+                    PaymentInput(
+                        cash_amount=Decimal("0.00"),
+                        payment_date=today_in_fiscal_timezone(),
+                        retentions=[
+                            {
+                                "kind": item.kind,
+                                "amount": item.amount,
+                                "reason": f"Código SRI {item.sri_retention_code}",
+                                "document_reference": preview.authorization_number,
+                            }
+                            for item in preview.retentions
+                        ],
+                    ),
+                    correlation_id=correlation_id,
+                    idempotency_key=idempotency_key,
+                )
+            results.append(
+                RetentionBatchItemRead(
+                    file_name=file_name,
+                    receivable_id=receivable.id,
+                    authorization_number=preview.authorization_number,
+                    supporting_document=preview.supporting_document,
+                    invoice_sequential=document.sequential,
+                    total=total,
+                    status="MATCHED",
+                    detail="Registrada" if apply else "Lista para registrar",
+                )
+            )
+        except HTTPException as exc:
+            results.append(
+                RetentionBatchItemRead(
+                    file_name=file_name, status="REVIEW_REQUIRED", detail=str(exc.detail)
+                )
+            )
+    return RetentionBatchRead(items=results)
 
 
 # --- Aging (E5-05): función pura y agregados ----------------------------------

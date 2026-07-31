@@ -82,6 +82,7 @@ from app.schemas.receivables import (
     ReceivableDueDateUpdate,
     ReminderInput,
     ReminderRead,
+    RetentionBatchRead,
     RetentionXmlPreviewRead,
     ReversalInput,
 )
@@ -737,7 +738,9 @@ async def post_signed_contract_pdf(
         )
 
     return await execute_idempotent(
-        session, context=context, operation="commercial.contract_versions.signed_pdf.upload",
+        session,
+        context=context,
+        operation="commercial.contract_versions.signed_pdf.upload",
         idempotency_key=idempotency_key,
         request_payload={
             "contract_id": str(contract_id),
@@ -746,7 +749,8 @@ async def post_signed_contract_pdf(
             "sha256": hashlib.sha256(data).hexdigest(),
         },
         action="commercial_contract_version.signed_pdf_uploaded",
-        entity_type="commercial_contract_version", callback=upload,
+        entity_type="commercial_contract_version",
+        callback=upload,
     )
 
 
@@ -1452,6 +1456,74 @@ async def put_receivable_due_date(
         action="receivable.due_date_corrected",
         entity_type="receivable",
         callback=update,
+    )
+
+
+@router.post(
+    "/receivables/retention-batch",
+    response_model=RetentionBatchRead,
+)
+async def post_retention_batch(
+    files: Annotated[list[UploadFile], File()],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:write"))],
+    apply: Annotated[bool, Form()] = False,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> dict[str, object]:
+    """Relaciona varios XML autorizados y registra solo las coincidencias exactas."""
+    if not files:
+        raise HTTPException(status_code=422, detail="At least one XML file is required")
+    if len(files) > 50:
+        raise HTTPException(status_code=422, detail="A maximum of 50 XML files is allowed")
+    parsed_files = [
+        (file.filename or "retencion.xml", await file.read(receivables.MAX_RETENTION_XML_BYTES + 1))
+        for file in files
+    ]
+    if not apply:
+        result = await receivables.import_retention_xml_batch(
+            session,
+            context=context,
+            files=parsed_files,
+            apply=False,
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key=f"preview-{uuid.uuid4()}",
+        )
+        return result.model_dump(mode="json", by_alias=True)
+
+    if idempotency_key is None or not 16 <= len(idempotency_key) <= 128:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "An Idempotency-Key between 16 and 128 characters is required "
+                "to register retentions"
+            ),
+        )
+
+    async def register_batch() -> tuple[str, dict[str, object]]:
+        result = await receivables.import_retention_xml_batch(
+            session,
+            context=context,
+            files=parsed_files,
+            apply=True,
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key=idempotency_key,
+        )
+        return str(context.tenant_id), result.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.retention_batch.register",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "files": [
+                {"name": name, "sha256": hashlib.sha256(content).hexdigest()}
+                for name, content in parsed_files
+            ],
+        },
+        action="receivable.retention_batch_registered",
+        entity_type="receivable_batch",
+        callback=register_batch,
     )
 
 

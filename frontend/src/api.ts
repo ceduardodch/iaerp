@@ -242,6 +242,19 @@ export type RetentionXmlPreview = {
   }>
 }
 
+export type RetentionBatch = {
+  items: Array<{
+    fileName: string
+    receivableId?: string | null
+    authorizationNumber?: string | null
+    supportingDocument?: string | null
+    invoiceSequential?: string | null
+    total: string
+    status: 'MATCHED' | 'REVIEW_REQUIRED'
+    detail: string
+  }>
+}
+
 export type DiscountInput = {
   amount: string
   reason: string
