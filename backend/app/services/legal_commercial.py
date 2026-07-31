@@ -160,7 +160,12 @@ async def upload_signed_contract(
 
 
 async def signed_contract_download(
-    session: AsyncSession, context: AuthContext, *, contract_id: uuid.UUID, version_id: uuid.UUID
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    inline: bool = False,
 ) -> tuple[str, str]:
     version = await session.scalar(
         select(ContractVersion).where(
@@ -177,6 +182,7 @@ async def signed_contract_download(
             object_key=version.signed_artifact_object_key,
             file_name=file_name,
             content_type="application/pdf",
+            content_disposition="inline" if inline else "attachment",
         ),
         file_name,
     )

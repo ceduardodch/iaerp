@@ -84,6 +84,28 @@ function formatPercent(value: string | number): string {
   return `${formatAmount(value)} %`
 }
 
+function PdfPreviewModal({
+  title,
+  artifact,
+  onClose,
+}: {
+  title: string
+  artifact: Pick<ArtifactDownload, 'downloadUrl' | 'fileName'>
+  onClose: () => void
+}) {
+  return (
+    <ErpModal title={title} size="lg" onClose={onClose}>
+      <iframe className="pdf-preview-frame" src={artifact.downloadUrl} title={artifact.fileName} />
+      <div className="erp-form-actions pdf-preview-actions">
+        <ErpButton variant="secondary" onClick={() => window.open(artifact.downloadUrl, '_blank', 'noopener,noreferrer')}>
+          Abrir en otra pestaña
+        </ErpButton>
+        <ErpButton variant="primary" onClick={onClose}>Cerrar</ErpButton>
+      </div>
+    </ErpModal>
+  )
+}
+
 function DevLogin() {
   const { loginDev } = useAuth()
   const [error, setError] = useState('')
@@ -479,6 +501,7 @@ function ContractsPage({
   const [partyId, setPartyId] = useState(initialPartyId ?? '')
   const [selected, setSelected] = useState<CommercialContract | null>(null)
   const [creating, setCreating] = useState(false)
+  const [signedPdfPreview, setSignedPdfPreview] = useState<ContractArtifactDownload | null>(null)
   const contractsQuery = useQuery({
     queryKey: ['commercial', 'contracts', partyId],
     queryFn: () => apiRequest<CommercialContract[]>(token, `/commercial/contracts${partyId ? `?party_id=${partyId}` : ''}`),
@@ -520,8 +543,8 @@ function ContractsPage({
     },
   })
   const downloadSigned = useMutation({
-    mutationFn: (versionId: string) => apiRequest<ContractArtifactDownload>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/signed-pdf`),
-    onSuccess: (artifact) => window.open(artifact.downloadUrl, '_blank', 'noopener,noreferrer'),
+    mutationFn: (versionId: string) => apiRequest<ContractArtifactDownload>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/signed-pdf?inline=true`),
+    onSuccess: setSignedPdfPreview,
   })
 
   function submitContract(event: FormEvent<HTMLFormElement>) {
@@ -574,6 +597,7 @@ function ContractsPage({
             </article>
           ))}
           {versionsQuery.error ? <p className="form-error" role="alert">{versionsQuery.error.message}</p> : null}
+          {downloadSigned.error ? <p className="form-error" role="alert">{downloadSigned.error.message}</p> : null}
         </ErpPanel>
         <ErpFormPanel eyebrow="Nueva versión" title="Términos comerciales" submitLabel="Agregar versión" pending={createVersion.isPending} error={createVersion.error?.message} onSubmit={submitVersion} onCancel={() => setSelected(null)}>
           <label>Vigente desde<input name="validFrom" type="date" defaultValue={todayInFiscalTimezone()} required /></label>
@@ -583,6 +607,7 @@ function ContractsPage({
           <p className="fine-print">Esta versión es comercial. No crea ni emite una factura SRI.</p>
         </ErpFormPanel>
       </section>
+      {signedPdfPreview ? <PdfPreviewModal title="Contrato firmado" artifact={signedPdfPreview} onClose={() => setSignedPdfPreview(null)} /> : null}
     </>
   )
 
@@ -1368,13 +1393,13 @@ function InvoiceDetail({
     window.open(download.downloadUrl, '_blank', 'noopener,noreferrer')
   }
 
-  async function previewRide(artifactId: string) {
-    const download = await apiRequest<ArtifactDownload>(
+  const previewRide = useMutation({
+    mutationFn: (artifactId: string) => apiRequest<ArtifactDownload>(
       token,
-      `/invoices/${invoiceId}/artifacts/${artifactId}/download`,
-    )
-    setRidePreview(download)
-  }
+      `/invoices/${invoiceId}/artifacts/${artifactId}/download?inline=true`,
+    ),
+    onSuccess: setRidePreview,
+  })
 
   if (invoiceQuery.isPending) {
     return (
@@ -1489,6 +1514,9 @@ function InvoiceDetail({
       {archiveInvoice.error ? (
         <p className="form-error" role="alert">{archiveInvoice.error.message}</p>
       ) : null}
+      {previewRide.error ? (
+        <p className="form-error" role="alert">{previewRide.error.message}</p>
+      ) : null}
 
       <section aria-labelledby="invoice-artifacts-title">
         <p className="section-number" id="invoice-artifacts-title">Artefactos</p>
@@ -1504,7 +1532,14 @@ function InvoiceDetail({
                 <div>
                   <strong>{artifact.artifactType === 'xml-signed' ? 'XML firmado' : 'RIDE PDF vigente'}</strong>
                   {artifact.artifactType === 'ride-pdf' ? (
-                    <ErpButton variant="ghost" onClick={() => void previewRide(artifact.id)}>Ver RIDE</ErpButton>
+                    <ErpButton
+                      variant="ghost"
+                      onClick={() => {
+                        if (!previewRide.isPending) previewRide.mutate(artifact.id)
+                      }}
+                    >
+                      Ver RIDE
+                    </ErpButton>
                   ) : null}
                   <ErpButton variant="ghost" onClick={() => void downloadArtifact(artifact.id)}>
                     {artifact.artifactType === 'xml-signed' ? 'Descargar XML firmado' : 'Descargar RIDE PDF'}
@@ -1519,9 +1554,7 @@ function InvoiceDetail({
       </section>
 
       {ridePreview ? (
-        <ErpModal title="RIDE autorizado" size="lg" onClose={() => setRidePreview(null)}>
-          <iframe className="ride-preview-frame" src={ridePreview.downloadUrl} title={ridePreview.fileName} />
-        </ErpModal>
+        <PdfPreviewModal title="RIDE autorizado" artifact={ridePreview} onClose={() => setRidePreview(null)} />
       ) : null}
 
       {archiving ? (

@@ -7,6 +7,18 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización local: 2026-07-31 `America/Guayaquil`.
+  Todo PDF disponible en IAERP se visualiza dentro de la aplicación: tanto el
+  RIDE de Facturas como el PDF firmado de Contratos usan un visor común,
+  accesible y con cierre por teclado. La URL privada vence en cinco minutos y
+  el visor pide al almacenamiento una respuesta `inline`; la descarga normal
+  sigue usando `attachment`. No modifica XML, RIDE ni el estado de un
+  comprobante fiscal existente. Facturas además traduce el estado persistido
+  de cartera (`PAID`/`PARTIALLY_PAID`) a su etiqueta pública antes de responder;
+  evita que una factura cobrada deje el listado en error 500. Validado con
+  Ruff, mypy, pruebas API de artefactos/facturas, lint, build y Playwright de
+  Facturas.
+
 - Actualización local: 2026-07-30 `America/Guayaquil`.
   Cartera queda limitada a cuentas por cobrar, aging, cobros y recordatorios.
   La política de mensajes automáticos se configura únicamente en Empresa →

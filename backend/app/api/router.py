@@ -759,9 +759,10 @@ async def get_signed_contract_pdf(
     version_id: uuid.UUID,
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("commercial:read"))],
+    inline: bool = Query(default=False),
 ) -> ContractArtifactDownloadRead:
     download_url, file_name = await legal_commercial.signed_contract_download(
-        session, context, contract_id=contract_id, version_id=version_id
+        session, context, contract_id=contract_id, version_id=version_id, inline=inline
     )
     return ContractArtifactDownloadRead(
         download_url=download_url, expires_in_seconds=300, file_name=file_name
@@ -1061,8 +1062,11 @@ async def get_invoice_artifact_download(
     artifact_id: uuid.UUID,
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+    inline: bool = Query(default=False),
 ) -> ArtifactDownloadRead:
-    return await billing.create_artifact_download(session, context, invoice_id, artifact_id)
+    return await billing.create_artifact_download(
+        session, context, invoice_id, artifact_id, inline=inline
+    )
 
 
 @router.post("/invoices/{invoice_id}/issue", response_model=OperationRead, status_code=202)

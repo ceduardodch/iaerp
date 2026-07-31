@@ -203,6 +203,15 @@ async function mockApi(page: Page) {
     }
     return route.fulfill({ json: [] })
   })
+  await page.route(/\/api\/v1\/invoices\/[^/]+\/artifacts\/[^/]+\/download\?inline=true$/, (route) =>
+    route.fulfill({
+      json: {
+        downloadUrl: 'https://documents.example.test/ride.pdf?disposition=inline',
+        expiresInSeconds: 300,
+        fileName: 'FACTURA-001001000000002.pdf',
+      },
+    }),
+  )
 }
 
 async function expectNoA11yViolations(page: Page) {
@@ -323,6 +332,28 @@ test('authorized invoice detail shows SRI transmission, artifacts and credit not
   await page.keyboard.press('Enter')
   await expect(page.getByRole('heading', { name: 'Nueva nota de crédito', level: 1 })).toBeVisible()
   await expectNoA11yViolations(page)
+})
+
+test('RIDE opens in the in-app PDF viewer and returns focus when it closes', async ({ page }) => {
+  await loginAndOpenInvoices(page)
+  await page
+    .getByRole('row', { name: new RegExp(authorizedInvoice.sequential) })
+    .getByRole('button', { name: 'Ver' })
+    .click()
+
+  const viewRide = page.getByRole('button', { name: 'Ver RIDE' })
+  await viewRide.click()
+  const dialog = page.getByRole('dialog', { name: 'RIDE autorizado' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('iframe[title="FACTURA-001001000000002.pdf"]')).toHaveAttribute(
+    'src',
+    /disposition=inline/,
+  )
+  await expect(dialog.getByRole('button', { name: 'Abrir en otra pestaña' })).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(viewRide).toBeFocused()
 })
 
 test('rejected invoice shows an accessible SRI message', async ({ page }) => {

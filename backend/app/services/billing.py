@@ -12,6 +12,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -52,6 +53,29 @@ from app.services.unit_of_work import append_audit
 # docs/03-domain-model.md (Billing: SalesDocument, Sequence).
 _INVOICE_DOCUMENT_TYPE = "INVOICE"
 _CREDIT_NOTE_DOCUMENT_TYPE = "CREDIT_NOTE"
+
+_RECEIVABLE_STATUS_TO_COLLECTION_STATUS: dict[
+    str, Literal["OPEN", "PARTIAL", "SETTLED", "VOIDED"]
+] = {
+    "OPEN": "OPEN",
+    "PARTIALLY_PAID": "PARTIAL",
+    "PAID": "SETTLED",
+    "VOID": "VOIDED",
+}
+
+
+def _collection_status_from_receivable(
+    status: str | None,
+) -> Literal["OPEN", "PARTIAL", "SETTLED", "VOIDED"] | None:
+    """Traduce el estado persistido de cartera al contrato de Facturas.
+
+    ``Receivable`` conserva valores operativos como ``PAID``; el contrato de
+    lectura usa etiquetas estables para la interfaz. Nunca se debe devolver
+    el valor interno porque Pydantic rechaza una respuesta completa si una
+    factura ya cobrada trae ``PAID``.
+    """
+
+    return _RECEIVABLE_STATUS_TO_COLLECTION_STATUS.get(status or "")
 
 # Estados de un SalesDocument que cuentan como "en curso o autorizado" para el
 # control de saldo acreditable de una nota de credito (E4-07, ADR 0008 seccion
@@ -1024,7 +1048,7 @@ async def to_sales_document_read(
         authorization_number=document.authorization_number,
         authorized_at=document.authorized_at,
         sri_transmission=sri_transmission,
-        collection_status=receivable,
+        collection_status=_collection_status_from_receivable(receivable),
         lines=[
             SalesDocumentLineRead(
                 id=line.id,
@@ -1366,6 +1390,8 @@ async def create_artifact_download(
     context: AuthContext,
     document_id: uuid.UUID,
     artifact_id: uuid.UUID,
+    *,
+    inline: bool = False,
 ) -> ArtifactDownloadRead:
     """Emite una URL prefirmada de corta duracion para descargar un artefacto.
 
@@ -1385,6 +1411,7 @@ async def create_artifact_download(
         object_key=artifact.object_key,
         file_name=file_name,
         content_type=content_type,
+        content_disposition="inline" if inline and extension == "pdf" else "attachment",
     )
     return ArtifactDownloadRead(
         download_url=download_url,
