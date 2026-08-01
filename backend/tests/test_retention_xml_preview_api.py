@@ -181,6 +181,8 @@ async def test_batch_preview_then_registers_matched_xml_once(client) -> None:
     assert repeated.status_code == 200, repeated.text
     assert repeated.json() == first.json()
     async with SessionFactory() as session:
+        receivable = await session.get(Receivable, uuid.UUID(receivable_id))
+        assert receivable is not None
         movements = list(
             await session.scalars(
                 select(Movement).where(
@@ -190,6 +192,13 @@ async def test_batch_preview_then_registers_matched_xml_once(client) -> None:
             )
         )
     assert len(movements) == 2
+
+    invoice_token = await token_for(client, "a@iaerp.local", TENANT_A, ["invoices:read"])
+    invoice = await client.get(
+        f"/api/v1/invoices/{receivable.sales_document_id}", headers=auth(invoice_token)
+    )
+    assert invoice.status_code == 200, invoice.text
+    assert invoice.json()["retentionTotal"] == "13.50"
 
 
 @pytest.mark.parametrize(

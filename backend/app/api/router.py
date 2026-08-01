@@ -1221,6 +1221,7 @@ def _summary_to_account_item(summary: receivables.ReceivableSummary) -> AccountI
     return AccountItemRead(
         id=summary.id,
         party_id=summary.party_id,
+        invoice_sequential=summary.invoice_sequential,
         status=summary.status,
         original_amount=summary.original_amount,
         open_amount=summary.open_amount,

@@ -36,6 +36,7 @@ import {
   type Product,
   type ReminderInput,
   type ReceivableDueDateUpdate,
+  type ReceivableMovement,
   type RetentionInput,
   type RetentionBatch,
   type RetentionXmlPreview,
@@ -1452,6 +1453,7 @@ function InvoiceDetail({
         <div><dt>Punto de emisión</dt><dd>{emissionPoint?.code ?? 'No disponible'}</dd></div>
         <div><dt>Condición de pago</dt><dd>{invoice.installments?.[0]?.dueDate === invoice.issueDate ? 'Contado' : 'Crédito'}</dd></div>
         <div><dt>Vencimiento</dt><dd>{invoice.installments?.[0]?.dueDate ?? invoice.issueDate}</dd></div>
+        <div><dt>Retenciones aplicadas</dt><dd>{Number(invoice.retentionTotal) > 0 ? `$${formatAmount(invoice.retentionTotal)}` : 'Sin retención registrada'}</dd></div>
         {invoice.accessKey ? <div><dt>Clave de acceso</dt><dd>{invoice.accessKey}</dd></div> : null}
       </dl>
 
@@ -1714,6 +1716,7 @@ function InvoicesPage({
                   <th>Fecha</th>
                   <th>Estado</th>
                   <th>Cobro</th>
+                  <th>Retenciones</th>
                   <th>Total</th>
                   <th>Acciones</th>
                 </tr>
@@ -1726,6 +1729,7 @@ function InvoicesPage({
                     <td>{invoice.issueDate}</td>
                     <td><InvoiceStatusBadge status={invoice.status} /></td>
                     <td><CollectionStatusBadge status={invoice.collectionStatus} /></td>
+                    <td><ErpStatusBadge tone={Number(invoice.retentionTotal) > 0 ? 'success' : 'neutral'}>{Number(invoice.retentionTotal) > 0 ? `$${formatAmount(invoice.retentionTotal)}` : 'Sin retención'}</ErpStatusBadge></td>
                     <td>${formatAmount(invoice.total)}</td>
                     <td>
                       <ErpActionCell>
@@ -1844,6 +1848,7 @@ type ReceivablePanel =
   | { view: 'payment'; receivable: AccountItem }
   | { view: 'reminder'; receivable: AccountItem }
   | { view: 'due-date'; receivable: AccountItem }
+  | { view: 'history'; receivable: AccountItem }
   | { view: 'retention-batch' }
 
 function emptyRetention(): RetentionInput & { key: string } {
@@ -1964,6 +1969,58 @@ function BatchRetentionImportForm({
         </section>
       ) : null}
     </ErpFormPanel>
+  )
+}
+
+function ReceivableMovementHistory({
+  token,
+  receivable,
+  onClose,
+}: {
+  token: string
+  receivable: AccountItem
+  onClose: () => void
+}) {
+  const movementsQuery = useQuery({
+    queryKey: ['receivables', receivable.id, 'movements'],
+    queryFn: () => apiRequest<ReceivableMovement[]>(token, `/receivables/${receivable.id}/movements`),
+  })
+  const movementLabels: Record<ReceivableMovement['movementType'], string> = {
+    PAYMENT: 'Cobro',
+    RETENTION: 'Retención',
+    DISCOUNT: 'Descuento',
+    CREDIT_NOTE: 'Nota de crédito',
+    REVERSAL: 'Reverso',
+  }
+
+  return (
+    <section className="form-panel erp-form-panel erp-full-page-form">
+      <p className="section-number">Cobranzas</p>
+      <h2>Movimientos de factura {receivable.invoiceSequential ?? '—'}</h2>
+      <p className="fine-print">Cliente y factura se relacionan por esta cuenta por cobrar. Cada retención muestra su autorización SRI en la referencia.</p>
+      {movementsQuery.isPending ? <p>Cargando movimientos…</p> : null}
+      {movementsQuery.error ? <p className="form-error" role="alert">{movementsQuery.error.message}</p> : null}
+      {movementsQuery.data ? (
+        movementsQuery.data.length > 0 ? (
+          <div className="table-wrap" tabIndex={0} aria-label="Movimientos de la factura">
+            <table className="erp-responsive-table">
+              <thead><tr><th>Fecha</th><th>Tipo</th><th>Valor</th><th>Referencia</th></tr></thead>
+              <tbody>
+                {movementsQuery.data.map((movement) => (
+                  <tr key={movement.id}>
+                    <td>{new Date(movement.createdAt).toLocaleString('es-EC')}</td>
+                    <td><ErpStatusBadge tone={movement.movementType === 'RETENTION' ? 'success' : 'neutral'}>{movementLabels[movement.movementType]}</ErpStatusBadge></td>
+                    <td>${formatAmount(movement.amount)}</td>
+                    <td>{movement.supportReference ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <ErpEmptyState title="Sin movimientos" description="Todavía no se ha registrado ningún cobro, retención o descuento." />
+      ) : null}
+      <div className="erp-form-actions"><ErpButton variant="secondary" onClick={onClose}>Volver a Cartera</ErpButton></div>
+    </section>
   )
 }
 
@@ -2518,6 +2575,14 @@ function ReceivablesPage({
       </>
     )
   }
+  if (panel?.view === 'history') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Movimientos" subtitle={`Factura ${panel.receivable.invoiceSequential ?? 'sin número disponible'}`} />
+        <ReceivableMovementHistory token={token} receivable={panel.receivable} onClose={closePanel} />
+      </>
+    )
+  }
   if (panel?.view === 'retention-batch') {
     return (
       <>
@@ -2565,6 +2630,7 @@ function ReceivablesPage({
               <thead>
                 <tr>
                   <th>Cliente</th>
+                  <th>Factura</th>
                   <th>Monto original</th>
                   <th>Saldo</th>
                   <th>Estado</th>
@@ -2576,6 +2642,7 @@ function ReceivablesPage({
                 {receivables.map((receivable) => (
                   <tr key={receivable.id}>
                     <td><strong>{partiesById.get(receivable.partyId)?.name ?? receivable.partyId}</strong></td>
+                    <td>{receivable.invoiceSequential ?? '—'}</td>
                     <td>${formatAmount(receivable.originalAmount)}</td>
                     <td>${formatAmount(receivable.openAmount)}</td>
                     <td><ReceivableStatusBadge status={receivable.status} /></td>
@@ -2589,6 +2656,12 @@ function ReceivablesPage({
                           disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
                           Registrar cobro
+                        </ErpButton>
+                        <ErpButton
+                          variant="ghost"
+                          onClick={(event) => openPanel({ view: 'history', receivable }, event.currentTarget)}
+                        >
+                          Ver movimientos
                         </ErpButton>
                         <ErpButton
                           variant="ghost"

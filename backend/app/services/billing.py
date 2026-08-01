@@ -15,7 +15,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
@@ -31,7 +31,7 @@ from app.models.billing import (
     SRITransmission,
 )
 from app.models.masters import EmissionPoint, Establishment, Party, Product, TaxCategory
-from app.models.receivables import Receivable
+from app.models.receivables import Movement, Receivable
 from app.schemas.billing import (
     ArtifactDownloadRead,
     CreditNoteInput,
@@ -76,6 +76,7 @@ def _collection_status_from_receivable(
     """
 
     return _RECEIVABLE_STATUS_TO_COLLECTION_STATUS.get(status or "")
+
 
 # Estados de un SalesDocument que cuentan como "en curso o autorizado" para el
 # control de saldo acreditable de una nota de credito (E4-07, ADR 0008 seccion
@@ -1014,11 +1015,26 @@ async def to_sales_document_read(
     installments = await list_sales_document_installments(session, context, document.id)
     transmission = await _get_latest_sri_transmission(session, context, document.id)
     receivable = await session.scalar(
-        select(Receivable.status).where(
+        select(Receivable).where(
             Receivable.tenant_id == context.tenant_id,
             Receivable.sales_document_id == document.id,
         )
     )
+    reversed_movement_ids = select(Movement.reversed_movement_id).where(
+        Movement.tenant_id == context.tenant_id,
+        Movement.reversed_movement_id.is_not(None),
+    )
+    retention_total = Decimal("0.00")
+    if receivable is not None:
+        retention_total = await session.scalar(
+            select(func.coalesce(func.sum(Movement.amount), Decimal("0.00"))).where(
+                Movement.tenant_id == context.tenant_id,
+                Movement.receivable_id == receivable.id,
+                Movement.movement_type == "RETENTION",
+                Movement.reversed_movement_id.is_(None),
+                Movement.id.not_in(reversed_movement_ids),
+            )
+        ) or Decimal("0.00")
     sri_transmission = (
         SRITransmissionRead(
             status=transmission.status,
@@ -1048,7 +1064,10 @@ async def to_sales_document_read(
         authorization_number=document.authorization_number,
         authorized_at=document.authorized_at,
         sri_transmission=sri_transmission,
-        collection_status=_collection_status_from_receivable(receivable),
+        collection_status=_collection_status_from_receivable(
+            receivable.status if receivable is not None else None
+        ),
+        retention_total=retention_total,
         lines=[
             SalesDocumentLineRead(
                 id=line.id,

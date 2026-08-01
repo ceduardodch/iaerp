@@ -8,6 +8,17 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Actualización local: 2026-07-31 `America/Guayaquil`.
+  Cartera muestra el número de factura de cada cuenta y permite abrir su
+  historial de movimientos. Ahí se ven cobros, retenciones, descuentos, notas
+  de crédito y reversos, con fecha, valor y referencia; una retención muestra
+  la autorización SRI asociada. Facturas expone el total de retenciones
+  activas en el listado y el detalle. “Sin retención” significa que todavía no
+  existe una retención registrada, no que el cliente esté excluido de retener.
+  Los reversos dejan de contar en el total. Validado con Ruff, mypy, pruebas
+  API de facturas/cartera y lint/build frontend; pendiente commit, CI y
+  promoción autorizada.
+
+- Actualización local: 2026-07-31 `America/Guayaquil`.
   Cartera permite cargar hasta 50 XML de comprobantes de retención en una sola
   operación. Primero muestra el cruce verificable de cada archivo con su
   factura (establecimiento, punto de emisión y secuencial), autorización y

@@ -43,6 +43,7 @@ class AgingRead(APIModel):
 class AccountItemRead(APIModel):
     id: uuid.UUID
     party_id: uuid.UUID
+    invoice_sequential: str | None = None
     status: AccountItemStatus
     original_amount: Decimal
     open_amount: Decimal

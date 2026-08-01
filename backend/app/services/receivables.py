@@ -124,6 +124,7 @@ class ReceivableSummary:
 
     id: uuid.UUID
     party_id: uuid.UUID
+    invoice_sequential: str | None
     status: str
     original_amount: Decimal
     open_amount: Decimal
@@ -707,6 +708,7 @@ async def list_receivables(
             AccountItemRead(
                 id=entity.id,
                 party_id=entity.party_id,
+                invoice_sequential=summary.invoice_sequential,
                 status=summary.status,
                 original_amount=entity.original_amount,
                 open_amount=summary.open_amount,
@@ -858,10 +860,17 @@ async def to_receivable_summary(
             ReceivableInstallment.receivable_id == receivable.id,
         )
     )
+    invoice_sequential = await session.scalar(
+        select(SalesDocument.sequential).where(
+            SalesDocument.tenant_id == tenant_id,
+            SalesDocument.id == receivable.sales_document_id,
+        )
+    )
 
     return ReceivableSummary(
         id=receivable.id,
         party_id=receivable.party_id,
+        invoice_sequential=invoice_sequential,
         status=status,
         original_amount=receivable.original_amount,
         open_amount=open_amount,

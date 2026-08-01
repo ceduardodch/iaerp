@@ -147,6 +147,7 @@ export type SalesDocument = {
   sriTransmission?: SriTransmission | null
   collectionStatus?: AccountItemStatus | null
   installments?: Array<{ dueDate: string; amount: string }>
+  retentionTotal: string
 }
 
 export type InvoiceLineInput = {
@@ -214,11 +215,24 @@ export type AccountItemStatus = 'OPEN' | 'PARTIAL' | 'OVERDUE' | 'SETTLED' | 'VO
 export type AccountItem = {
   id: string
   partyId: string
+  invoiceSequential?: string | null
   status: AccountItemStatus
   originalAmount: string
   openAmount: string
   currency: string
   dueDate?: string | null
+}
+
+export type ReceivableMovement = {
+  id: string
+  receivableId: string
+  installmentId: string
+  movementType: 'PAYMENT' | 'RETENTION' | 'DISCOUNT' | 'CREDIT_NOTE' | 'REVERSAL'
+  amount: string
+  supportReference?: string | null
+  reversedMovementId?: string | null
+  actorId: string
+  createdAt: string
 }
 
 export type PaymentMethod = 'TRANSFER' | 'CHECK' | 'CASH' | 'CARD' | 'OTHER'
