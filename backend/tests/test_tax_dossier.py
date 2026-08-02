@@ -192,8 +192,11 @@ async def test_dossier_of_a_received_document_has_no_receivable(client, stored_o
 
     assert body["direction"] == "RECIBIDO"
     assert body["receivableId"] is None
-    # Un comprobante de retencion no lista retenciones de si mismo.
-    assert body["retentions"] == []
+    # El comprobante muestra su propio desglose, sin mezclar IVA y renta.
+    assert body["retainedIva"] == "32.80"
+    assert body["retainedIncomeTax"] == "8.59"
+    assert body["expectedNet"] == "0.00"
+    assert len(body["retentions"]) == 1
 
 
 async def test_dossier_requires_tax_read_scope(client) -> None:

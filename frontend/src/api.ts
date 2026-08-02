@@ -281,6 +281,7 @@ export type BankStatementImport = {
   unmatchedCreditCount: number
   ignoredDebitCount: number
   alreadyImportedCount: number
+  manualCorrectionCount: number
   matches: Array<{
     transactionId: string
     paymentDate: string
@@ -293,6 +294,19 @@ export type BankStatementImport = {
     retentionTotal: string
     replacesManualPayment: boolean
     status: 'MATCHED' | 'REGISTERED'
+    detail: string
+  }>
+  manualCorrections: Array<{
+    transactionId: string
+    paymentDate: string
+    reference: string
+    amount: string
+    targetReceivableId: string
+    targetInvoiceSequential: string
+    manualReceivableId: string
+    manualInvoiceSequential: string
+    manualMovementId: string
+    status: 'CORRECTION_REQUIRED' | 'CORRECTED'
     detail: string
   }>
 }

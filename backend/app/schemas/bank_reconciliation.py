@@ -25,6 +25,20 @@ class BankStatementMatchRead(APIModel):
     detail: str
 
 
+class BankStatementManualCorrectionRead(APIModel):
+    transaction_id: str = Field(min_length=64, max_length=64)
+    payment_date: date
+    reference: str = Field(min_length=1, max_length=120)
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    target_receivable_id: uuid.UUID
+    target_invoice_sequential: str = Field(min_length=9, max_length=9)
+    manual_receivable_id: uuid.UUID
+    manual_invoice_sequential: str = Field(min_length=9, max_length=9)
+    manual_movement_id: uuid.UUID
+    status: Literal["CORRECTION_REQUIRED", "CORRECTED"]
+    detail: str
+
+
 class BankStatementImportRead(APIModel):
     period: str = Field(pattern=r"^\d{4}-\d{2}$")
     file_name: str
@@ -36,4 +50,6 @@ class BankStatementImportRead(APIModel):
     unmatched_credit_count: int = Field(ge=0)
     ignored_debit_count: int = Field(ge=0)
     already_imported_count: int = Field(ge=0)
+    manual_correction_count: int = Field(ge=0)
     matches: list[BankStatementMatchRead]
+    manual_corrections: list[BankStatementManualCorrectionRead]

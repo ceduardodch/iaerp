@@ -65,7 +65,7 @@ en el **ADR 0012** y no se cambian sin un ADR nuevo.
 | E5 | Tareas del asistente + docs de usuario | ✅ Hecho | El scheduler crea pendientes de bajar evidencia, completar respaldo, revisar IVA y preparar ATS; todos llevan `requires_approval=true`. No envía, entrega ni paga. |
 | E6 | Ventas propias sin descargar del portal | ✅ Hecho | `own_documents.py` importa las facturas AUTORIZADAS que emitio IAERP leyendo su artefacto `xml-signed` (la autorizacion sale de `SRITransmission`). `POST /tax/periods/{id}/import-issued` y el boton **Importar mis ventas**. Sin autorizacion o sin XML firmado se omite explicando el motivo. |
 | E7 | Carga en bloque con previo | ✅ Hecho | `bulk.py` + `POST /tax/evidence/bulk` (hasta 50 archivos, ZIP incluido). Clasifica por contenido, ubica cada comprobante en el periodo de su fecha real de emision y muestra un **previo que no escribe nada**. Al confirmar guarda evidencia y documentos; con `applyRetentions` delega en `receivables.import_retention_xml_batch`. Un archivo ilegible no aborta el lote. |
-| E8 | Expediente del comprobante | ✅ Hecho | `dossier.py` + `GET /tax/documents/{id}/dossier` y fila desplegable: factura → retencion (IVA y renta separadas) → cobro con referencia bancaria → neto esperado (`total − retenciones`) y saldo. Una retencion por si sola NO cuenta como cobro. |
+| E8 | Expediente del comprobante | ✅ Hecho | `dossier.py` + `GET /tax/documents/{id}/dossier` y tarjeta desplegable: cada documento muestra `ID IAERP` copiable y clave SRI por separado; factura → retencion (IVA y renta separadas) → cobro con referencia bancaria → neto esperado (`total − retenciones`) y saldo. El comprobante de retención muestra su propio desglose. Una retencion por si sola NO cuenta como cobro. |
 | F | RDEP / ADI | 🚫 Bloqueado | RDEP requiere origen de datos de nomina/IESS (fuera del alcance actual) |
 
 ## Hallazgos de las muestras reales (2026-08-02)
@@ -233,13 +233,16 @@ evidencia completa. `POST /tax/periods/{id}/status` exige confirmación humana e
 idempotencia para avanzar primero a `LISTO_DECLARAR` y después a `DECLARADO`.
 La pantalla expone ambas confirmaciones y no permite saltar pasos.
 
-**Siguiente trabajo.** Carlos empezó por julio de 2026: cargar y revisar compras,
-ventas y retenciones, generar el ATS y validarlo con evidencia real en el portal
-del SRI. Después repetir el cierre hacia atrás, un mes a la vez. La conciliación
-bancaria también queda limitada al período elegido y da prioridad al archivo
-subido sobre cobros manuales sin referencia, siempre con reverso auditable.
-Además falta definir el 564 con el factor de proporcionalidad o el respaldo
-contable del contribuyente. No automatizar la presentación ni el pago.
+**Siguiente trabajo.** Integrar el cambio aislado de prioridad documental cuando
+el worktree principal quede libre. Después, Carlos continúa con julio de 2026:
+cargar y revisar compras, ventas y retenciones, generar el ATS y validarlo con
+evidencia real en el portal del SRI. Repetir el cierre hacia atrás, un mes a la
+vez. La conciliación bancaria usa el período elegido y da prioridad al archivo
+subido: conserva el cobro manual y crea un reverso auditable. Si el manual está
+en otra factura del mismo cliente, solo propone corregirlo cuando la fecha del
+banco demuestra que esa factura todavía no existía. También falta definir el
+564 con el factor de proporcionalidad o el respaldo contable del contribuyente.
+No automatizar la presentación ni el pago.
 
 Notas utiles para quien retome:
 - `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno

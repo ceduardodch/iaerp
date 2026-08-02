@@ -2072,7 +2072,7 @@ function BankStatementImportForm({
         <section className="retention-batch-results" aria-live="polite">
           <div className="retention-batch-heading">
             <h3>Resultado de la conciliación</h3>
-            <span>{preview.matchedCount} coincidencia{preview.matchedCount === 1 ? '' : 's'} · {preview.unmatchedCreditCount} abono{preview.unmatchedCreditCount === 1 ? '' : 's'} sin aplicar</span>
+            <span>{preview.matchedCount} coincidencia{preview.matchedCount === 1 ? '' : 's'} · {preview.manualCorrectionCount} {preview.manualCorrectionCount === 1 ? 'corrección' : 'correcciones'} · {preview.unmatchedCreditCount} abono{preview.unmatchedCreditCount === 1 ? '' : 's'} sin aplicar</span>
           </div>
           <p className="fine-print">Período {preview.period}. Se leyeron {preview.totalRows} movimientos: {preview.creditRows} abonos del período, {preview.outsidePeriodCreditCount} de otros meses, {preview.ignoredDebitCount} débitos ignorados y {preview.alreadyImportedCount} abono{preview.alreadyImportedCount === 1 ? '' : 's'} ya registrado{preview.alreadyImportedCount === 1 ? '' : 's'}.</p>
           {preview.matches.length > 0 ? (
@@ -2094,12 +2094,34 @@ function BankStatementImportForm({
                 </tbody>
               </table>
             </div>
-          ) : <ErpEmptyState title="Sin coincidencias exactas" description="Los abonos dudosos o sin una factura única no modificaron Cartera." />}
+          ) : null}
+          {preview.manualCorrections.length > 0 ? (
+            <div className="table-wrap" tabIndex={0} aria-label="Correcciones de cobros manuales">
+              <table className="erp-responsive-table">
+                <thead><tr><th>Fecha banco</th><th>Referencia</th><th>Factura correcta</th><th>Factura manual</th><th>Valor</th><th>Resultado</th></tr></thead>
+                <tbody>
+                  {preview.manualCorrections.map((correction) => (
+                    <tr key={`${correction.transactionId}-${correction.manualMovementId}`}>
+                      <td>{correction.paymentDate}</td>
+                      <td>{correction.reference}</td>
+                      <td>{correction.targetInvoiceSequential}</td>
+                      <td>{correction.manualInvoiceSequential}</td>
+                      <td>${formatAmount(correction.amount)}</td>
+                      <td><ErpStatusBadge tone={correction.status === 'CORRECTED' ? 'success' : 'warning'}>{correction.detail}</ErpStatusBadge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {preview.matches.length === 0 && preview.manualCorrections.length === 0 ? (
+            <ErpEmptyState title="Sin coincidencias exactas" description="Los abonos dudosos o sin una factura única no modificaron Cartera." />
+          ) : null}
           {registerMatches.error ? <p className="form-error" role="alert">{registerMatches.error.message}</p> : null}
           {registered ? <p className="fine-print">La conciliación terminó. Solo los cobros indicados como registrados modificaron Cartera.</p> : null}
           {!registered ? (
-            <ErpButton variant="primary" disabled={preview.matchedCount === 0 || registerMatches.isPending} onClick={() => registerMatches.mutate()}>
-              {registerMatches.isPending ? 'Registrando…' : `Registrar ${preview.matchedCount} cobro${preview.matchedCount === 1 ? '' : 's'}`}
+            <ErpButton variant="primary" disabled={(preview.matchedCount + preview.manualCorrectionCount) === 0 || registerMatches.isPending} onClick={() => registerMatches.mutate()}>
+              {registerMatches.isPending ? 'Registrando…' : `Confirmar ${preview.matchedCount + preview.manualCorrectionCount} cambio${(preview.matchedCount + preview.manualCorrectionCount) === 1 ? '' : 's'}`}
             </ErpButton>
           ) : null}
         </section>
