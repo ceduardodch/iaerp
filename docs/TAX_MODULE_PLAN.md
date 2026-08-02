@@ -25,7 +25,7 @@ en el **ADR 0012** y no se cambian sin un ADR nuevo.
 | E0 | ADR + alcance | ✅ Hecho | ADR 0012; `02-scope-and-restrictions.md` y `00-product-vision.md` actualizados |
 | E1 | Fundacion (modelos + migracion + evidencia) | ✅ Hecho | 11 tablas en `models/tax.py` + migracion `e4f5a6b7c8d9`; `services/tax/{evidence,periods}.py`; `api/tax.py` con scopes `tax:read`/`tax:write`; 9 pruebas en `tests/test_tax_foundation.py` |
 | E2 | Ingesta (XML/TXT + clasificacion) | ✅ Hecho | `sri_xml.py`, `txt_import.py`, `ingest.py` y el endpoint `POST /tax/evidence/{id}/ingest` |
-| E3 | IVA (motor + campos copiar-pegar) | ✅ Backend hecho · ⏳ falta pantalla | `iva.py` (trazabilidad por cifra), `form_fields.py` (seed 104 editable), `GET /tax/periods/{id}/iva` y `/documents`. **Falta la seccion "08 Tributario" del frontend** |
+| E3 | IVA (motor + campos copiar-pegar + pantalla) | ✅ Hecho | `iva.py` (trazabilidad por cifra), `form_fields.py` (seed 104 editable), endpoints y la seccion **Tributario** (`components/tax/TaxPage.tsx`, lazy) con carga de evidencia, periodos por anio, tabla copiar-y-pegar, resumen y documentos usados. 12 pruebas E2E |
 | E4 | ATS (XML/ZIP + validacion + correcciones) | ✅ Generador hecho | `ats.py`: orden de nodos **identico** al ATS aceptado (verificado nodo a nodo), mes de dos digitos, umbral de forma de pago, ZIP con un solo XML y validador que detecta `__MACOSX`. Falta conectarlo a los datos del periodo y al ciclo de `SRIValidationIssue` |
 | E5 | Tareas del asistente + docs de usuario | ⏳ Pendiente | Ninguna automatizacion envia ni paga |
 | F | RDEP / ADI | 🚫 Bloqueado | RDEP requiere origen de datos de nomina/IESS (fuera del alcance actual) |
@@ -167,6 +167,11 @@ Lo construido en E1 deja listo el almacenamiento; **falta leer el contenido**:
 5. Desempaquetar ZIP y procesar su contenido.
 
 Notas utiles para quien retome:
+- `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno
+  (`index.css`): usa clases propias (`.tax-year-label`, `.tax-subhead`) en vez de
+  reutilizarlas, o el texto no se vera.
+- Las claves de `amounts` viajan en camelCase (`ventasBrutas`), igual que
+  `sourceKey`, para poder cruzarlas desde el frontend.
 - Los tests de evidencia mockean MinIO con el fixture `stored_objects`
   (`monkeypatch` sobre `evidence_service.storage.upload_private_object`), asi que
   corren sin Docker.

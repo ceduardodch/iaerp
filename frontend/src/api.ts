@@ -517,3 +517,79 @@ export async function apiRequest<T>(
 export function idempotencyKey(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`
 }
+
+// Módulo tributario (ADR 0012)
+export type TaxPeriod = {
+  id: string
+  year: number
+  month: number
+  obligationType: 'IVA' | 'ATS' | 'RDEP' | 'RENTA' | 'ADI'
+  status:
+    | 'PENDIENTE_DESCARGA'
+    | 'EVIDENCIA_INCOMPLETA'
+    | 'LISTO_REVISAR'
+    | 'LISTO_DECLARAR'
+    | 'DECLARADO'
+  dueDate?: string | null
+  notes?: string | null
+}
+
+export type TaxEvidence = {
+  id: string
+  taxPeriodId?: string | null
+  filename: string
+  fileType: 'XML' | 'TXT' | 'PDF' | 'ZIP' | 'OTHER'
+  sha256: string
+  sizeBytes: number
+  origin: string
+  uploadedAt: string
+  processingNotes?: string | null
+  duplicate: boolean
+}
+
+export type TaxIngestResult = {
+  created: number
+  updated: number
+  skipped: number
+  preliminary: number
+  notes: string[]
+}
+
+export type TaxFiscalDocument = {
+  id: string
+  direction: 'EMITIDO' | 'RECIBIDO'
+  docType: string
+  accessKey?: string | null
+  issueDate: string
+  counterpartyIdentification?: string | null
+  counterpartyName?: string | null
+  subtotal: string
+  taxTotal: string
+  total: string
+  isPreliminary: boolean
+}
+
+export type TaxFormField = {
+  fieldCode: string
+  label: string
+  sourceKey: string
+  /** true = el usuario copia el valor al formulario; false = el SRI lo autocalcula. */
+  isPaste: boolean
+  /** Formateado como `1234.56`. */
+  value: string
+  documentCount: number
+  /** true si el código aún debe confirmarse contra el formulario vigente. */
+  needsReview: boolean
+}
+
+export type TaxIvaSummary = {
+  periodId: string
+  year: number
+  month: number
+  status: string
+  documentCount: number
+  isPreliminary: boolean
+  preliminaryReasons: string[]
+  amounts: Record<string, string>
+  fields: TaxFormField[]
+}

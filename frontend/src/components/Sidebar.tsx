@@ -1,6 +1,6 @@
 import { useAuth } from '../auth'
 
-type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'contracts' | 'crm'
+type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'contracts' | 'crm' | 'tax'
 
 const sections: Array<{ id: Section; label: string }> = [
   { id: 'overview', label: 'Resumen' },
@@ -11,6 +11,7 @@ const sections: Array<{ id: Section; label: string }> = [
   { id: 'organization', label: 'Empresa' },
   { id: 'receivables', label: 'Cartera' },
   { id: 'crm', label: 'CRM' },
+  { id: 'tax', label: 'Tributario' },
 ]
 
 export function Sidebar({

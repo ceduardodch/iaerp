@@ -64,13 +64,17 @@ import { ErpModal } from './components/erp/ErpModal'
 const LeadsPage = lazy(() =>
   import('./components/crm').then((module) => ({ default: module.LeadsPage })),
 )
+// La sección tributaria también se carga bajo demanda: solo la usa quien declara.
+const TaxPage = lazy(() =>
+  import('./components/tax').then((module) => ({ default: module.TaxPage })),
+)
 import { InvoiceSpreadsheet } from './components/InvoiceSpreadsheet'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionLoadingSkeleton } from './components/LoadingSkeleton'
 import { useToast } from './components/Toast'
 
-type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'contracts' | 'crm'
+type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'contracts' | 'crm' | 'tax'
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
   minimumFractionDigits: 2,
@@ -3099,6 +3103,13 @@ function Workspace() {
           <ErrorBoundary label="el CRM">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando CRM…" />}>
               <LeadsPage token={token} parties={parties} products={products} />
+            </Suspense>
+          </ErrorBoundary>
+        ) : null}
+        {section === 'tax' ? (
+          <ErrorBoundary label="el módulo tributario">
+            <Suspense fallback={<SectionLoadingSkeleton label="Cargando Tributario…" />}>
+              <TaxPage token={token} />
             </Suspense>
           </ErrorBoundary>
         ) : null}
