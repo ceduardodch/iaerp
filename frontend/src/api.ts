@@ -668,3 +668,44 @@ export type TaxBulkResult = {
   retentionCount: number
   retentionsApplied: number
 }
+
+export type TaxDossierRetention = {
+  accessKey?: string | null
+  issueDate: string
+  issuerName?: string | null
+  ivaAmount: string
+  incomeTaxAmount: string
+}
+
+export type TaxDossierMovement = {
+  movementType: 'PAYMENT' | 'RETENTION' | 'DISCOUNT' | 'CREDIT_NOTE' | 'REVERSAL'
+  amount: string
+  occurredAt: string
+  reference?: string | null
+  /** Presente cuando el cobro vino de la conciliación del extracto bancario. */
+  bankReference?: string | null
+}
+
+/** Historia del comprobante: retenciones, cobros y saldo. */
+export type TaxDocumentDossier = {
+  documentId: string
+  docType: string
+  direction: 'EMITIDO' | 'RECIBIDO'
+  accessKey?: string | null
+  issueDate: string
+  counterpartyName?: string | null
+  total: string
+  paymentMethods: string[]
+  retentions: TaxDossierRetention[]
+  movements: TaxDossierMovement[]
+  receivableId?: string | null
+  receivableStatus?: string | null
+  retainedIva: string
+  retainedIncomeTax: string
+  collectedAmount: string
+  outstandingAmount: string
+  /** total − retención IVA − retención renta */
+  expectedNet: string
+  netDifference: string
+  notes: string[]
+}

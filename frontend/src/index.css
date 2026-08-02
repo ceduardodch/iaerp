@@ -400,6 +400,19 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 /* Clases propias: `.section-number` está oculta globalmente por el rediseño. */
 .tax-year-label { margin: 0 0 .1rem; color: var(--muted); font-size: .72rem; font-weight: 750; letter-spacing: .1em; }
 .tax-subhead { margin: 1.2rem 0 .4rem; color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+/* Expediente del comprobante (factura → retención → cobro) */
+.tax-dossier-row td { background: #f7f6f1; }
+.tax-dossier { display: flex; flex-wrap: wrap; gap: 2rem; padding: .6rem .2rem; }
+.tax-dossier-tree { flex: 1 1 22rem; margin: 0; padding: 0; list-style: none; font-size: .8rem; }
+.tax-dossier-tree li { position: relative; padding: .35rem 0 .35rem 1.4rem; }
+/* Guías del árbol: dan la lectura anidada sin depender de imágenes. */
+.tax-dossier-tree li:not(.tax-dossier-root)::before { content: '└'; position: absolute; left: .3rem; color: var(--muted); }
+.tax-dossier-root { padding-left: 0 !important; border-bottom: 1px solid var(--line); }
+.tax-dossier-label { color: var(--muted); font-weight: 650; }
+.tax-dossier-summary { flex: 0 1 18rem; margin: 0; }
+.tax-dossier-summary div { display: flex; justify-content: space-between; gap: 1rem; padding: .3rem 0; border-top: 1px solid var(--line); font-size: .78rem; }
+.tax-dossier-summary .tax-dossier-net { font-weight: 750; }
+
 /* Carga en bloque: previo antes de confirmar */
 .tax-bulk { margin-top: 1rem; display: grid; gap: .6rem; }
 .tax-bulk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: .4rem; }

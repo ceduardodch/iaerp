@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 
 import {
   apiRequest,
   idempotencyKey,
   type TaxBulkResult,
+  type TaxDocumentDossier,
   type TaxAnnex,
   type TaxFiscalDocument,
   type TaxIvaSummary,
@@ -38,6 +39,83 @@ function monthName(month: number): string {
   return MONTHS[month - 1] ?? String(month)
 }
 
+const MOVEMENT_LABELS: Record<string, string> = {
+  PAYMENT: 'Cobro',
+  RETENTION: 'Retención aplicada',
+  DISCOUNT: 'Descuento',
+  CREDIT_NOTE: 'Nota de crédito',
+  REVERSAL: 'Reverso',
+}
+
+/**
+ * Historia del comprobante: qué retención le hicieron, qué cobros entraron (con
+ * su referencia bancaria si vinieron del extracto) y cuánto falta.
+ */
+function DossierView({ dossier }: { dossier: TaxDocumentDossier }) {
+  return (
+    <div className="tax-dossier">
+      <ul className="tax-dossier-tree">
+        <li className="tax-dossier-root">
+          <strong>{dossier.docType}</strong> {dossier.accessKey ?? ''} · ${dossier.total}
+        </li>
+
+        {dossier.retentions.map((retention) => (
+          <li key={retention.accessKey ?? retention.issueDate}>
+            <span className="tax-dossier-label">Retención</span> {retention.issueDate}
+            {retention.issuerName ? ` · ${retention.issuerName}` : ''}
+            <br />
+            <small>
+              IVA ${retention.ivaAmount} · Renta ${retention.incomeTaxAmount}
+            </small>
+          </li>
+        ))}
+
+        {dossier.movements.map((movement, index) => (
+          <li key={`${movement.movementType}-${index}`}>
+            <span className="tax-dossier-label">
+              {MOVEMENT_LABELS[movement.movementType] ?? movement.movementType}
+            </span>{' '}
+            ${movement.amount}
+            {movement.bankReference ? (
+              <>
+                <br />
+                <small>Banco · {movement.bankReference}</small>
+              </>
+            ) : movement.reference ? (
+              <>
+                <br />
+                <small>Ref. {movement.reference}</small>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      <dl className="tax-dossier-summary">
+        <div>
+          <dt>Retención IVA</dt><dd>${dossier.retainedIva}</dd>
+        </div>
+        <div>
+          <dt>Retención renta</dt><dd>${dossier.retainedIncomeTax}</dd>
+        </div>
+        <div className="tax-dossier-net">
+          <dt>Neto esperado</dt><dd>${dossier.expectedNet}</dd>
+        </div>
+        {dossier.receivableId ? (
+          <>
+            <div><dt>Cobrado</dt><dd>${dossier.collectedAmount}</dd></div>
+            <div><dt>Pendiente</dt><dd>${dossier.outstandingAmount}</dd></div>
+          </>
+        ) : null}
+      </dl>
+
+      {dossier.notes.map((note) => (
+        <p key={note} className="fine-print">{note}</p>
+      ))}
+    </div>
+  )
+}
+
 /**
  * Sección tributaria (ADR 0012): evidencia del SRI por periodo y valores listos
  * para copiar al formulario. Nada se calcula en el cliente; todo viene del
@@ -50,6 +128,7 @@ export function TaxPage({ token }: { token: string }) {
   const [generatedAnnex, setGeneratedAnnex] = useState<TaxAnnex | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [applyRetentions, setApplyRetentions] = useState(false)
+  const [openDossierId, setOpenDossierId] = useState<string | null>(null)
 
   const periodsQuery = useQuery({
     queryKey: ['tax', 'periods'],
@@ -106,6 +185,14 @@ export function TaxPage({ token }: { token: string }) {
   })
 
   const bulkResult = applyBulk.data ?? previewBulk.data ?? null
+
+  // Historia del comprobante: se pide solo cuando el usuario despliega la fila.
+  const dossierQuery = useQuery({
+    queryKey: ['tax', 'dossier', openDossierId],
+    queryFn: () =>
+      apiRequest<TaxDocumentDossier>(token, `/tax/documents/${openDossierId}/dossier`),
+    enabled: Boolean(openDossierId),
+  })
 
   const generateAts = useMutation({
     mutationFn: (periodId: string) => apiRequest<TaxAnnex>(token, `/tax/periods/${periodId}/ats`, {
@@ -561,30 +648,60 @@ export function TaxPage({ token }: { token: string }) {
                   <tr>
                     <th>Fecha</th><th>Tipo</th><th>Contraparte</th>
                     <th>Base</th><th>IVA</th><th>Total</th><th>Pago</th><th>Estado</th>
+                    <th>Detalle</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(documentsQuery.data ?? []).map((document) => (
-                    <tr key={document.id}>
-                      <td>{document.issueDate}</td>
-                      <td>{document.direction === 'EMITIDO' ? '↑' : '↓'} {document.docType}</td>
-                      <td>{document.counterpartyName ?? document.counterpartyIdentification ?? '—'}</td>
-                      <td>${document.subtotal}</td>
-                      <td>${document.taxTotal}</td>
-                      <td>${document.total}</td>
-                      <td>
-                        {(document.paymentMethods ?? []).map((method) => (
-                          method === '20' ? 'Transferencia' : `Código ${method}`
-                        )).join(', ') || 'Sin respaldo XML'}
-                      </td>
-                      <td>
-                        {document.isPreliminary ? (
-                          <ErpStatusBadge tone="warning">Preliminar</ErpStatusBadge>
-                        ) : (
-                          <ErpStatusBadge tone="success">Confirmado</ErpStatusBadge>
-                        )}
-                      </td>
-                    </tr>
+                    <Fragment key={document.id}>
+                      <tr>
+                        <td>{document.issueDate}</td>
+                        <td>{document.direction === 'EMITIDO' ? '↑' : '↓'} {document.docType}</td>
+                        <td>{document.counterpartyName ?? document.counterpartyIdentification ?? '—'}</td>
+                        <td>${document.subtotal}</td>
+                        <td>${document.taxTotal}</td>
+                        <td>${document.total}</td>
+                        <td>
+                          {(document.paymentMethods ?? []).map((method) => (
+                            method === '20' ? 'Transferencia' : `Código ${method}`
+                          )).join(', ') || 'Sin respaldo XML'}
+                        </td>
+                        <td>
+                          {document.isPreliminary ? (
+                            <ErpStatusBadge tone="warning">Preliminar</ErpStatusBadge>
+                          ) : (
+                            <ErpStatusBadge tone="success">Confirmado</ErpStatusBadge>
+                          )}
+                        </td>
+                        <td>
+                          <ErpButton
+                            variant="ghost"
+                            aria-expanded={openDossierId === document.id}
+                            aria-label={`Ver historia del comprobante ${document.accessKey ?? document.id}`}
+                            onClick={() =>
+                              setOpenDossierId(openDossierId === document.id ? null : document.id)
+                            }
+                          >
+                            {openDossierId === document.id ? 'Ocultar' : 'Ver historia'}
+                          </ErpButton>
+                        </td>
+                      </tr>
+                      {openDossierId === document.id ? (
+                        <tr className="tax-dossier-row">
+                          <td colSpan={9}>
+                            {dossierQuery.isPending ? (
+                              <p className="fine-print">Cargando historia…</p>
+                            ) : dossierQuery.data ? (
+                              <DossierView dossier={dossierQuery.data} />
+                            ) : (
+                              <p className="form-error">
+                                {dossierQuery.error?.message ?? 'No se pudo cargar la historia.'}
+                              </p>
+                            )}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

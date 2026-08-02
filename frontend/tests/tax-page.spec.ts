@@ -319,3 +319,60 @@ test('confirmar la carga informa lo registrado', async ({ page }) => {
   await expect(page.getByText('Carga confirmada')).toBeVisible()
   await expect(page.getByText(/Registrados: 2 nuevo/)).toBeVisible()
 })
+
+// Expediente: la historia del comprobante en la propia tabla de documentos.
+test('despliega la historia del comprobante con retención y cobro', async ({ page }) => {
+  await page.route('**/api/v1/tax/documents/*/dossier', (route) => route.fulfill({
+    json: {
+      documentId: '55555555-5555-4555-8555-555555555555',
+      docType: 'FACTURA',
+      direction: 'EMITIDO',
+      accessKey: '1511202501179999999900120010010000000451234567819',
+      issueDate: '2025-11-15',
+      counterpartyName: 'CLIENTE DEMO S.A.',
+      total: '359.24',
+      paymentMethods: ['20'],
+      retentions: [
+        {
+          accessKey: '1011202507066666666600120010010000023643121521411',
+          issueDate: '2025-11-20',
+          issuerName: 'CLIENTE AGENTE DEMO',
+          ivaAmount: '32.80',
+          incomeTaxAmount: '8.59',
+        },
+      ],
+      movements: [
+        {
+          movementType: 'PAYMENT',
+          amount: '317.85',
+          occurredAt: '2025-11-25T10:00:00Z',
+          reference: 'BANCO 998877 | TRX-1',
+          bankReference: '998877 | TRX-1',
+        },
+      ],
+      receivableId: '88888888-8888-4888-8888-888888888888',
+      receivableStatus: 'SETTLED',
+      retainedIva: '32.80',
+      retainedIncomeTax: '8.59',
+      collectedAmount: '317.85',
+      outstandingAmount: '0.00',
+      expectedNet: '317.85',
+      netDifference: '0.00',
+      notes: [],
+    },
+  }))
+
+  await page.getByRole('button', { name: /Ver historia del comprobante/ }).first().click()
+
+  const dossier = page.locator('.tax-dossier')
+  await expect(dossier).toBeVisible()
+  // La retención se ve con IVA y renta separadas.
+  await expect(dossier).toContainText('IVA $32.80')
+  await expect(dossier).toContainText('Renta $8.59')
+  // El cobro muestra su referencia bancaria.
+  await expect(dossier).toContainText('Cobro')
+  await expect(dossier).toContainText('Banco · 998877')
+  // total − retenciones = neto esperado.
+  await expect(dossier).toContainText('Neto esperado')
+  await expect(dossier).toContainText('$317.85')
+})
