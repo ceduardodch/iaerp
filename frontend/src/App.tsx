@@ -2033,7 +2033,7 @@ function BankStatementImportForm({
       onSubmit={(event) => { event.preventDefault(); previewStatement.mutate() }}
       onCancel={onCancel}
     >
-      <p className="fine-print">El TXT se procesa en memoria. Ignoramos débitos y solo proponemos abonos que dejan una única factura autorizada en cero, con sus retenciones ya descontadas. Nada se registra hasta que confirmes.</p>
+      <p className="fine-print">El TXT se procesa en memoria. Ignoramos débitos y solo proponemos abonos que saldan una única factura autorizada, con sus retenciones ya descontadas. Nada se registra hasta que confirmes.</p>
       <label>
         Estado de cuenta bancario
         <input
