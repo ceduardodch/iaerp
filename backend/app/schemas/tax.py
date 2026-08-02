@@ -54,6 +54,48 @@ class IngestResultRead(APIModel):
     notes: list[str]
 
 
+class DossierRetentionRead(APIModel):
+    access_key: str | None = None
+    issue_date: date
+    issuer_name: str | None = None
+    iva_amount: Decimal
+    income_tax_amount: Decimal
+
+
+class DossierMovementRead(APIModel):
+    movement_type: str
+    amount: Decimal
+    occurred_at: datetime
+    reference: str | None = None
+    # Presente cuando el cobro vino de la conciliación del extracto bancario.
+    bank_reference: str | None = None
+
+
+class DocumentDossierRead(APIModel):
+    """Historia completa del comprobante: retenciones, cobros y saldo."""
+
+    document_id: uuid.UUID
+    doc_type: str
+    direction: str
+    access_key: str | None = None
+    issue_date: date
+    counterparty_name: str | None = None
+    total: Decimal
+    payment_methods: list[str]
+    retentions: list[DossierRetentionRead]
+    movements: list[DossierMovementRead]
+    receivable_id: uuid.UUID | None = None
+    receivable_status: str | None = None
+    retained_iva: Decimal
+    retained_income_tax: Decimal
+    collected_amount: Decimal
+    outstanding_amount: Decimal
+    # total − retención IVA − retención renta
+    expected_net: Decimal
+    net_difference: Decimal
+    notes: list[str]
+
+
 class BulkItemRead(APIModel):
     """Una entrada del lote, ya clasificada por su contenido."""
 

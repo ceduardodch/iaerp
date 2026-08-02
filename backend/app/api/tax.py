@@ -19,6 +19,9 @@ from app.models.tax import FiscalDocument, SRIValidationIssue, TaxAnnex
 from app.schemas.tax import (
     BulkItemRead,
     BulkResultRead,
+    DocumentDossierRead,
+    DossierMovementRead,
+    DossierRetentionRead,
     FiscalDocumentRead,
     IngestResultRead,
     IvaSummaryRead,
@@ -35,6 +38,7 @@ from app.schemas.tax import (
 from app.services import receivables
 from app.services.tax import annexes as annexes_service
 from app.services.tax import bulk as bulk_service
+from app.services.tax import dossier as dossier_service
 from app.services.tax import evidence as evidence_service
 from app.services.tax import form_fields, own_documents
 from app.services.tax import ingest as ingest_service
@@ -415,6 +419,55 @@ async def get_period_documents(
         .order_by(FiscalDocument.issue_date, FiscalDocument.access_key)
     )
     return [FiscalDocumentRead.model_validate(document) for document in documents]
+
+
+@router.get("/documents/{document_id}/dossier", response_model=DocumentDossierRead)
+async def get_document_dossier(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:read"))],
+    document_id: uuid.UUID,
+) -> DocumentDossierRead:
+    """Historia del comprobante: retenciones, cobros con su referencia y saldo."""
+    record = await dossier_service.build_dossier(session, context, document_id=document_id)
+    return DocumentDossierRead(
+        document_id=record.document_id,
+        doc_type=record.doc_type,
+        direction=record.direction,
+        access_key=record.access_key,
+        issue_date=record.issue_date,
+        counterparty_name=record.counterparty_name,
+        total=record.total,
+        payment_methods=record.payment_methods,
+        retentions=[
+            DossierRetentionRead(
+                access_key=item.access_key,
+                issue_date=item.issue_date,
+                issuer_name=item.issuer_name,
+                iva_amount=item.iva_amount,
+                income_tax_amount=item.income_tax_amount,
+            )
+            for item in record.retentions
+        ],
+        movements=[
+            DossierMovementRead(
+                movement_type=item.movement_type,
+                amount=item.amount,
+                occurred_at=item.occurred_at,
+                reference=item.reference,
+                bank_reference=item.bank_reference,
+            )
+            for item in record.movements
+        ],
+        receivable_id=record.receivable_id,
+        receivable_status=record.receivable_status,
+        retained_iva=record.retained_iva,
+        retained_income_tax=record.retained_income_tax,
+        collected_amount=record.collected_amount,
+        outstanding_amount=record.outstanding_amount,
+        expected_net=record.expected_net,
+        net_difference=record.net_difference,
+        notes=record.notes,
+    )
 
 
 @router.get("/periods/{period_id}/iva", response_model=IvaSummaryRead)
