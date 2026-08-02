@@ -246,10 +246,11 @@ test('receivables screens reflow at 320 CSS px and at 200% zoom without horizont
   await loginAndOpenReceivables(page)
   await expectNoHorizontalOverflow(page)
 
-  await page
+  const registerPaymentButton = page
     .getByRole('button', { name: `Registrar cobro para ${customer.name}` })
     .first()
-    .click()
+  await expect(registerPaymentButton).toBeInViewport()
+  await registerPaymentButton.click()
   await expect(page.getByRole('heading', { name: 'Registrar cobro', level: 1 })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

@@ -698,8 +698,9 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
   .erp-responsive-table td { padding: 0; border: 0; }
   .erp-responsive-table td:first-child { grid-column: 1; }
   .erp-responsive-table td:nth-child(2), .erp-responsive-table td:nth-child(3) { grid-column: 1; color: var(--muted); font-size: .7rem; }
-  .erp-responsive-table td:last-child { position: absolute; top: .75rem; right: .75rem; width: auto; }
-  .erp-responsive-table td:first-child strong { max-width: calc(100% - 5rem); }
+  .erp-responsive-table td:last-child { position: static; grid-column: 1 / -1; width: 100%; margin-top: .35rem; }
+  .erp-responsive-table td:first-child strong { max-width: 100%; }
+  .erp-responsive-table .erp-action-cell { flex-wrap: wrap; justify-content: flex-start; }
   .metric-grid { grid-template-columns: 1fr; }
   .metric-card { min-height: 180px; }
   .readiness-panel { grid-template-columns: 1fr; gap: 1rem; }
