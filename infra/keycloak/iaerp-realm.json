@@ -364,6 +364,16 @@
       "name": "receivables:notify",
       "protocol": "openid-connect",
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "tax:read",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "tax:write",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
     }
   ],
   "clients": [
@@ -412,7 +422,9 @@
         "commercial:write",
         "receivables:read",
         "receivables:write",
-        "receivables:notify"
+        "receivables:notify",
+        "tax:read",
+        "tax:write"
       ],
       "optionalClientScopes": [
         "organization"

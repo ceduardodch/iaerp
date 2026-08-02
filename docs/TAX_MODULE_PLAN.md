@@ -19,6 +19,28 @@
   lectores), `ff975f0` (E2 persistencia + E4 generador), `1c9573e` (E3 backend),
   `64c6bf2` (E3 pantalla).
 
+## ⚠️ Accion requerida en Keycloak de produccion
+
+El modulo exige los scopes `tax:read` y `tax:write`. Estaban declarados en el
+modo dev (`ALL_DEV_SCOPES`, `api/router.py`) pero **faltaban en el realm**, asi
+que en produccion la seccion Tributario responde `Missing scopes: tax:write`.
+
+`infra/keycloak/iaerp-realm.json` ya quedo corregido (scopes del realm +
+`defaultClientScopes` de `iaerp-web`). Como la instancia de produccion **no se
+reimporta**, hay que aplicarlo a mano una sola vez:
+
+1. Consola admin de Keycloak → realm **iaerp** → **Client scopes** → *Create*:
+   - Nombre `tax:read`, protocolo `openid-connect`, tipo **None**.
+   - En *Settings*, activar **Include in token scope**; desactivar *Display on
+     consent screen*.
+   - Repetir con `tax:write`.
+2. **Clients** → `iaerp-web` → pestaña **Client scopes** → *Add client scope* →
+   seleccionar `tax:read` y `tax:write` → agregar como **Default**.
+3. Cerrar sesion en IAERP y volver a entrar (el token se emite de nuevo).
+
+Los clientes CLI y de agentes (`iaerp-mcp-cli`, `iaerp-agent-*`) **no** reciben
+estos scopes a proposito: los agentes no operan lo tributario.
+
 ## Que es
 
 Preparar declaraciones y anexos del SRI **desde evidencia real** (XML
