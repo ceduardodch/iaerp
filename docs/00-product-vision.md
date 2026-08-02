@@ -54,6 +54,10 @@ permisos, politicas, idempotencia y auditoria.
 
 ## No objetivos del MVP
 
-Contabilidad general, declaraciones tributarias, conciliacion bancaria,
-transferencias, nomina, RRHH, marketing, campanas Telegram, operacion de
-farmacias y procesos de franquicias.
+Contabilidad general, conciliacion bancaria, transferencias, nomina, RRHH,
+marketing, campanas Telegram, operacion de farmacias y procesos de franquicias.
+
+La **preparacion** de declaraciones y anexos (IVA mensual y ATS) si forma parte
+del alcance desde el ADR 0012: IAERP concilia la evidencia real del SRI y deja
+los valores listos para declarar, pero no envia ni paga sin aprobacion humana.
+RDEP y ADI quedan fuera hasta definir el origen de los datos de nomina.
