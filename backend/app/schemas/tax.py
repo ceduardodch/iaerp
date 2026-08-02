@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import Field
 
@@ -38,3 +39,53 @@ class TaxEvidenceRead(APIModel):
     processing_notes: str | None = None
     # true cuando el archivo ya existia (mismo hash) y no se volvio a guardar.
     duplicate: bool = False
+
+
+class IngestResultRead(APIModel):
+    created: int
+    updated: int
+    skipped: int
+    preliminary: int
+    notes: list[str]
+
+
+class FiscalDocumentRead(APIModel):
+    id: uuid.UUID
+    direction: str
+    doc_type: str
+    access_key: str | None = None
+    issue_date: date
+    counterparty_identification: str | None = None
+    counterparty_name: str | None = None
+    subtotal: Decimal
+    tax_total: Decimal
+    total: Decimal
+    is_preliminary: bool
+
+
+class TaxFormFieldRead(APIModel):
+    field_code: str
+    label: str
+    source_key: str
+    # true = el usuario copia el valor al formulario; false = el SRI lo autocalcula.
+    is_paste: bool
+    # Formateado como `1234.56`, listo para copiar.
+    value: str
+    # Documentos que respaldan la cifra.
+    document_count: int
+    # true si este codigo aun debe confirmarse contra el formulario vigente.
+    needs_review: bool = False
+
+
+class IvaSummaryRead(APIModel):
+    period_id: uuid.UUID
+    year: int
+    month: int
+    status: str
+    document_count: int
+    is_preliminary: bool
+    preliminary_reasons: list[str]
+    # Todas las cifras del motor, formateadas.
+    amounts: dict[str, str]
+    # Campos del formulario listos para copiar/controlar.
+    fields: list[TaxFormFieldRead]

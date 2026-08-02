@@ -24,8 +24,8 @@ en el **ADR 0012** y no se cambian sin un ADR nuevo.
 |---|-------|--------|-------|
 | E0 | ADR + alcance | ✅ Hecho | ADR 0012; `02-scope-and-restrictions.md` y `00-product-vision.md` actualizados |
 | E1 | Fundacion (modelos + migracion + evidencia) | ✅ Hecho | 11 tablas en `models/tax.py` + migracion `e4f5a6b7c8d9`; `services/tax/{evidence,periods}.py`; `api/tax.py` con scopes `tax:read`/`tax:write`; 9 pruebas en `tests/test_tax_foundation.py` |
-| E2 | Ingesta (XML/TXT + clasificacion) | ✅ Hecho (falta endpoint) | `sri_xml.py`, `txt_import.py` e `ingest.py` (persistencia + ZIP), validados contra archivos reales. Falta exponerlo por API y disparar la ingesta al subir evidencia |
-| E3 | IVA (motor + campos copiar-pegar + pantalla) | ⏳ Pendiente | Necesita confirmar codigos del F104 vigentes. `formatting.py` ya entrega `1234.56` |
+| E2 | Ingesta (XML/TXT + clasificacion) | ✅ Hecho | `sri_xml.py`, `txt_import.py`, `ingest.py` y el endpoint `POST /tax/evidence/{id}/ingest` |
+| E3 | IVA (motor + campos copiar-pegar) | ✅ Backend hecho · ⏳ falta pantalla | `iva.py` (trazabilidad por cifra), `form_fields.py` (seed 104 editable), `GET /tax/periods/{id}/iva` y `/documents`. **Falta la seccion "08 Tributario" del frontend** |
 | E4 | ATS (XML/ZIP + validacion + correcciones) | ✅ Generador hecho | `ats.py`: orden de nodos **identico** al ATS aceptado (verificado nodo a nodo), mes de dos digitos, umbral de forma de pago, ZIP con un solo XML y validador que detecta `__MACOSX`. Falta conectarlo a los datos del periodo y al ciclo de `SRIValidationIssue` |
 | E5 | Tareas del asistente + docs de usuario | ⏳ Pendiente | Ninguna automatizacion envia ni paga |
 | F | RDEP / ADI | 🚫 Bloqueado | RDEP requiere origen de datos de nomina/IESS (fuera del alcance actual) |
@@ -69,13 +69,19 @@ estructura. Lo aprendido:
 
 ## Insumos que faltan (bloqueantes reales, los provee el usuario)
 
-1. **Ficha tecnica del ATS vigente** y su XSD si existe. Las dos muestras
+1. **Confirmar dos codigos del formulario 104.** El seed de `form_fields.py` los
+   marca `needs_review` y la API los expone con `needsReview: true`:
+   - **507** — hoy apunta a "total de adquisiciones y pagos".
+   - **564** — hoy apunta a "IVA en adquisiciones / credito tributario".
+   El **609** esta confirmado por el usuario (solo retencion de IVA recibida);
+   401, 411, 500, 510 y 517 son los habituales. Todo es editable en
+   `TaxFormFieldMap` sin tocar codigo.
+2. **Ficha tecnica del ATS vigente** y su XSD si existe. Las dos muestras
    aceptadas fijan el orden de nodos, pero no cubren todos los casos (notas de
    credito, reembolsos, exportaciones, retenciones emitidas).
-2. **Codigos del formulario 104 vigentes** (401, 411, 500, 510, 507, 517, 564,
-   609): van en `TaxFormFieldMap`, configurables por vigencia, nunca en codigo.
-3. Muestras de **comprobantes emitidos** y de **notas de credito** para cerrar la
-   ingesta de ventas.
+3. Muestras de **comprobantes emitidos en XML** y de **notas de credito**: los
+   emitidos que entrego el usuario son PDF, asi que las ventas del periodo aun no
+   se pueden conciliar desde evidencia descargada.
 
 ## Que se reutiliza (no rehacer)
 
