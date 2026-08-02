@@ -7,6 +7,20 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización local: 2026-08-02 `America/Guayaquil`. La carga documental
+  prevalece sobre cobros manuales sin borrar su historia. Si un abono bancario
+  ya está ligado a la factura correcta y existe un cobro manual igual en otra
+  factura del mismo cliente, IAERP propone el reverso solo con prueba
+  inequívoca: la factura manual fue emitida después del abono. La persona ve la
+  corrección antes de confirmarla; el movimiento original queda en auditoría.
+  Tributario separa cada comprobante en una tarjeta, muestra y permite copiar
+  su `ID IAERP`, conserva aparte la clave SRI y desglosa el IVA y la renta en el
+  propio comprobante de retención. La regla usa el período elegido, por lo que
+  sirve para julio, junio y los meses anteriores. Ruff, mypy, 67 pruebas de
+  banco/tributario, build, lint y 42 recorridos Playwright pasan en una copia
+  aislada de `origin/main`. Pendiente integrar porque otra sesión mantiene
+  cambios locales sin subir en el worktree principal.
+
 - Actualización local: 2026-08-02 `America/Guayaquil`. Cartera permite cargar
   el TXT de Banco Bolivariano y conciliar un mes elegido. Factura y abono deben
   pertenecer al mismo período; esto permite separar pagos iguales que se

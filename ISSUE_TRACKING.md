@@ -14,6 +14,13 @@
 > factura y retenciones cuadran completas; el original se conserva con reverso.
 > Julio de 2026 es el primer período y luego se avanzará hacia atrás.
 
+> Corte 2026-08-02: cambio listo en copia aislada. Tributario separa cada
+> comprobante y muestra su ID; las retenciones enseñan IVA y renta propios. Si
+> el banco respalda una factura y un cobro manual igual quedó en una factura
+> emitida después del abono, IAERP propone un reverso auditable. Sirve para
+> cualquier período elegido. Falta integrar cuando el worktree principal quede
+> libre de cambios de la otra sesión.
+
 ---
 
 ## 🎯 Objetivo de este Documento

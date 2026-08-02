@@ -353,6 +353,10 @@ Pruebas E2E (Playwright, escritorio y viewport movil):
   si `abono + retenciones = total`, el sistema crea un reverso auditable del
   manual y registra el banco. Nunca borra el movimiento ni reemplaza retenciones.
   Pagos con referencia, descuentos o notas de crédito quedan fuera.
+- Si el banco ya quedó en la factura respaldada y el mismo valor fue cargado
+  manualmente en otra factura del cliente, la vista previa propone corregir el
+  manual solo cuando la otra factura fue emitida después del abono. Al confirmar
+  crea el reverso en esa factura; no mueve ni borra el cobro original.
 - Dos abonos o dos facturas por el mismo valor dentro del período quedan para
   revisión. Importes iguales en meses distintos no crean ambigüedad.
 - El archivo se procesa en memoria. Una huella estable de cuenta, fecha,

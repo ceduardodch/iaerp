@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Fragment, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import {
   apiRequest,
@@ -13,6 +13,7 @@ import {
   type TaxPeriod,
 } from '../../api'
 import { ErpButton, ErpEmptyState, ErpPageHeader, ErpPanel, ErpStatusBadge } from '../erp'
+import './TaxPage.css'
 
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -98,9 +99,11 @@ function DossierView({ dossier }: { dossier: TaxDocumentDossier }) {
         <div>
           <dt>Retención renta</dt><dd>${dossier.retainedIncomeTax}</dd>
         </div>
-        <div className="tax-dossier-net">
-          <dt>Neto esperado</dt><dd>${dossier.expectedNet}</dd>
-        </div>
+        {dossier.docType !== 'RETENCION' ? (
+          <div className="tax-dossier-net">
+            <dt>Neto esperado</dt><dd>${dossier.expectedNet}</dd>
+          </div>
+        ) : null}
         {dossier.receivableId ? (
           <>
             <div><dt>Cobrado</dt><dd>${dossier.collectedAmount}</dd></div>
@@ -642,69 +645,83 @@ export function TaxPage({ token }: { token: string }) {
           </ErpPanel>
 
           <ErpPanel title="Documentos usados" count={documentsQuery.data?.length ?? 0}>
-            <div className="table-wrap" tabIndex={0} aria-label="Documentos del periodo">
-              <table className="erp-responsive-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th><th>Tipo</th><th>Contraparte</th>
-                    <th>Base</th><th>IVA</th><th>Total</th><th>Pago</th><th>Estado</th>
-                    <th>Detalle</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(documentsQuery.data ?? []).map((document) => (
-                    <Fragment key={document.id}>
-                      <tr>
-                        <td>{document.issueDate}</td>
-                        <td>{document.direction === 'EMITIDO' ? '↑' : '↓'} {document.docType}</td>
-                        <td>{document.counterpartyName ?? document.counterpartyIdentification ?? '—'}</td>
-                        <td>${document.subtotal}</td>
-                        <td>${document.taxTotal}</td>
-                        <td>${document.total}</td>
-                        <td>
-                          {(document.paymentMethods ?? []).map((method) => (
-                            method === '20' ? 'Transferencia' : `Código ${method}`
-                          )).join(', ') || 'Sin respaldo XML'}
-                        </td>
-                        <td>
-                          {document.isPreliminary ? (
-                            <ErpStatusBadge tone="warning">Preliminar</ErpStatusBadge>
-                          ) : (
-                            <ErpStatusBadge tone="success">Confirmado</ErpStatusBadge>
-                          )}
-                        </td>
-                        <td>
-                          <ErpButton
-                            variant="ghost"
-                            aria-expanded={openDossierId === document.id}
-                            aria-label={`Ver historia del comprobante ${document.accessKey ?? document.id}`}
-                            onClick={() =>
-                              setOpenDossierId(openDossierId === document.id ? null : document.id)
-                            }
-                          >
-                            {openDossierId === document.id ? 'Ocultar' : 'Ver historia'}
-                          </ErpButton>
-                        </td>
-                      </tr>
-                      {openDossierId === document.id ? (
-                        <tr className="tax-dossier-row">
-                          <td colSpan={9}>
-                            {dossierQuery.isPending ? (
-                              <p className="fine-print">Cargando historia…</p>
-                            ) : dossierQuery.data ? (
-                              <DossierView dossier={dossierQuery.data} />
-                            ) : (
-                              <p className="form-error">
-                                {dossierQuery.error?.message ?? 'No se pudo cargar la historia.'}
-                              </p>
-                            )}
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
+            <div className="tax-document-list" aria-label="Documentos del periodo">
+              {(documentsQuery.data ?? []).map((document) => (
+                <article className="tax-document-card" key={document.id}>
+                  <header className="tax-document-header">
+                    <div>
+                      <span className="tax-document-direction">
+                        {document.direction === 'EMITIDO' ? 'Emitido' : 'Recibido'}
+                      </span>
+                      <h3>{document.docType} · {document.issueDate}</h3>
+                      <p>{document.counterpartyName ?? document.counterpartyIdentification ?? 'Sin contraparte'}</p>
+                    </div>
+                    {document.isPreliminary ? (
+                      <ErpStatusBadge tone="warning">Preliminar</ErpStatusBadge>
+                    ) : (
+                      <ErpStatusBadge tone="success">Confirmado</ErpStatusBadge>
+                    )}
+                  </header>
+
+                  <dl className="tax-document-amounts">
+                    <div><dt>Base</dt><dd>${document.subtotal}</dd></div>
+                    <div><dt>IVA</dt><dd>${document.taxTotal}</dd></div>
+                    <div className="tax-document-total"><dt>Total</dt><dd>${document.total}</dd></div>
+                  </dl>
+
+                  <div className="tax-document-identifiers">
+                    <div>
+                      <span>ID IAERP</span>
+                      <code>{document.id}</code>
+                      <ErpButton
+                        variant="ghost"
+                        aria-label={`Copiar ID IAERP ${document.id}`}
+                        onClick={() => void copyValue(`document-${document.id}`, document.id)}
+                      >
+                        {copiedField === `document-${document.id}` ? 'Copiado' : 'Copiar ID'}
+                      </ErpButton>
+                    </div>
+                    <div>
+                      <span>Clave SRI</span>
+                      <code>{document.accessKey ?? 'Sin clave en la evidencia'}</code>
+                    </div>
+                    <div>
+                      <span>Forma de pago</span>
+                      <strong>
+                        {(document.paymentMethods ?? []).map((method) => (
+                          method === '20' ? 'Transferencia' : `Código ${method}`
+                        )).join(', ') || 'Sin respaldo XML'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="tax-document-actions">
+                    <ErpButton
+                      variant="ghost"
+                      aria-expanded={openDossierId === document.id}
+                      aria-label={`Ver historia del comprobante ${document.accessKey ?? document.id}`}
+                      onClick={() =>
+                        setOpenDossierId(openDossierId === document.id ? null : document.id)
+                      }
+                    >
+                      {openDossierId === document.id ? 'Ocultar historia' : 'Ver historia'}
+                    </ErpButton>
+                  </div>
+                  {openDossierId === document.id ? (
+                    <div className="tax-document-dossier">
+                      {dossierQuery.isPending ? (
+                        <p className="fine-print">Cargando historia…</p>
+                      ) : dossierQuery.data ? (
+                        <DossierView dossier={dossierQuery.data} />
+                      ) : (
+                        <p className="form-error">
+                          {dossierQuery.error?.message ?? 'No se pudo cargar la historia.'}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
               {(documentsQuery.data ?? []).length === 0 ? (
                 <ErpEmptyState
                   title="Sin comprobantes"

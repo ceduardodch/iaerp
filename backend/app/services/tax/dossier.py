@@ -106,7 +106,27 @@ async def _retentions_for(
     (``001-001-000000045``), no por clave de acceso.
     """
     if document.doc_type == "RETENCION":
-        return []
+        rows = list(
+            await session.scalars(
+                select(FiscalRetention).where(
+                    FiscalRetention.tenant_id == context.tenant_id,
+                    FiscalRetention.fiscal_document_id == document.id,
+                )
+            )
+        )
+        if not rows:
+            return []
+        own_retention = DossierRetention(
+            access_key=document.access_key,
+            issue_date=document.issue_date,
+            issuer_name=document.counterparty_name,
+        )
+        for row in rows:
+            if row.kind == "IVA":
+                own_retention.iva_amount += row.retained_amount
+            else:
+                own_retention.income_tax_amount += row.retained_amount
+        return [own_retention]
 
     parts = [
         document.establishment_code,
@@ -231,7 +251,9 @@ async def build_dossier(
         )
 
     dossier.expected_net = quantize_amount(
-        document.total - dossier.retained_iva - dossier.retained_income_tax
+        Decimal("0.00")
+        if document.doc_type == "RETENCION"
+        else document.total - dossier.retained_iva - dossier.retained_income_tax
     )
     if dossier.receivable_id is not None:
         dossier.net_difference = quantize_amount(

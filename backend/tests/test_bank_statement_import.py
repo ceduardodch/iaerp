@@ -339,6 +339,130 @@ async def test_bank_statement_period_replaces_manual_payment_with_bank_evidence(
     assert sum((movement.amount for movement in retentions), Decimal("0.00")) == Decimal("330.48")
 
 
+async def test_uploaded_bank_evidence_reverses_manual_payment_on_future_invoice(client) -> None:
+    setup = await _create_receivable_via_event(
+        key_prefix="bank-document-priority",
+        sequential="000000965",
+        total=Decimal("150.00"),
+        issue_date=date(2026, 7, 1),
+    )
+    target_receivable_id, masters = await setup(client)
+    token = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["receivables:write", "receivables:read"]
+    )
+    retention = await client.post(
+        f"/api/v1/receivables/{target_receivable_id}/payments",
+        headers=auth(token, "bank-priority-retention-0001"),
+        json={
+            "cashAmount": "0.00",
+            "paymentDate": "2026-07-10",
+            "retentions": [
+                {
+                    "kind": "RETENTION_RENTA",
+                    "amount": "3.00",
+                    "reason": "Código SRI 3440",
+                    "documentReference": "2" * 49,
+                },
+                {
+                    "kind": "RETENTION_IVA",
+                    "amount": "10.50",
+                    "reason": "Código SRI 2",
+                    "documentReference": "2" * 49,
+                },
+            ],
+            "discounts": [],
+        },
+    )
+    assert retention.status_code == 201, retention.text
+    content = _statement(
+        _row(
+            occurred_at="07/14/2026 13:32:00.000",
+            reference="DOCUMENT-PRIORITY-1",
+            description="TRANSFERENCIA RECIBIDA",
+            sign="+",
+            amount="136.50",
+        )
+    )
+    registered = await client.post(
+        "/api/v1/receivables/bank-statement",
+        headers={**auth(token), "Idempotency-Key": "bank-document-priority-0001"},
+        data={"apply": "true", "period": "2026-07"},
+        files={"file": ("estado.txt", content, "text/plain")},
+    )
+    assert registered.status_code == 200, registered.text
+    assert registered.json()["matchedCount"] == 1
+
+    future_document = await _insert_authorized_invoice(
+        tenant_id=TENANT_A,
+        establishment_id=uuid.UUID(masters["establishment_id"]),
+        emission_point_id=uuid.UUID(masters["emission_point_id"]),
+        party_id=uuid.UUID(masters["party_id"]),
+        product_id=uuid.UUID(masters["product_id"]),
+        sequential="000000966",
+        total=Decimal("200.00"),
+        issue_date=date(2026, 7, 17),
+    )
+    async with SessionFactory() as session:
+        await handle_invoice_authorized(session, _message_for(future_document))
+        await session.commit()
+    future_receivable_response = await client.get(
+        "/api/v1/receivables", headers=auth(token)
+    )
+    assert future_receivable_response.status_code == 200
+    future_receivable_id = next(
+        item["id"]
+        for item in future_receivable_response.json()
+        if item["invoiceSequential"] == "000000966"
+    )
+    manual = await client.post(
+        f"/api/v1/receivables/{future_receivable_id}/payments",
+        headers=auth(token, "bank-priority-manual-0001"),
+        json={
+            "cashAmount": "136.50",
+            "paymentDate": "2026-07-30",
+            "method": "TRANSFER",
+            "reference": None,
+            "retentions": [],
+            "discounts": [],
+        },
+    )
+    assert manual.status_code == 201, manual.text
+
+    preview = await client.post(
+        "/api/v1/receivables/bank-statement",
+        headers=auth(token),
+        data={"apply": "false", "period": "2026-07"},
+        files={"file": ("estado.txt", content, "text/plain")},
+    )
+    assert preview.status_code == 200, preview.text
+    correction = preview.json()["manualCorrections"][0]
+    assert preview.json()["matchedCount"] == 0
+    assert preview.json()["alreadyImportedCount"] == 1
+    assert preview.json()["manualCorrectionCount"] == 1
+    assert correction["targetInvoiceSequential"] == "000000965"
+    assert correction["manualInvoiceSequential"] == "000000966"
+    assert correction["status"] == "CORRECTION_REQUIRED"
+
+    applied = await client.post(
+        "/api/v1/receivables/bank-statement",
+        headers={**auth(token), "Idempotency-Key": "bank-document-priority-0002"},
+        data={"apply": "true", "period": "2026-07"},
+        files={"file": ("estado.txt", content, "text/plain")},
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["manualCorrections"][0]["status"] == "CORRECTED"
+    async with SessionFactory() as session:
+        future_movements = list(
+            await session.scalars(
+                select(Movement).where(
+                    Movement.receivable_id == uuid.UUID(future_receivable_id)
+                )
+            )
+        )
+    assert len([item for item in future_movements if item.movement_type == "PAYMENT"]) == 1
+    assert len([item for item in future_movements if item.movement_type == "REVERSAL"]) == 1
+
+
 async def test_bank_statement_requires_supported_file_and_write_scope(client) -> None:
     read_token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:read"])
     forbidden = await client.post(

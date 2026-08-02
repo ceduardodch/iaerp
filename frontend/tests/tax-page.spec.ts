@@ -183,13 +183,17 @@ test('separa la retención de renta del IVA mensual', async ({ page }) => {
   await expect(page.getByRole('definition').filter({ hasText: '8.59' })).toBeVisible()
 })
 
-test('marca los comprobantes preliminares en la tabla de documentos', async ({ page }) => {
-  const retentionRow = page.getByRole('row', { name: /RETENCION/ })
-  await expect(retentionRow).toContainText('Preliminar')
+test('separa cada comprobante y muestra su ID IAERP', async ({ page }) => {
+  const retentionCard = page.locator('article').filter({ hasText: 'RETENCION' })
+  await expect(retentionCard).toContainText('Preliminar')
 
-  const invoiceRow = page.getByRole('row', { name: /PROVEEDOR DEMO/ })
-  await expect(invoiceRow).toContainText('Confirmado')
-  await expect(invoiceRow).toContainText('Transferencia')
+  const invoiceCard = page.locator('article').filter({ hasText: 'PROVEEDOR DEMO' })
+  await expect(invoiceCard).toContainText('Confirmado')
+  await expect(invoiceCard).toContainText('Transferencia')
+  await expect(invoiceCard).toContainText('ID IAERP')
+  await expect(invoiceCard).toContainText('55555555-5555-4555-8555-555555555555')
+  await expect(invoiceCard).toContainText('Clave SRI')
+  await expect(invoiceCard.getByRole('button', { name: /Copiar ID IAERP/ })).toBeVisible()
 })
 
 test('genera el ATS y ofrece su descarga privada', async ({ page }) => {
