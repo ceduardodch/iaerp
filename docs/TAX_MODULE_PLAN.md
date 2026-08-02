@@ -4,7 +4,20 @@
 > leer esto y `docs/adrs/0012-tax-module-scope.md` antes de tocar codigo.
 > Coordinacion general: [`COORDINACION_IA.md`](../COORDINACION_IA.md).
 
-**Ultima actualizacion:** 2026-07-23
+**Ultima actualizacion:** 2026-08-02
+
+## Estado de git (leer antes de tocar)
+
+- **Rama de trabajo: `feature/tax-module`** (autorizada por el usuario porque
+  `release` estaba tomada por otra sesion y `main` es produccion).
+- Sale de `main`; PR **draft #26** abierto contra `main`. No mergear todavia.
+- ⚠️ **El CI no corre en ramas `feature`** (solo `develop`/`release`/`main`, por
+  push o PR). La validacion se hace en local y en el PR.
+- ⚠️ `main` ya venia con **CI en rojo** por `receivables-a11y.spec.ts`, ajeno a
+  este modulo.
+- Commits del modulo, en orden: `0e39cec` (E0), `335b732` (E1), `3511f7b` (E2
+  lectores), `ff975f0` (E2 persistencia + E4 generador), `1c9573e` (E3 backend),
+  `64c6bf2` (E3 pantalla).
 
 ## Que es
 
@@ -152,19 +165,39 @@ anio. Reutiliza `ErpPanel`, `ErpStatusBadge`, `ErpEmptyState` y el patron de
 - Validacion final del usuario: cargar un mes real, comparar contra la
   declaracion hecha a mano y subir el ATS generado al portal.
 
-## Donde retomar (E2)
+## Donde retomar (siguiente tarea concreta)
 
-Lo construido en E1 deja listo el almacenamiento; **falta leer el contenido**:
+El modulo ya es usable de punta a punta: cargar evidencia -> ingerir -> ver el
+IVA con valores para copiar. **Lo siguiente es conectar el ATS**, cuyo generador
+ya existe y esta verificado, pero todavia no se alimenta de los datos reales.
 
-1. Extraer el parseo del sobre SRI de `services/receivables.py`
-   (`_parse_authorized_retention_xml`) a `services/tax/sri_xml.py` y hacer que
-   receivables lo consuma, sin cambiar su comportamiento actual.
-2. Extenderlo a factura, nota de credito, nota de debito y liquidacion.
-3. Crear `FiscalDocument` + `FiscalDocumentTax` + `FiscalRetention` desde cada
-   evidencia XML, asignando el periodo por la **fecha real de emision**.
-4. Parser del TXT del portal; si no permite separar facturas mixtas, marcar
-   `is_preliminary` y registrar el faltante.
-5. Desempaquetar ZIP y procesar su contenido.
+**Tarea 1 — Conectar el ATS al periodo (cierra E4).**
+1. Crear `services/tax/ats_builder.py` (o una funcion en `ats.py`) que arme el
+   `AtsInput` desde los `FiscalDocument` del periodo:
+   - `purchases` <- documentos `RECIBIDO` (factura/liquidacion/ND menos NC), con
+     su desglose de `FiscalDocumentTax` en `base_zero_rate` / `base_taxed`.
+   - `sales` <- documentos `EMITIDO`, **agrupados por cliente y tipo**, con
+     `document_count` y las retenciones que le hicieron (`valorRetIva`,
+     `valorRetRenta`) desde `FiscalRetention`.
+   - `sales_by_establishment` <- suma por `establishment_code`.
+2. Endpoint `POST /tax/periods/{id}/ats` que genere XML+ZIP, los suba con
+   `storage.upload_private_object` y persista un `TaxAnnex` (usar
+   `execute_idempotent`, como el resto de escrituras).
+3. `GET /tax/annexes/{id}/download` con URL prefirmada.
+4. Boton "Generar ATS" en `TaxPage.tsx` + descarga del ZIP.
+5. `POST /tax/annexes/{id}/issues` para registrar los errores que devuelva el SRI
+   (linea, columna, mensaje) en `SRIValidationIssue`, y mostrarlos en la pantalla
+   con su estado de correccion.
+
+**Tarea 2 — E5: tareas del asistente.** Generar `TaxTask` (revisar IVA, bajar
+comprobantes, preparar anexo) desde el scheduler existente
+(`workers/dispatcher.py`, patron de `collections.py`). **Ninguna automatizacion
+envia, entrega ni paga**: todas nacen con `requires_approval=true`.
+
+**Tarea 3 — Estado del periodo.** Hoy los periodos se quedan en
+`PENDIENTE_DESCARGA`. Falta la transicion automatica a `EVIDENCIA_INCOMPLETA` /
+`LISTO_REVISAR` segun haya comprobantes y si alguno es preliminar, y la accion
+manual (con confirmacion) para marcar `DECLARADO`.
 
 Notas utiles para quien retome:
 - `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno
