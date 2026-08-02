@@ -54,6 +54,44 @@ class IngestResultRead(APIModel):
     notes: list[str]
 
 
+class BulkItemRead(APIModel):
+    """Una entrada del lote, ya clasificada por su contenido."""
+
+    filename: str
+    # Nombre del ZIP del que salió, si vino dentro de uno.
+    source_archive: str | None = None
+    status: str
+    doc_type: str | None = None
+    direction: str | None = None
+    access_key: str | None = None
+    issue_date: date | None = None
+    # Periodo destino, calculado con la fecha real de emisión.
+    period_year: int | None = None
+    period_month: int | None = None
+    counterparty_identification: str | None = None
+    counterparty_name: str | None = None
+    total: Decimal | None = None
+    is_retention: bool = False
+    error: str | None = None
+
+
+class BulkResultRead(APIModel):
+    """Resultado del previo o de la carga confirmada."""
+
+    items: list[BulkItemRead]
+    created: int
+    updated: int
+    duplicates: int
+    errors: int
+    # Comprobantes por periodo destino: {"2025-11": 4}
+    periods: dict[str, int]
+    notes: list[str]
+    # Retenciones recibidas que podrían aplicarse a cartera.
+    retention_count: int
+    # Resultado de aplicar esas retenciones (solo si se pidió).
+    retentions_applied: int = 0
+
+
 class OwnDocumentsResultRead(APIModel):
     """Resultado de importar los comprobantes que la propia entidad emitió."""
 

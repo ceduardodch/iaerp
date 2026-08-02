@@ -210,3 +210,112 @@ test('exige confirmación antes de dejar el periodo listo para declarar', async 
   await page.getByRole('button', { name: 'Marcar listo para declarar' }).click()
   await expect.poll(() => confirmation).toContain('revisaste la evidencia')
 })
+
+// Carga en bloque: revisar primero, confirmar después. La pantalla no decide
+// nada por su cuenta: muestra lo que el servidor clasificó.
+const bulkPreview = {
+  items: [
+    {
+      filename: 'Factura (1).xml',
+      status: 'OK',
+      docType: 'FACTURA',
+      direction: 'RECIBIDO',
+      accessKey: '3011202501099999999900120010100000079561234567818',
+      issueDate: '2025-11-30',
+      periodYear: 2025,
+      periodMonth: 11,
+      counterpartyName: 'PROVEEDOR DEMO CIA LTDA',
+      total: '276.30',
+      isRetention: false,
+    },
+    {
+      filename: 'Retención (1).xml',
+      status: 'OK',
+      docType: 'RETENCION',
+      direction: 'RECIBIDO',
+      issueDate: '2025-11-10',
+      periodYear: 2025,
+      periodMonth: 11,
+      counterpartyName: 'CLIENTE AGENTE DEMO',
+      total: '41.39',
+      isRetention: true,
+    },
+    {
+      filename: 'roto.xml',
+      status: 'ERROR',
+      isRetention: false,
+      error: 'Invalid SRI XML',
+    },
+  ],
+  created: 0,
+  updated: 0,
+  duplicates: 0,
+  errors: 1,
+  periods: { '2025-11': 2 },
+  notes: [],
+  retentionCount: 1,
+  retentionsApplied: 0,
+}
+
+async function selectBulkFiles(page: Page) {
+  await page.setInputFiles('input[type="file"]', [
+    { name: 'Factura (1).xml', mimeType: 'application/xml', buffer: Buffer.from('<a/>') },
+    { name: 'Retención (1).xml', mimeType: 'application/xml', buffer: Buffer.from('<b/>') },
+  ])
+}
+
+test('revisa el lote antes de guardar y clasifica cada archivo', async ({ page }) => {
+  await page.route('**/api/v1/tax/evidence/bulk', (route) =>
+    route.fulfill({ json: bulkPreview }),
+  )
+
+  await selectBulkFiles(page)
+  await page.getByRole('button', { name: 'Revisar carga' }).click()
+
+  await expect(page.getByText('Previo: esto es lo que se cargará')).toBeVisible()
+  // Cada archivo muestra qué es y a qué periodo va.
+  const invoiceRow = page.getByRole('row', { name: /Factura \(1\)\.xml/ })
+  await expect(invoiceRow).toContainText('FACTURA')
+  await expect(invoiceRow).toContainText('Recibido')
+  await expect(invoiceRow).toContainText('Noviembre 2025')
+  // El archivo ilegible se reporta sin abortar el resto.
+  await expect(page.getByRole('row', { name: /roto\.xml/ })).toContainText('Invalid SRI XML')
+  // Todavía no se guardó nada: sigue ofreciendo confirmar.
+  await expect(page.getByRole('button', { name: 'Confirmar carga' })).toBeVisible()
+})
+
+test('ofrece aplicar las retenciones a cartera solo si hay retenciones', async ({ page }) => {
+  await page.route('**/api/v1/tax/evidence/bulk', (route) =>
+    route.fulfill({ json: bulkPreview }),
+  )
+
+  await selectBulkFiles(page)
+  await page.getByRole('button', { name: 'Revisar carga' }).click()
+
+  const checkbox = page.getByRole('checkbox', { name: /Aplicar 1 retención/ })
+  await expect(checkbox).toBeVisible()
+  // Por defecto NO se aplica: la cartera solo se toca si se confirma.
+  await expect(checkbox).not.toBeChecked()
+})
+
+test('confirmar la carga informa lo registrado', async ({ page }) => {
+  let applied = false
+  await page.route('**/api/v1/tax/evidence/bulk', async (route) => {
+    const body = route.request().postData() ?? ''
+    if (body.includes('name="apply"') && body.includes('true')) {
+      applied = true
+      return route.fulfill({
+        json: { ...bulkPreview, created: 2, retentionsApplied: 1 },
+      })
+    }
+    return route.fulfill({ json: bulkPreview })
+  })
+
+  await selectBulkFiles(page)
+  await page.getByRole('button', { name: 'Revisar carga' }).click()
+  await page.getByRole('button', { name: 'Confirmar carga' }).click()
+
+  await expect.poll(() => applied).toBe(true)
+  await expect(page.getByText('Carga confirmada')).toBeVisible()
+  await expect(page.getByText(/Registrados: 2 nuevo/)).toBeVisible()
+})

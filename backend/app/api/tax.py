@@ -17,6 +17,8 @@ from app.db.session import get_session
 from app.models.platform import Tenant
 from app.models.tax import FiscalDocument, SRIValidationIssue, TaxAnnex
 from app.schemas.tax import (
+    BulkItemRead,
+    BulkResultRead,
     FiscalDocumentRead,
     IngestResultRead,
     IvaSummaryRead,
@@ -30,7 +32,9 @@ from app.schemas.tax import (
     TaxPeriodRead,
     TaxPeriodStatusUpdate,
 )
+from app.services import receivables
 from app.services.tax import annexes as annexes_service
+from app.services.tax import bulk as bulk_service
 from app.services.tax import evidence as evidence_service
 from app.services.tax import form_fields, own_documents
 from app.services.tax import ingest as ingest_service
@@ -244,6 +248,109 @@ async def post_evidence_ingest(
         action="tax.evidence.ingested",
         entity_type="tax_evidence",
         callback=run,
+    )
+
+
+def _bulk_payload(
+    result: bulk_service.BulkResult, *, retentions_applied: int = 0
+) -> dict[str, object]:
+    return BulkResultRead(
+        items=[BulkItemRead.model_validate(item) for item in result.items],
+        created=result.created,
+        updated=result.updated,
+        duplicates=result.duplicates,
+        errors=result.errors,
+        periods=result.periods,
+        notes=result.notes,
+        retention_count=result.retention_count,
+        retentions_applied=retentions_applied,
+    ).model_dump(mode="json", by_alias=True)
+
+
+@router.post("/evidence/bulk", response_model=BulkResultRead)
+async def post_evidence_bulk(
+    files: Annotated[list[UploadFile], File()],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+    apply: Annotated[bool, Form()] = False,
+    apply_retentions: Annotated[bool, Form(alias="applyRetentions")] = False,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> dict[str, object]:
+    """Carga en bloque los comprobantes de un periodo.
+
+    Con ``apply=false`` solo clasifica y **no escribe nada**: es el previo que el
+    usuario revisa. Con ``apply=true`` guarda la evidencia y registra los
+    comprobantes. Las retenciones se aplican a cartera solo si ademas se pide
+    ``applyRetentions``, respetando la regla de que un cobro necesita respaldo.
+    """
+    if not files:
+        raise HTTPException(status_code=422, detail="At least one file is required")
+    if len(files) > bulk_service.MAX_BULK_FILES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"A maximum of {bulk_service.MAX_BULK_FILES} files is allowed",
+        )
+
+    ruc = await _tenant_ruc(session, context)
+    payload_files = [
+        (
+            file.filename or "comprobante.xml",
+            await file.read(evidence_service.MAX_EVIDENCE_SIZE + 1),
+        )
+        for file in files
+    ]
+
+    if not apply:
+        preview = await bulk_service.preview_bulk(
+            session,
+            context,
+            files=payload_files,
+            tenant_ruc=ruc,
+        )
+        return _bulk_payload(preview)
+
+    if idempotency_key is None or not 16 <= len(idempotency_key) <= 128:
+        raise HTTPException(
+            status_code=422,
+            detail="Idempotency-Key header is required to apply a bulk upload",
+        )
+
+    async def register() -> tuple[str, dict[str, object]]:
+        result = await bulk_service.apply_bulk(
+            session,
+            context,
+            files=payload_files,
+            tenant_ruc=ruc,
+        )
+        applied = 0
+        if apply_retentions:
+            # Se delega en el flujo de cartera, que ya cruza la retencion con su
+            # factura y registra el movimiento; aqui no se reimplementa.
+            candidates = bulk_service.retention_files(payload_files)
+            if candidates:
+                batch = await receivables.import_retention_xml_batch(
+                    session,
+                    context=context,
+                    files=candidates,
+                    apply=True,
+                    correlation_id=str(uuid.uuid4()),
+                    idempotency_key=f"{idempotency_key}-retentions",
+                )
+                applied = sum(1 for item in batch.items if item.status == "MATCHED")
+        return str(context.tenant_id), _bulk_payload(result, retentions_applied=applied)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax.evidence.bulk",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "files": [name for name, _content in payload_files],
+            "applyRetentions": apply_retentions,
+        },
+        action="tax.evidence.bulk_uploaded",
+        entity_type="tax_evidence",
+        callback=register,
     )
 
 

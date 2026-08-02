@@ -636,3 +636,35 @@ export type TaxOwnDocumentsResult = {
   skipped: number
   notes: string[]
 }
+
+export type TaxBulkItem = {
+  filename: string
+  /** Nombre del ZIP del que salió, si vino dentro de uno. */
+  sourceArchive?: string | null
+  status: 'OK' | 'DUPLICADO' | 'ERROR'
+  docType?: string | null
+  direction?: 'EMITIDO' | 'RECIBIDO' | null
+  accessKey?: string | null
+  issueDate?: string | null
+  /** Periodo destino, calculado con la fecha real de emisión. */
+  periodYear?: number | null
+  periodMonth?: number | null
+  counterpartyIdentification?: string | null
+  counterpartyName?: string | null
+  total?: string | null
+  isRetention: boolean
+  error?: string | null
+}
+
+export type TaxBulkResult = {
+  items: TaxBulkItem[]
+  created: number
+  updated: number
+  duplicates: number
+  errors: number
+  /** Comprobantes por periodo destino: {"2025-11": 4} */
+  periods: Record<string, number>
+  notes: string[]
+  retentionCount: number
+  retentionsApplied: number
+}

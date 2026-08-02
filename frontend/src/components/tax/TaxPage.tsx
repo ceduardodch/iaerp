@@ -1,13 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState } from 'react'
 
 import {
   apiRequest,
   idempotencyKey,
-  type TaxEvidence,
+  type TaxBulkResult,
   type TaxAnnex,
   type TaxFiscalDocument,
-  type TaxIngestResult,
   type TaxIvaSummary,
   type TaxOwnDocumentsResult,
   type TaxPeriod,
@@ -49,6 +48,8 @@ export function TaxPage({ token }: { token: string }) {
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [generatedAnnex, setGeneratedAnnex] = useState<TaxAnnex | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [applyRetentions, setApplyRetentions] = useState(false)
 
   const periodsQuery = useQuery({
     queryKey: ['tax', 'periods'],
@@ -75,32 +76,36 @@ export function TaxPage({ token }: { token: string }) {
     enabled: Boolean(activePeriodId),
   })
 
-  const uploadEvidence = useMutation({
-    mutationFn: async (file: File) => {
-      const body = new FormData()
-      body.append('file', file)
-      body.append('origin', 'PORTAL_SRI')
-      const evidence = await apiRequest<TaxEvidence>(token, '/tax/evidence', {
+  // Carga en bloque: primero se revisa (no escribe), luego se confirma.
+  function bulkFormData(files: File[], apply: boolean): FormData {
+    const body = new FormData()
+    for (const file of files) body.append('files', file)
+    body.append('apply', apply ? 'true' : 'false')
+    if (apply && applyRetentions) body.append('applyRetentions', 'true')
+    return body
+  }
+
+  const previewBulk = useMutation({
+    mutationFn: (files: File[]) =>
+      apiRequest<TaxBulkResult>(token, '/tax/evidence/bulk', {
         method: 'POST',
-        headers: { 'Idempotency-Key': idempotencyKey('tax-evidence') },
-        body,
-      })
-      // La ingesta es un paso aparte: guardar la evidencia nunca se pierde
-      // aunque el archivo no se pueda interpretar.
-      const result = await apiRequest<TaxIngestResult>(
-        token,
-        `/tax/evidence/${evidence.id}/ingest`,
-        {
-          method: 'POST',
-          headers: { 'Idempotency-Key': idempotencyKey('tax-ingest') },
-        },
-      )
-      return { evidence, result }
-    },
+        body: bulkFormData(files, false),
+      }),
+  })
+
+  const applyBulk = useMutation({
+    mutationFn: (files: File[]) =>
+      apiRequest<TaxBulkResult>(token, '/tax/evidence/bulk', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('tax-bulk') },
+        body: bulkFormData(files, true),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['tax'] })
     },
   })
+
+  const bulkResult = applyBulk.data ?? previewBulk.data ?? null
 
   const generateAts = useMutation({
     mutationFn: (periodId: string) => apiRequest<TaxAnnex>(token, `/tax/periods/${periodId}/ats`, {
@@ -156,13 +161,6 @@ export function TaxPage({ token }: { token: string }) {
     enabled: Boolean(generatedAnnex?.id),
   })
 
-  function submitEvidence(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const input = event.currentTarget.elements.namedItem('file') as HTMLInputElement | null
-    const file = input?.files?.[0]
-    if (file) uploadEvidence.mutate(file)
-  }
-
   async function copyValue(field: string, value: string) {
     try {
       await navigator.clipboard.writeText(value)
@@ -196,38 +194,135 @@ export function TaxPage({ token }: { token: string }) {
         subtitle="Carga la evidencia del SRI y obtén los valores listos para declarar."
       />
 
-      <ErpPanel title="Cargar evidencia del SRI">
-        <form className="tax-upload" onSubmit={submitEvidence}>
+      <ErpPanel title="Cargar comprobantes del SRI">
+        <div className="tax-upload">
           <label>
-            Archivo del SRI (XML, TXT o ZIP)
-            <input name="file" type="file" accept=".xml,.txt,.zip,.pdf" required />
+            Archivos del mes (XML, TXT o ZIP · hasta 50)
+            <input
+              type="file"
+              accept=".xml,.txt,.zip,.pdf"
+              multiple
+              onChange={(event) => {
+                setSelectedFiles(Array.from(event.target.files ?? []))
+                previewBulk.reset()
+                applyBulk.reset()
+              }}
+            />
           </label>
-          <ErpButton variant="primary" type="submit" disabled={uploadEvidence.isPending}>
-            {uploadEvidence.isPending ? 'Procesando…' : 'Cargar y procesar'}
+          <ErpButton
+            variant="primary"
+            disabled={selectedFiles.length === 0 || previewBulk.isPending}
+            onClick={() => previewBulk.mutate(selectedFiles)}
+          >
+            {previewBulk.isPending ? 'Revisando…' : 'Revisar carga'}
           </ErpButton>
-        </form>
-        {uploadEvidence.error ? (
-          <p className="form-error" role="alert">{uploadEvidence.error.message}</p>
+        </div>
+        {selectedFiles.length > 0 ? (
+          <p className="fine-print">
+            {selectedFiles.length} archivo{selectedFiles.length === 1 ? '' : 's'} seleccionado
+            {selectedFiles.length === 1 ? '' : 's'}. Se revisa primero; nada se guarda hasta
+            que confirmes.
+          </p>
         ) : null}
-        {uploadEvidence.data ? (
-          <div className="tax-ingest-result" role="status">
-            <p>
-              {uploadEvidence.data.evidence.duplicate
-                ? 'El archivo ya estaba cargado; no se duplicó.'
-                : `Archivo guardado (${uploadEvidence.data.evidence.fileType}).`}{' '}
-              Comprobantes nuevos: {uploadEvidence.data.result.created} · actualizados:{' '}
-              {uploadEvidence.data.result.updated}
-              {uploadEvidence.data.result.preliminary > 0
-                ? ` · preliminares: ${uploadEvidence.data.result.preliminary}`
-                : ''}
+        {previewBulk.error ? (
+          <p className="form-error" role="alert">{previewBulk.error.message}</p>
+        ) : null}
+        {applyBulk.error ? (
+          <p className="form-error" role="alert">{applyBulk.error.message}</p>
+        ) : null}
+
+        {bulkResult ? (
+          <div className="tax-bulk" aria-live="polite">
+            <p className="tax-subhead">
+              {applyBulk.data ? 'Carga confirmada' : 'Previo: esto es lo que se cargará'}
             </p>
-            {uploadEvidence.data.result.notes.map((note) => (
+            <p className="fine-print">
+              {Object.entries(bulkResult.periods)
+                .map(([period, count]) => `${period}: ${count} comprobante(s)`)
+                .join(' · ') || 'Sin comprobantes reconocidos.'}
+              {bulkResult.errors > 0 ? ` · ${bulkResult.errors} con problema` : ''}
+            </p>
+            <div className="table-wrap" tabIndex={0} aria-label="Detalle de la carga">
+              <table className="erp-responsive-table">
+                <thead>
+                  <tr>
+                    <th>Archivo</th><th>Tipo</th><th>Sentido</th>
+                    <th>Emisión</th><th>Periodo</th><th>Contraparte</th>
+                    <th>Total</th><th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bulkResult.items.map((item, index) => (
+                    <tr key={`${item.filename}-${item.accessKey ?? index}`}>
+                      <td>
+                        {item.filename}
+                        {item.sourceArchive ? (
+                          <small> · en {item.sourceArchive}</small>
+                        ) : null}
+                      </td>
+                      <td>{item.docType ?? '—'}</td>
+                      <td>{item.direction === 'EMITIDO' ? '↑ Emitido' : item.direction === 'RECIBIDO' ? '↓ Recibido' : '—'}</td>
+                      <td>{item.issueDate ?? '—'}</td>
+                      <td>
+                        {item.periodYear && item.periodMonth
+                          ? `${monthName(item.periodMonth)} ${item.periodYear}`
+                          : '—'}
+                      </td>
+                      <td>{item.counterpartyName ?? item.counterpartyIdentification ?? '—'}</td>
+                      <td className="tax-value">{item.total ?? '—'}</td>
+                      <td>
+                        {item.status === 'ERROR' ? (
+                          <ErpStatusBadge tone="danger">{item.error ?? 'Error'}</ErpStatusBadge>
+                        ) : item.status === 'DUPLICADO' ? (
+                          <ErpStatusBadge tone="neutral">Ya cargado</ErpStatusBadge>
+                        ) : (
+                          <ErpStatusBadge tone="success">Listo</ErpStatusBadge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {applyBulk.data ? (
+              <p className="tax-ingest-result" role="status">
+                Registrados: {applyBulk.data.created} nuevo(s) · {applyBulk.data.updated}{' '}
+                actualizado(s)
+                {applyBulk.data.retentionsApplied > 0
+                  ? ` · ${applyBulk.data.retentionsApplied} retención(es) aplicada(s) a cartera`
+                  : ''}
+              </p>
+            ) : (
+              <div className="tax-bulk-actions">
+                {bulkResult.retentionCount > 0 ? (
+                  <label className="tax-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={applyRetentions}
+                      onChange={(event) => setApplyRetentions(event.target.checked)}
+                    />
+                    Aplicar {bulkResult.retentionCount} retención(es) a cartera
+                  </label>
+                ) : null}
+                <ErpButton
+                  variant="primary"
+                  disabled={applyBulk.isPending}
+                  onClick={() => applyBulk.mutate(selectedFiles)}
+                >
+                  {applyBulk.isPending ? 'Cargando…' : 'Confirmar carga'}
+                </ErpButton>
+              </div>
+            )}
+            {bulkResult.notes.map((note) => (
               <p key={note} className="fine-print">{note}</p>
             ))}
           </div>
         ) : null}
+
         <p className="fine-print">
-          Los PDF se guardan como respaldo, pero sus valores no se leen automáticamente:
+          Cada archivo se clasifica por su contenido y se ubica en el periodo de su fecha
+          real de emisión. Los PDF se guardan como respaldo, pero sus valores no se leen:
           para el detalle carga el XML autorizado.
         </p>
       </ErpPanel>

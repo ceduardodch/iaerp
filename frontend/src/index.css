@@ -400,6 +400,11 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 /* Clases propias: `.section-number` está oculta globalmente por el rediseño. */
 .tax-year-label { margin: 0 0 .1rem; color: var(--muted); font-size: .72rem; font-weight: 750; letter-spacing: .1em; }
 .tax-subhead { margin: 1.2rem 0 .4rem; color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+/* Carga en bloque: previo antes de confirmar */
+.tax-bulk { margin-top: 1rem; display: grid; gap: .6rem; }
+.tax-bulk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: .4rem; }
+.tax-checkbox { display: inline-flex; align-items: center; gap: .45rem; font-size: .8rem; }
+.tax-checkbox input { min-height: auto; margin: 0; }
 .tax-periods { display: grid; gap: 1.2rem; }
 .tax-year-group { display: grid; gap: .5rem; }
 .tax-period-list { display: flex; flex-wrap: wrap; gap: .5rem; }
