@@ -71,9 +71,9 @@ def build_ats_input(
 ) -> AtsBuildResult:
     """Arma el ATS exclusivamente desde documentos del periodo.
 
-    La forma de pago no existe aun en el modelo fiscal. Por eso una venta (o
-    compra sobre el umbral) sin esa evidencia queda como faltante, en lugar de
-    asignarle ``01`` o ``20`` de manera ficticia.
+    La forma de pago sale del XML autorizado. Una venta (o compra sobre el
+    umbral) sin esa evidencia queda como faltante, en lugar de asignarle ``01``
+    o ``20`` de manera ficticia.
     """
     by_document: dict[object, list[FiscalDocumentTax]] = defaultdict(list)
     for tax in taxes:
@@ -142,6 +142,7 @@ def build_ats_input(
                     base_taxed=bases["GRAVADO"],
                     base_exempt=bases["EXENTO"],
                     iva_amount=iva,
+                    payment_methods=list(document.payment_methods),
                 )
             )
             continue
@@ -164,6 +165,14 @@ def build_ats_input(
             sales_groups[key] = sale
         else:
             sale.document_count += 1
+        if not document.payment_methods:
+            missing.append(
+                f"Venta {(_series(document) or _date(document.issue_date))} "
+                "sin forma de pago respaldada en el XML."
+            )
+        for method in document.payment_methods:
+            if method not in sale.payment_methods:
+                sale.payment_methods.append(method)
         for tax in document_taxes:
             if tax.tax_bracket == "NO_OBJETO":
                 sale.base_no_iva += sign * tax.base_amount
@@ -179,17 +188,12 @@ def build_ats_input(
                 sale.withheld_income_tax += retention.retained_amount
         if document.establishment_code:
             sales_by_establishment[document.establishment_code] += sign * document.subtotal
-        # El SRI exige formasDePago en ventas, pero no hay evidencia de ella.
-        missing.append(
-            f"Venta {(_series(document) or _date(document.issue_date))} "
-            "sin forma de pago respaldada."
-        )
 
     for purchase in purchases:
         if purchase.total > Decimal("500.00"):
             missing.append(
                 f"Compra {purchase.establishment}-{purchase.emission_point}-{purchase.sequential} "
-                "supera el umbral ATS y no tiene forma de pago respaldada."
+                "supera el umbral ATS y no tiene forma de pago respaldada en el XML."
             )
 
     return AtsBuildResult(

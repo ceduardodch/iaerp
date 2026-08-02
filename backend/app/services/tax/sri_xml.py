@@ -92,6 +92,7 @@ class ParsedDocument:
     subtotal: Decimal = Decimal("0.00")
     tax_total: Decimal = Decimal("0.00")
     total: Decimal = Decimal("0.00")
+    payment_methods: list[str] = field(default_factory=list)
     taxes: list[ParsedTax] = field(default_factory=list)
     retentions: list[ParsedRetention] = field(default_factory=list)
 
@@ -238,6 +239,13 @@ def _parse_invoice_like(
         or _text(document, f"{info_tag}/valorModificacion"),
         default=subtotal + tax_total,
     )
+    payment_methods = list(
+        dict.fromkeys(
+            method
+            for payment in _children(document, f"{info_tag}/pagos/pago")
+            if (method := _text(payment, "formaPago")) is not None
+        )
+    )
 
     return ParsedDocument(
         doc_type=doc_type,
@@ -255,6 +263,7 @@ def _parse_invoice_like(
         subtotal=subtotal,
         tax_total=tax_total,
         total=total,
+        payment_methods=payment_methods,
         taxes=taxes,
     )
 

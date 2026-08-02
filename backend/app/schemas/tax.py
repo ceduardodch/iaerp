@@ -60,6 +60,7 @@ class FiscalDocumentRead(APIModel):
     subtotal: Decimal
     tax_total: Decimal
     total: Decimal
+    payment_methods: list[str]
     is_preliminary: bool
 
 

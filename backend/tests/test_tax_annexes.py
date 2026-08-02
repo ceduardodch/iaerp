@@ -51,11 +51,14 @@ def _headers(token: str, prefix: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", "Idempotency-Key": f"{prefix}-{uuid.uuid4()}"}
 
 
-async def _upload_and_ingest(client, token: str, filename: str) -> None:
+async def _upload_and_ingest(
+    client, token: str, filename: str, *, content: bytes | None = None
+) -> None:
+    payload = content if content is not None else (FIXTURES / filename).read_bytes()
     uploaded = await client.post(
         "/api/v1/tax/evidence",
         headers=_headers(token, "tax-evidence"),
-        files={"file": (filename, (FIXTURES / filename).read_bytes(), "application/xml")},
+        files={"file": (filename, payload, "application/xml")},
     )
     assert uploaded.status_code == 201, uploaded.text
     ingested = await client.post(
@@ -88,7 +91,7 @@ async def test_ats_is_built_from_period_evidence_and_zip_has_one_xml(
     assert b"276.30" in archive.read("AT112025.xml")
 
 
-async def test_ats_refuses_unbacked_payment_method_and_keeps_the_gap_visible(
+async def test_ats_uses_transfer_from_authorized_sales_xml(
     client, stored_annex_objects
 ) -> None:
     token = await _token(client)
@@ -100,8 +103,36 @@ async def test_ats_refuses_unbacked_payment_method_and_keeps_the_gap_visible(
         f"/api/v1/tax/periods/{period['id']}/ats",
         headers=_headers(token, "tax-ats"),
     )
+    assert response.status_code == 201, response.text
+    zip_data = next(data for key, data in stored_annex_objects.items() if key.endswith(".zip"))
+    xml = zipfile.ZipFile(BytesIO(zip_data)).read("AT112025.xml")
+    assert b"<formasDePago><formaPago>20</formaPago></formasDePago>" in xml
+
+
+async def test_ats_still_refuses_a_sale_without_payment_evidence(
+    client, stored_annex_objects
+) -> None:
+    token = await _token(client)
+    xml = (FIXTURES / "factura_emitida_autorizada.xml").read_bytes()
+    xml = xml.replace(
+        b"<pagos><pago><formaPago>20</formaPago><total>115.00</total></pago></pagos>",
+        b"",
+    )
+    await _upload_and_ingest(
+        client,
+        token,
+        "factura_emitida_sin_forma_pago.xml",
+        content=xml,
+    )
+    periods = await client.get(
+        "/api/v1/tax/periods", headers={"Authorization": f"Bearer {token}"}
+    )
+    response = await client.post(
+        f"/api/v1/tax/periods/{periods.json()[0]['id']}/ats",
+        headers=_headers(token, "tax-ats"),
+    )
     assert response.status_code == 422
-    assert "forma de pago respaldada" in response.json()["detail"]
+    assert "sin forma de pago respaldada en el XML" in response.json()["detail"]
 
 
 async def test_sri_validation_issue_is_saved_per_private_annex(

@@ -120,6 +120,7 @@ async def _upsert_document(
     document.subtotal = parsed.subtotal
     document.tax_total = parsed.tax_total
     document.total = parsed.total
+    document.payment_methods = list(parsed.payment_methods)
     # El XML trae el detalle completo: deja de ser preliminar.
     document.is_preliminary = False
     if evidence_id is not None:

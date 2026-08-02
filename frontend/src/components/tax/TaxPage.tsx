@@ -384,7 +384,7 @@ export function TaxPage({ token }: { token: string }) {
                 <thead>
                   <tr>
                     <th>Fecha</th><th>Tipo</th><th>Contraparte</th>
-                    <th>Base</th><th>IVA</th><th>Total</th><th>Estado</th>
+                    <th>Base</th><th>IVA</th><th>Total</th><th>Pago</th><th>Estado</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -396,6 +396,11 @@ export function TaxPage({ token }: { token: string }) {
                       <td>${document.subtotal}</td>
                       <td>${document.taxTotal}</td>
                       <td>${document.total}</td>
+                      <td>
+                        {(document.paymentMethods ?? []).map((method) => (
+                          method === '20' ? 'Transferencia' : `Código ${method}`
+                        )).join(', ') || 'Sin respaldo XML'}
+                      </td>
                       <td>
                         {document.isPreliminary ? (
                           <ErpStatusBadge tone="warning">Preliminar</ErpStatusBadge>

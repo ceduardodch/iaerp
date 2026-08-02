@@ -39,7 +39,7 @@ en el **ADR 0012** y no se cambian sin un ADR nuevo.
 | E1 | Fundacion (modelos + migracion + evidencia) | ✅ Hecho | 11 tablas en `models/tax.py` + migracion `e4f5a6b7c8d9`; `services/tax/{evidence,periods}.py`; `api/tax.py` con scopes `tax:read`/`tax:write`; 9 pruebas en `tests/test_tax_foundation.py` |
 | E2 | Ingesta (XML/TXT + clasificacion) | ✅ Hecho | `sri_xml.py`, `txt_import.py`, `ingest.py` y el endpoint `POST /tax/evidence/{id}/ingest` |
 | E3 | IVA (motor + campos copiar-pegar + pantalla) | ✅ Hecho | `iva.py` (trazabilidad por cifra), `form_fields.py` (seed 104 editable), endpoints y la seccion **Tributario** (`components/tax/TaxPage.tsx`, lazy) con carga de evidencia, periodos por anio, tabla copiar-y-pegar, resumen y documentos usados. 12 pruebas E2E |
-| E4 | ATS (XML/ZIP + validacion + correcciones) | ✅ Hecho con faltantes visibles | `ats_builder.py` toma los documentos fiscales del periodo, agrupa ventas por cliente/tipo, cruza retenciones por serie y suma establecimientos. La API genera y custodia XML/ZIP privados, permite descargar y registrar/ver errores del SRI. Si falta una forma de pago respaldada o hay evidencia preliminar, no inventa nada: rechaza la generación y explica el faltante. |
+| E4 | ATS (XML/ZIP + validacion + correcciones) | ✅ Hecho con faltantes visibles | `sri_xml.py` lee `formaPago` del XML autorizado y `ats_builder.py` toma documentos, impuestos, pagos y retenciones del periodo. La API genera y custodia XML/ZIP privados, permite descargar y registrar/ver errores del SRI. Si falta respaldo o hay evidencia preliminar, no inventa nada: rechaza la generación y explica el faltante. |
 | E5 | Tareas del asistente + docs de usuario | ✅ Hecho | El scheduler crea pendientes de bajar evidencia, completar respaldo, revisar IVA y preparar ATS; todos llevan `requires_approval=true`. No envía, entrega ni paga. |
 | F | RDEP / ADI | 🚫 Bloqueado | RDEP requiere origen de datos de nomina/IESS (fuera del alcance actual) |
 
@@ -181,11 +181,10 @@ ya existe y esta verificado, pero todavia no se alimenta de los datos reales.
   entrega ni envia el anexo al SRI.
 - `POST`/`GET /tax/annexes/{id}/issues` conservan los errores del SRI y la
   pantalla los muestra junto al ZIP generado.
-- **Faltante real:** `FiscalDocument` y `SalesDocument` aún no guardan una
-  forma de pago respaldada. Como ventas siempre la requieren y compras sobre
-  el umbral también, el generador se detiene con 422 y el dato faltante; no usa
-  los antiguos valores ficticios `01`/`20`. La siguiente tarea debe definir el
-  origen y la persistencia de ese dato con evidencia antes de habilitar esos ATS.
+- `FiscalDocument.payment_methods` conserva los códigos `formaPago` del XML
+  autorizado. Transferencias respaldadas como `20` llegan al ATS; compras sobre
+  el umbral y ventas sin ese dato se detienen con 422. No se aplican códigos por
+  defecto ni se cambia un comprobante autorizado.
 
 **Tarea 2 — E5: tareas del asistente: terminada el 2026-08-02.**
 `services/tax/tasks.py` se ejecuta desde el dispatcher y crea pendientes

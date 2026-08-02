@@ -566,6 +566,7 @@ export type TaxFiscalDocument = {
   subtotal: string
   taxTotal: string
   total: string
+  paymentMethods?: string[]
   isPreliminary: boolean
 }
 

@@ -35,6 +35,7 @@ def test_parses_invoice_with_zero_rated_iva() -> None:
     assert document.sequential == "000007956"
     assert document.subtotal == Decimal("276.3")
     assert document.total == Decimal("276.3")
+    assert document.payment_methods == ["20"]
 
     assert len(document.taxes) == 1
     tax = document.taxes[0]
@@ -52,6 +53,7 @@ def test_parses_invoice_with_iva_15() -> None:
     assert document.subtotal == Decimal("13.13")
     assert document.tax_total == Decimal("1.97")
     assert document.total == Decimal("15.10")
+    assert document.payment_methods == ["20"]
 
     tax = document.taxes[0]
     assert tax.sri_tax_code == "4"

@@ -191,6 +191,9 @@ class FiscalDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Bas
     subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"))
     tax_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"))
     total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"))
+    # Códigos SRI tomados del XML autorizado (p.ej. 20 = sistema financiero).
+    # Una lista vacía significa que el documento no respaldó el dato.
+    payment_methods: Mapped[list[str]] = mapped_column(JSON, default=list)
     # true cuando el respaldo no permite afirmar el detalle (TXT sin desglose,
     # solo PDF, etc.). El calculo lo reporta como preliminar, no lo adivina.
     is_preliminary: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -97,6 +97,7 @@ async function mockApi(page: Page) {
         subtotal: '276.30',
         taxTotal: '0.00',
         total: '276.30',
+        paymentMethods: ['20'],
         isPreliminary: false,
       },
       {
@@ -176,6 +177,7 @@ test('marca los comprobantes preliminares en la tabla de documentos', async ({ p
 
   const invoiceRow = page.getByRole('row', { name: /PROVEEDOR DEMO/ })
   await expect(invoiceRow).toContainText('Confirmado')
+  await expect(invoiceRow).toContainText('Transferencia')
 })
 
 test('genera el ATS y ofrece su descarga privada', async ({ page }) => {
