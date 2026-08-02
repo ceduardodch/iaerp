@@ -15,16 +15,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthContext, require_scopes
 from app.db.session import get_session
 from app.models.platform import Tenant
-from app.models.tax import FiscalDocument
+from app.models.tax import FiscalDocument, SRIValidationIssue, TaxAnnex
 from app.schemas.tax import (
     FiscalDocumentRead,
     IngestResultRead,
     IvaSummaryRead,
+    SRIValidationIssueCreate,
+    SRIValidationIssueRead,
+    TaxAnnexRead,
     TaxEvidenceRead,
     TaxFormFieldRead,
     TaxPeriodCreate,
     TaxPeriodRead,
 )
+from app.services.tax import annexes as annexes_service
 from app.services.tax import evidence as evidence_service
 from app.services.tax import form_fields
 from app.services.tax import ingest as ingest_service
@@ -268,4 +272,111 @@ async def get_period_iva(
         # mantener una sola convencion en toda la API.
         amounts={to_camel(key): value for key, value in summary.as_dict().items()},
         fields=fields,
+    )
+
+
+@router.post("/periods/{period_id}/ats", response_model=TaxAnnexRead, status_code=201)
+async def post_period_ats(
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+    period_id: uuid.UUID,
+) -> dict[str, object]:
+    """Genera un ZIP ATS privado; no lo entrega ni lo envia al SRI."""
+
+    async def generate() -> tuple[str, dict[str, object]]:
+        period = await periods_service.get_period(session, context, period_id=period_id)
+        annex = await annexes_service.generate_ats(session, context, period=period)
+        url = await annexes_service.download_url(session, context, annex_id=annex.id)
+        payload = TaxAnnexRead.model_validate(annex)
+        payload.download_url = url
+        return str(annex.id), payload.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax.annex.ats.generate",
+        idempotency_key=idempotency_key,
+        request_payload={"periodId": str(period_id), "annexType": "ATS"},
+        action="tax.annex.ats.generated",
+        entity_type="tax_annex",
+        callback=generate,
+    )
+
+
+@router.get("/annexes/{annex_id}/download")
+async def get_annex_download(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:read"))],
+    annex_id: uuid.UUID,
+) -> dict[str, str]:
+    """Devuelve una URL privada y temporal del ZIP; no entrega el anexo al SRI."""
+    return {"url": await annexes_service.download_url(session, context, annex_id=annex_id)}
+
+
+@router.get("/annexes/{annex_id}/issues", response_model=list[SRIValidationIssueRead])
+async def get_annex_issues(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:read"))],
+    annex_id: uuid.UUID,
+) -> list[SRIValidationIssueRead]:
+    annex = await session.scalar(
+        select(TaxAnnex).where(TaxAnnex.tenant_id == context.tenant_id, TaxAnnex.id == annex_id)
+    )
+    if annex is None:
+        raise HTTPException(status_code=404, detail="Tax annex not found")
+    records = await session.scalars(
+        select(SRIValidationIssue)
+        .where(
+            SRIValidationIssue.tenant_id == context.tenant_id,
+            SRIValidationIssue.tax_annex_id == annex.id,
+        )
+        .order_by(SRIValidationIssue.created_at.desc())
+    )
+    return [SRIValidationIssueRead.model_validate(record) for record in records]
+
+
+@router.post("/annexes/{annex_id}/issues", response_model=SRIValidationIssueRead, status_code=201)
+async def post_annex_issue(
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+    annex_id: uuid.UUID,
+    data: SRIValidationIssueCreate,
+) -> dict[str, object]:
+    """Registra un error devuelto por el SRI; nunca lo corrige ni lo envia."""
+
+    async def create() -> tuple[str, dict[str, object]]:
+        annex = await session.scalar(
+            select(TaxAnnex).where(
+                TaxAnnex.tenant_id == context.tenant_id, TaxAnnex.id == annex_id
+            )
+        )
+        if annex is None:
+            raise HTTPException(status_code=404, detail="Tax annex not found")
+        issue = SRIValidationIssue(
+            tenant_id=context.tenant_id,
+            tax_annex_id=annex.id,
+            severity=data.severity,
+            line_number=data.line_number,
+            column_number=data.column_number,
+            message=data.message,
+            suggested_fix=data.suggested_fix,
+        )
+        session.add(issue)
+        await session.flush()
+        return (
+            str(issue.id),
+            SRIValidationIssueRead.model_validate(issue).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax.annex.issue.create",
+        idempotency_key=idempotency_key,
+        request_payload={"annexId": str(annex_id), **data.model_dump(mode="json")},
+        action="tax.annex.issue.created",
+        entity_type="sri_validation_issue",
+        callback=create,
     )

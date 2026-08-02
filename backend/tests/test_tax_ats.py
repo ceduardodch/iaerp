@@ -40,6 +40,7 @@ def sample_input() -> AtsInput:
                 registration_date="19/04/2026",
                 authorization="1904202601099999999900120010100000086031234567818",
                 base_zero_rate=Decimal("522.89"),
+                payment_methods=["20"],
             ),
             AtsPurchase(
                 supplier_identification="0888888888001",
@@ -60,6 +61,7 @@ def sample_input() -> AtsInput:
                 iva_amount=Decimal("275.40"),
                 withheld_iva=Decimal("192.78"),
                 withheld_income_tax=Decimal("50.49"),
+                payment_methods=["01"],
             )
         ],
     )

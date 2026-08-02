@@ -3,6 +3,7 @@ import asyncio
 from redis.asyncio import Redis
 
 from app.core.config import get_settings
+from app.services.tax.tasks import run_tax_scheduler
 from app.workers.celery_app import celery_app
 from app.workers.collections import run_collection_scheduler
 from app.workers.outbox import OutboxMessage, run_dispatcher
@@ -48,6 +49,7 @@ async def serve() -> None:
         group.create_task(run_dispatcher(CeleryPublisher()))
         group.create_task(publish_heartbeat())
         group.create_task(run_collection_scheduler())
+        group.create_task(run_tax_scheduler())
 
 
 def main() -> None:

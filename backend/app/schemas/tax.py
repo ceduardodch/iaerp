@@ -89,3 +89,27 @@ class IvaSummaryRead(APIModel):
     amounts: dict[str, str]
     # Campos del formulario listos para copiar/controlar.
     fields: list[TaxFormFieldRead]
+
+
+class TaxAnnexRead(APIModel):
+    id: uuid.UUID
+    tax_period_id: uuid.UUID
+    annex_type: str
+    status: str
+    version: int
+    xml_sha256: str | None = None
+    download_url: str | None = None
+
+
+class SRIValidationIssueCreate(APIModel):
+    severity: str = Field(default="ERROR", pattern="^(ERROR|ADVERTENCIA)$")
+    line_number: int | None = Field(default=None, ge=1)
+    column_number: int | None = Field(default=None, ge=1)
+    message: str = Field(min_length=1, max_length=4000)
+    suggested_fix: str | None = Field(default=None, max_length=4000)
+
+
+class SRIValidationIssueRead(SRIValidationIssueCreate):
+    id: uuid.UUID
+    tax_annex_id: uuid.UUID | None = None
+    status: str

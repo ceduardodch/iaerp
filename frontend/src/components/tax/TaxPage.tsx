@@ -5,6 +5,7 @@ import {
   apiRequest,
   idempotencyKey,
   type TaxEvidence,
+  type TaxAnnex,
   type TaxFiscalDocument,
   type TaxIngestResult,
   type TaxIvaSummary,
@@ -46,6 +47,7 @@ export function TaxPage({ token }: { token: string }) {
   const queryClient = useQueryClient()
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [generatedAnnex, setGeneratedAnnex] = useState<TaxAnnex | null>(null)
 
   const periodsQuery = useQuery({
     queryKey: ['tax', 'periods'],
@@ -96,6 +98,25 @@ export function TaxPage({ token }: { token: string }) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['tax'] })
     },
+  })
+
+  const generateAts = useMutation({
+    mutationFn: (periodId: string) => apiRequest<TaxAnnex>(token, `/tax/periods/${periodId}/ats`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey('tax-ats') },
+    }),
+    onSuccess: (annex) => {
+      setGeneratedAnnex(annex)
+    },
+  })
+
+  const issuesQuery = useQuery({
+    queryKey: ['tax', 'annex-issues', generatedAnnex?.id],
+    queryFn: () => apiRequest<Array<{ id: string; status: string; severity: string; lineNumber?: number | null; columnNumber?: number | null; message: string }>>(
+      token,
+      `/tax/annexes/${generatedAnnex?.id}/issues`,
+    ),
+    enabled: Boolean(generatedAnnex?.id),
   })
 
   function submitEvidence(event: FormEvent<HTMLFormElement>) {
@@ -227,15 +248,46 @@ export function TaxPage({ token }: { token: string }) {
 
           <ErpPanel
             title={`Formulario 104 · ${monthName(summary.month)} ${summary.year}`}
-            actions={
+            actions={<>
               <ErpStatusBadge tone={summary.isPreliminary ? 'warning' : 'success'}>
                 {summary.documentCount} comprobante(s)
               </ErpStatusBadge>
-            }
+              <ErpButton
+                variant="secondary"
+                disabled={generateAts.isPending || !activePeriodId}
+                onClick={() => activePeriodId && generateAts.mutate(activePeriodId)}
+              >
+                {generateAts.isPending ? 'Generando ATS…' : 'Generar ATS'}
+              </ErpButton>
+            </>}
           >
             <p className="fine-print">
               Valores con punto decimal y dos decimales, listos para copiar al formulario.
             </p>
+            {generateAts.error ? (
+              <p className="form-error" role="alert">{generateAts.error.message}</p>
+            ) : null}
+            {generatedAnnex ? (
+              <div className="tax-ingest-result" role="status">
+                <p>
+                  ATS v{generatedAnnex.version} generado.{' '}
+                  {generatedAnnex.downloadUrl ? (
+                    <a href={generatedAnnex.downloadUrl}>Descargar ZIP</a>
+                  ) : null}
+                </p>
+                {(issuesQuery.data ?? []).length > 0 ? (
+                  <ul>
+                    {issuesQuery.data?.map((issue) => (
+                      <li key={issue.id}>
+                        {issue.severity} {issue.lineNumber ? `línea ${issue.lineNumber}` : ''}: {issue.message} ({issue.status})
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="fine-print">Sin errores del SRI registrados todavía.</p>
+                )}
+              </div>
+            ) : null}
             <div className="table-wrap" tabIndex={0} aria-label="Campos para copiar">
               <table className="erp-responsive-table">
                 <thead>

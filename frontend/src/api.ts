@@ -593,3 +593,13 @@ export type TaxIvaSummary = {
   amounts: Record<string, string>
   fields: TaxFormField[]
 }
+
+export type TaxAnnex = {
+  id: string
+  taxPeriodId: string
+  annexType: 'ATS' | 'RDEP' | 'ADI'
+  status: 'GENERADO' | 'VALIDADO' | 'RECHAZADO' | 'ENTREGADO'
+  version: number
+  xmlSha256?: string | null
+  downloadUrl?: string | null
+}

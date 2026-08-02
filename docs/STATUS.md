@@ -7,6 +7,19 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización local: 2026-08-02 `America/Guayaquil`. Tributario conecta ATS
+  al periodo: toma comprobantes fiscales y sus impuestos/retenciones, genera
+  XML y ZIP privados idempotentes, permite descarga temporal y registra los
+  errores del SRI. La pantalla tiene "Generar ATS", descarga y lista los
+  errores registrados. No genera un anexo si un documento es preliminar o si
+  falta una forma de pago con respaldo; el modelo aún no persiste esa evidencia
+  y el sistema la reporta sin inventar `01`/`20`. Ruff, mypy, 37 pruebas
+  tributarias, build, lint y Playwright tributario pasan localmente. El
+  dispatcher además crea pendientes idempotentes para bajar evidencia,
+  completarla, revisar IVA y preparar ATS; todos exigen aprobación humana y no
+  hacen envíos, entregas ni pagos. Pendiente commit, push y revisión humana del
+  origen de formas de pago.
+
 - Actualización local: 2026-07-31 `America/Guayaquil`.
   Cartera muestra el número de factura de cada cuenta y permite abrir su
   historial de movimientos. Ahí se ven cobros, retenciones, descuentos, notas

@@ -112,6 +112,17 @@ async function mockApi(page: Page) {
       },
     ],
   }))
+  await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/ats`, (route) => route.fulfill({
+    json: {
+      id: '77777777-7777-4777-8777-777777777777',
+      taxPeriodId: PERIOD_ID,
+      annexType: 'ATS',
+      status: 'GENERADO',
+      version: 1,
+      downloadUrl: 'https://private.example/AT112025.zip',
+    },
+  }))
+  await page.route('**/api/v1/tax/annexes/77777777-7777-4777-8777-777777777777/issues', (route) => route.fulfill({ json: [] }))
 }
 
 test.beforeEach(async ({ page }) => {
@@ -165,4 +176,13 @@ test('marca los comprobantes preliminares en la tabla de documentos', async ({ p
 
   const invoiceRow = page.getByRole('row', { name: /PROVEEDOR DEMO/ })
   await expect(invoiceRow).toContainText('Confirmado')
+})
+
+test('genera el ATS y ofrece su descarga privada', async ({ page }) => {
+  await page.getByRole('button', { name: 'Generar ATS' }).click()
+  await expect(page.getByRole('status')).toContainText('ATS v1 generado')
+  await expect(page.getByRole('link', { name: 'Descargar ZIP' })).toHaveAttribute(
+    'href',
+    'https://private.example/AT112025.zip',
+  )
 })

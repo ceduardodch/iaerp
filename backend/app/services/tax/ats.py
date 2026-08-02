@@ -211,11 +211,9 @@ def build_ats_xml(data: AtsInput) -> bytes:
         _text_node(payment_exterior, "aplicConvDobTrib", "NA")
         _text_node(payment_exterior, "pagExtSujRetNorLeg", "NA")
 
-        # Obligatorio sobre el umbral; el SRI rechaza el anexo si falta.
-        methods = purchase.payment_methods
-        if not methods and purchase.total > PAYMENT_METHOD_THRESHOLD:
-            methods = ["20"]
-        _append_payment_methods(node, methods)
+        # La capa que arma el ATS valida que exista respaldo antes de llegar
+        # aqui. El generador nunca inventa una forma de pago para completar XML.
+        _append_payment_methods(node, purchase.payment_methods)
 
     sales = SubElement(root, "ventas")
     for sale in data.sales:
@@ -237,7 +235,7 @@ def build_ats_xml(data: AtsInput) -> bytes:
         }
         for tag in _SALES_ORDER:
             _text_node(node, tag, values[tag])
-        _append_payment_methods(node, sale.payment_methods or ["01"])
+        _append_payment_methods(node, sale.payment_methods)
 
     by_establishment = SubElement(root, "ventasEstablecimiento")
     totals = data.sales_by_establishment or {"001": total_sales}
