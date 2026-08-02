@@ -249,6 +249,7 @@ async def test_bank_statement_period_replaces_manual_payment_with_bank_evidence(
         },
     )
     assert manual.status_code == 201, manual.text
+    synthetic_authorization = "1" * 49
     retention = await client.post(
         f"/api/v1/receivables/{receivable_id}/payments",
         headers=auth(token, "bank-document-retention-0001"),
@@ -260,13 +261,13 @@ async def test_bank_statement_period_replaces_manual_payment_with_bank_evidence(
                     "kind": "RETENTION_RENTA",
                     "amount": "55.08",
                     "reason": "Código SRI 3440",
-                    "documentReference": ("1007202607179123341700120010090000149151438917214"),
+                    "documentReference": synthetic_authorization,
                 },
                 {
                     "kind": "RETENTION_IVA",
                     "amount": "275.40",
                     "reason": "Código SRI 2",
-                    "documentReference": ("1007202607179123341700120010090000149151438917214"),
+                    "documentReference": synthetic_authorization,
                 },
             ],
             "discounts": [],
