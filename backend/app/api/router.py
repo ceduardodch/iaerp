@@ -121,6 +121,8 @@ ALL_DEV_SCOPES = {
     "communications:write",
     "commercial:read",
     "commercial:write",
+    "tax:read",
+    "tax:write",
 }
 
 IdempotencyKey = Annotated[

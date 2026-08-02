@@ -23,7 +23,7 @@ en el **ADR 0012** y no se cambian sin un ADR nuevo.
 | # | Etapa | Estado | Notas |
 |---|-------|--------|-------|
 | E0 | ADR + alcance | ✅ Hecho | ADR 0012; `02-scope-and-restrictions.md` y `00-product-vision.md` actualizados |
-| E1 | Fundacion (modelos + migracion + evidencia) | ⏳ Pendiente | `models/tax.py`, migracion, `POST /tax/evidence`, `GET /tax/periods` |
+| E1 | Fundacion (modelos + migracion + evidencia) | ✅ Hecho | 11 tablas en `models/tax.py` + migracion `e4f5a6b7c8d9`; `services/tax/{evidence,periods}.py`; `api/tax.py` con scopes `tax:read`/`tax:write`; 9 pruebas en `tests/test_tax_foundation.py` |
 | E2 | Ingesta (XML/TXT + clasificacion) | ⏳ Pendiente | Extraer `sri_xml.py` compartido y extenderlo |
 | E3 | IVA (motor + campos copiar-pegar + pantalla) | ⏳ Pendiente | Necesita confirmar codigos del F104 vigentes |
 | E4 | ATS (XML/ZIP + validacion + correcciones) | 🚫 Bloqueado | Falta ficha tecnica/XSD vigente + una muestra aceptada por el SRI |
@@ -108,6 +108,31 @@ anio. Reutiliza `ErpPanel`, `ErpStatusBadge`, `ErpEmptyState` y el patron de
   de emision, formato `1234.56`, y ZIP del ATS con **un solo XML en la raiz**.
 - Validacion final del usuario: cargar un mes real, comparar contra la
   declaracion hecha a mano y subir el ATS generado al portal.
+
+## Donde retomar (E2)
+
+Lo construido en E1 deja listo el almacenamiento; **falta leer el contenido**:
+
+1. Extraer el parseo del sobre SRI de `services/receivables.py`
+   (`_parse_authorized_retention_xml`) a `services/tax/sri_xml.py` y hacer que
+   receivables lo consuma, sin cambiar su comportamiento actual.
+2. Extenderlo a factura, nota de credito, nota de debito y liquidacion.
+3. Crear `FiscalDocument` + `FiscalDocumentTax` + `FiscalRetention` desde cada
+   evidencia XML, asignando el periodo por la **fecha real de emision**.
+4. Parser del TXT del portal; si no permite separar facturas mixtas, marcar
+   `is_preliminary` y registrar el faltante.
+5. Desempaquetar ZIP y procesar su contenido.
+
+Notas utiles para quien retome:
+- Los tests de evidencia mockean MinIO con el fixture `stored_objects`
+  (`monkeypatch` sobre `evidence_service.storage.upload_private_object`), asi que
+  corren sin Docker.
+- Los campos de formulario multipart necesitan `alias` camelCase
+  (`Form(alias="taxPeriodId")`); sin el, FastAPI los recibe como `None` en
+  silencio.
+- Sin Docker levantado fallan de forma pre-existente `test_health.py` y dos
+  pruebas de receivables (flake de fecha `OVERDUE`/`PARTIAL`): no son de este
+  modulo.
 
 ## Reglas de trabajo
 
