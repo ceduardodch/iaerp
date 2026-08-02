@@ -45,6 +45,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.collection_defaults import DEFAULT_COLLECTION_EMAIL_BODY
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.masters import TenantEntityMixin
 
@@ -320,14 +321,7 @@ class CollectionPolicy(TimestampMixin, Base):
     email_subject: Mapped[str] = mapped_column(
         String(200), default="Recordatorio de pago - {{empresa}}"
     )
-    email_body: Mapped[str] = mapped_column(
-        String(5000),
-        default=(
-            "Estimado/a {{cliente}},\n\n"
-            "Le recordamos que mantiene un saldo pendiente. "
-            "Revise el detalle y realice el pago hasta {{vencimiento}}."
-        ),
-    )
+    email_body: Mapped[str] = mapped_column(String(5000), default=DEFAULT_COLLECTION_EMAIL_BODY)
     payment_instructions: Mapped[str] = mapped_column(String(1500), default="")
 
 

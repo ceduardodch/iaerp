@@ -20,6 +20,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from app.core.collection_defaults import DEFAULT_COLLECTION_EMAIL_BODY
 from app.schemas.base import APIModel
 
 AccountItemStatus = Literal["OPEN", "PARTIAL", "OVERDUE", "SETTLED", "VOIDED"]
@@ -193,6 +194,39 @@ class AgingSummaryRead(APIModel):
     by_party: list[PartyAgingBucketTotalRead]
 
 
+class CollectionsBreakdownRead(APIModel):
+    """Cómo se cobró: cuánto entró en dinero y cuánto se fue en retenciones.
+
+    Responde la pregunta operativa "de lo que cobré, ¿cuánto es efectivo y
+    cuánto retención?". Solo cuenta movimientos activos: ni las filas
+    ``REVERSAL`` ni los movimientos que un ``REVERSAL`` ya deshizo, con la
+    misma regla que ``compute_installment_balance`` para que el desglose nunca
+    contradiga el saldo mostrado en la cartera.
+
+    ``cash_amount`` agrupa los ``PAYMENT`` (transferencia, cheque, efectivo,
+    tarjeta): dinero que efectivamente entró. ``retention_amount`` son los
+    ``RETENTION``: valor legalmente retenido por el cliente, que se recupera
+    ante el SRI, no en caja. ``credit_amount`` junta ``CREDIT_NOTE`` y
+    ``DISCOUNT``: reducen la deuda sin ser cobro.
+
+    ``from_date``/``to_date`` filtran por ``Movement.effective_date`` (la
+    fecha real del cobro), no por la fecha técnica de registro.
+    """
+
+    from_date: date | None
+    to_date: date | None
+    cash_amount: Decimal
+    cash_count: int = Field(ge=0)
+    retention_amount: Decimal
+    retention_count: int = Field(ge=0)
+    credit_amount: Decimal
+    credit_count: int = Field(ge=0)
+    # cash + retention: lo que realmente saldó factura por vía de cobro.
+    settled_amount: Decimal
+    # Porcentaje del cobro que se fue en retenciones (0 si no hubo cobro).
+    retention_share: Decimal
+
+
 class ReminderInput(APIModel):
     """Input para envío manual de recordatorio (Sprint 3, decisión 8).
 
@@ -240,11 +274,7 @@ class CollectionPolicyUpdate(APIModel):
         default="Recordatorio de pago - {{empresa}}", min_length=3, max_length=200
     )
     email_body: str = Field(
-        default=(
-            "Estimado/a {{cliente}},\n\n"
-            "Le recordamos que mantiene un saldo pendiente. "
-            "Revise el detalle y realice el pago hasta {{vencimiento}}."
-        ),
+        default=DEFAULT_COLLECTION_EMAIL_BODY,
         min_length=3,
         max_length=5000,
     )

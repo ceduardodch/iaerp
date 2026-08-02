@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import html
 import uuid
-from datetime import UTC, date, datetime, time, timedelta
-from decimal import Decimal
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, select
@@ -21,67 +19,13 @@ from app.models.receivables import (
     ReceivableInstallment,
 )
 from app.services import crm_integrations
+from app.services.collection_email import render_collection_email
 from app.services.receivables import compute_installment_balance
 from app.workers.outbox import OutboxMessage
 
 FISCAL_TZ = ZoneInfo("America/Guayaquil")
 COLLECTION_REMINDER_DUE_EVENT = "collection.reminder.due"
 CONSUMER_NAME = "iaerp.collection-reminders"
-
-
-def _format_usd(amount: Decimal) -> str:
-    return f"${amount:,.2f}"
-
-
-def _render_collection_email(
-    *,
-    policy: CollectionPolicy,
-    company_name: str,
-    party_name: str,
-    open_amount: Decimal,
-    due_date: date,
-    as_of: date,
-) -> tuple[str, str, str]:
-    """Renderiza la plantilla del tenant y una tabla fiscalmente neutra."""
-    days_overdue = max(0, (as_of - due_date).days)
-    values = {
-        "{{empresa}}": company_name,
-        "{{cliente}}": party_name,
-        "{{saldo}}": _format_usd(open_amount),
-        "{{vencimiento}}": due_date.strftime("%d/%m/%Y"),
-        "{{dias_atraso}}": str(days_overdue),
-        "{{cuenta_bancaria}}": policy.payment_instructions or "Consulte con nuestro equipo.",
-    }
-
-    def render(text: str) -> str:
-        for token, value in values.items():
-            text = text.replace(token, value)
-        return text
-
-    subject = render(policy.email_subject)
-    body = render(policy.email_body)
-    bank = values["{{cuenta_bancaria}}"]
-    plain = (
-        f"{body}\n\n"
-        f"Saldo pendiente: {values['{{saldo}}']}\n"
-        f"Fecha de vencimiento: {values['{{vencimiento}}']}\n"
-        f"Días de atraso: {values['{{dias_atraso}}']}\n"
-        f"Datos para pago: {bank}"
-    )
-    html_message = (
-        f"<p>{html.escape(body).replace(chr(10), '<br>')}</p>"
-        "<table style=\"border-collapse:collapse\" cellpadding=\"8\" border=\"1\">"
-        "<tr><th align=\"left\">Saldo pendiente</th>"
-        f"<td>{html.escape(values['{{saldo}}'])}</td></tr>"
-        "<tr><th align=\"left\">Fecha de vencimiento</th>"
-        f"<td>{html.escape(values['{{vencimiento}}'])}</td></tr>"
-        "<tr><th align=\"left\">Días de atraso</th>"
-        f"<td>{html.escape(values['{{dias_atraso}}'])}</td></tr>"
-        "<tr><th align=\"left\">Datos para pago</th>"
-        f"<td>{html.escape(bank).replace(chr(10), '<br>')}</td></tr>"
-        "</table>"
-    )
-    return subject, plain, html_message
 
 
 async def schedule_receivable_reminders(
@@ -232,7 +176,7 @@ async def handle_collection_reminder_due(
             tenant = await session.get(Tenant, reminder.tenant_id)
             if tenant is None:
                 raise RuntimeError("Collection reminder tenant is missing")
-            subject, email_text, html_message = _render_collection_email(
+            subject, email_text, html_message = render_collection_email(
                 policy=policy,
                 company_name=tenant.name,
                 party_name=party.name,

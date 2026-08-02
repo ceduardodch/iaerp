@@ -44,6 +44,7 @@ from app.models.billing import SalesDocument, SalesDocumentInstallment
 from app.models.masters import EmissionPoint, Establishment, Party
 from app.models.platform import Tenant
 from app.models.receivables import (
+    CollectionPolicy,
     CollectionReminder,
     CustomerCredit,
     Movement,
@@ -56,6 +57,7 @@ from app.schemas.receivables import (
     AgingBucketTotalRead,
     AgingRead,
     AgingSummaryRead,
+    CollectionsBreakdownRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
     ReminderInput,
@@ -64,6 +66,7 @@ from app.schemas.receivables import (
     RetentionXmlPreviewItem,
     RetentionXmlPreviewRead,
 )
+from app.services.collection_email import render_collection_email
 from app.services.unit_of_work import append_audit
 
 MAX_RETENTION_XML_BYTES = 2 * 1024 * 1024
@@ -655,6 +658,94 @@ async def compute_aging_summary(
     ]
 
     return AgingSummaryRead(as_of=as_of, buckets=buckets_read, by_party=by_party_read)
+
+
+# Cómo se agrupan los tipos de movimiento en el desglose de cobro.
+_CASH_MOVEMENTS = ("PAYMENT",)
+_RETENTION_MOVEMENTS = ("RETENTION",)
+_CREDIT_MOVEMENTS = ("CREDIT_NOTE", "DISCOUNT")
+
+
+async def compute_collections_breakdown(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> CollectionsBreakdownRead:
+    """Desglosa el cobro en dinero recibido vs retenido (``GET /receivables/collections``).
+
+    Una retención NO es caja: es valor que el cliente retuvo y que se recupera
+    ante el SRI. Separarla del efectivo evita leer como liquidez algo que aún
+    no lo es. ``CREDIT_NOTE``/``DISCOUNT`` van aparte porque bajan la deuda sin
+    que entre dinero.
+
+    Cuenta solo movimientos activos con la MISMA regla que
+    ``compute_installment_balance`` (ni ``REVERSAL`` ni movimientos ya
+    revertidos), para que este desglose y el saldo de la cartera nunca se
+    contradigan.
+
+    El filtro de fechas usa ``Movement.effective_date`` (fecha real del cobro).
+    Los movimientos históricos sin ``effective_date`` caen fuera de cualquier
+    rango acotado; sin rango se incluyen todos.
+    """
+    tenant_id = context.tenant_id
+
+    stmt = (
+        select(
+            Movement.movement_type,
+            func.coalesce(func.sum(Movement.amount), Decimal("0.00")),
+            func.count(Movement.id),
+        )
+        .where(
+            Movement.tenant_id == tenant_id,
+            Movement.reversed_movement_id.is_(None),
+            Movement.id.not_in(_reversed_movement_ids(tenant_id)),
+        )
+        .group_by(Movement.movement_type)
+    )
+    if from_date is not None:
+        stmt = stmt.where(Movement.effective_date >= from_date)
+    if to_date is not None:
+        stmt = stmt.where(Movement.effective_date <= to_date)
+
+    totals: dict[str, tuple[Decimal, int]] = {
+        movement_type: (Decimal(str(amount)), int(count))
+        for movement_type, amount, count in await session.execute(stmt)
+    }
+
+    def group(types: tuple[str, ...]) -> tuple[Decimal, int]:
+        amount = Decimal("0.00")
+        count = 0
+        for movement_type in types:
+            group_amount, group_count = totals.get(movement_type, (Decimal("0.00"), 0))
+            amount += group_amount
+            count += group_count
+        return amount.quantize(Decimal("0.01")), count
+
+    cash_amount, cash_count = group(_CASH_MOVEMENTS)
+    retention_amount, retention_count = group(_RETENTION_MOVEMENTS)
+    credit_amount, credit_count = group(_CREDIT_MOVEMENTS)
+
+    settled_amount = cash_amount + retention_amount
+    retention_share = (
+        (retention_amount / settled_amount * 100).quantize(Decimal("0.01"))
+        if settled_amount > 0
+        else Decimal("0.00")
+    )
+
+    return CollectionsBreakdownRead(
+        from_date=from_date,
+        to_date=to_date,
+        cash_amount=cash_amount,
+        cash_count=cash_count,
+        retention_amount=retention_amount,
+        retention_count=retention_count,
+        credit_amount=credit_amount,
+        credit_count=credit_count,
+        settled_amount=settled_amount,
+        retention_share=retention_share,
+    )
 
 
 # --- Consultas: GET /receivables, GET /receivables/{id} ----------------------
@@ -1416,6 +1507,74 @@ async def send_reminder(
     return reminder_record
 
 
+async def _render_receivable_email(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    receivable: Receivable,
+    party_name: str,
+    body_override: str | None,
+) -> tuple[str, str, str]:
+    """Arma el correo de cobro de un receivable con la plantilla del tenant.
+
+    El envío manual usa exactamente la misma plantilla que el recordatorio
+    programado (``services/collection_email.py``), para que el cliente reciba
+    siempre el mismo formato y los mismos datos de pago sin importar quién
+    disparó el correo.
+
+    El vencimiento que se comunica es el de la cuota abierta más antigua: es la
+    que está en mora y la que el cliente debe atender primero. Si no queda
+    ninguna cuota abierta se usa la más reciente, para no inventar una fecha.
+    """
+    policy = await session.get(CollectionPolicy, tenant_id)
+    if policy is None:
+        policy = CollectionPolicy(tenant_id=tenant_id)
+        session.add(policy)
+        await session.flush()
+
+    tenant = await session.get(Tenant, tenant_id)
+    company_name = tenant.name if tenant is not None else "Nuestra empresa"
+
+    installments = list(
+        await session.scalars(
+            select(ReceivableInstallment)
+            .where(
+                ReceivableInstallment.tenant_id == tenant_id,
+                ReceivableInstallment.receivable_id == receivable.id,
+            )
+            .order_by(ReceivableInstallment.due_date)
+        )
+    )
+    open_installments = [
+        installment
+        for installment in installments
+        if await compute_installment_balance(
+            session, tenant_id=tenant_id, installment=installment
+        )
+        > 0
+    ]
+    reference = (
+        open_installments[0]
+        if open_installments
+        else (installments[-1] if installments else None)
+    )
+    due_date = reference.due_date if reference is not None else today_in_fiscal_timezone()
+
+    open_amount = await compute_receivable_balance(
+        session, tenant_id=tenant_id, receivable=receivable
+    )
+
+    return render_collection_email(
+        policy=policy,
+        company_name=company_name,
+        party_name=party_name,
+        open_amount=open_amount,
+        due_date=due_date,
+        as_of=today_in_fiscal_timezone(),
+        body_override=body_override,
+    )
+
+
 async def send_real_reminder(
     session: AsyncSession,
     context: AuthContext,
@@ -1472,12 +1631,20 @@ async def send_real_reminder(
             "Por favor contáctenos si ya realizó el pago."
         )
         if channel == "EMAIL":
+            subject, message, html_message = await _render_receivable_email(
+                session,
+                tenant_id=context.tenant_id,
+                receivable=receivable,
+                party_name=party.name,
+                body_override=reminder.message,
+            )
             await crm_integrations.send_google_email(
                 session,
                 context,
                 recipient=recipient,
-                subject="Recordatorio de pago",
+                subject=subject,
                 message=message,
+                html_message=html_message,
             )
         elif channel == "WHATSAPP":
             await crm_integrations.send_whatsapp_message(

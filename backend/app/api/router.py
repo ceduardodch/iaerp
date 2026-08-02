@@ -77,6 +77,7 @@ from app.schemas.receivables import (
     AgingSummaryRead,
     CollectionPolicyRead,
     CollectionPolicyUpdate,
+    CollectionsBreakdownRead,
     MovementRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
@@ -1308,6 +1309,28 @@ async def get_receivables_aging(
             for party_bucket in summary.by_party
         ],
     ).model_dump(mode="json", by_alias=True)
+
+
+@router.get("/receivables/collections", response_model=CollectionsBreakdownRead)
+async def get_receivables_collections(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+    from_date: Annotated[date | None, Query(alias="from")] = None,
+    to_date: Annotated[date | None, Query(alias="to")] = None,
+) -> dict[str, object]:
+    """Desglose del cobro: cuánto entró en dinero y cuánto quedó retenido.
+
+    Ruta estatica declarada ANTES de ``GET /receivables/{receivable_id}``, por
+    la misma razon que ``/receivables/aging``. El calculo vive integramente en
+    ``services/receivables.py::compute_collections_breakdown``, que reusa la
+    regla de movimientos activos de ``compute_installment_balance`` para que el
+    desglose jamas contradiga el saldo de la cartera.
+    """
+
+    breakdown = await receivables.compute_collections_breakdown(
+        session, context=context, from_date=from_date, to_date=to_date
+    )
+    return breakdown.model_dump(mode="json", by_alias=True)
 
 
 @router.get("/receivables/collection-policy", response_model=CollectionPolicyRead)
