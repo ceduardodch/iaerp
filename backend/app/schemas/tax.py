@@ -54,6 +54,17 @@ class IngestResultRead(APIModel):
     notes: list[str]
 
 
+class OwnDocumentsResultRead(APIModel):
+    """Resultado de importar los comprobantes que la propia entidad emitió."""
+
+    created: int
+    updated: int
+    # Comprobantes propios que no se pudieron importar (sin autorización o sin
+    # XML firmado); el motivo va en `notes`.
+    skipped: int
+    notes: list[str]
+
+
 class FiscalDocumentRead(APIModel):
     id: uuid.UUID
     direction: str

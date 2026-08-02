@@ -20,6 +20,7 @@ from app.schemas.tax import (
     FiscalDocumentRead,
     IngestResultRead,
     IvaSummaryRead,
+    OwnDocumentsResultRead,
     SRIValidationIssueCreate,
     SRIValidationIssueRead,
     TaxAnnexRead,
@@ -31,7 +32,7 @@ from app.schemas.tax import (
 )
 from app.services.tax import annexes as annexes_service
 from app.services.tax import evidence as evidence_service
-from app.services.tax import form_fields
+from app.services.tax import form_fields, own_documents
 from app.services.tax import ingest as ingest_service
 from app.services.tax import iva as iva_service
 from app.services.tax import periods as periods_service
@@ -242,6 +243,51 @@ async def post_evidence_ingest(
         request_payload={"evidenceId": str(evidence_id)},
         action="tax.evidence.ingested",
         entity_type="tax_evidence",
+        callback=run,
+    )
+
+
+@router.post("/periods/{period_id}/import-issued", response_model=OwnDocumentsResultRead)
+async def post_period_import_issued(
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+    period_id: uuid.UUID,
+) -> dict[str, object]:
+    """Trae al periodo las facturas AUTORIZADAS que la propia entidad emitio.
+
+    Evita tener que descargar y subir los comprobantes propios: se leen del XML
+    firmado que IAERP ya guardo al emitirlos.
+    """
+    ruc = await _tenant_ruc(session, context)
+
+    async def run() -> tuple[str, dict[str, object]]:
+        period = await periods_service.get_period(session, context, period_id=period_id)
+        result = await own_documents.import_issued_documents(
+            session,
+            context,
+            period=period,
+            tenant_ruc=ruc,
+        )
+        # Importar ventas puede cambiar el estado del periodo (p.ej. de
+        # PENDIENTE_DESCARGA a LISTO_REVISAR).
+        await periods_service.refresh_period_statuses(session, context)
+        payload = OwnDocumentsResultRead(
+            created=result.created,
+            updated=result.updated,
+            skipped=result.skipped,
+            notes=result.notes,
+        )
+        return str(period_id), payload.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax.period.import_issued",
+        idempotency_key=idempotency_key,
+        request_payload={"periodId": str(period_id)},
+        action="tax.period.issued_imported",
+        entity_type="tax_period",
         callback=run,
     )
 

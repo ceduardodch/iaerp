@@ -72,13 +72,14 @@ def extract_xml_members(data: bytes) -> list[tuple[str, bytes]]:
     return members
 
 
-async def _upsert_document(
+async def upsert_parsed_document(
     session: AsyncSession,
     context: AuthContext,
     *,
     parsed: ParsedDocument,
     tenant_ruc: str,
     evidence_id: uuid.UUID | None,
+    sales_document_id: uuid.UUID | None = None,
 ) -> tuple[FiscalDocument, bool]:
     """Crea o actualiza el comprobante y su detalle. Devuelve ``(doc, creado)``."""
     period = await periods_service.get_or_create_period(
@@ -125,6 +126,10 @@ async def _upsert_document(
     document.is_preliminary = False
     if evidence_id is not None:
         document.evidence_id = evidence_id
+    # Enlace al comprobante propio que origino este registro (ventas emitidas
+    # por IAERP), para poder rastrear de donde salio sin duplicar la fuente.
+    if sales_document_id is not None:
+        document.sales_document_id = sales_document_id
     if parsed.retentions:
         document.related_access_key = document.related_access_key or None
 
@@ -275,7 +280,7 @@ async def ingest_evidence(
 
     for payload in payloads:
         parsed = parse_authorized_document(payload)
-        _document, created = await _upsert_document(
+        _document, created = await upsert_parsed_document(
             session,
             context,
             parsed=parsed,
@@ -313,4 +318,9 @@ async def ingest_evidence(
     return result
 
 
-__all__ = ["IngestResult", "extract_xml_members", "ingest_evidence"]
+__all__ = [
+    "IngestResult",
+    "extract_xml_members",
+    "ingest_evidence",
+    "upsert_parsed_document",
+]

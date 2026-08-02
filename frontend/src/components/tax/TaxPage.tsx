@@ -9,6 +9,7 @@ import {
   type TaxFiscalDocument,
   type TaxIngestResult,
   type TaxIvaSummary,
+  type TaxOwnDocumentsResult,
   type TaxPeriod,
 } from '../../api'
 import { ErpButton, ErpEmptyState, ErpPageHeader, ErpPanel, ErpStatusBadge } from '../erp'
@@ -108,6 +109,19 @@ export function TaxPage({ token }: { token: string }) {
     }),
     onSuccess: (annex) => {
       setGeneratedAnnex(annex)
+    },
+  })
+
+  // Trae las ventas desde las facturas que IAERP ya emitió y autorizó, para no
+  // tener que descargarlas del portal y volverlas a subir.
+  const importIssued = useMutation({
+    mutationFn: (periodId: string) =>
+      apiRequest<TaxOwnDocumentsResult>(token, `/tax/periods/${periodId}/import-issued`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('tax-import-issued') },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tax'] })
     },
   })
 
@@ -258,6 +272,22 @@ export function TaxPage({ token }: { token: string }) {
 
       {summary ? (
         <>
+          {importIssued.data ? (
+            <div className="tax-ingest-result" role="status">
+              <p>
+                Ventas propias importadas: {importIssued.data.created} nueva(s) ·{' '}
+                {importIssued.data.updated} actualizada(s)
+                {importIssued.data.skipped > 0 ? ` · ${importIssued.data.skipped} sin importar` : ''}
+              </p>
+              {importIssued.data.notes.map((note) => (
+                <p key={note} className="fine-print">{note}</p>
+              ))}
+            </div>
+          ) : null}
+          {importIssued.error ? (
+            <p className="form-error" role="alert">{importIssued.error.message}</p>
+          ) : null}
+
           {summary.isPreliminary ? (
             <div className="tax-warning" role="alert">
               <strong>Datos preliminares.</strong>
@@ -275,6 +305,13 @@ export function TaxPage({ token }: { token: string }) {
               <ErpStatusBadge tone={summary.isPreliminary ? 'warning' : 'success'}>
                 {summary.documentCount} comprobante(s)
               </ErpStatusBadge>
+              <ErpButton
+                variant="secondary"
+                disabled={importIssued.isPending || !activePeriodId}
+                onClick={() => activePeriodId && importIssued.mutate(activePeriodId)}
+              >
+                {importIssued.isPending ? 'Importando ventas…' : 'Importar mis ventas'}
+              </ErpButton>
               <ErpButton
                 variant="secondary"
                 disabled={generateAts.isPending || !activePeriodId}

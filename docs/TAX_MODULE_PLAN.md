@@ -41,6 +41,7 @@ en el **ADR 0012** y no se cambian sin un ADR nuevo.
 | E3 | IVA (motor + campos copiar-pegar + pantalla) | ✅ Hecho | `iva.py` (trazabilidad por cifra), `form_fields.py` (seed 104 editable), endpoints y la seccion **Tributario** (`components/tax/TaxPage.tsx`, lazy) con carga de evidencia, periodos por anio, tabla copiar-y-pegar, resumen y documentos usados. 12 pruebas E2E |
 | E4 | ATS (XML/ZIP + validacion + correcciones) | ✅ Hecho con faltantes visibles | `sri_xml.py` lee `formaPago` del XML autorizado y `ats_builder.py` toma documentos, impuestos, pagos y retenciones del periodo. La API genera y custodia XML/ZIP privados, permite descargar y registrar/ver errores del SRI. Si falta respaldo o hay evidencia preliminar, no inventa nada: rechaza la generación y explica el faltante. |
 | E5 | Tareas del asistente + docs de usuario | ✅ Hecho | El scheduler crea pendientes de bajar evidencia, completar respaldo, revisar IVA y preparar ATS; todos llevan `requires_approval=true`. No envía, entrega ni paga. |
+| E6 | Ventas propias sin descargar del portal | ✅ Hecho | `own_documents.py` importa las facturas AUTORIZADAS que emitio IAERP leyendo su artefacto `xml-signed` (la autorizacion sale de `SRITransmission`). `POST /tax/periods/{id}/import-issued` y el boton **Importar mis ventas**. Sin autorizacion o sin XML firmado se omite explicando el motivo. |
 | F | RDEP / ADI | 🚫 Bloqueado | RDEP requiere origen de datos de nomina/IESS (fuera del alcance actual) |
 
 ## Hallazgos de las muestras reales (2026-08-02)
@@ -95,9 +96,11 @@ estructura. Lo aprendido:
 2. **Ficha tecnica del ATS vigente** y su XSD si existe. Las dos muestras
    aceptadas fijan el orden de nodos, pero no cubren todos los casos (notas de
    credito, reembolsos, exportaciones, retenciones emitidas).
-3. Muestras de **comprobantes emitidos en XML** y de **notas de credito**: los
-   emitidos que entrego el usuario son PDF, asi que las ventas del periodo aun no
-   se pueden conciliar desde evidencia descargada.
+3. Muestras de **notas de credito emitidas en XML** para cerrar el lado de
+   ventas. Los comprobantes emitidos **ya no dependen del portal**: se importan
+   del XML firmado que IAERP guarda al emitirlos (boton "Importar mis ventas" /
+   `POST /tax/periods/{id}/import-issued`). Solo hacen falta muestras de los
+   documentos que el sistema todavia no emite.
 
 ## Que se reutiliza (no rehacer)
 

@@ -604,3 +604,11 @@ export type TaxAnnex = {
   xmlSha256?: string | null
   downloadUrl?: string | null
 }
+
+export type TaxOwnDocumentsResult = {
+  created: number
+  updated: number
+  /** Comprobantes propios que no se pudieron importar; el motivo va en `notes`. */
+  skipped: number
+  notes: string[]
+}

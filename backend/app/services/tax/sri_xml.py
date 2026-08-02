@@ -320,10 +320,18 @@ def _parse_retention(
     )
 
 
-def parse_authorized_document(xml_bytes: bytes) -> ParsedDocument:
-    """Lee un comprobante autorizado del SRI (factura, NC, ND, liquidacion o retencion)."""
-    document, authorization_number, authorized_at = open_authorization_envelope(xml_bytes)
+def parse_receipt_element(
+    document: Element,
+    *,
+    authorization_number: str,
+    authorized_at: datetime | None,
+) -> ParsedDocument:
+    """Lee un comprobante YA extraido del sobre.
 
+    Se expone aparte para poder reutilizarlo con los comprobantes que la propia
+    entidad emitio: IAERP guarda su XML **firmado** (sin el sobre
+    ``<autorizacion>``) y la autorizacion en ``SRITransmission``.
+    """
     root_tag = _local(document.tag)
     cod_doc = _text(document, "infoTributaria/codDoc") or ""
     doc_type = _DOC_TYPES.get(cod_doc)
@@ -354,6 +362,42 @@ def parse_authorized_document(xml_bytes: bytes) -> ParsedDocument:
     )
 
 
+def parse_authorized_document(xml_bytes: bytes) -> ParsedDocument:
+    """Lee un comprobante autorizado del SRI (factura, NC, ND, liquidacion o retencion)."""
+    document, authorization_number, authorized_at = open_authorization_envelope(xml_bytes)
+    return parse_receipt_element(
+        document,
+        authorization_number=authorization_number,
+        authorized_at=authorized_at,
+    )
+
+
+def parse_signed_receipt(
+    xml_bytes: bytes,
+    *,
+    authorization_number: str,
+    authorized_at: datetime | None = None,
+) -> ParsedDocument:
+    """Lee un comprobante FIRMADO propio (sin el sobre ``<autorizacion>``).
+
+    Es el formato que IAERP guarda como artefacto ``xml-signed`` al emitir. La
+    autorizacion no viene en el archivo, asi que la aporta el llamador desde
+    ``SRITransmission``.
+    """
+    if not xml_bytes or len(xml_bytes) > MAX_XML_BYTES:
+        raise HTTPException(status_code=422, detail="XML must be between 1 byte and 2 MB")
+    try:
+        document = _safe_fromstring(xml_bytes)
+    except Exception as exc:  # noqa: BLE001 - cualquier XML invalido es 422
+        raise HTTPException(status_code=422, detail="Invalid signed receipt XML") from exc
+
+    return parse_receipt_element(
+        document,
+        authorization_number=authorization_number,
+        authorized_at=authorized_at,
+    )
+
+
 __all__ = [
     "MAX_XML_BYTES",
     "ParsedDocument",
@@ -361,5 +405,7 @@ __all__ = [
     "ParsedTax",
     "open_authorization_envelope",
     "parse_authorized_document",
+    "parse_receipt_element",
+    "parse_signed_receipt",
     "parse_sri_date",
 ]
