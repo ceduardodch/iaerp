@@ -7,6 +7,25 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización local: 2026-08-02 `America/Guayaquil`. Los periodos
+  tributarios cambian de estado al ingerir evidencia: sin comprobantes quedan
+  pendientes, con algún documento preliminar muestran evidencia incompleta y
+  con respaldo completo quedan listos para revisar. La pantalla exige una
+  confirmación humana para marcar primero "Listo para declarar" y otra para
+  registrar que ya fue declarado; la API impide saltar pasos, usa idempotencia
+  y deja auditoría. Un periodo declarado no se reabre de forma automática.
+  Validado con Ruff, mypy, 41 pruebas tributarias, build, lint y 16 pruebas
+  Playwright de Tributario.
+
+- Revisión documental: la guía del formulario IVA publicada por el SRI y
+  actualizada el 15 de junio de 2026 confirma que el casillero 507 corresponde
+  a adquisiciones y pagos brutos gravados con tarifa 0%, mientras el 517 es el
+  valor neto. También se corrigió el 411 como ventas gravadas netas y se
+  separaron los valores brutos y netos de 401, 500 y 510. El 500, 510 y 564
+  quedan para revisión humana: el SRI exige probar el derecho a crédito y
+  determinar el crédito aplicable por proporcionalidad o contabilidad; los XML
+  por sí solos no prueban esos datos.
+
 - Actualización local: 2026-08-02 `America/Guayaquil`. Tributario conecta ATS
   al periodo: toma comprobantes fiscales y sus impuestos/retenciones, genera
   XML y ZIP privados idempotentes, permite descarga temporal y registra los

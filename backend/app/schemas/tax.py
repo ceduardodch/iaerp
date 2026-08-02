@@ -27,6 +27,11 @@ class TaxPeriodCreate(APIModel):
     notes: str | None = Field(default=None, max_length=2000)
 
 
+class TaxPeriodStatusUpdate(APIModel):
+    target_status: str = Field(pattern="^(LISTO_DECLARAR|DECLARADO)$")
+    confirmed: bool
+
+
 class TaxEvidenceRead(APIModel):
     id: uuid.UUID
     tax_period_id: uuid.UUID | None = None

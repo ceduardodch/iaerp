@@ -308,6 +308,8 @@ async def ingest_evidence(
                 if row.preliminary_reason and row.preliminary_reason not in result.notes:
                     result.notes.append(row.preliminary_reason)
 
+    await periods_service.refresh_period_statuses(session, context)
+
     return result
 
 

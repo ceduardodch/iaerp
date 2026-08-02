@@ -82,12 +82,15 @@ estructura. Lo aprendido:
 
 ## Insumos que faltan (bloqueantes reales, los provee el usuario)
 
-1. **Confirmar dos codigos del formulario 104.** El seed de `form_fields.py` los
-   marca `needs_review` y la API los expone con `needsReview: true`:
-   - **507** — hoy apunta a "total de adquisiciones y pagos".
-   - **564** — hoy apunta a "IVA en adquisiciones / credito tributario".
-   El **609** esta confirmado por el usuario (solo retencion de IVA recibida);
-   401, 411, 500, 510 y 517 son los habituales. Todo es editable en
+1. **Definir el credito aplicable del 564 con respaldo contable.** La guia del
+   SRI vigente al 15 de junio de 2026 confirma que el **507** contiene
+   adquisiciones y pagos, incluidos activos fijos, gravados con tarifa 0%; el
+   mapa separa su valor bruto del neto del 517. También se corrigieron el 411
+   (ventas gravadas netas) y las columnas bruta/neta de 401, 500 y 510. La misma
+   guia define el **564** como credito tributario aplicable segun el factor de
+   proporcionalidad o la contabilidad. Por eso el 500, 510 y 564 siguen
+   `needs_review`: los XML no prueban por sí solos el derecho a crédito. El
+   **609** conserva solo la retencion de IVA recibida. Todo es editable en
    `TaxFormFieldMap` sin tocar codigo.
 2. **Ficha tecnica del ATS vigente** y su XSD si existe. Las dos muestras
    aceptadas fijan el orden de nodos, pero no cubren todos los casos (notas de
@@ -129,6 +132,10 @@ estado) · `TaxTask`.
 
 Estados de `TaxPeriod`: `PENDIENTE_DESCARGA` -> `EVIDENCIA_INCOMPLETA` ->
 `LISTO_REVISAR` -> `LISTO_DECLARAR` -> `DECLARADO`.
+
+La ingesta mueve automáticamente los tres primeros estados según los
+comprobantes del periodo. Los dos últimos requieren confirmación humana por la
+API y quedan bajo idempotencia y auditoría.
 
 ### Servicios (`backend/app/services/tax/`)
 
@@ -192,10 +199,16 @@ idempotentes de bajar comprobantes, completar evidencia, revisar IVA y preparar
 ATS. Todas nacen con `requires_approval=true`; el scheduler no declara,
 entrega, paga ni abre comunicación externa.
 
-**Tarea 3 — Estado del periodo.** Hoy los periodos se quedan en
-`PENDIENTE_DESCARGA`. Falta la transicion automatica a `EVIDENCIA_INCOMPLETA` /
-`LISTO_REVISAR` segun haya comprobantes y si alguno es preliminar, y la accion
-manual (con confirmacion) para marcar `DECLARADO`.
+**Tarea 3 — Estado del periodo: terminada el 2026-08-02.**
+La ingesta mantiene `PENDIENTE_DESCARGA` sin comprobantes, usa
+`EVIDENCIA_INCOMPLETA` si alguno es preliminar y pasa a `LISTO_REVISAR` con
+evidencia completa. `POST /tax/periods/{id}/status` exige confirmación humana e
+idempotencia para avanzar primero a `LISTO_DECLARAR` y después a `DECLARADO`.
+La pantalla expone ambas confirmaciones y no permite saltar pasos.
+
+**Siguiente trabajo.** Definir el 564 con el factor de proporcionalidad o el
+respaldo contable del contribuyente y validar un ATS generado con evidencia real
+en el portal del SRI. No automatizar la presentación ni el pago.
 
 Notas utiles para quien retome:
 - `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno

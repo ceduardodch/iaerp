@@ -8,9 +8,9 @@ tocar el calculo. Este modulo solo aporta un **seed inicial editable**.
 autocalcula (solo control): mezclarlos hace que se pisen valores calculados por
 el propio formulario.
 
-⚠️ Los codigos marcados ``needs_review`` deben confirmarse contra el formulario
-vigente antes de declarar. El unico confirmado por el usuario es el **609**
-(retencion de IVA que le efectuaron).
+⚠️ Los codigos marcados ``needs_review`` requieren evidencia adicional antes de
+declarar. El 564 depende del factor de proporcionalidad o de la contabilidad y
+no puede deducirse solo de los XML. El 609 es solo retencion de IVA recibida.
 """
 
 from __future__ import annotations
@@ -39,29 +39,45 @@ class FieldSeed:
 FORM_104_SEED: tuple[FieldSeed, ...] = (
     FieldSeed(
         "401",
-        "Ventas locales gravadas con tarifa distinta de 0%",
+        "Ventas locales gravadas con tarifa distinta de 0% - valor bruto",
+        "ventas_gravadas_bruta_base",
+        True,
+    ),
+    FieldSeed(
+        "411",
+        "Ventas locales gravadas con tarifa distinta de 0% - valor neto",
         "ventas_gravadas_base",
         True,
     ),
-    FieldSeed("411", "Ventas locales gravadas con tarifa 0%", "ventas_tarifa_cero_base", True),
-    FieldSeed("500", "Total de ventas y otras operaciones", "ventas_brutas", False),
     FieldSeed(
-        "510",
-        "Adquisiciones gravadas con tarifa distinta de 0%",
-        "compras_gravadas_base",
-        True,
-    ),
-    FieldSeed("517", "Adquisiciones gravadas con tarifa 0%", "compras_tarifa_cero_base", True),
-    FieldSeed(
-        "507",
-        "Total de adquisiciones y pagos (confirmar contra el formulario vigente)",
-        "compras_totales_base",
+        "500",
+        "Adquisiciones gravadas con tarifa distinta de 0% - valor bruto",
+        "compras_gravadas_bruta_base",
         False,
         needs_review=True,
     ),
     FieldSeed(
+        "510",
+        "Adquisiciones gravadas con tarifa distinta de 0% - valor neto",
+        "compras_gravadas_base",
+        False,
+        needs_review=True,
+    ),
+    FieldSeed(
+        "517",
+        "Adquisiciones gravadas con tarifa 0% - valor neto",
+        "compras_tarifa_cero_base",
+        True,
+    ),
+    FieldSeed(
+        "507",
+        "Adquisiciones y pagos (incluye activos fijos) gravados con tarifa 0% - valor bruto",
+        "compras_tarifa_cero_bruta_base",
+        True,
+    ),
+    FieldSeed(
         "564",
-        "IVA en adquisiciones / credito tributario (confirmar contra el formulario vigente)",
+        "Credito tributario aplicable segun proporcionalidad o contabilidad",
         "iva_credito_tributario",
         False,
         needs_review=True,
@@ -93,6 +109,51 @@ async def ensure_form_field_map(
         )
     )
     known = {record.field_code for record in existing}
+
+    # Corrige los seeds antiguos solo si siguen intactos. Si el tenant edito
+    # cualquiera de estos valores, se conserva su mapa sin cambios.
+    legacy_defaults = {
+        "401": (
+            "Ventas locales gravadas con tarifa distinta de 0%",
+            "ventas_gravadas_base",
+            True,
+        ),
+        "411": (
+            "Ventas locales gravadas con tarifa 0%",
+            "ventas_tarifa_cero_base",
+            True,
+        ),
+        "500": ("Total de ventas y otras operaciones", "ventas_brutas", False),
+        "510": (
+            "Adquisiciones gravadas con tarifa distinta de 0%",
+            "compras_gravadas_base",
+            True,
+        ),
+        "517": (
+            "Adquisiciones gravadas con tarifa 0%",
+            "compras_tarifa_cero_base",
+            True,
+        ),
+        "507": (
+            "Total de adquisiciones y pagos (confirmar contra el formulario vigente)",
+            "compras_totales_base",
+            False,
+        ),
+    }
+    seeds_by_code = {seed.field_code: seed for seed in FORM_104_SEED}
+    for record in existing:
+        legacy = legacy_defaults.get(record.field_code)
+        seed = seeds_by_code.get(record.field_code)
+        if legacy is not None and seed is not None:
+            legacy_label, legacy_source, legacy_paste = legacy
+            if (
+                record.label == legacy_label
+                and record.source_key == legacy_source
+                and record.is_paste is legacy_paste
+            ):
+                record.label = seed.label
+                record.source_key = seed.source_key
+                record.is_paste = seed.is_paste
 
     for seed in FORM_104_SEED:
         if seed.field_code in known:

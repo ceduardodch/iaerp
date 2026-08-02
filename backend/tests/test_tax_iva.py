@@ -96,7 +96,7 @@ async def test_ingest_assigns_period_by_real_issue_date(client, stored_objects) 
     assert result["created"] == 1
     # El comprobante se emitio el 30/11/2025: debe caer en el periodo 2025-11.
     period = await find_period(client, token, 2025, 11)
-    assert period["status"] == "PENDIENTE_DESCARGA"
+    assert period["status"] == "LISTO_REVISAR"
 
     documents = await client.get(
         f"/api/v1/tax/periods/{period['id']}/documents", headers=auth(token)
@@ -176,11 +176,21 @@ async def test_form_fields_separate_paste_from_control(client, stored_objects) -
     codes = {field["fieldCode"]: field for field in body["fields"]}
     assert {"401", "411", "500", "510", "517", "609"} <= set(codes)
 
-    # 510 es para copiar; 500 lo autocalcula el formulario.
-    assert codes["510"]["isPaste"] is True
+    # El derecho a credito de 500/510 requiere revisar el destino contable.
+    assert codes["510"]["isPaste"] is False
+    assert codes["510"]["needsReview"] is True
     assert codes["500"]["isPaste"] is False
-    # Los codigos aun no confirmados quedan marcados para revision.
-    assert codes["507"]["needsReview"] is True
+    assert codes["500"]["sourceKey"] == "comprasGravadasBrutaBase"
+    assert codes["500"]["needsReview"] is True
+    # El 507 fue contrastado con la guia vigente del SRI: bruto, tarifa 0%.
+    assert codes["507"]["sourceKey"] == "comprasTarifaCeroBrutaBase"
+    assert codes["507"]["isPaste"] is True
+    assert codes["507"]["needsReview"] is False
+    # El 411 es el valor neto de ventas gravadas, no ventas con tarifa 0%.
+    assert codes["411"]["sourceKey"] == "ventasGravadasBase"
+    # El 564 depende de proporcionalidad o contabilidad: no se copia sin revisar.
+    assert codes["564"]["isPaste"] is False
+    assert codes["564"]["needsReview"] is True
     assert codes["609"]["needsReview"] is False
 
     # Todos los valores salen con punto decimal y dos decimales.
@@ -197,6 +207,7 @@ async def test_txt_only_period_is_reported_as_preliminary(client, stored_objects
     assert result["preliminary"] >= 1
 
     period = await find_period(client, token, 2025, 12)
+    assert period["status"] == "EVIDENCIA_INCOMPLETA"
     body = (
         await client.get(f"/api/v1/tax/periods/{period['id']}/iva", headers=auth(token))
     ).json()
@@ -222,3 +233,55 @@ async def test_empty_period_reports_missing_evidence(client, stored_objects) -> 
     assert body["isPreliminary"] is True
     assert any("evidencia" in reason for reason in body["preliminaryReasons"])
     assert body["amounts"]["saldoAPagar"] == "0.00"
+
+
+async def test_period_requires_human_confirmation_before_declared(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+    period = await find_period(client, token, 2025, 11)
+    assert period["status"] == "LISTO_REVISAR"
+
+    rejected = await client.post(
+        f"/api/v1/tax/periods/{period['id']}/status",
+        headers=auth(token, f"tax-status-{uuid.uuid4()}"),
+        json={"targetStatus": "LISTO_DECLARAR", "confirmed": False},
+    )
+    assert rejected.status_code == 422
+
+    skipped = await client.post(
+        f"/api/v1/tax/periods/{period['id']}/status",
+        headers=auth(token, f"tax-status-{uuid.uuid4()}"),
+        json={"targetStatus": "DECLARADO", "confirmed": True},
+    )
+    assert skipped.status_code == 409
+
+    ready = await client.post(
+        f"/api/v1/tax/periods/{period['id']}/status",
+        headers=auth(token, f"tax-status-{uuid.uuid4()}"),
+        json={"targetStatus": "LISTO_DECLARAR", "confirmed": True},
+    )
+    assert ready.status_code == 200, ready.text
+    assert ready.json()["status"] == "LISTO_DECLARAR"
+
+    declared = await client.post(
+        f"/api/v1/tax/periods/{period['id']}/status",
+        headers=auth(token, f"tax-status-{uuid.uuid4()}"),
+        json={"targetStatus": "DECLARADO", "confirmed": True},
+    )
+    assert declared.status_code == 200, declared.text
+    assert declared.json()["status"] == "DECLARADO"
+
+
+async def test_preliminary_period_cannot_be_marked_ready(client, stored_objects) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "recibidos_portal.txt")
+    period = await find_period(client, token, 2025, 12)
+
+    response = await client.post(
+        f"/api/v1/tax/periods/{period['id']}/status",
+        headers=auth(token, f"tax-status-{uuid.uuid4()}"),
+        json={"targetStatus": "LISTO_DECLARAR", "confirmed": True},
+    )
+    assert response.status_code == 409

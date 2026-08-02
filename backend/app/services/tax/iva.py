@@ -71,6 +71,7 @@ class IvaSummary:
 # Claves semanticas del motor. El mapa de campos del formulario apunta a estas,
 # de modo que renumerar el 104 no obligue a tocar el calculo.
 AMOUNT_KEYS = (
+    "ventas_gravadas_bruta_base",
     "ventas_gravadas_base",
     "ventas_tarifa_cero_base",
     "ventas_exentas_base",
@@ -78,7 +79,9 @@ AMOUNT_KEYS = (
     "ventas_brutas",
     "ventas_netas",
     "iva_generado",
+    "compras_gravadas_bruta_base",
     "compras_gravadas_base",
+    "compras_tarifa_cero_bruta_base",
     "compras_tarifa_cero_base",
     "compras_exentas_base",
     "compras_no_objeto_base",
@@ -172,9 +175,17 @@ async def compute_iva(
 
         amounts[f"{side}_{bracket_key}"].add(base, document.id)
         if side == "ventas":
+            if sign > 0 and tax.tax_bracket == "GRAVADO":
+                amounts["ventas_gravadas_bruta_base"].add(tax.base_amount, document.id)
             amounts["ventas_brutas"].add(base, document.id)
             amounts["iva_generado"].add(value, document.id)
         else:
+            if sign > 0 and tax.tax_bracket == "GRAVADO":
+                amounts["compras_gravadas_bruta_base"].add(tax.base_amount, document.id)
+            elif sign > 0 and tax.tax_bracket == "TARIFA_CERO":
+                amounts["compras_tarifa_cero_bruta_base"].add(
+                    tax.base_amount, document.id
+                )
             amounts["compras_totales_base"].add(base, document.id)
             amounts["iva_credito_tributario"].add(value, document.id)
 

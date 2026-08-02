@@ -123,6 +123,18 @@ async function mockApi(page: Page) {
       downloadUrl: 'https://private.example/AT112025.zip',
     },
   }))
+  await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/status`, async (route) => {
+    const request = route.request().postDataJSON() as { targetStatus: string }
+    await route.fulfill({
+      json: {
+        id: PERIOD_ID,
+        year: 2025,
+        month: 11,
+        obligationType: 'IVA',
+        status: request.targetStatus,
+      },
+    })
+  })
   await page.route('**/api/v1/tax/annexes/77777777-7777-4777-8777-777777777777/issues', (route) => route.fulfill({ json: [] }))
 }
 
@@ -187,4 +199,14 @@ test('genera el ATS y ofrece su descarga privada', async ({ page }) => {
     'href',
     'https://private.example/AT112025.zip',
   )
+})
+
+test('exige confirmación antes de dejar el periodo listo para declarar', async ({ page }) => {
+  let confirmation = ''
+  page.on('dialog', async (dialog) => {
+    confirmation = dialog.message()
+    await dialog.accept()
+  })
+  await page.getByRole('button', { name: 'Marcar listo para declarar' }).click()
+  await expect.poll(() => confirmation).toContain('revisaste la evidencia')
 })

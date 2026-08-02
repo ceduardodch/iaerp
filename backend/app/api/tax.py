@@ -27,6 +27,7 @@ from app.schemas.tax import (
     TaxFormFieldRead,
     TaxPeriodCreate,
     TaxPeriodRead,
+    TaxPeriodStatusUpdate,
 )
 from app.services.tax import annexes as annexes_service
 from app.services.tax import evidence as evidence_service
@@ -90,6 +91,41 @@ async def post_period(
         action="tax.period.created",
         entity_type="tax_period",
         callback=create,
+    )
+
+
+@router.post("/periods/{period_id}/status", response_model=TaxPeriodRead)
+async def post_period_status(
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+    period_id: uuid.UUID,
+    data: TaxPeriodStatusUpdate,
+) -> dict[str, object]:
+    """Confirma manualmente que un periodo está listo o ya fue declarado."""
+
+    async def update() -> tuple[str, dict[str, object]]:
+        period = await periods_service.set_manual_status(
+            session,
+            context,
+            period_id=period_id,
+            target_status=data.target_status,
+            confirmed=data.confirmed,
+        )
+        return (
+            str(period.id),
+            TaxPeriodRead.model_validate(period).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax.period.status.update",
+        idempotency_key=idempotency_key,
+        request_payload={"periodId": str(period_id), **data.model_dump(mode="json")},
+        action="tax.period.status.updated",
+        entity_type="tax_period",
+        callback=update,
     )
 
 

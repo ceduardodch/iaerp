@@ -59,6 +59,7 @@ export function TaxPage({ token }: { token: string }) {
     [periodsQuery.data],
   )
   const activePeriodId = selectedPeriodId ?? periods[0]?.id ?? null
+  const activePeriod = periods.find((period) => period.id === activePeriodId) ?? null
 
   const ivaQuery = useQuery({
     queryKey: ['tax', 'iva', activePeriodId],
@@ -109,6 +110,28 @@ export function TaxPage({ token }: { token: string }) {
       setGeneratedAnnex(annex)
     },
   })
+
+  const updatePeriodStatus = useMutation({
+    mutationFn: ({ periodId, targetStatus }: { periodId: string; targetStatus: 'LISTO_DECLARAR' | 'DECLARADO' }) =>
+      apiRequest<TaxPeriod>(token, `/tax/periods/${periodId}/status`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('tax-period-status') },
+        body: JSON.stringify({ targetStatus, confirmed: true }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tax'] })
+    },
+  })
+
+  function confirmPeriodStatus(targetStatus: 'LISTO_DECLARAR' | 'DECLARADO') {
+    if (!activePeriodId) return
+    const message = targetStatus === 'DECLARADO'
+      ? '¿Confirmas que esta declaración ya fue presentada al SRI?'
+      : '¿Confirmas que revisaste la evidencia y los valores del periodo?'
+    if (window.confirm(message)) {
+      updatePeriodStatus.mutate({ periodId: activePeriodId, targetStatus })
+    }
+  }
 
   const issuesQuery = useQuery({
     queryKey: ['tax', 'annex-issues', generatedAnnex?.id],
@@ -266,6 +289,27 @@ export function TaxPage({ token }: { token: string }) {
             </p>
             {generateAts.error ? (
               <p className="form-error" role="alert">{generateAts.error.message}</p>
+            ) : null}
+            {updatePeriodStatus.error ? (
+              <p className="form-error" role="alert">{updatePeriodStatus.error.message}</p>
+            ) : null}
+            {activePeriod?.status === 'LISTO_REVISAR' ? (
+              <ErpButton
+                variant="primary"
+                disabled={updatePeriodStatus.isPending}
+                onClick={() => confirmPeriodStatus('LISTO_DECLARAR')}
+              >
+                Marcar listo para declarar
+              </ErpButton>
+            ) : null}
+            {activePeriod?.status === 'LISTO_DECLARAR' ? (
+              <ErpButton
+                variant="primary"
+                disabled={updatePeriodStatus.isPending}
+                onClick={() => confirmPeriodStatus('DECLARADO')}
+              >
+                Confirmar como declarado
+              </ErpButton>
             ) : null}
             {generatedAnnex ? (
               <div className="tax-ingest-result" role="status">
