@@ -24,9 +24,9 @@ en el **ADR 0012** y no se cambian sin un ADR nuevo.
 |---|-------|--------|-------|
 | E0 | ADR + alcance | ✅ Hecho | ADR 0012; `02-scope-and-restrictions.md` y `00-product-vision.md` actualizados |
 | E1 | Fundacion (modelos + migracion + evidencia) | ✅ Hecho | 11 tablas en `models/tax.py` + migracion `e4f5a6b7c8d9`; `services/tax/{evidence,periods}.py`; `api/tax.py` con scopes `tax:read`/`tax:write`; 9 pruebas en `tests/test_tax_foundation.py` |
-| E2 | Ingesta (XML/TXT + clasificacion) | 🔄 En curso | **Lectores listos y validados contra archivos reales**: `sri_xml.py` (factura/NC/ND/liquidacion/retencion) y `txt_import.py`. Falta persistir los `FiscalDocument` y el desempaquetado de ZIP |
-| E3 | IVA (motor + campos copiar-pegar + pantalla) | ⏳ Pendiente | Necesita confirmar codigos del F104 vigentes |
-| E4 | ATS (XML/ZIP + validacion + correcciones) | 🔓 Desbloqueado | El usuario entrego dos ATS aceptados (`AT-072025`, `AT-042026`) que fijan el orden exacto de nodos |
+| E2 | Ingesta (XML/TXT + clasificacion) | ✅ Hecho (falta endpoint) | `sri_xml.py`, `txt_import.py` e `ingest.py` (persistencia + ZIP), validados contra archivos reales. Falta exponerlo por API y disparar la ingesta al subir evidencia |
+| E3 | IVA (motor + campos copiar-pegar + pantalla) | ⏳ Pendiente | Necesita confirmar codigos del F104 vigentes. `formatting.py` ya entrega `1234.56` |
+| E4 | ATS (XML/ZIP + validacion + correcciones) | ✅ Generador hecho | `ats.py`: orden de nodos **identico** al ATS aceptado (verificado nodo a nodo), mes de dos digitos, umbral de forma de pago, ZIP con un solo XML y validador que detecta `__MACOSX`. Falta conectarlo a los datos del periodo y al ciclo de `SRIValidationIssue` |
 | E5 | Tareas del asistente + docs de usuario | ⏳ Pendiente | Ninguna automatizacion envia ni paga |
 | F | RDEP / ADI | 🚫 Bloqueado | RDEP requiere origen de datos de nomina/IESS (fuera del alcance actual) |
 
@@ -58,6 +58,14 @@ estructura. Lo aprendido:
    — los dos errores conocidos que reporto el usuario.
 8. El ATS de 2025-07 trae `ivaComp` en `ventaEst` y el de 2026-04 no: el esquema
    cambia entre periodos, asi que el generador debe versionarse por vigencia.
+9. **Umbral de `formasDePago` confirmado con datos reales**: en compras aparece
+   sobre ~500 USD (sin el: 49.97 / 15.10 / 67.55 / 26.70; con el: 522.89 y
+   5389.89). En ventas viene siempre.
+10. **El ZIP del usuario venia con `__MACOSX/._AT-112025.xml`**: comprimir desde
+    el Finder de macOS agrega metadatos y el SRI rechaza el anexo. El generador
+    arma el ZIP entrada por entrada y `validate_ats_zip` detecta ese caso.
+11. Los **emitidos** del usuario son PDF, no XML: las ventas del ATS deben salir
+    de los comprobantes que IAERP emite (`SalesDocument`), no de esos PDF.
 
 ## Insumos que faltan (bloqueantes reales, los provee el usuario)
 
