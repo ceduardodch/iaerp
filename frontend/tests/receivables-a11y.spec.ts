@@ -239,6 +239,58 @@ test('status filter narrows the receivables list', async ({ page }) => {
   await expect(page.getByRole('cell', { name: 'SALDADA' })).toBeVisible()
 })
 
+test('bank statement preview registers only the confirmed exact invoice match', async ({
+  page,
+}) => {
+  let requestCount = 0
+  await page.route('**/api/v1/receivables/bank-statement', (route) => {
+    requestCount += 1
+    const registered = requestCount > 1
+    return route.fulfill({
+      json: {
+        fileName: 'estado.txt',
+        sourceSha256: 'a'.repeat(64),
+        totalRows: 3,
+        creditRows: 2,
+        matchedCount: 1,
+        unmatchedCreditCount: 1,
+        ignoredDebitCount: 1,
+        alreadyImportedCount: 0,
+        matches: [{
+          transactionId: 'b'.repeat(64),
+          paymentDate: '2026-07-14',
+          reference: '22525496-2451',
+          description: 'TRANSFERENCIA RECIBIDA',
+          amount: '136.50',
+          receivableId: overdueReceivable.id,
+          invoiceSequential: '000000961',
+          originalAmount: '150.00',
+          retentionTotal: '13.50',
+          status: registered ? 'REGISTERED' : 'MATCHED',
+          detail: registered ? 'Cobro registrado' : 'Lista para registrar',
+        }],
+      },
+    })
+  })
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: 'Cargar estado bancario' }).click()
+  await expect(page.getByRole('heading', { name: 'Conciliar banco', level: 1 })).toBeVisible()
+  await page.getByLabel('Estado de cuenta bancario').setInputFiles({
+    name: 'estado.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('estado bancario sintetico'),
+  })
+  await page.getByRole('button', { name: 'Revisar movimientos' }).click()
+  await expect(page.getByRole('cell', { name: '000000961' })).toBeVisible()
+  await expect(page.getByText('1 coincidencia · 1 abono sin aplicar')).toBeVisible()
+  await expectNoA11yViolations(page)
+
+  await page.getByRole('button', { name: 'Registrar 1 cobro' }).click()
+  await expect(page.getByText('Cobro registrado')).toBeVisible()
+  await expect(page.getByText(/Solo los cobros indicados como registrados/)).toBeVisible()
+  expect(requestCount).toBe(2)
+})
+
 test('receivables screens reflow at 320 CSS px and at 200% zoom without horizontal scroll', async ({
   page,
 }) => {

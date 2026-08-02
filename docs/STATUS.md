@@ -7,6 +7,19 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Actualización local: 2026-08-02 `America/Guayaquil`. Cartera permite cargar
+  el TXT de estado de cuenta de Banco Bolivariano y revisar una conciliación
+  antes de registrar. Solo considera abonos; ignora débitos y comisiones. Un
+  cobro se propone únicamente cuando existe una sola factura autorizada,
+  emitida antes del abono, cuyo saldo completo coincide exactamente. El saldo
+  ya descuenta retenciones IVA y renta registradas. Facturas con pagos,
+  descuentos o notas de crédito previas, montos ambiguos y abonos parciales no
+  se aplican. La confirmación exige permiso, idempotencia y auditoría; el TXT
+  se procesa en memoria y cada movimiento bancario queda protegido contra
+  duplicados por una huella sin datos de la cuenta. El archivo real entregado
+  se leyó como 205 movimientos, 23 abonos y 182 débitos. Ruff, mypy, 72 pruebas
+  de Cartera y 18 pruebas Playwright pasan; OpenAPI, build y lint también.
+
 - Actualización local: 2026-08-02 `America/Guayaquil`. Los periodos
   tributarios cambian de estado al ingerir evidencia: sin comprobantes quedan
   pendientes, con algún documento preliminar muestran evidencia incompleta y

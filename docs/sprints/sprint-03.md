@@ -339,6 +339,24 @@ Pruebas E2E (Playwright, escritorio y viewport movil):
   pantallas nuevas (lista de cartera, drawer de cobro, historial de
   movimientos).
 
+### Extensión: conciliación bancaria de cobros completos
+
+- `POST /receivables/bank-statement` recibe un TXT bancario y siempre ofrece
+  vista previa antes de escribir; `apply=true` exige `Idempotency-Key`.
+- Solo se consideran abonos. Débitos, comisiones y filas inválidas no crean
+  movimientos de Cartera.
+- Un abono se relaciona únicamente si una sola factura `AUTHORIZED`, emitida
+  antes del movimiento, tiene exactamente ese saldo abierto. Las retenciones
+  activas ya forman parte del cálculo del saldo neto.
+- Una cuenta con cobros, descuentos o notas de crédito previos no entra en el
+  cruce automático. Dos abonos o dos facturas por el mismo valor quedan para
+  revisión y no se adivina la relación.
+- El archivo se procesa en memoria. Una huella estable de cuenta, fecha,
+  referencia, descripción e importe evita registrar dos veces el mismo abono
+  aun cuando se vuelva a cargar en otro estado de cuenta.
+- La confirmación registra `PAYMENT` con método `TRANSFER`, conserva la
+  referencia bancaria y deja auditoría del lote. No se expone como tool MCP.
+
 ## Criterios de aceptacion
 
 - Todo `Receivable` referencia una factura `AUTHORIZED` existente
@@ -383,6 +401,8 @@ Pruebas E2E (Playwright, escritorio y viewport movil):
   contra PostgreSQL/Redis reales).
 - Los recorridos E2E de cobro, aplicacion de nota de credito y reverso pasan
   en escritorio y viewport movil.
+- La carga bancaria no aplica abonos parciales ni ambiguos y repetir el mismo
+  movimiento no crea un segundo `PAYMENT`.
 - **La cartera coincide con documentos y movimientos**: para cada receivable
   del dataset, `original_amount` = `SalesDocument.total` de origen, y
   `open_amount` calculado = `original_amount - suma de movimientos activos`,

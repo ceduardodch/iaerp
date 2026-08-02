@@ -15,6 +15,7 @@ import {
   type AccountItem,
   type AccountItemStatus,
   type ArtifactDownload,
+  type BankStatementImport,
   type CollectionPolicy,
   type CommercialContract,
   type ContractArtifactDownload,
@@ -1854,6 +1855,7 @@ type ReceivablePanel =
   | { view: 'due-date'; receivable: AccountItem }
   | { view: 'history'; receivable: AccountItem }
   | { view: 'retention-batch' }
+  | { view: 'bank-statement' }
 
 function emptyRetention(): RetentionInput & { key: string } {
   return { key: crypto.randomUUID(), kind: 'RETENTION_IVA', amount: '0.00', reason: '', documentReference: '' }
@@ -1968,6 +1970,116 @@ function BatchRetentionImportForm({
           {!registered ? (
             <ErpButton variant="primary" disabled={matched.length === 0 || registerBatch.isPending} onClick={() => registerBatch.mutate()}>
               {registerBatch.isPending ? 'Registrando…' : `Registrar ${matched.length} retención${matched.length === 1 ? '' : 'es'}`}
+            </ErpButton>
+          ) : null}
+        </section>
+      ) : null}
+    </ErpFormPanel>
+  )
+}
+
+function BankStatementImportForm({
+  token,
+  onRegistered,
+  onCancel,
+}: {
+  token: string
+  onRegistered: () => void
+  onCancel: () => void
+}) {
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<BankStatementImport | null>(null)
+  const [registered, setRegistered] = useState(false)
+
+  function statementFormData(apply: boolean) {
+    if (!file) throw new Error('Selecciona el TXT del banco.')
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('apply', String(apply))
+    return formData
+  }
+
+  const previewStatement = useMutation({
+    mutationFn: () => apiRequest<BankStatementImport>(token, '/receivables/bank-statement', {
+      method: 'POST',
+      body: statementFormData(false),
+    }),
+    onSuccess: (result) => {
+      setPreview(result)
+      setRegistered(false)
+    },
+  })
+  const registerMatches = useMutation({
+    mutationFn: () => apiRequest<BankStatementImport>(token, '/receivables/bank-statement', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey('web-bank-statement') },
+      body: statementFormData(true),
+    }),
+    onSuccess: (result) => {
+      setPreview(result)
+      setRegistered(true)
+      onRegistered()
+    },
+  })
+
+  return (
+    <ErpFormPanel
+      eyebrow="Cobranzas"
+      title="Conciliar estado bancario"
+      submitLabel="Revisar movimientos"
+      pendingLabel="Revisando…"
+      pending={previewStatement.isPending}
+      error={previewStatement.error?.message}
+      onSubmit={(event) => { event.preventDefault(); previewStatement.mutate() }}
+      onCancel={onCancel}
+    >
+      <p className="fine-print">El TXT se procesa en memoria. Ignoramos débitos y solo proponemos abonos que dejan una única factura autorizada en cero, con sus retenciones ya descontadas. Nada se registra hasta que confirmes.</p>
+      <label>
+        Estado de cuenta bancario
+        <input
+          type="file"
+          accept=".txt,text/plain"
+          required
+          onChange={(event) => {
+            setFile(event.target.files?.[0] ?? null)
+            setPreview(null)
+            setRegistered(false)
+          }}
+        />
+      </label>
+      {file ? <p className="fine-print">Archivo seleccionado: {file.name}</p> : null}
+      {preview ? (
+        <section className="retention-batch-results" aria-live="polite">
+          <div className="retention-batch-heading">
+            <h3>Resultado de la conciliación</h3>
+            <span>{preview.matchedCount} coincidencia{preview.matchedCount === 1 ? '' : 's'} · {preview.unmatchedCreditCount} abono{preview.unmatchedCreditCount === 1 ? '' : 's'} sin aplicar</span>
+          </div>
+          <p className="fine-print">Se leyeron {preview.totalRows} movimientos: {preview.creditRows} abonos, {preview.ignoredDebitCount} débitos ignorados y {preview.alreadyImportedCount} abono{preview.alreadyImportedCount === 1 ? '' : 's'} ya registrado{preview.alreadyImportedCount === 1 ? '' : 's'}.</p>
+          {preview.matches.length > 0 ? (
+            <div className="table-wrap" tabIndex={0} aria-label="Coincidencias del estado bancario">
+              <table className="erp-responsive-table">
+                <thead><tr><th>Fecha</th><th>Referencia bancaria</th><th>Factura</th><th>Original</th><th>Retenciones</th><th>Abono</th><th>Resultado</th></tr></thead>
+                <tbody>
+                  {preview.matches.map((match) => (
+                    <tr key={match.transactionId}>
+                      <td>{match.paymentDate}</td>
+                      <td>{match.reference}</td>
+                      <td>{match.invoiceSequential}</td>
+                      <td>${formatAmount(match.originalAmount)}</td>
+                      <td>${formatAmount(match.retentionTotal)}</td>
+                      <td>${formatAmount(match.amount)}</td>
+                      <td><ErpStatusBadge tone="success">{match.detail}</ErpStatusBadge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <ErpEmptyState title="Sin coincidencias exactas" description="Los abonos dudosos o sin una factura única no modificaron Cartera." />}
+          {registerMatches.error ? <p className="form-error" role="alert">{registerMatches.error.message}</p> : null}
+          {registered ? <p className="fine-print">La conciliación terminó. Solo los cobros indicados como registrados modificaron Cartera.</p> : null}
+          {!registered ? (
+            <ErpButton variant="primary" disabled={preview.matchedCount === 0 || registerMatches.isPending} onClick={() => registerMatches.mutate()}>
+              {registerMatches.isPending ? 'Registrando…' : `Registrar ${preview.matchedCount} cobro${preview.matchedCount === 1 ? '' : 's'}`}
             </ErpButton>
           ) : null}
         </section>
@@ -2599,6 +2711,18 @@ function ReceivablesPage({
       </>
     )
   }
+  if (panel?.view === 'bank-statement') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Conciliar banco" subtitle="Registra únicamente abonos que cuadran de forma única con una factura autorizada." />
+        <BankStatementImportForm
+          token={token}
+          onRegistered={() => void queryClient.invalidateQueries({ queryKey: ['receivables'] })}
+          onCancel={closePanel}
+        />
+      </>
+    )
+  }
 
   return (
     <>
@@ -2625,6 +2749,9 @@ function ReceivablesPage({
         </label>
         <ErpButton variant="primary" onClick={(event) => openPanel({ view: 'retention-batch' }, event.currentTarget)}>
           Cargar retenciones XML
+        </ErpButton>
+        <ErpButton variant="secondary" onClick={(event) => openPanel({ view: 'bank-statement' }, event.currentTarget)}>
+          Cargar estado bancario
         </ErpButton>
       </ErpToolbar>
       <section className="split-layout erp-list-only">

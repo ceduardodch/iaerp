@@ -19,6 +19,7 @@ from app.models.platform import (
     User,
 )
 from app.models.receivables import CollectionPolicy
+from app.schemas.bank_reconciliation import BankStatementImportRead
 from app.schemas.billing import (
     ArtifactDownloadRead,
     CreditNoteInput,
@@ -86,7 +87,14 @@ from app.schemas.receivables import (
     RetentionXmlPreviewRead,
     ReversalInput,
 )
-from app.services import billing, fiscal_settings, legal_commercial, masters, receivables
+from app.services import (
+    bank_reconciliation,
+    billing,
+    fiscal_settings,
+    legal_commercial,
+    masters,
+    receivables,
+)
 from app.services.unit_of_work import append_audit, execute_idempotent
 
 router = APIRouter()
@@ -1527,6 +1535,67 @@ async def post_retention_batch(
         action="receivable.retention_batch_registered",
         entity_type="receivable_batch",
         callback=register_batch,
+    )
+
+
+@router.post(
+    "/receivables/bank-statement",
+    response_model=BankStatementImportRead,
+)
+async def post_bank_statement(
+    file: Annotated[UploadFile, File()],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:write"))],
+    apply: Annotated[bool, Form()] = False,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> dict[str, object]:
+    """Cruza abonos bancarios y registra solo cobros totales con match único."""
+    content = await file.read(bank_reconciliation.MAX_BANK_STATEMENT_BYTES + 1)
+    file_name = file.filename or "estado-bancario.txt"
+    if not apply:
+        result = await bank_reconciliation.import_bank_statement(
+            session,
+            context=context,
+            file_name=file_name,
+            content=content,
+            apply=False,
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key=f"preview-{uuid.uuid4()}",
+        )
+        return result.model_dump(mode="json", by_alias=True)
+    if idempotency_key is None or not 16 <= len(idempotency_key) <= 128:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "An Idempotency-Key between 16 and 128 characters is required "
+                "to register bank payments"
+            ),
+        )
+
+    async def register_matches() -> tuple[str, dict[str, object]]:
+        result = await bank_reconciliation.import_bank_statement(
+            session,
+            context=context,
+            file_name=file_name,
+            content=content,
+            apply=True,
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key=idempotency_key,
+        )
+        return str(context.tenant_id), result.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.bank_statement.register",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "file_name": file_name,
+            "sha256": hashlib.sha256(content).hexdigest(),
+        },
+        action="receivable.bank_statement_registered",
+        entity_type="receivable_batch",
+        callback=register_matches,
     )
 
 

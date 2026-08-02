@@ -819,6 +819,54 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /receivables/bank-statement:
+    post:
+      operationId: importReceivablesBankStatement
+      summary: Conciliar abonos bancarios con facturas autorizadas
+      description: >-
+        Procesa un TXT bancario en memoria. La vista previa no escribe. Al
+        confirmar, registra únicamente abonos que cuadran de forma única con
+        el saldo completo de una factura autorizada; dicho saldo ya refleja
+        retenciones registradas. Ignora débitos y no aplica coincidencias
+        ambiguas, parciales o con movimientos previos distintos de retención.
+      security:
+        - oauth2: ["receivables:write"]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Obligatoria al confirmar apply=true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, apply]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                apply:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Vista previa o resultado del registro confirmado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankStatementImport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Archivo inválido o confirmación sin idempotencia
   /receivables/{receivableId}:
     get:
       operationId: getReceivable
@@ -1819,6 +1867,92 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Aging"
             - type: "null"
+    BankStatementMatch:
+      type: object
+      additionalProperties: false
+      required:
+        - transactionId
+        - paymentDate
+        - reference
+        - description
+        - amount
+        - receivableId
+        - invoiceSequential
+        - originalAmount
+        - retentionTotal
+        - status
+        - detail
+      properties:
+        transactionId:
+          type: string
+          minLength: 64
+          maxLength: 64
+        paymentDate:
+          type: string
+          format: date
+        reference:
+          type: string
+        description:
+          type: string
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        receivableId:
+          type: string
+          format: uuid
+        invoiceSequential:
+          type: string
+          pattern: '^\d{9}$'
+        originalAmount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        retentionTotal:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        status:
+          type: string
+          enum: [MATCHED, REGISTERED]
+        detail:
+          type: string
+    BankStatementImport:
+      type: object
+      additionalProperties: false
+      required:
+        - fileName
+        - sourceSha256
+        - totalRows
+        - creditRows
+        - matchedCount
+        - unmatchedCreditCount
+        - ignoredDebitCount
+        - alreadyImportedCount
+        - matches
+      properties:
+        fileName:
+          type: string
+        sourceSha256:
+          type: string
+          minLength: 64
+          maxLength: 64
+        totalRows:
+          type: integer
+          minimum: 0
+        creditRows:
+          type: integer
+          minimum: 0
+        matchedCount:
+          type: integer
+          minimum: 0
+        unmatchedCreditCount:
+          type: integer
+          minimum: 0
+        ignoredDebitCount:
+          type: integer
+          minimum: 0
+        alreadyImportedCount:
+          type: integer
+          minimum: 0
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/BankStatementMatch"
     PaymentInput:
       type: object
       additionalProperties: false

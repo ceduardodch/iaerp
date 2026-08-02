@@ -269,6 +269,30 @@ export type RetentionBatch = {
   }>
 }
 
+export type BankStatementImport = {
+  fileName: string
+  sourceSha256: string
+  totalRows: number
+  creditRows: number
+  matchedCount: number
+  unmatchedCreditCount: number
+  ignoredDebitCount: number
+  alreadyImportedCount: number
+  matches: Array<{
+    transactionId: string
+    paymentDate: string
+    reference: string
+    description: string
+    amount: string
+    receivableId: string
+    invoiceSequential: string
+    originalAmount: string
+    retentionTotal: string
+    status: 'MATCHED' | 'REGISTERED'
+    detail: string
+  }>
+}
+
 export type DiscountInput = {
   amount: string
   reason: string
