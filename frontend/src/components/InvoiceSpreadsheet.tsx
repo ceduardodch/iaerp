@@ -1,8 +1,9 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
 
 import type { InvoicePreview, Product, TaxCategory } from '../api'
 import { formatAmount } from '../utils/format'
 import { ErpButton } from './erp'
+import { ErpCombobox, type ErpComboboxOption } from './erp/ErpCombobox'
 
 export type InvoiceSpreadsheetLine = {
   key: string
@@ -34,6 +35,23 @@ function formatCurrency(value: string | undefined): string {
   return value === undefined ? '—' : `$${formatAmount(value)}`
 }
 
+/**
+ * Deja pasar solo lo que puede formar un decimal: dígitos, un punto y una coma
+ * que se normaliza a punto.
+ *
+ * Antes estas celdas eran `<input type="number">` y el precio se perdía al
+ * escribir: el navegador considera inválido un valor a medias (por ejemplo
+ * "12." o "12,5") y devuelve cadena vacía en `value`, así que el importe
+ * desaparecía mientras se tecleaba. Además pintaba flechas de subir/bajar que
+ * con `step="0.000001"` movían el precio en millonésimas y la rueda del mouse
+ * lo cambiaba sin querer al hacer scroll sobre la tabla.
+ */
+function sanitizeDecimal(raw: string): string | null {
+  const normalized = raw.replace(',', '.')
+  if (normalized === '') return ''
+  return /^\d*\.?\d*$/.test(normalized) ? normalized : null
+}
+
 export function InvoiceSpreadsheet({
   lines,
   products,
@@ -47,6 +65,19 @@ export function InvoiceSpreadsheet({
 }: InvoiceSpreadsheetProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const pendingFocusRow = useRef<number | null>(null)
+
+  const productOptions = useMemo<ErpComboboxOption[]>(
+    () =>
+      products.map((product) => {
+        const tax = taxes.find((item) => item.id === product.taxCategoryId)
+        return {
+          value: product.id,
+          label: product.name,
+          hint: tax ? `IVA ${formatPercent(tax.rate)}` : undefined,
+        }
+      }),
+    [products, taxes],
+  )
 
   useEffect(() => {
     const row = pendingFocusRow.current
@@ -82,6 +113,13 @@ export function InvoiceSpreadsheet({
     }
   }
 
+  function updateDecimal(key: string, field: 'quantity' | 'unitPrice' | 'discount', raw: string) {
+    const value = sanitizeDecimal(raw)
+    // Una tecla que no forma un decimal se ignora en vez de borrar la celda.
+    if (value === null) return
+    onUpdateLine(key, { [field]: value })
+  }
+
   return (
     <div className="invoice-spreadsheet-section">
       <div className="invoice-spreadsheet-wrap" ref={wrapRef}>
@@ -89,7 +127,6 @@ export function InvoiceSpreadsheet({
           <thead>
             <tr>
               <th scope="col">Producto</th>
-              <th scope="col">Descripción</th>
               <th scope="col">Cantidad</th>
               <th scope="col">P. Unit.</th>
               <th scope="col">Desc.</th>
@@ -108,35 +145,15 @@ export function InvoiceSpreadsheet({
               return (
                 <tr key={line.key}>
                   <td>
-                    <select
-                      aria-label={`Producto ${index + 1}`}
+                    <ErpCombobox
+                      ariaLabel={`Producto ${index + 1}`}
+                      options={productOptions}
                       value={line.productId}
-                      onChange={(event) => onProductChange(line.key, event.target.value)}
+                      onChange={(productId) => onProductChange(line.key, productId)}
                       onKeyDown={(event) => handleKeyDown(event, index, 0)}
-                      data-row={index}
-                      data-col={0}
-                      required
-                    >
-                      <option value="" disabled>Seleccionar…</option>
-                      {products.map((product) => {
-                        const tax = taxes.find((item) => item.id === product.taxCategoryId)
-                        return (
-                          <option key={product.id} value={product.id}>
-                            {product.name}{tax ? ` · IVA ${formatPercent(tax.rate)}` : ''}
-                          </option>
-                        )
-                      })}
-                    </select>
-                  </td>
-                  <td>
-                    <input
-                      aria-label={`Descripción ${index + 1}`}
-                      type="text"
-                      value={line.description}
-                      onChange={(event) => onUpdateLine(line.key, { description: event.target.value })}
-                      onKeyDown={(event) => handleKeyDown(event, index, 1)}
-                      data-row={index}
-                      data-col={1}
+                      placeholder="Buscar producto…"
+                      dataRow={index}
+                      dataCol={0}
                       required
                     />
                   </td>
@@ -145,14 +162,13 @@ export function InvoiceSpreadsheet({
                       aria-label={`Cantidad ${index + 1}`}
                       className={quantityInvalid ? 'cell-invalid' : undefined}
                       aria-invalid={quantityInvalid ? 'true' : undefined}
-                      type="number"
-                      min="0.000001"
-                      step="0.000001"
+                      type="text"
+                      inputMode="decimal"
                       value={line.quantity}
-                      onChange={(event) => onUpdateLine(line.key, { quantity: event.target.value })}
-                      onKeyDown={(event) => handleKeyDown(event, index, 2)}
+                      onChange={(event) => updateDecimal(line.key, 'quantity', event.target.value)}
+                      onKeyDown={(event) => handleKeyDown(event, index, 1)}
                       data-row={index}
-                      data-col={2}
+                      data-col={1}
                       required
                     />
                   </td>
@@ -161,28 +177,26 @@ export function InvoiceSpreadsheet({
                       aria-label={`Precio unitario ${index + 1}`}
                       className={unitPriceInvalid ? 'cell-invalid' : undefined}
                       aria-invalid={unitPriceInvalid ? 'true' : undefined}
-                      type="number"
-                      min="0"
-                      step="0.000001"
+                      type="text"
+                      inputMode="decimal"
                       value={line.unitPrice}
-                      onChange={(event) => onUpdateLine(line.key, { unitPrice: event.target.value })}
-                      onKeyDown={(event) => handleKeyDown(event, index, 3)}
+                      onChange={(event) => updateDecimal(line.key, 'unitPrice', event.target.value)}
+                      onKeyDown={(event) => handleKeyDown(event, index, 2)}
                       data-row={index}
-                      data-col={3}
+                      data-col={2}
                       required
                     />
                   </td>
                   <td>
                     <input
                       aria-label={`Descuento ${index + 1}`}
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={line.discount}
-                      onChange={(event) => onUpdateLine(line.key, { discount: event.target.value })}
-                      onKeyDown={(event) => handleKeyDown(event, index, 4)}
+                      onChange={(event) => updateDecimal(line.key, 'discount', event.target.value)}
+                      onKeyDown={(event) => handleKeyDown(event, index, 3)}
                       data-row={index}
-                      data-col={4}
+                      data-col={3}
                     />
                   </td>
                   <td className="invoice-spreadsheet-amount">{formatCurrency(calculatedLine?.baseAmount)}</td>
@@ -193,9 +207,11 @@ export function InvoiceSpreadsheet({
                       <ErpButton
                         variant="ghost"
                         aria-label={`Quitar línea ${index + 1}`}
+                        title="Quitar línea"
+                        className="erp-icon-button"
                         onClick={() => onRemoveLine(line.key)}
                       >
-                        Quitar
+                        <span aria-hidden="true">✕</span>
                       </ErpButton>
                     ) : null}
                   </td>
@@ -205,7 +221,7 @@ export function InvoiceSpreadsheet({
           </tbody>
           <tfoot>
             <tr>
-              <th scope="row" colSpan={5}>
+              <th scope="row" colSpan={4}>
                 Totales
                 <span className="invoice-spreadsheet-pending" aria-live="polite">
                   {previewPending ? 'Calculando…' : ''}

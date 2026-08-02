@@ -1,9 +1,11 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CalendarClock, DollarSign, History, Mail } from 'lucide-react'
 import {
   lazy,
   startTransition,
   Suspense,
   useDeferredValue,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -17,6 +19,7 @@ import {
   type ArtifactDownload,
   type BankStatementImport,
   type CollectionPolicy,
+  type CollectionsBreakdown,
   type CommercialContract,
   type ContractArtifactDownload,
   type ContractVersion,
@@ -58,6 +61,7 @@ import {
   ErpStatusBadge,
   ErpToolbar,
 } from './components/erp'
+import { ErpCombobox } from './components/erp/ErpCombobox'
 import { ErpModal } from './components/erp/ErpModal'
 // Code-splitting (Sprint 7): la sección CRM arrastra dependencias pesadas
 // (@dnd-kit + framer-motion) y es la menos usada en el arranque; se carga
@@ -1027,6 +1031,17 @@ function NewInvoiceForm({
   const availableEmissionPoints = emissionPoints.filter(
     (point) => point.establishmentId === establishmentId,
   )
+  // La identificación va como pista buscable: dos clientes pueden llamarse casi
+  // igual y el RUC es lo que los distingue.
+  const customerOptions = useMemo(
+    () =>
+      customers.map((customer) => ({
+        value: customer.id,
+        label: customer.name,
+        hint: customer.identificationNumber,
+      })),
+    [customers],
+  )
   const previewPayload = JSON.stringify({
     issueDate,
     lines: lines.map((line) => ({
@@ -1133,15 +1148,17 @@ function NewInvoiceForm({
     >
       <label>
         Cliente
-        <select value={customerId} onChange={(event) => {
-          const nextId = event.target.value
-          setCustomerId(nextId)
-          setPaymentTermsDays(customers.find((customer) => customer.id === nextId)?.paymentTermsDays ?? defaultPaymentTermsDays)
-        }} required>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>{customer.name}</option>
-          ))}
-        </select>
+        <ErpCombobox
+          ariaLabel="Cliente"
+          placeholder="Buscar por nombre o identificación…"
+          options={customerOptions}
+          value={customerId}
+          onChange={(nextId) => {
+            setCustomerId(nextId)
+            setPaymentTermsDays(customers.find((customer) => customer.id === nextId)?.paymentTermsDays ?? defaultPaymentTermsDays)
+          }}
+          required
+        />
       </label>
       <div className="field-row">
         <label>
@@ -2534,16 +2551,30 @@ function SendReminderForm({
   onCancel: () => void
 }) {
   const [channel, setChannel] = useState<ReminderInput['channel']>('EMAIL')
-  const [templateId, setTemplateId] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
   const [message, setMessage] = useState('')
+
+  // Se lee la plantilla configurada solo para mostrar qué se va a enviar; el
+  // servidor la vuelve a renderizar con los valores reales del receivable.
+  const policyQuery = useQuery({
+    queryKey: ['receivables', 'collection-policy'],
+    queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
+  })
+  const policy = policyQuery.data
 
   const sendReminder = useMutation({
     mutationFn: () =>
       apiRequest<Operation>(token, `/receivables/${receivable.id}/reminders`, {
         method: 'POST',
         headers: { 'Idempotency-Key': idempotencyKey('web-receivable-reminder') },
-        body: JSON.stringify({ channel, templateId, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null, message: message || null } satisfies ReminderInput),
+        body: JSON.stringify({
+          channel,
+          // El identificador solo etiqueta el envío en el historial: el texto
+          // sale de la plantilla del tenant, no de este campo.
+          templateId: channel === 'EMAIL' ? policy?.emailTemplateId : policy?.whatsappTemplateId,
+          scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+          message: message || null,
+        } satisfies ReminderInput),
       }),
     onSuccess: () => onSent(),
   })
@@ -2553,11 +2584,13 @@ function SendReminderForm({
     sendReminder.mutate()
   }
 
+  const missingBankDetails = channel === 'EMAIL' && policy !== undefined && !policy.paymentInstructions
+
   return (
     <ErpFormPanel
-      eyebrow="Recordatorio"
-      title="Enviar recordatorio"
-      submitLabel="Enviar"
+      eyebrow="Cobranza"
+      title="Enviar correo de cobro"
+      submitLabel={scheduledAt ? 'Programar' : 'Enviar ahora'}
       pendingLabel="Enviando…"
       pending={sendReminder.isPending}
       error={sendReminder.error?.message}
@@ -2572,16 +2605,38 @@ function SendReminderForm({
           <option value="WHATSAPP">WhatsApp</option>
         </select>
       </label>
+      {channel === 'EMAIL' && policy ? (
+        <section className="reminder-template-preview" aria-label="Plantilla que se enviará">
+          <p className="fine-print">
+            Se envía con la plantilla configurada en <strong>Configuración → Cobranza</strong>.
+          </p>
+          <dl>
+            <div><dt>Asunto</dt><dd>{policy.emailSubject}</dd></div>
+            <div><dt>Cuerpo</dt><dd className="reminder-template-body">{message || policy.emailBody}</dd></div>
+            <div>
+              <dt>Datos para pago</dt>
+              <dd className="reminder-template-body">
+                {policy.paymentInstructions || 'Sin configurar'}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+      {missingBankDetails ? (
+        <p className="form-warning" role="status">
+          Aún no hay datos bancarios configurados: el correo saldrá sin cuenta a la cual
+          transferir. Complétalos en Configuración → Cobranza → Datos para pago.
+        </p>
+      ) : null}
       <label>
-        Plantilla
-        <input
-          value={templateId}
-          onChange={(event) => setTemplateId(event.target.value)}
-          placeholder="ID de plantilla"
-          required
+        Mensaje personalizado
+        <textarea
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          rows={4}
+          placeholder="Opcional: reemplaza el cuerpo. El saldo y los datos de pago se agregan igual."
         />
       </label>
-      <label>Mensaje personalizado<textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={4} placeholder="Opcional" /></label>
       <label>Programar para<input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
     </ErpFormPanel>
   )
@@ -2667,6 +2722,55 @@ function CollectionPolicyEditor({
   )
 }
 
+/**
+ * Cuánto del cobro entró en dinero y cuánto se fue en retenciones.
+ *
+ * Sin esta separación el total cobrado se lee como liquidez, y no lo es: la
+ * retención es valor que el cliente retuvo y que se recupera ante el SRI, no en
+ * caja. Los importes vienen calculados del servidor (`GET /receivables/collections`),
+ * con la misma regla de movimientos activos que el saldo.
+ */
+function CollectionsBreakdownStrip({ breakdown }: { breakdown?: CollectionsBreakdown }) {
+  if (!breakdown) return null
+
+  return (
+    <section aria-label="Desglose del cobro">
+      <dl className="collections-breakdown">
+        <div>
+          <dt>Cobrado en dinero</dt>
+          <dd>
+            ${formatAmount(breakdown.cashAmount)}
+            <small>{breakdown.cashCount} cobro(s) recibidos en banco o caja</small>
+          </dd>
+        </div>
+        <div>
+          <dt>Retenciones</dt>
+          <dd>
+            ${formatAmount(breakdown.retentionAmount)}
+            <small>{breakdown.retentionCount} comprobante(s); se recuperan ante el SRI</small>
+          </dd>
+        </div>
+        <div>
+          <dt>Total saldado</dt>
+          <dd>
+            ${formatAmount(breakdown.settledAmount)}
+            <small>{formatAmount(breakdown.retentionShare)} % del cobro fue retención</small>
+          </dd>
+        </div>
+        {Number(breakdown.creditAmount) > 0 ? (
+          <div>
+            <dt>Notas de crédito y descuentos</dt>
+            <dd>
+              ${formatAmount(breakdown.creditAmount)}
+              <small>Bajan la deuda sin que entre dinero</small>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </section>
+  )
+}
+
 function ReceivablesPage({
   token,
   parties,
@@ -2692,6 +2796,10 @@ function ReceivablesPage({
       ? ['OPEN', 'PARTIAL', 'OVERDUE'].includes(item.status)
       : true,
   )
+  const collectionsQuery = useQuery({
+    queryKey: ['receivables', 'collections'],
+    queryFn: () => apiRequest<CollectionsBreakdown>(token, '/receivables/collections'),
+  })
 
   function openPanel(next: ReceivablePanel, trigger?: HTMLElement) {
     lastTriggerRef.current = trigger ?? null
@@ -2722,7 +2830,7 @@ function ReceivablesPage({
   if (panel?.view === 'reminder') {
     return (
       <>
-        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Enviar recordatorio" subtitle={`Saldo pendiente: $${formatAmount(panel.receivable.openAmount)}`} />
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Enviar correo de cobro" subtitle={`Saldo pendiente: $${formatAmount(panel.receivable.openAmount)}`} />
         <SendReminderForm key={panel.receivable.id} token={token} receivable={panel.receivable} onSent={closePanel} onCancel={closePanel} />
       </>
     )
@@ -2798,6 +2906,7 @@ function ReceivablesPage({
           Cargar estado bancario
         </ErpButton>
       </ErpToolbar>
+      <CollectionsBreakdownStrip breakdown={collectionsQuery.data} />
       <section className="split-layout erp-list-only">
         <ErpPanel title="Cuentas por cobrar" count={receivables.length}>
           <div className="table-wrap" tabIndex={0} aria-label="Listado de cuentas por cobrar">
@@ -2823,35 +2932,48 @@ function ReceivablesPage({
                     <td><ReceivableStatusBadge status={receivable.status} /></td>
                     <td><AgingChip dueDate={receivable.dueDate} /></td>
                     <td>
+                      {/* Iconos y no texto: cuatro acciones escritas empujaban la
+                          tabla a lo ancho y tapaban el saldo. El nombre completo
+                          sigue disponible en aria-label y en el tooltip. */}
                       <ErpActionCell>
                         <ErpButton
                           variant="ghost"
+                          className="erp-icon-button"
                           aria-label={`Registrar cobro para ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          title="Registrar cobro"
                           onClick={(event) => openPanel({ view: 'payment', receivable }, event.currentTarget)}
                           disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
-                          Registrar cobro
+                          <DollarSign size={16} aria-hidden="true" />
                         </ErpButton>
                         <ErpButton
                           variant="ghost"
+                          className="erp-icon-button"
+                          aria-label={`Ver movimientos de ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          title="Ver movimientos"
                           onClick={(event) => openPanel({ view: 'history', receivable }, event.currentTarget)}
                         >
-                          Ver movimientos
+                          <History size={16} aria-hidden="true" />
                         </ErpButton>
                         <ErpButton
                           variant="ghost"
-                          aria-label={`Enviar recordatorio para ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          className="erp-icon-button"
+                          aria-label={`Enviar correo de cobro a ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          title="Enviar correo de cobro"
                           onClick={(event) => openPanel({ view: 'reminder', receivable }, event.currentTarget)}
                           disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
-                          Recordatorio
+                          <Mail size={16} aria-hidden="true" />
                         </ErpButton>
                         <ErpButton
                           variant="ghost"
+                          className="erp-icon-button"
+                          aria-label={`Editar vencimiento de ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          title="Editar vencimiento"
                           onClick={(event) => openPanel({ view: 'due-date', receivable }, event.currentTarget)}
                           disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
-                          Editar vencimiento
+                          <CalendarClock size={16} aria-hidden="true" />
                         </ErpButton>
                       </ErpActionCell>
                     </td>

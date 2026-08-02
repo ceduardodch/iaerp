@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { pickCombobox } from './combobox'
+
 const tenantNorte = '11111111-1111-4111-8111-111111111111'
 const ownerEmail = 'owner@iaerp.local'
 
@@ -50,21 +52,13 @@ test('creates an invoice draft with two lines and a discount; UI shows exactly t
   await expect(page.getByRole('heading', { name: 'Facturas', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Nueva factura' }).first().click()
 
-  await page.getByLabel('Cliente').selectOption({ label: 'Cliente Sintetico Norte' })
-  const firstProductId = await page
-    .getByLabel('Producto 1')
-    .locator('option', { hasText: productName })
-    .getAttribute('value')
-  await page.getByLabel('Producto 1').selectOption(firstProductId ?? '')
+  await pickCombobox(page, 'Cliente', 'Cliente Sintetico Norte')
+  await pickCombobox(page, 'Producto 1', productName)
   await page.getByLabel('Cantidad').fill('2')
   await page.getByLabel('Descuento').fill('1.50')
 
   await page.getByRole('button', { name: 'Agregar línea' }).click()
-  const secondProductId = await page
-    .getByLabel('Producto 2')
-    .locator('option', { hasText: /^Servicio Norte · IVA 15,00 %$/ })
-    .getAttribute('value')
-  await page.getByLabel('Producto 2').selectOption(secondProductId ?? '')
+  await pickCombobox(page, 'Producto 2', 'Servicio Norte')
   await page.getByLabel('Cantidad').nth(1).fill('1')
 
   const draftResponse = page.waitForResponse(

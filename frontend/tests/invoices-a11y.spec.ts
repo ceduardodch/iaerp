@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
+import { pickCombobox } from './combobox'
+
 const context = {
   tenantId: '11111111-1111-4111-8111-111111111111',
   ruc: '1799999999001',
@@ -291,7 +293,7 @@ test('creating a draft shows backend totals and opens detail with SRI status', a
   await loginAndOpenInvoices(page)
 
   await page.getByRole('button', { name: 'Nueva factura' }).click()
-  await page.getByLabel('Producto 1').selectOption(product.id)
+  await pickCombobox(page, 'Producto 1', product.name)
   await page.getByRole('button', { name: 'Guardar' }).click()
 
   // Toast de éxito (Sprint 8) al crear la factura.

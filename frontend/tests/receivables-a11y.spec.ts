@@ -80,6 +80,22 @@ async function mockApi(page: Page) {
       json: currentReceivables,
     })
   })
+  await page.route('**/api/v1/receivables/collections', (route) =>
+    route.fulfill({
+      json: {
+        fromDate: null,
+        toDate: null,
+        cashAmount: '400.00',
+        cashCount: 2,
+        retentionAmount: '100.00',
+        retentionCount: 1,
+        creditAmount: '0.00',
+        creditCount: 0,
+        settledAmount: '500.00',
+        retentionShare: '20.00',
+      },
+    }),
+  )
   await page.route('**/api/v1/receivables/collection-policy', (route) =>
     route.fulfill({
       json: {
@@ -89,6 +105,9 @@ async function mockApi(page: Page) {
         sendHour: 9,
         emailTemplateId: 'payment_reminder',
         whatsappTemplateId: 'payment_reminder',
+        emailSubject: 'Recordatorio de pago - {{empresa}}',
+        emailBody: 'Estimado/a {{cliente}}, podemos acordar un plan de pagos.',
+        paymentInstructions: 'BANCO SINTETICO\nCUENTA CORRIENTE\n0000000000',
         updatedAt: '2026-07-05T12:00:00Z',
       },
     }),
@@ -169,7 +188,7 @@ test('settled receivable is available only when explicitly requested', async ({ 
     name: /\$80,00/,
   })
   await expect(settledRow.getByRole('button', { name: /Registrar cobro/ })).toBeDisabled()
-  await expect(settledRow.getByRole('button', { name: /recordatorio/i })).toBeDisabled()
+  await expect(settledRow.getByRole('button', { name: /correo de cobro/i })).toBeDisabled()
 })
 
 test('register payment full-page view is keyboard reachable, labelled and passes axe', async ({ page }) => {
@@ -214,23 +233,42 @@ test('registering a payment shows the backend-computed balance, never client mat
   await expectNoA11yViolations(page)
 })
 
-test('send reminder full-page view is keyboard reachable, labelled and passes axe', async ({ page }) => {
+test('send collection email view is keyboard reachable, labelled and passes axe', async ({ page }) => {
   await loginAndOpenReceivables(page)
 
-  const reminderButton = page.getByRole('button', { name: `Enviar recordatorio para ${customer.name}` }).first()
+  const reminderButton = page
+    .getByRole('button', { name: `Enviar correo de cobro a ${customer.name}` })
+    .first()
   await reminderButton.focus()
   await page.keyboard.press('Enter')
 
-  await expect(page.getByRole('heading', { name: 'Enviar recordatorio', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Enviar correo de cobro', level: 1 })).toBeVisible()
   await expect(page.getByLabel('Canal')).toBeVisible()
-  await expect(page.getByLabel('Plantilla')).toBeVisible()
   await expectNoA11yViolations(page)
 
-  await page.getByLabel('Plantilla').fill('11111111-1111-4111-8111-111111111111')
-  await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+  // Ya no se pide escribir un id de plantilla: se muestra la configurada, con
+  // sus datos bancarios, y se envía directo.
+  const preview = page.getByRole('region', { name: 'Plantilla que se enviará' })
+  await expect(preview).toContainText('Recordatorio de pago - {{empresa}}')
+  await expect(preview).toContainText('plan de pagos')
+  await expect(preview).toContainText('BANCO SINTETICO')
 
-  await expect(page.getByRole('heading', { name: 'Enviar recordatorio' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Enviar ahora', exact: true }).click()
+
+  await expect(page.getByRole('heading', { name: 'Enviar correo de cobro' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+})
+
+test('collections strip separates cash from retentions', async ({ page }) => {
+  await loginAndOpenReceivables(page)
+
+  // Una retención baja el saldo pero no es caja: debe verse aparte del dinero.
+  const strip = page.getByRole('region', { name: 'Desglose del cobro' })
+  await expect(strip).toContainText('Cobrado en dinero')
+  await expect(strip).toContainText('$400,00')
+  await expect(strip).toContainText('Retenciones')
+  await expect(strip).toContainText('$100,00')
+  await expect(strip).toContainText('20,00 % del cobro fue retención')
 })
 
 test('status filter narrows the receivables list', async ({ page }) => {

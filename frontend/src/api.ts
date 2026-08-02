@@ -332,9 +332,34 @@ export type ReceivableDueDateUpdate = {
 
 export type ReminderInput = {
   channel: 'EMAIL' | 'WHATSAPP'
-  templateId: string
+  /**
+   * Etiqueta del envío en el historial, no la fuente del texto: el cuerpo sale
+   * de la plantilla del tenant (`CollectionPolicy`). Opcional, igual que en el
+   * backend, que cae a "payment_reminder" si no llega.
+   */
+  templateId?: string | null
   message?: string | null
   scheduledAt?: string | null
+}
+
+/**
+ * Desglose del cobro (`GET /receivables/collections`).
+ *
+ * `cashAmount` es dinero que entró; `retentionAmount` es valor que el cliente
+ * retuvo y que se recupera ante el SRI, no en caja. `creditAmount` agrupa notas
+ * de crédito y descuentos: bajan la deuda sin cobro.
+ */
+export type CollectionsBreakdown = {
+  fromDate: string | null
+  toDate: string | null
+  cashAmount: string
+  cashCount: number
+  retentionAmount: string
+  retentionCount: number
+  creditAmount: string
+  creditCount: number
+  settledAmount: string
+  retentionShare: string
 }
 
 export type CollectionPolicy = {
