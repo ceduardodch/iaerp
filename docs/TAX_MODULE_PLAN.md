@@ -24,21 +24,50 @@ en el **ADR 0012** y no se cambian sin un ADR nuevo.
 |---|-------|--------|-------|
 | E0 | ADR + alcance | ✅ Hecho | ADR 0012; `02-scope-and-restrictions.md` y `00-product-vision.md` actualizados |
 | E1 | Fundacion (modelos + migracion + evidencia) | ✅ Hecho | 11 tablas en `models/tax.py` + migracion `e4f5a6b7c8d9`; `services/tax/{evidence,periods}.py`; `api/tax.py` con scopes `tax:read`/`tax:write`; 9 pruebas en `tests/test_tax_foundation.py` |
-| E2 | Ingesta (XML/TXT + clasificacion) | ⏳ Pendiente | Extraer `sri_xml.py` compartido y extenderlo |
+| E2 | Ingesta (XML/TXT + clasificacion) | 🔄 En curso | **Lectores listos y validados contra archivos reales**: `sri_xml.py` (factura/NC/ND/liquidacion/retencion) y `txt_import.py`. Falta persistir los `FiscalDocument` y el desempaquetado de ZIP |
 | E3 | IVA (motor + campos copiar-pegar + pantalla) | ⏳ Pendiente | Necesita confirmar codigos del F104 vigentes |
-| E4 | ATS (XML/ZIP + validacion + correcciones) | 🚫 Bloqueado | Falta ficha tecnica/XSD vigente + una muestra aceptada por el SRI |
+| E4 | ATS (XML/ZIP + validacion + correcciones) | 🔓 Desbloqueado | El usuario entrego dos ATS aceptados (`AT-072025`, `AT-042026`) que fijan el orden exacto de nodos |
 | E5 | Tareas del asistente + docs de usuario | ⏳ Pendiente | Ninguna automatizacion envia ni paga |
 | F | RDEP / ADI | 🚫 Bloqueado | RDEP requiere origen de datos de nomina/IESS (fuera del alcance actual) |
 
+## Hallazgos de las muestras reales (2026-08-02)
+
+El usuario entrego archivos reales de su RUC. **No se versionan** (traen RUC,
+nombres, correos, telefonos y certificados X509 de terceros): en
+`backend/tests/fixtures/sri/` viven equivalentes **anonimizados** con la misma
+estructura. Lo aprendido:
+
+1. **El TXT del portal es ISO-8859-1, no UTF-8.** Decodificarlo como UTF-8 falla
+   ("Retenci�n"). `decode_portal_text` intenta UTF-8 y cae a latin-1.
+2. **El nombre de la carpeta miente.** Un archivo dentro de "Diciembre 2025"
+   contenia facturas emitidas el 11/11 y el 30/11. El periodo SIEMPRE sale de la
+   fecha de emision del comprobante.
+3. **El TXT no trae valores de las retenciones** (columnas vacias): esas filas se
+   marcan `is_preliminary` con motivo y se pide el XML. No se inventan cifras.
+4. **En la retencion, `codigo` distingue el concepto:** `1` = RENTA, `2` = IVA.
+   Confirmado en un comprobante real (renta 2.75% cod. 3440 e IVA 70% cod. 2
+   sobre la misma factura sustento).
+5. **ATS y ADI usan raiz y orden DISTINTOS** (por eso los rechazos previos):
+   - ATS: raiz `<iva>`, etiqueta `TipoIDInformante` (con "ID"), y `razonSocial`
+     va **antes** de `Anio`/`Mes`.
+   - ADI: raiz `<adi>`, etiqueta `TipoIdInformante` (con "Id"), y `razonSocial`
+     va **despues** de `Mes`.
+6. **`formasDePago` aparece solo sobre cierto monto** en `detalleCompras` (en las
+   muestras, sobre ~500 USD); en `detalleVentas` viene siempre.
+7. `detalleVentas` incluye `tipoEmision` y `numeroComprobantes` **despues** de el
+   — los dos errores conocidos que reporto el usuario.
+8. El ATS de 2025-07 trae `ivaComp` en `ventaEst` y el de 2026-04 no: el esquema
+   cambia entre periodos, asi que el generador debe versionarse por vigencia.
+
 ## Insumos que faltan (bloqueantes reales, los provee el usuario)
 
-1. **Muestras reales anonimizadas**: XML autorizados (factura, nota de credito,
-   retencion), un TXT del portal y **un ATS XML aceptado por el SRI** (referencia
-   del orden exacto de nodos).
-2. **Ficha tecnica del ATS vigente** y su XSD si existe. No estan en el repo y el
-   esquema cambia entre periodos; sin eso el generador se construiria a ciegas.
-3. **Codigos del formulario 104 vigentes** (401, 411, 500, 510, 507, 517, 564,
+1. **Ficha tecnica del ATS vigente** y su XSD si existe. Las dos muestras
+   aceptadas fijan el orden de nodos, pero no cubren todos los casos (notas de
+   credito, reembolsos, exportaciones, retenciones emitidas).
+2. **Codigos del formulario 104 vigentes** (401, 411, 500, 510, 507, 517, 564,
    609): van en `TaxFormFieldMap`, configurables por vigencia, nunca en codigo.
+3. Muestras de **comprobantes emitidos** y de **notas de credito** para cerrar la
+   ingesta de ventas.
 
 ## Que se reutiliza (no rehacer)
 
