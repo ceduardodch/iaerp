@@ -342,20 +342,24 @@ Pruebas E2E (Playwright, escritorio y viewport movil):
 ### Extensión: conciliación bancaria de cobros completos
 
 - `POST /receivables/bank-statement` recibe un TXT bancario y siempre ofrece
-  vista previa antes de escribir; `apply=true` exige `Idempotency-Key`.
+  vista previa antes de escribir; exige un período `YYYY-MM` y `apply=true`
+  exige `Idempotency-Key`.
 - Solo se consideran abonos. Débitos, comisiones y filas inválidas no crean
   movimientos de Cartera.
-- Un abono se relaciona únicamente si una sola factura `AUTHORIZED`, emitida
-  antes del movimiento, tiene exactamente ese saldo abierto. Las retenciones
-  activas ya forman parte del cálculo del saldo neto.
-- Una cuenta con cobros, descuentos o notas de crédito previos no entra en el
-  cruce automático. Dos abonos o dos facturas por el mismo valor quedan para
-  revisión y no se adivina la relación.
+- Un abono se relaciona únicamente si una sola factura `AUTHORIZED` del mismo
+  período, emitida antes del movimiento, tiene exactamente ese saldo neto.
+  Las retenciones activas forman parte del cálculo.
+- La evidencia documental tiene prioridad sobre un cobro manual sin referencia:
+  si `abono + retenciones = total`, el sistema crea un reverso auditable del
+  manual y registra el banco. Nunca borra el movimiento ni reemplaza retenciones.
+  Pagos con referencia, descuentos o notas de crédito quedan fuera.
+- Dos abonos o dos facturas por el mismo valor dentro del período quedan para
+  revisión. Importes iguales en meses distintos no crean ambigüedad.
 - El archivo se procesa en memoria. Una huella estable de cuenta, fecha,
   referencia, descripción e importe evita registrar dos veces el mismo abono
   aun cuando se vuelva a cargar en otro estado de cuenta.
 - La confirmación registra `PAYMENT` con método `TRANSFER`, conserva la
-  referencia bancaria y deja auditoría del lote. No se expone como tool MCP.
+  referencia bancaria, la fecha efectiva y la auditoría. No se expone como MCP.
 
 ## Criterios de aceptacion
 

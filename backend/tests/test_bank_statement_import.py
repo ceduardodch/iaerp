@@ -97,20 +97,20 @@ async def test_bank_statement_preview_then_registers_only_unique_exact_match(cli
     preview = await client.post(
         "/api/v1/receivables/bank-statement",
         headers=auth(token),
-        data={"apply": "false"},
+        data={"apply": "false", "period": "2026-01"},
         files={"file": ("estado.txt", content, "text/plain")},
     )
     assert preview.status_code == 200, preview.text
     body = preview.json()
     assert body["totalRows"] == 3
     assert body["creditRows"] == 2
+    assert body["period"] == "2026-01"
+    assert body["outsidePeriodCreditCount"] == 0
     assert body["matchedCount"] == 1
     assert body["unmatchedCreditCount"] == 1
     assert body["ignoredDebitCount"] == 1
     assert body["alreadyImportedCount"] == 0
-    assert body["matches"][0] | {
-        "transactionId": body["matches"][0]["transactionId"]
-    } == {
+    assert body["matches"][0] | {"transactionId": body["matches"][0]["transactionId"]} == {
         "transactionId": body["matches"][0]["transactionId"],
         "paymentDate": "2026-01-14",
         "reference": "22525496-2451",
@@ -120,6 +120,7 @@ async def test_bank_statement_preview_then_registers_only_unique_exact_match(cli
         "invoiceSequential": "000000961",
         "originalAmount": "150.00",
         "retentionTotal": "13.50",
+        "replacesManualPayment": False,
         "status": "MATCHED",
         "detail": "Lista para registrar",
     }
@@ -138,7 +139,7 @@ async def test_bank_statement_preview_then_registers_only_unique_exact_match(cli
     applied = await client.post(
         "/api/v1/receivables/bank-statement",
         headers=headers,
-        data={"apply": "true"},
+        data={"apply": "true", "period": "2026-01"},
         files={"file": ("estado.txt", content, "text/plain")},
     )
     assert applied.status_code == 200, applied.text
@@ -149,7 +150,7 @@ async def test_bank_statement_preview_then_registers_only_unique_exact_match(cli
     replay = await client.post(
         "/api/v1/receivables/bank-statement",
         headers=headers,
-        data={"apply": "true"},
+        data={"apply": "true", "period": "2026-01"},
         files={"file": ("estado.txt", content, "text/plain")},
     )
     assert replay.status_code == 200, replay.text
@@ -158,7 +159,7 @@ async def test_bank_statement_preview_then_registers_only_unique_exact_match(cli
     another_key = await client.post(
         "/api/v1/receivables/bank-statement",
         headers={**auth(token), "Idempotency-Key": "bank-statement-register-0002"},
-        data={"apply": "true"},
+        data={"apply": "true", "period": "2026-01"},
         files={"file": ("estado.txt", content, "text/plain")},
     )
     assert another_key.status_code == 200, another_key.text
@@ -175,6 +176,7 @@ async def test_bank_statement_preview_then_registers_only_unique_exact_match(cli
         )
     assert len(payments_after) == 1
     assert payments_after[0].amount == Decimal("136.50")
+    assert payments_after[0].effective_date == date(2026, 1, 14)
 
 
 async def test_bank_statement_does_not_guess_between_equal_invoices(client) -> None:
@@ -214,7 +216,7 @@ async def test_bank_statement_does_not_guess_between_equal_invoices(client) -> N
     response = await client.post(
         "/api/v1/receivables/bank-statement",
         headers=auth(token),
-        data={"apply": "false"},
+        data={"apply": "false", "period": "2026-01"},
         files={"file": ("estado.txt", content, "text/plain")},
     )
     assert response.status_code == 200, response.text
@@ -223,12 +225,125 @@ async def test_bank_statement_does_not_guess_between_equal_invoices(client) -> N
     assert response.json()["matches"] == []
 
 
+async def test_bank_statement_period_replaces_manual_payment_with_bank_evidence(client) -> None:
+    setup = await _create_receivable_via_event(
+        key_prefix="bank-period-replace",
+        sequential="000000964",
+        total=Decimal("2111.40"),
+        issue_date=date(2026, 7, 1),
+    )
+    receivable_id, _masters = await setup(client)
+    token = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["receivables:write", "receivables:read"]
+    )
+    manual = await client.post(
+        f"/api/v1/receivables/{receivable_id}/payments",
+        headers=auth(token, "bank-manual-payment-0001"),
+        json={
+            "cashAmount": "1780.92",
+            "paymentDate": "2026-07-30",
+            "method": "TRANSFER",
+            "reference": None,
+            "retentions": [],
+            "discounts": [],
+        },
+    )
+    assert manual.status_code == 201, manual.text
+    retention = await client.post(
+        f"/api/v1/receivables/{receivable_id}/payments",
+        headers=auth(token, "bank-document-retention-0001"),
+        json={
+            "cashAmount": "0.00",
+            "paymentDate": "2026-07-10",
+            "retentions": [
+                {
+                    "kind": "RETENTION_RENTA",
+                    "amount": "55.08",
+                    "reason": "Código SRI 3440",
+                    "documentReference": ("1007202607179123341700120010090000149151438917214"),
+                },
+                {
+                    "kind": "RETENTION_IVA",
+                    "amount": "275.40",
+                    "reason": "Código SRI 2",
+                    "documentReference": ("1007202607179123341700120010090000149151438917214"),
+                },
+            ],
+            "discounts": [],
+        },
+    )
+    assert retention.status_code == 201, retention.text
+    content = _statement(
+        *[
+            _row(
+                occurred_at=occurred_at,
+                reference=f"UNIVERSIDAD-{month}",
+                description="1416 - PAGO SERVICIOS VARIOS CASH",
+                sign="+",
+                amount="1780.92",
+            )
+            for month, occurred_at in (
+                ("APR", "04/20/2026 13:32:00.000"),
+                ("MAY", "05/15/2026 13:32:00.000"),
+                ("JUN", "06/16/2026 13:32:00.000"),
+                ("JUL", "07/14/2026 13:32:00.000"),
+            )
+        ]
+    )
+
+    preview = await client.post(
+        "/api/v1/receivables/bank-statement",
+        headers=auth(token),
+        data={"apply": "false", "period": "2026-07"},
+        files={"file": ("estado.txt", content, "text/plain")},
+    )
+    assert preview.status_code == 200, preview.text
+    preview_body = preview.json()
+    assert preview_body["period"] == "2026-07"
+    assert preview_body["creditRows"] == 1
+    assert preview_body["outsidePeriodCreditCount"] == 3
+    assert preview_body["matchedCount"] == 1
+    assert preview_body["matches"][0]["replacesManualPayment"] is True
+    assert preview_body["matches"][0]["detail"] == (
+        "Reemplazará cobro manual con respaldo bancario"
+    )
+
+    applied = await client.post(
+        "/api/v1/receivables/bank-statement",
+        headers={**auth(token), "Idempotency-Key": "bank-period-replace-0001"},
+        data={"apply": "true", "period": "2026-07"},
+        files={"file": ("estado.txt", content, "text/plain")},
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["matches"][0]["detail"] == (
+        "Cobro manual reemplazado con respaldo bancario"
+    )
+    async with SessionFactory() as session:
+        movements = list(
+            await session.scalars(
+                select(Movement).where(Movement.receivable_id == uuid.UUID(receivable_id))
+            )
+        )
+    payments = [movement for movement in movements if movement.movement_type == "PAYMENT"]
+    reversals = [movement for movement in movements if movement.movement_type == "REVERSAL"]
+    retentions = [movement for movement in movements if movement.movement_type == "RETENTION"]
+    assert len(payments) == 2
+    assert len(reversals) == 1
+    assert len(retentions) == 2
+    manual_payment = next(movement for movement in payments if movement.support_reference is None)
+    bank_payment = next(movement for movement in payments if movement.support_reference is not None)
+    assert reversals[0].reversed_movement_id == manual_payment.id
+    assert bank_payment.effective_date == date(2026, 7, 14)
+    assert bank_payment.support_reference.startswith("BANCO UNIVERSIDAD-JUL | ")
+    assert sum((movement.amount for movement in retentions), Decimal("0.00")) == Decimal("330.48")
+
+
 async def test_bank_statement_requires_supported_file_and_write_scope(client) -> None:
     read_token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:read"])
     forbidden = await client.post(
         "/api/v1/receivables/bank-statement",
         headers=auth(read_token),
-        data={"apply": "false"},
+        data={"apply": "false", "period": "2026-01"},
         files={"file": ("estado.txt", _statement(), "text/plain")},
     )
     assert forbidden.status_code == 403
@@ -236,7 +351,28 @@ async def test_bank_statement_requires_supported_file_and_write_scope(client) ->
     invalid = await client.post(
         "/api/v1/receivables/bank-statement",
         headers=auth(write_token),
-        data={"apply": "false"},
+        data={"apply": "false", "period": "2026-01"},
         files={"file": ("estado.txt", b"not a bank statement", "text/plain")},
     )
     assert invalid.status_code == 422
+    invalid_period = await client.post(
+        "/api/v1/receivables/bank-statement",
+        headers=auth(write_token),
+        data={"apply": "false", "period": "2026-13"},
+        files={
+            "file": (
+                "estado.txt",
+                _statement(
+                    _row(
+                        occurred_at="01/14/2026 13:32:00.000",
+                        reference="PERIOD-1",
+                        description="TRANSFERENCIA RECIBIDA",
+                        sign="+",
+                        amount="100.00",
+                    )
+                ),
+                "text/plain",
+            )
+        },
+    )
+    assert invalid_period.status_code == 422

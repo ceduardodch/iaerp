@@ -43,7 +43,7 @@
 | --- | --- | --- | --- |
 | Claude (orquestador) | 🟢 ACTIVA | Calidad de tests a11y RESTAURADA; próximo: Sprint 4 (facturas) | 2026-07-21 |
 | Codex (GPT-5.6, vía Claude) | ⚪ detenido | Se colgó por `approval_mode="approve"` en modo no interactivo; para usarlo hay que invocarlo con `--full-auto`/`-a never`. Alcanzó a hacer 2 mejoras menores (auth.tsx, ErpModal.tsx) que se conservaron | 2026-07-21 |
-| Codex (este hilo) | ✅ COMPLETA | Conciliación bancaria conservadora en Cartera: vista previa y registro manual solo de abonos con match único y exacto contra factura autorizada | 2026-08-02 |
+| Codex (este hilo) | ✅ COMPLETA | Conciliación bancaria por período: evidencia subida reemplaza cobro manual sin referencia mediante reverso auditable; julio primero | 2026-08-02 |
 | Otra sesión (Sonnet 4.6) | ⚠️ ¿activa? | Venía haciendo Sprints UI/UX (sidebar, forms) y muteando tests | reciente |
 
 > Si eres una IA nueva y esta tabla muestra a alguien 🟢 ACTIVA, **no toques su

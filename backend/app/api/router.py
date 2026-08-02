@@ -1427,6 +1427,7 @@ async def get_receivable_movements(
             installment_id=movement.installment_id,
             movement_type=movement.movement_type,
             amount=movement.amount,
+            effective_date=movement.effective_date,
             support_reference=movement.support_reference,
             reversed_movement_id=movement.reversed_movement_id,
             actor_id=movement.actor_id,
@@ -1544,12 +1545,17 @@ async def post_retention_batch(
 )
 async def post_bank_statement(
     file: Annotated[UploadFile, File()],
+    period: Annotated[str, Form(pattern=r"^\d{4}-\d{2}$")],
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("receivables:write"))],
     apply: Annotated[bool, Form()] = False,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> dict[str, object]:
-    """Cruza abonos bancarios y registra solo cobros totales con match único."""
+    """Cruza abonos del periodo y registra solo cobros totales con match único."""
+    try:
+        period_date = datetime.strptime(period, "%Y-%m").date().replace(day=1)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Period must use YYYY-MM") from exc
     content = await file.read(bank_reconciliation.MAX_BANK_STATEMENT_BYTES + 1)
     file_name = file.filename or "estado-bancario.txt"
     if not apply:
@@ -1558,6 +1564,7 @@ async def post_bank_statement(
             context=context,
             file_name=file_name,
             content=content,
+            period=period_date,
             apply=False,
             correlation_id=str(uuid.uuid4()),
             idempotency_key=f"preview-{uuid.uuid4()}",
@@ -1578,6 +1585,7 @@ async def post_bank_statement(
             context=context,
             file_name=file_name,
             content=content,
+            period=period_date,
             apply=True,
             correlation_id=str(uuid.uuid4()),
             idempotency_key=idempotency_key,
@@ -1592,6 +1600,7 @@ async def post_bank_statement(
         request_payload={
             "file_name": file_name,
             "sha256": hashlib.sha256(content).hexdigest(),
+            "period": period,
         },
         action="receivable.bank_statement_registered",
         entity_type="receivable_batch",

@@ -825,10 +825,11 @@ paths:
       summary: Conciliar abonos bancarios con facturas autorizadas
       description: >-
         Procesa un TXT bancario en memoria. La vista previa no escribe. Al
-        confirmar, registra únicamente abonos que cuadran de forma única con
-        el saldo completo de una factura autorizada; dicho saldo ya refleja
-        retenciones registradas. Ignora débitos y no aplica coincidencias
-        ambiguas, parciales o con movimientos previos distintos de retención.
+        confirmar, registra únicamente abonos del período que cuadran de forma
+        única con una factura autorizada del mismo período. Si la factura ya
+        tiene un cobro manual sin respaldo y el abono más las retenciones
+        documentadas cuadran el total, revierte el manual y registra el banco.
+        Ignora débitos y no aplica coincidencias ambiguas o parciales.
       security:
         - oauth2: ["receivables:write"]
       parameters:
@@ -846,11 +847,14 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [file, apply]
+              required: [file, period, apply]
               properties:
                 file:
                   type: string
                   format: binary
+                period:
+                  type: string
+                  pattern: '^\d{4}-\d{2}$'
                 apply:
                   type: boolean
                   default: false
@@ -1880,6 +1884,7 @@ components:
         - invoiceSequential
         - originalAmount
         - retentionTotal
+        - replacesManualPayment
         - status
         - detail
       properties:
@@ -1906,6 +1911,8 @@ components:
           $ref: "#/components/schemas/PositiveDecimal"
         retentionTotal:
           $ref: "#/components/schemas/NonNegativeDecimal"
+        replacesManualPayment:
+          type: boolean
         status:
           type: string
           enum: [MATCHED, REGISTERED]
@@ -1915,16 +1922,21 @@ components:
       type: object
       additionalProperties: false
       required:
+        - period
         - fileName
         - sourceSha256
         - totalRows
         - creditRows
+        - outsidePeriodCreditCount
         - matchedCount
         - unmatchedCreditCount
         - ignoredDebitCount
         - alreadyImportedCount
         - matches
       properties:
+        period:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
         fileName:
           type: string
         sourceSha256:
@@ -1935,6 +1947,9 @@ components:
           type: integer
           minimum: 0
         creditRows:
+          type: integer
+          minimum: 0
+        outsidePeriodCreditCount:
           type: integer
           minimum: 0
         matchedCount:
@@ -2007,7 +2022,7 @@ components:
       type: object
       additionalProperties: false
       description: Aplicacion sobre una cuota de un receivable (cobro, retencion, descuento, nota de credito o reverso).
-      required: [id, receivableId, installmentId, movementType, amount, actorId, createdAt]
+      required: [id, receivableId, installmentId, movementType, amount, effectiveDate, actorId, createdAt]
       properties:
         id:
           type: string
@@ -2023,6 +2038,9 @@ components:
           enum: [PAYMENT, RETENTION, DISCOUNT, CREDIT_NOTE, REVERSAL]
         amount:
           $ref: "#/components/schemas/NonNegativeDecimal"
+        effectiveDate:
+          type: [string, "null"]
+          format: date
         supportReference:
           type: [string, "null"]
         reversedMovementId:

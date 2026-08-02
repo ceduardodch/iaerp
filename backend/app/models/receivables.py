@@ -200,6 +200,9 @@ class Movement(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     installment_id: Mapped[uuid.UUID]
     movement_type: Mapped[str] = mapped_column(String(20))
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    # Fecha real del cobro o retencion. ``created_at`` conserva la fecha
+    # tecnica en que IAERP registro el movimiento.
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Texto libre: numero de retencion, motivo de descuento, id/clave de NC.
     support_reference: Mapped[str | None] = mapped_column(String(200))
     reversed_movement_id: Mapped[uuid.UUID | None]

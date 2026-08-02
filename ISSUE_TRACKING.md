@@ -9,6 +9,11 @@
 > de lint, build, Playwright, WCAG AA y reflow móvil pasaron localmente; queda
 > esperar CI remoto tras el push.
 
+> Corte 2026-08-02: conciliación bancaria por período lista y validada. Un
+> abono respaldado puede sustituir un cobro manual sin referencia solo cuando
+> factura y retenciones cuadran completas; el original se conserva con reverso.
+> Julio de 2026 es el primer período y luego se avanzará hacia atrás.
+
 ---
 
 ## 🎯 Objetivo de este Documento

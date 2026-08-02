@@ -233,9 +233,13 @@ evidencia completa. `POST /tax/periods/{id}/status` exige confirmación humana e
 idempotencia para avanzar primero a `LISTO_DECLARAR` y después a `DECLARADO`.
 La pantalla expone ambas confirmaciones y no permite saltar pasos.
 
-**Siguiente trabajo.** Definir el 564 con el factor de proporcionalidad o el
-respaldo contable del contribuyente y validar un ATS generado con evidencia real
-en el portal del SRI. No automatizar la presentación ni el pago.
+**Siguiente trabajo.** Carlos empezó por julio de 2026: cargar y revisar compras,
+ventas y retenciones, generar el ATS y validarlo con evidencia real en el portal
+del SRI. Después repetir el cierre hacia atrás, un mes a la vez. La conciliación
+bancaria también queda limitada al período elegido y da prioridad al archivo
+subido sobre cobros manuales sin referencia, siempre con reverso auditable.
+Además falta definir el 564 con el factor de proporcionalidad o el respaldo
+contable del contribuyente. No automatizar la presentación ni el pago.
 
 Notas utiles para quien retome:
 - `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno

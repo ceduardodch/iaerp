@@ -1032,6 +1032,7 @@ async def record_payment(
             installment_id=installment.id,
             movement_type="PAYMENT",
             amount=apply_amount,
+            effective_date=payment.payment_date,
             support_reference=payment.reference,
             actor_id=context.actor_id,
         )
@@ -1049,6 +1050,7 @@ async def record_payment(
                     installment_id=first_installment.id,
                     movement_type="RETENTION",
                     amount=retention.amount,
+                    effective_date=payment.payment_date,
                     support_reference=(
                         f"{retention.document_reference} | {retention.kind}: {retention.reason}"
                     ),
@@ -1066,6 +1068,7 @@ async def record_payment(
                     installment_id=first_installment.id,
                     movement_type="DISCOUNT",
                     amount=discount.amount,
+                    effective_date=payment.payment_date,
                     support_reference=discount.reason,
                     actor_id=context.actor_id,
                 )

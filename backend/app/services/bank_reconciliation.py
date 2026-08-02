@@ -4,7 +4,7 @@ import hashlib
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
@@ -44,6 +44,7 @@ class ReceivableCandidate:
     document: SalesDocument
     open_amount: Decimal
     retention_total: Decimal
+    manual_payment: Movement | None
 
 
 def parse_bank_statement(content: bytes) -> ParsedBankStatement:
@@ -132,13 +133,13 @@ def _bank_reference(credit: BankCredit) -> str:
 
 
 async def _receivable_candidates(
-    session: AsyncSession, *, tenant_id: uuid.UUID
+    session: AsyncSession, *, tenant_id: uuid.UUID, period: date
 ) -> list[ReceivableCandidate]:
     entities = list(
         await session.scalars(
             select(Receivable).where(
                 Receivable.tenant_id == tenant_id,
-                Receivable.status.in_(("OPEN", "PARTIALLY_PAID")),
+                Receivable.status.in_(("OPEN", "PARTIALLY_PAID", "PAID")),
             )
         )
     )
@@ -150,9 +151,14 @@ async def _receivable_candidates(
                 SalesDocument.id == entity.sales_document_id,
                 SalesDocument.document_type == "INVOICE",
                 SalesDocument.status == "AUTHORIZED",
+                SalesDocument.issue_date >= period,
             )
         )
-        if document is None:
+        if (
+            document is None
+            or document.issue_date.year != period.year
+            or document.issue_date.month != period.month
+        ):
             continue
         active_movements = list(
             await session.scalars(
@@ -164,22 +170,44 @@ async def _receivable_candidates(
                 )
             )
         )
-        if any(movement.movement_type != "RETENTION" for movement in active_movements):
+        if any(
+            movement.movement_type not in {"RETENTION", "PAYMENT"} for movement in active_movements
+        ):
             continue
-        open_amount = await receivables.compute_receivable_balance(
-            session, tenant_id=tenant_id, receivable=entity
-        )
-        if open_amount <= 0:
+        retention_movements = [
+            movement for movement in active_movements if movement.movement_type == "RETENTION"
+        ]
+        payment_movements = [
+            movement for movement in active_movements if movement.movement_type == "PAYMENT"
+        ]
+        if len(payment_movements) > 1:
             continue
         retention_total = sum(
-            (movement.amount for movement in active_movements), Decimal("0.00")
+            (movement.amount for movement in retention_movements), Decimal("0.00")
         )
+        expected_cash = entity.original_amount - retention_total
+        if expected_cash <= 0:
+            continue
+        manual_payment: Movement | None = None
+        if payment_movements:
+            manual_payment = payment_movements[0]
+            if (
+                manual_payment.support_reference or ""
+            ).strip() or manual_payment.amount != expected_cash:
+                continue
+        else:
+            open_amount = await receivables.compute_receivable_balance(
+                session, tenant_id=tenant_id, receivable=entity
+            )
+            if open_amount != expected_cash:
+                continue
         candidates.append(
             ReceivableCandidate(
                 receivable=entity,
                 document=document,
-                open_amount=open_amount,
+                open_amount=expected_cash,
                 retention_total=retention_total,
+                manual_payment=manual_payment,
             )
         )
     return candidates
@@ -191,26 +219,32 @@ async def import_bank_statement(
     context: AuthContext,
     file_name: str,
     content: bytes,
+    period: date,
     apply: bool,
     correlation_id: str,
     idempotency_key: str,
 ) -> BankStatementImportRead:
     parsed = parse_bank_statement(content)
+    period_credits = [
+        credit
+        for credit in parsed.credits
+        if credit.occurred_at.year == period.year and credit.occurred_at.month == period.month
+    ]
     imported_references = set(
         await session.scalars(
             select(Movement.support_reference).where(
                 Movement.tenant_id == context.tenant_id,
                 Movement.movement_type == "PAYMENT",
                 Movement.support_reference.in_(
-                    [_bank_reference(credit) for credit in parsed.credits]
+                    [_bank_reference(credit) for credit in period_credits]
                 ),
             )
         )
     )
     pending_credits = [
-        credit for credit in parsed.credits if _bank_reference(credit) not in imported_references
+        credit for credit in period_credits if _bank_reference(credit) not in imported_references
     ]
-    candidates = await _receivable_candidates(session, tenant_id=context.tenant_id)
+    candidates = await _receivable_candidates(session, tenant_id=context.tenant_id, period=period)
 
     credits_by_amount: dict[Decimal, list[BankCredit]] = defaultdict(list)
     candidates_by_amount: dict[Decimal, list[ReceivableCandidate]] = defaultdict(list)
@@ -229,8 +263,25 @@ async def import_bank_statement(
         if credit.occurred_at.date() < candidate.document.issue_date:
             continue
         status = "MATCHED"
-        detail = "Lista para registrar"
+        detail = (
+            "Reemplazará cobro manual con respaldo bancario"
+            if candidate.manual_payment is not None
+            else "Lista para registrar"
+        )
         if apply:
+            if candidate.manual_payment is not None:
+                await receivables.reverse_movement(
+                    session,
+                    context,
+                    receivable_id=candidate.receivable.id,
+                    movement_id=candidate.manual_payment.id,
+                    reason=(
+                        "Sustituido por evidencia bancaria "
+                        f"{credit.reference} del {credit.occurred_at.date().isoformat()}"
+                    ),
+                    correlation_id=correlation_id,
+                    idempotency_key=f"{idempotency_key}:reverse:{credit.transaction_id}",
+                )
             await receivables.record_payment(
                 session,
                 context,
@@ -245,7 +296,11 @@ async def import_bank_statement(
                 idempotency_key=f"{idempotency_key}:{credit.transaction_id}",
             )
             status = "REGISTERED"
-            detail = "Cobro registrado"
+            detail = (
+                "Cobro manual reemplazado con respaldo bancario"
+                if candidate.manual_payment is not None
+                else "Cobro registrado"
+            )
         matches.append(
             BankStatementMatchRead(
                 transaction_id=credit.transaction_id,
@@ -257,16 +312,19 @@ async def import_bank_statement(
                 invoice_sequential=candidate.document.sequential,
                 original_amount=candidate.receivable.original_amount,
                 retention_total=candidate.retention_total,
+                replaces_manual_payment=candidate.manual_payment is not None,
                 status=status,
                 detail=detail,
             )
         )
-    already_imported_count = len(parsed.credits) - len(pending_credits)
+    already_imported_count = len(period_credits) - len(pending_credits)
     return BankStatementImportRead(
+        period=period.strftime("%Y-%m"),
         file_name=file_name,
         source_sha256=parsed.source_sha256,
         total_rows=parsed.total_rows,
-        credit_rows=len(parsed.credits),
+        credit_rows=len(period_credits),
+        outside_period_credit_count=len(parsed.credits) - len(period_credits),
         matched_count=len(matches),
         unmatched_credit_count=len(pending_credits) - len(matches),
         ignored_debit_count=parsed.debit_rows,

@@ -138,6 +138,7 @@ class MovementRead(APIModel):
     installment_id: uuid.UUID
     movement_type: MovementType
     amount: Decimal
+    effective_date: date | None
     support_reference: str | None
     reversed_movement_id: uuid.UUID | None
     actor_id: str

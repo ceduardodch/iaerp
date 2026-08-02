@@ -1987,6 +1987,12 @@ function BankStatementImportForm({
   onRegistered: () => void
   onCancel: () => void
 }) {
+  const [period, setPeriod] = useState(() => {
+    const previousMonth = new Date()
+    previousMonth.setDate(1)
+    previousMonth.setMonth(previousMonth.getMonth() - 1)
+    return `${previousMonth.getFullYear()}-${String(previousMonth.getMonth() + 1).padStart(2, '0')}`
+  })
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<BankStatementImport | null>(null)
   const [registered, setRegistered] = useState(false)
@@ -1995,6 +2001,7 @@ function BankStatementImportForm({
     if (!file) throw new Error('Selecciona el TXT del banco.')
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('period', period)
     formData.append('apply', String(apply))
     return formData
   }
@@ -2035,6 +2042,19 @@ function BankStatementImportForm({
     >
       <p className="fine-print">El TXT se procesa en memoria. Ignoramos débitos y solo proponemos abonos que saldan una única factura autorizada, con sus retenciones ya descontadas. Nada se registra hasta que confirmes.</p>
       <label>
+        Período a conciliar
+        <input
+          type="month"
+          required
+          value={period}
+          onChange={(event) => {
+            setPeriod(event.target.value)
+            setPreview(null)
+            setRegistered(false)
+          }}
+        />
+      </label>
+      <label>
         Estado de cuenta bancario
         <input
           type="file"
@@ -2054,7 +2074,7 @@ function BankStatementImportForm({
             <h3>Resultado de la conciliación</h3>
             <span>{preview.matchedCount} coincidencia{preview.matchedCount === 1 ? '' : 's'} · {preview.unmatchedCreditCount} abono{preview.unmatchedCreditCount === 1 ? '' : 's'} sin aplicar</span>
           </div>
-          <p className="fine-print">Se leyeron {preview.totalRows} movimientos: {preview.creditRows} abonos, {preview.ignoredDebitCount} débitos ignorados y {preview.alreadyImportedCount} abono{preview.alreadyImportedCount === 1 ? '' : 's'} ya registrado{preview.alreadyImportedCount === 1 ? '' : 's'}.</p>
+          <p className="fine-print">Período {preview.period}. Se leyeron {preview.totalRows} movimientos: {preview.creditRows} abonos del período, {preview.outsidePeriodCreditCount} de otros meses, {preview.ignoredDebitCount} débitos ignorados y {preview.alreadyImportedCount} abono{preview.alreadyImportedCount === 1 ? '' : 's'} ya registrado{preview.alreadyImportedCount === 1 ? '' : 's'}.</p>
           {preview.matches.length > 0 ? (
             <div className="table-wrap" tabIndex={0} aria-label="Coincidencias del estado bancario">
               <table className="erp-responsive-table">
@@ -2124,7 +2144,9 @@ function ReceivableMovementHistory({
               <tbody>
                 {movementsQuery.data.map((movement) => (
                   <tr key={movement.id}>
-                    <td>{new Date(movement.createdAt).toLocaleString('es-EC')}</td>
+                    <td>{movement.effectiveDate
+                      ? movement.effectiveDate.split('-').reverse().join('/')
+                      : new Date(movement.createdAt).toLocaleString('es-EC')}</td>
                     <td><ErpStatusBadge tone={movement.movementType === 'RETENTION' ? 'success' : 'neutral'}>{movementLabels[movement.movementType]}</ErpStatusBadge></td>
                     <td>${formatAmount(movement.amount)}</td>
                     <td>{movement.supportReference ?? '—'}</td>

@@ -232,6 +232,7 @@ export type ReceivableMovement = {
   supportReference?: string | null
   reversedMovementId?: string | null
   actorId: string
+  effectiveDate?: string | null
   createdAt: string
 }
 
@@ -270,10 +271,12 @@ export type RetentionBatch = {
 }
 
 export type BankStatementImport = {
+  period: string
   fileName: string
   sourceSha256: string
   totalRows: number
   creditRows: number
+  outsidePeriodCreditCount: number
   matchedCount: number
   unmatchedCreditCount: number
   ignoredDebitCount: number
@@ -288,6 +291,7 @@ export type BankStatementImport = {
     invoiceSequential: string
     originalAmount: string
     retentionTotal: string
+    replacesManualPayment: boolean
     status: 'MATCHED' | 'REGISTERED'
     detail: string
   }>
