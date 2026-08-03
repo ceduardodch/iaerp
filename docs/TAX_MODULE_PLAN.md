@@ -233,16 +233,16 @@ evidencia completa. `POST /tax/periods/{id}/status` exige confirmación humana e
 idempotencia para avanzar primero a `LISTO_DECLARAR` y después a `DECLARADO`.
 La pantalla expone ambas confirmaciones y no permite saltar pasos.
 
-**Siguiente trabajo.** Integrar el cambio aislado de prioridad documental cuando
-el worktree principal quede libre. Después, Carlos continúa con julio de 2026:
-cargar y revisar compras, ventas y retenciones, generar el ATS y validarlo con
-evidencia real en el portal del SRI. Repetir el cierre hacia atrás, un mes a la
-vez. La conciliación bancaria usa el período elegido y da prioridad al archivo
-subido: conserva el cobro manual y crea un reverso auditable. Si el manual está
-en otra factura del mismo cliente, solo propone corregirlo cuando la fecha del
-banco demuestra que esa factura todavía no existía. También falta definir el
-564 con el factor de proporcionalidad o el respaldo contable del contribuyente.
-No automatizar la presentación ni el pago.
+**Siguiente trabajo.** La prioridad documental y la conciliación bancaria ya
+están integradas en `main`. Carlos continúa con julio de 2026: cargar y revisar
+compras, ventas y retenciones, generar el ATS y validarlo con evidencia real en
+el portal del SRI. Repetir el cierre hacia atrás, un mes a la vez. La
+conciliación usa el período elegido y da prioridad al archivo subido: conserva
+el cobro manual y crea un reverso auditable. Si el manual está en otra factura
+del mismo cliente, solo propone corregirlo cuando la fecha del banco demuestra
+que esa factura todavía no existía. También falta definir el 564 con el factor
+de proporcionalidad o el respaldo contable del contribuyente. No automatizar
+la presentación ni el pago.
 
 Notas utiles para quien retome:
 - `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno

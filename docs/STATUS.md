@@ -7,6 +7,15 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Reconciliación de ramas: 2026-08-02 `America/Guayaquil`. Se revisó la rama
+  local `release` contra `main`. Sus cambios útiles ya llegaron a producción:
+  perfiles de retención esperada, transmisión SRI, control de ambiente y RIDE,
+  duplicado de facturas rechazadas, contratos, contactos sin WhatsApp y
+  correcciones de migraciones. Una prueba de integración aislada mostró
+  conflictos con versiones más nuevas de Contratos, Tributario, el visor PDF y
+  la navegación; por eso no se mezcló la rama antigua. `main` conserva la
+  versión vigente y la puerta completa de CI/CD terminó correctamente.
+
 - Actualización local: 2026-08-02 `America/Guayaquil`. La carga documental
   prevalece sobre cobros manuales sin borrar su historia. Si un abono bancario
   ya está ligado a la factura correcta y existe un cobro manual igual en otra
@@ -18,8 +27,7 @@ alcance y las decisiones.
   propio comprobante de retención. La regla usa el período elegido, por lo que
   sirve para julio, junio y los meses anteriores. Ruff, mypy, 67 pruebas de
   banco/tributario, build, lint y 42 recorridos Playwright pasan en una copia
-  aislada de `origin/main`. Pendiente integrar porque otra sesión mantiene
-  cambios locales sin subir en el worktree principal.
+  aislada de `origin/main`. El cambio ya está integrado en `main`.
 
 - Actualización local: 2026-08-02 `America/Guayaquil`. Cartera permite cargar
   el TXT de Banco Bolivariano y conciliar un mes elegido. Factura y abono deben
