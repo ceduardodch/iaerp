@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Contratos simples listos en cambios locales: 2026-08-02
+- Contratos simples integrados en `main`: 2026-08-02
   `America/Guayaquil`. Contratos enlaza cliente, oportunidad ganada y
   documentos accesorios; cada versión guarda vigencia, plazo y tipo de cobro.
   La persona sube el PDF terminado, lo envía por Gmail y revisa solo ese hilo.
@@ -22,8 +22,9 @@ alcance y las decisiones.
   SQL offline de migración PostgreSQL, 365 pruebas backend (33 omitidas por
   dependencias opcionales), build/lint frontend y Playwright de Contratos en
   escritorio y móvil. Docker/Redis local no estaba activo, por lo que la prueba
-  aislada de salud y la migración PostgreSQL en vivo quedan para CI. Sin commit,
-  push, PR ni despliegue.
+  aislada de salud y la migración PostgreSQL en vivo quedan para CI. El cambio
+  quedó unido a la tolerancia documental y al remitente de facturas antes del
+  push autorizado a producción.
 
 - Remitente de facturas por alias: 2026-08-02 `America/Guayaquil`. Cada tenant
   puede configurar en `Empresa -> Envío de facturas` un correo y nombre de
@@ -33,7 +34,7 @@ alcance y las decisiones.
   Google rechaza el alias, no se envía el correo y se pide revisar su alta en
   Gmail. RIDE y XML siguen adjuntos. Ruff, mypy, 64 pruebas tributarias, 25
   pruebas dirigidas de configuración/facturación/Gmail, build, lint y 44
-  recorridos Playwright de Facturas y Tributario pasan en copia aislada.
+  recorridos Playwright de Facturas y Tributario pasan sobre el conjunto unido.
 
 - Tolerancia documental de cartera: 2026-08-02 `America/Guayaquil`. Al aplicar
   un XML autorizado de retención, IAERP permite cerrar una diferencia máxima
@@ -43,7 +44,7 @@ alcance y las decisiones.
   `0.02` el archivo sigue en revisión y no crea movimientos. El caso reproducido
   de `65.41 - 57.74 - 7.68` cierra en `0.00`. Ruff, mypy, 64 pruebas
   tributarias, 31 pruebas dirigidas de cartera, build, lint y 24 recorridos
-  Playwright tributarios pasan en una copia aislada de `main`.
+  Playwright tributarios pasan sobre el conjunto unido en `main`.
 
 - Entrega de factura y orden tributario local: 2026-08-02
   `America/Guayaquil`. La factura autorizada muestra ahora un bloque claro de

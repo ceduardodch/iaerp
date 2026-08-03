@@ -474,6 +474,9 @@ async def send_google_email(
         message=message,
         html_message=html_message,
         attachments=attachments,
+        sender_address=sender_address,
+        sender_name=sender_name,
+        reply_to=reply_to,
     )
     return sent.message_id
 
@@ -487,6 +490,9 @@ async def send_google_email_with_thread(
     message: str,
     html_message: str | None = None,
     attachments: list[tuple[str, str, bytes]] | None = None,
+    sender_address: str | None = None,
+    sender_name: str | None = None,
+    reply_to: str | None = None,
 ) -> GoogleSentMessage:
     entity, token = await _google_access_token(session, context)
     email = EmailMessage()

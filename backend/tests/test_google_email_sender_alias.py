@@ -26,7 +26,7 @@ async def test_google_email_uses_configured_sender_alias(monkeypatch) -> None:
 
         @staticmethod
         def json() -> dict[str, str]:
-            return {"id": "gmail-message-1"}
+            return {"id": "gmail-message-1", "threadId": "gmail-thread-1"}
 
     class FakeClient:
         def __init__(self, *, timeout: int) -> None:
