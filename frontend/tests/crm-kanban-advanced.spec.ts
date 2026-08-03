@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { mockDashboardEndpoints } from './dashboard-mocks'
 
 /**
  * E2E del Sprint 2 - CRM Kanban Advanced (mocks page.route, sin backend):
@@ -54,6 +55,7 @@ async function mockApi(page: Page, options?: { leads?: unknown[] }) {
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } })
   )
+  await mockDashboardEndpoints(page)
   await page.route('**/api/v1/context', (route) => route.fulfill({ json: context }))
   for (const path of ['parties', 'products', 'tax-categories', 'establishments', 'emission-points', 'receivables', 'invoices']) {
     await page.route(`**/api/v1/${path}`, (route) => route.fulfill({ json: [] }))

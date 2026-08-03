@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { pickCombobox } from './combobox'
+import { mockDashboardEndpoints } from './dashboard-mocks'
 
 // Sprint 6 (HU-17): el formulario de nueva factura muestra si la condición de
 // pago aplicada proviene del override del cliente o del default de la empresa.
@@ -27,6 +28,7 @@ async function mockApi(page: Page) {
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
+  await mockDashboardEndpoints(page)
   await page.route('**/api/v1/context', (route) => route.fulfill({
     json: {
       tenantId: '11111111-1111-4111-8111-111111111111',
