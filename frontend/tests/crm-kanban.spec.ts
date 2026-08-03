@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { mockDashboardEndpoints } from './dashboard-mocks'
 
 /**
  * E2E del Sprint 1 - CRM Kanban Foundation, con mocks `page.route` (sin
@@ -51,10 +52,17 @@ async function mockApi(page: Page) {
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } })
   )
+  await mockDashboardEndpoints(page)
   await page.route('**/api/v1/context', (route) => route.fulfill({ json: context }))
   for (const path of ['parties', 'products', 'tax-categories', 'establishments', 'emission-points', 'receivables', 'invoices']) {
     await page.route(`**/api/v1/${path}`, (route) => route.fulfill({ json: [] }))
   }
+  await page.route('**/api/v1/receivables/aging', (route) =>
+    route.fulfill({ json: { asOf: '2026-08-02', buckets: [], byParty: [] } })
+  )
+  await page.route('**/api/v1/receivables/collections/monthly**', (route) =>
+    route.fulfill({ json: { months: [] } })
+  )
   await page.route('**/api/v1/crm/integrations/status', (route) =>
     route.fulfill({ json: { googleConnected: false, googleEmail: null } })
   )

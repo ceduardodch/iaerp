@@ -142,6 +142,11 @@ export function ErpCombobox({
         aria-autocomplete="list"
         aria-activedescendant={open && matches[activeIndex] ? `${listId}-${activeIndex}` : undefined}
         autoComplete="off"
+        // Un <input type="text"> trae `size=20` implícito, y ese ancho
+        // preferido (~195px) marca el mínimo de la celda que lo contiene: en la
+        // grilla de factura inflaba la columna y estiraba la página a 1010px en
+        // un viewport de 320. Con size=1 el ancho real lo fija el CSS.
+        size={1}
         required={required}
         disabled={disabled}
         placeholder={selected ? undefined : placeholder}
