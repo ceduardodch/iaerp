@@ -447,6 +447,7 @@ async def send_google_email(
     subject: str,
     message: str,
     html_message: str | None = None,
+    attachments: list[tuple[str, str, bytes]] | None = None,
 ) -> str:
     entity, token = await _google_access_token(session, context)
     email = EmailMessage()
@@ -456,6 +457,9 @@ async def send_google_email(
     email.set_content(message)
     if html_message:
         email.add_alternative(html_message, subtype="html")
+    for file_name, content_type, data in attachments or []:
+        maintype, subtype = content_type.split("/", 1)
+        email.add_attachment(data, maintype=maintype, subtype=subtype, filename=file_name)
     raw = base64.urlsafe_b64encode(email.as_bytes()).decode().rstrip("=")
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(

@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import EmailStr, Field, field_validator
 
 from app.schemas.base import APIModel
 
@@ -190,3 +190,13 @@ class ArtifactDownloadRead(APIModel):
     download_url: str
     expires_in_seconds: int
     file_name: str
+
+
+class InvoiceEmailInput(APIModel):
+    recipient: EmailStr
+
+
+class InvoiceEmailRead(APIModel):
+    message_id: str
+    recipient: EmailStr
+    attachment_names: list[str]

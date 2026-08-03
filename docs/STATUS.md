@@ -7,6 +7,17 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Corrección local: 2026-08-02 `America/Guayaquil`. La confirmación de una
+  corrección bancaria ya no excede el límite de 128 caracteres de PostgreSQL:
+  deriva claves internas cortas y estables, y el reverso recalcula el saldo
+  después de guardar el movimiento. Los comprobantes de retención SRI 1.0
+  también alimentan Tributario; IVA y renta siguen separados. Facturas añade
+  un envío manual para comprobantes autorizados, con destinatario visible,
+  confirmación y los dos adjuntos vigentes: RIDE PDF y XML firmado. El envío es
+  idempotente y deja auditoría. Ruff, mypy, 63 pruebas tributarias, 23 pruebas
+  de banco/facturación, build, lint y 24 recorridos Playwright tributarios
+  pasan. Cambio integrado en `main` con autorización del operador.
+
 - Reconciliación de ramas: 2026-08-02 `America/Guayaquil`. Se revisó la rama
   local `release` contra `main`. Sus cambios útiles ya llegaron a producción:
   perfiles de retención esperada, transmisión SRI, control de ambiente y RIDE,

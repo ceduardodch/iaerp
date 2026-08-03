@@ -30,6 +30,7 @@ import {
   type Establishment,
   type FiscalSettings,
   type InvoiceLineInput,
+  type InvoiceEmailResult,
   type InvoicePreview,
   type IntegrationStatus,
   type Lead,
@@ -1354,6 +1355,9 @@ function InvoiceDetail({
 }) {
   const queryClient = useQueryClient()
   const [ridePreview, setRidePreview] = useState<ArtifactDownload | null>(null)
+  const [emailing, setEmailing] = useState(false)
+  const [emailRecipient, setEmailRecipient] = useState('')
+  const [sentEmail, setSentEmail] = useState<InvoiceEmailResult | null>(null)
   const [archiving, setArchiving] = useState(false)
   const [archiveReason, setArchiveReason] = useState('Prueba de emisión SRI; comprobante no autorizado.')
   const invoiceQuery = useQuery({
@@ -1406,6 +1410,18 @@ function InvoiceDetail({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       onClose()
+    },
+  })
+
+  const emailInvoice = useMutation({
+    mutationFn: () => apiRequest<InvoiceEmailResult>(token, `/invoices/${invoiceId}/email`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey('web-email-invoice') },
+      body: JSON.stringify({ recipient: emailRecipient.trim() }),
+    }),
+    onSuccess: (result) => {
+      setSentEmail(result)
+      setEmailing(false)
     },
   })
 
@@ -1539,6 +1555,14 @@ function InvoiceDetail({
       {archiveInvoice.error ? (
         <p className="form-error" role="alert">{archiveInvoice.error.message}</p>
       ) : null}
+      {emailInvoice.error ? (
+        <p className="form-error" role="alert">{emailInvoice.error.message}</p>
+      ) : null}
+      {sentEmail ? (
+        <p className="form-success" role="status">
+          Factura enviada a {sentEmail.recipient} con RIDE y XML.
+        </p>
+      ) : null}
       {previewRide.error ? (
         <p className="form-error" role="alert">{previewRide.error.message}</p>
       ) : null}
@@ -1598,11 +1622,51 @@ function InvoiceDetail({
         </ErpModal>
       ) : null}
 
+      {emailing ? (
+        <ErpModal title="Enviar factura por correo" size="sm" onClose={() => setEmailing(false)}>
+          <p className="fine-print">
+            Se enviarán el RIDE PDF y el XML firmado vigentes. Nada saldrá hasta que confirmes aquí.
+          </p>
+          <label>
+            Correo del destinatario
+            <input
+              type="email"
+              value={emailRecipient}
+              onChange={(event) => setEmailRecipient(event.target.value)}
+              required
+              autoFocus
+            />
+          </label>
+          <div className="erp-form-actions">
+            <ErpButton variant="secondary" onClick={() => setEmailing(false)} disabled={emailInvoice.isPending}>Cancelar</ErpButton>
+            <ErpButton
+              variant="primary"
+              disabled={emailInvoice.isPending || !emailRecipient.trim()}
+              onClick={() => emailInvoice.mutate()}
+            >
+              {emailInvoice.isPending ? 'Enviando…' : 'Confirmar envío'}
+            </ErpButton>
+          </div>
+        </ErpModal>
+      ) : null}
+
       <div className="erp-form-actions">
         <ErpButton variant="secondary" onClick={onClose}>Volver al listado</ErpButton>
         {canCreditNote ? (
           <ErpButton variant="secondary" onClick={() => onOpenCreditNote(invoice)}>
             Nota de crédito
+          </ErpButton>
+        ) : null}
+        {invoice.status === 'AUTHORIZED' ? (
+          <ErpButton
+            variant="secondary"
+            onClick={() => {
+              setEmailRecipient(customer?.email ?? '')
+              setSentEmail(null)
+              setEmailing(true)
+            }}
+          >
+            <Mail size={18} aria-hidden="true" /> Enviar factura
           </ErpButton>
         ) : null}
         <ErpButton

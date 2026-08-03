@@ -1367,6 +1367,9 @@ async def reverse_movement(
         actor_id=context.actor_id,
     )
     session.add(reversal)
+    # ``autoflush`` está desactivado: el reverso debe llegar a la base antes de
+    # recalcular el saldo o se conservaría el estado anterior del cobro.
+    await session.flush()
 
     # Si el original era CREDIT_NOTE, reducir CustomerCredit si hubo excedente
     if original.movement_type == "CREDIT_NOTE" and original.support_reference:

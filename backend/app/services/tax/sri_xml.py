@@ -279,25 +279,36 @@ def _parse_retention(
         raise HTTPException(status_code=422, detail="Retention has no valid issue date")
 
     retentions: list[ParsedRetention] = []
+
+    def append_retention(item: Element, supporting_number: str | None) -> None:
+        code = _text(item, "codigo") or ""
+        kind = _RETENTION_KINDS.get(code)
+        if kind is None:
+            # Otros impuestos (p.ej. ISD) no entran al IVA mensual ni a la
+            # conciliacion de renta; se omiten en vez de clasificarlos mal.
+            return
+        retentions.append(
+            ParsedRetention(
+                kind=kind,
+                sri_code=_text(item, "codigoRetencion") or "",
+                percentage=_decimal(_text(item, "porcentajeRetener")),
+                base_amount=_decimal(_text(item, "baseImponible")),
+                retained_amount=_decimal(_text(item, "valorRetenido")),
+                supporting_document_number=supporting_number,
+            )
+        )
+
     for support in _children(document, "docsSustento/docSustento"):
         supporting_number = _text(support, "numDocSustento")
         for item in _children(support, "retenciones/retencion"):
-            code = _text(item, "codigo") or ""
-            kind = _RETENTION_KINDS.get(code)
-            if kind is None:
-                # Otros impuestos (p.ej. ISD) no entran al IVA mensual ni a la
-                # conciliacion de renta; se omiten en vez de clasificarlos mal.
-                continue
-            retentions.append(
-                ParsedRetention(
-                    kind=kind,
-                    sri_code=_text(item, "codigoRetencion") or "",
-                    percentage=_decimal(_text(item, "porcentajeRetener")),
-                    base_amount=_decimal(_text(item, "baseImponible")),
-                    retained_amount=_decimal(_text(item, "valorRetenido")),
-                    supporting_document_number=supporting_number,
-                )
-            )
+            append_retention(item, supporting_number)
+
+    # Los comprobantes de retención 1.0 guardan los rubros directamente en
+    # ``impuestos``. Siguen siendo documentos SRI válidos y deben entrar al
+    # mismo cálculo sin inventar ni transformar sus valores.
+    if not retentions:
+        for item in _children(document, "impuestos/impuesto"):
+            append_retention(item, _text(item, "numDocSustento"))
 
     total_retained = sum((item.retained_amount for item in retentions), Decimal("0.00"))
     return ParsedDocument(

@@ -197,6 +197,12 @@ export type ArtifactDownload = {
   fileName: string
 }
 
+export type InvoiceEmailResult = {
+  messageId: string
+  recipient: string
+  attachmentNames: string[]
+}
+
 export type FiscalSettings = {
   sriEnvironment: '1' | '2'
   electronicInvoicingProviderName: string

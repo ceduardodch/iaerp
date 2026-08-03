@@ -244,6 +244,16 @@ que esa factura todavía no existía. También falta definir el 564 con el facto
 de proporcionalidad o el respaldo contable del contribuyente. No automatizar
 la presentación ni el pago.
 
+**Corrección del cierre de julio (2026-08-02).** El lector tributario acepta
+también la estructura válida de comprobantes de retención SRI 1.0
+(`impuestos/impuesto`), sin perder ni mezclar IVA y renta. Esto corrige la
+retención de la Universidad que antes aparecía en `0.00`; su XML respalda la
+factura exacta indicada en `numDocSustento`. La confirmación de correcciones del
+TXT bancario usa claves internas acotadas al tamaño real de PostgreSQL y deja
+el saldo de la factura manual recalculado tras el reverso. Para los meses
+anteriores se usa el mismo flujo y el mismo período elegido; no se crean cruces
+por parecido de cliente o importe.
+
 Notas utiles para quien retome:
 - `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno
   (`index.css`): usa clases propias (`.tax-year-label`, `.tax-subhead`) en vez de

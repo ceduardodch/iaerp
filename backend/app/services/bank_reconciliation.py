@@ -25,6 +25,16 @@ from app.services import receivables
 MAX_BANK_STATEMENT_BYTES = 2 * 1024 * 1024
 
 
+def _child_idempotency_key(
+    parent_key: str, *, operation: str, transaction_id: str
+) -> str:
+    """Derive a stable audit key that always fits the database column."""
+    digest = hashlib.sha256(
+        f"{parent_key}|{operation}|{transaction_id}".encode()
+    ).hexdigest()
+    return f"bank:{operation}:{digest}"
+
+
 @dataclass(frozen=True)
 class BankCredit:
     occurred_at: datetime
@@ -425,7 +435,11 @@ async def import_bank_statement(
                         f"{credit.reference} del {credit.occurred_at.date().isoformat()}"
                     ),
                     correlation_id=correlation_id,
-                    idempotency_key=f"{idempotency_key}:reverse:{credit.transaction_id}",
+                    idempotency_key=_child_idempotency_key(
+                        idempotency_key,
+                        operation="reverse",
+                        transaction_id=credit.transaction_id,
+                    ),
                 )
             await receivables.record_payment(
                 session,
@@ -438,7 +452,11 @@ async def import_bank_statement(
                     reference=_bank_reference(credit),
                 ),
                 correlation_id=correlation_id,
-                idempotency_key=f"{idempotency_key}:{credit.transaction_id}",
+                idempotency_key=_child_idempotency_key(
+                    idempotency_key,
+                    operation="payment",
+                    transaction_id=credit.transaction_id,
+                ),
             )
             status = "REGISTERED"
             detail = (
@@ -529,7 +547,11 @@ async def import_bank_statement(
                     f"comprobante destino {correction.target_document.sequential}"
                 ),
                 correlation_id=correlation_id,
-                idempotency_key=f"{idempotency_key}:manual-correction:{credit.transaction_id}",
+                idempotency_key=_child_idempotency_key(
+                    idempotency_key,
+                    operation="manual-correction",
+                    transaction_id=credit.transaction_id,
+                ),
             )
             status = "CORRECTED"
             detail = (

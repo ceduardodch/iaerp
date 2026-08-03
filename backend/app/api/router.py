@@ -24,6 +24,8 @@ from app.schemas.billing import (
     ArtifactDownloadRead,
     CreditNoteInput,
     DocumentArtifactRead,
+    InvoiceEmailInput,
+    InvoiceEmailRead,
     InvoiceInput,
     InvoicePreviewInput,
     InvoicePreviewRead,
@@ -1081,6 +1083,34 @@ async def get_invoice_artifact_download(
 ) -> ArtifactDownloadRead:
     return await billing.create_artifact_download(
         session, context, invoice_id, artifact_id, inline=inline
+    )
+
+
+@router.post("/invoices/{invoice_id}/email", response_model=InvoiceEmailRead)
+async def post_invoice_email(
+    invoice_id: uuid.UUID,
+    data: InvoiceEmailInput,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:write"))],
+) -> dict[str, object]:
+    """Envía, tras confirmación humana, el RIDE y XML de una factura autorizada."""
+
+    async def send() -> tuple[str, dict[str, object]]:
+        result = await billing.send_invoice_email(
+            session, context, invoice_id, recipient=str(data.recipient)
+        )
+        return result.message_id, result.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="invoices.email",
+        idempotency_key=idempotency_key,
+        request_payload={"invoice_id": str(invoice_id), "recipient": str(data.recipient)},
+        action="invoice.emailed",
+        entity_type="sales_document",
+        callback=send,
     )
 
 

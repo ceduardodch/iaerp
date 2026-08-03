@@ -9,6 +9,7 @@ dispara la transmision SRI (``workers/sri_transmission.py``).
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -36,6 +37,7 @@ from app.schemas.billing import (
     ArtifactDownloadRead,
     CreditNoteInput,
     DocumentArtifactRead,
+    InvoiceEmailRead,
     InvoiceInput,
     InvoicePreviewInput,
     InvoicePreviewLineRead,
@@ -45,7 +47,7 @@ from app.schemas.billing import (
     SRITransmissionRead,
 )
 from app.services import access_key as access_key_service
-from app.services import fiscal_settings, masters, ride, signing, sri_xml, storage
+from app.services import crm_integrations, fiscal_settings, masters, ride, signing, sri_xml, storage
 from app.services.fiscal_policy import FiscalCalculationPolicy, LineInput, resolve_fiscal_policy
 from app.services.unit_of_work import append_audit
 
@@ -1436,4 +1438,65 @@ async def create_artifact_download(
         download_url=download_url,
         expires_in_seconds=int(storage.PRESIGNED_URL_EXPIRY.total_seconds()),
         file_name=file_name,
+    )
+
+
+async def send_invoice_email(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+    *,
+    recipient: str,
+) -> InvoiceEmailRead:
+    """Envía una factura autorizada con su XML y RIDE por acción humana."""
+    document = await get_sales_document(session, context, document_id)
+    if document.document_type != "INVOICE" or document.status != "AUTHORIZED":
+        raise HTTPException(status_code=422, detail="Only authorized invoices can be emailed")
+
+    artifacts = list(
+        await session.scalars(
+            select(DocumentArtifact)
+            .where(
+                DocumentArtifact.tenant_id == context.tenant_id,
+                DocumentArtifact.sales_document_id == document_id,
+                DocumentArtifact.artifact_type.in_(("xml-signed", "ride-pdf")),
+            )
+            .order_by(DocumentArtifact.version.desc())
+        )
+    )
+    latest = {artifact.artifact_type: artifact for artifact in reversed(artifacts)}
+    if set(latest) != {"xml-signed", "ride-pdf"}:
+        raise HTTPException(
+            status_code=422,
+            detail="Authorized invoice requires both signed XML and RIDE before email",
+        )
+
+    establishment = await session.get(Establishment, document.establishment_id)
+    emission_point = await session.get(EmissionPoint, document.emission_point_id)
+    if establishment is None or emission_point is None:
+        raise HTTPException(status_code=422, detail="Invoice numbering data is incomplete")
+    invoice_number = f"{establishment.code}-{emission_point.code}-{document.sequential}"
+    attachment_names = [f"FACTURA-{invoice_number}.xml", f"FACTURA-{invoice_number}.pdf"]
+    xml_data, ride_data = await asyncio.gather(
+        storage.download_artifact(object_key=latest["xml-signed"].object_key),
+        storage.download_artifact(object_key=latest["ride-pdf"].object_key),
+    )
+    message_id = await crm_integrations.send_google_email(
+        session,
+        context,
+        recipient=recipient,
+        subject=f"Factura {invoice_number}",
+        message=(
+            f"Adjuntamos la factura {invoice_number}, su RIDE en PDF y el XML firmado.\n\n"
+            "Este correo fue enviado tras confirmación en IAERP."
+        ),
+        attachments=[
+            (attachment_names[0], "application/xml", xml_data),
+            (attachment_names[1], "application/pdf", ride_data),
+        ],
+    )
+    return InvoiceEmailRead(
+        message_id=message_id,
+        recipient=recipient,
+        attachment_names=attachment_names,
     )

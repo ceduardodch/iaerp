@@ -90,6 +90,45 @@ def test_parses_retention_separating_iva_from_renta() -> None:
     assert document.total == Decimal("41.39")
 
 
+def test_parses_legacy_retention_v1_without_losing_iva_or_renta() -> None:
+    xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<autorizacion>
+  <estado>AUTORIZADO</estado>
+  <numeroAutorizacion>0107202607123456789012345678901234567890123456789</numeroAutorizacion>
+  <fechaAutorizacion>2026-07-10T12:00:00-05:00</fechaAutorizacion>
+  <comprobante><![CDATA[
+    <comprobanteRetencion version="1.0.0">
+      <infoTributaria>
+        <ruc>0999999999001</ruc><razonSocial>CLIENTE PRUEBA</razonSocial>
+        <estab>001</estab><ptoEmi>001</ptoEmi><secuencial>000000123</secuencial>
+      </infoTributaria>
+      <infoCompRetencion>
+        <fechaEmision>10/07/2026</fechaEmision>
+        <identificacionSujetoRetenido>0777777777001</identificacionSujetoRetenido>
+        <razonSocialSujetoRetenido>EMISOR PRUEBA</razonSocialSujetoRetenido>
+      </infoCompRetencion>
+      <impuestos>
+        <impuesto><codigo>1</codigo><codigoRetencion>3440</codigoRetencion>
+          <baseImponible>2002.91</baseImponible><porcentajeRetener>2.75</porcentajeRetener>
+          <valorRetenido>55.08</valorRetenido><numDocSustento>001001000000652</numDocSustento></impuesto>
+        <impuesto><codigo>2</codigo><codigoRetencion>2</codigoRetencion>
+          <baseImponible>393.43</baseImponible><porcentajeRetener>70.00</porcentajeRetener>
+          <valorRetenido>275.40</valorRetenido><numDocSustento>001001000000652</numDocSustento></impuesto>
+      </impuestos>
+    </comprobanteRetencion>
+  ]]></comprobante>
+</autorizacion>"""
+
+    document = parse_authorized_document(xml)
+
+    kinds = {item.kind: item for item in document.retentions}
+    assert document.issue_date == date(2026, 7, 10)
+    assert document.total == Decimal("330.48")
+    assert kinds["RENTA"].retained_amount == Decimal("55.08")
+    assert kinds["IVA"].retained_amount == Decimal("275.40")
+    assert kinds["IVA"].supporting_document_number == "001001000000652"
+
+
 def test_rejects_document_that_is_not_authorized() -> None:
     xml = read_fixture("factura_recibida_autorizada.xml").replace(
         b"<estado>AUTORIZADO</estado>", b"<estado>NO AUTORIZADO</estado>"

@@ -5,7 +5,8 @@ from decimal import Decimal
 from sqlalchemy import select
 
 from app.db.session import SessionFactory
-from app.models.receivables import Movement
+from app.models.platform import AuditEvent
+from app.models.receivables import Movement, Receivable
 from app.workers.receivables import handle_invoice_authorized
 from tests.test_billing_api import TENANT_A, auth, token_for
 from tests.test_receivables_flow import _insert_authorized_invoice, _message_for
@@ -443,9 +444,11 @@ async def test_uploaded_bank_evidence_reverses_manual_payment_on_future_invoice(
     assert correction["manualInvoiceSequential"] == "000000966"
     assert correction["status"] == "CORRECTION_REQUIRED"
 
+    outer_idempotency_key = "bank-document-priority-" + ("x" * 105)
+    assert len(outer_idempotency_key) == 128
     applied = await client.post(
         "/api/v1/receivables/bank-statement",
-        headers={**auth(token), "Idempotency-Key": "bank-document-priority-0002"},
+        headers={**auth(token), "Idempotency-Key": outer_idempotency_key},
         data={"apply": "true", "period": "2026-07"},
         files={"file": ("estado.txt", content, "text/plain")},
     )
@@ -459,8 +462,28 @@ async def test_uploaded_bank_evidence_reverses_manual_payment_on_future_invoice(
                 )
             )
         )
+        original_payment = next(
+            item for item in future_movements if item.movement_type == "PAYMENT"
+        )
+        future_receivable = await session.get(Receivable, uuid.UUID(future_receivable_id))
+        reversal_audits = list(
+            await session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.tenant_id == TENANT_A,
+                    AuditEvent.action == "movement.reversed",
+                    AuditEvent.entity_id == str(original_payment.id),
+                )
+            )
+        )
     assert len([item for item in future_movements if item.movement_type == "PAYMENT"]) == 1
     assert len([item for item in future_movements if item.movement_type == "REVERSAL"]) == 1
+    assert future_receivable is not None
+    assert future_receivable.status == "OPEN"
+    assert reversal_audits
+    assert all(
+        event.idempotency_key is not None and len(event.idempotency_key) <= 128
+        for event in reversal_audits
+    )
 
 
 async def test_bank_statement_requires_supported_file_and_write_scope(client) -> None:
