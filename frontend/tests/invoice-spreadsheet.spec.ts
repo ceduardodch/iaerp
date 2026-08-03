@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { pickCombobox } from './combobox'
+import { mockDashboardEndpoints } from './dashboard-mocks'
 
 const product = {
   id: '16161616-1616-4616-8616-161616161616',
@@ -13,6 +14,7 @@ async function mockApi(page: Page) {
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
+  await mockDashboardEndpoints(page)
   await page.route('**/api/v1/context', (route) => route.fulfill({
     json: {
       tenantId: '11111111-1111-4111-8111-111111111111',

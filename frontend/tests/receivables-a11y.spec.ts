@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { mockDashboardEndpoints } from './dashboard-mocks'
 
 const context = {
   tenantId: '11111111-1111-4111-8111-111111111111',
@@ -112,6 +113,7 @@ async function mockApi(page: Page) {
       },
     }),
   )
+  await mockDashboardEndpoints(page)
   await page.route(`**/api/v1/receivables/${overdueReceivable.id}/payments`, (route) => {
     if (route.request().method() === 'POST') {
       currentReceivables = currentReceivables.map((item) =>

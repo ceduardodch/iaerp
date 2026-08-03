@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { mockDashboardEndpoints } from './dashboard-mocks'
 
 // Sección tributaria (ADR 0012): valores listos para copiar, distinción entre
 // campos "para pegar" y "solo control", y aviso explícito cuando los datos son
@@ -62,6 +63,7 @@ async function mockApi(page: Page) {
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
+  await mockDashboardEndpoints(page)
   await page.route('**/api/v1/context', (route) => route.fulfill({
     json: {
       tenantId: '11111111-1111-4111-8111-111111111111',
