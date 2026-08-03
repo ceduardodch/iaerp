@@ -105,6 +105,18 @@ const rejectedInvoice = {
   },
 }
 
+const historicalInvoice = {
+  ...draftInvoice,
+  id: '61616161-6161-4616-8616-616161616160',
+  sequential: '000000123',
+  issueDate: '2026-05-11',
+  status: 'HISTORICAL_ISSUED',
+  accessKey: '1'.repeat(49),
+  authorizationNumber: '1'.repeat(49),
+  reason: 'Factura historica respaldada por RIDE PDF; XML no disponible.',
+  sriTransmission: null,
+}
+
 const duplicatedInvoice = {
   ...rejectedInvoice,
   id: '51515151-5151-4515-8515-515151515151',
@@ -197,6 +209,9 @@ async function mockApi(page: Page) {
       },
     }),
   )
+  await page.route('**/api/v1/invoices/historical-pdf', (route) =>
+    route.fulfill({ status: 201, json: historicalInvoice }),
+  )
   await page.route('**/api/v1/invoices', (route) => {
     if (route.request().method() === 'POST') {
       return route.fulfill({ status: 201, json: draftInvoice })
@@ -214,6 +229,9 @@ async function mockApi(page: Page) {
   )
   await page.route(`**/api/v1/invoices/${duplicatedInvoice.id}`, (route) =>
     route.fulfill({ json: duplicatedInvoice }),
+  )
+  await page.route(`**/api/v1/invoices/${historicalInvoice.id}`, (route) =>
+    route.fulfill({ json: historicalInvoice }),
   )
   await page.route(`**/api/v1/invoices/${authorizedInvoice.id}/email-preview`, (route) =>
     route.fulfill({
@@ -233,6 +251,19 @@ async function mockApi(page: Page) {
     route.fulfill({ status: 201, json: duplicatedInvoice }),
   )
   await page.route('**/api/v1/invoices/*/artifacts', (route) => {
+    if (route.request().url().includes(historicalInvoice.id)) {
+      return route.fulfill({
+        json: [
+          {
+            id: 'd1d1d1d1-d1d1-4d1d-8d1d-d1d1d1d1d1d1',
+            artifactType: 'ride-pdf',
+            sha256: 'c'.repeat(64),
+            version: 1,
+            createdAt: '2026-08-03T12:00:00Z',
+          },
+        ],
+      })
+    }
     if (route.request().url().includes(authorizedInvoice.id)) {
       return route.fulfill({
         json: [
@@ -305,6 +336,26 @@ test.beforeEach(async ({ page }) => {
 test('invoice list passes WCAG 2.1 AA automated checks', async ({ page }) => {
   await loginAndOpenInvoices(page)
   await expect(page.getByRole('cell', { name: draftInvoice.sequential, exact: true })).toBeVisible()
+  await expectNoA11yViolations(page)
+})
+
+test('historical PDF is clearly separated from fiscal delivery and ATS', async ({ page }) => {
+  await loginAndOpenInvoices(page)
+  await page.getByRole('button', { name: 'Cargar histórica' }).click()
+  await expect(page.getByRole('heading', { name: 'Factura histórica' })).toBeVisible()
+  await page.getByLabel('RIDE PDF de SkyFranquicias').setInputFiles({
+    name: 'factura-historica.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4\n%%EOF'),
+  })
+  await page.getByRole('button', { name: 'Crear venta histórica' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Factura 000000123' })).toBeVisible()
+  await expect(page.getByText('HISTÓRICA · XML FALTANTE', { exact: true })).toBeVisible()
+  await expect(page.getByText(/El XML no está disponible y el documento no entra al ATS/)).toBeVisible()
+  await expect(page.getByText('Documento histórico: no se retransmite al SRI.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Preparar correo' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Nota de crédito' })).toHaveCount(0)
   await expectNoA11yViolations(page)
 })
 

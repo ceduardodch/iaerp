@@ -50,6 +50,7 @@
 | Codex (este hilo, históricos) | ✅ COMPLETA | Fecha documental de retenciones, reproceso seguro y conciliación de meses anteriores; validación local verde | 2026-08-02 |
 | Codex (este hilo, entrega fiscal) | ✅ COMPLETA | Correo de factura con plantilla, plazo, RIDE + XML y Tributario agrupado por documento | 2026-08-02 |
 | Codex (este hilo, contratos simples) | ✅ COMPLETA | Contratos, evidencia Gmail/PDF, preparación de cobros y opt-in de cobranza; validación local verde | 2026-08-02 |
+| Codex (este hilo, factura histórica PDF) | ✅ COMPLETA | RIDE Sky como venta histórica para Facturas/reportes, con XML faltante y sin efecto en ATS, IVA o Cartera | 2026-08-03 |
 | Otra sesión (Sonnet 4.6) | ⚠️ ¿activa? | Venía haciendo Sprints UI/UX (sidebar, forms) y muteando tests | reciente |
 
 > Si eres una IA nueva y esta tabla muestra a alguien 🟢 ACTIVA, **no toques su

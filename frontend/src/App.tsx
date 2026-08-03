@@ -483,10 +483,10 @@ function Overview({
 
       <SectionHeading index={canReadTax ? 3 : 2} title="Comercial" subtitle="¿Cómo viene la venta?" />
 
-      <ErpPanel title="Ventas autorizadas" actions={<ErpStatusBadge>Últimos 12 meses</ErpStatusBadge>}>
+      <ErpPanel title="Evolución de ventas emitidas" actions={<ErpStatusBadge>Últimos 12 meses</ErpStatusBadge>}>
         {taxDashboardQuery.isPending ? <p aria-busy="true">Cargando evolución…</p> : null}
         {salesTrend.length > 1 ? (
-          <ErpLineChart points={salesTrend} label="Ventas autorizadas netas por mes, últimos doce meses" />
+          <ErpLineChart points={salesTrend} label="Ventas emitidas netas por mes, incluidos respaldos históricos, últimos doce meses" />
         ) : !taxDashboardQuery.isPending ? (
           <p className="fine-print">Aún no hay suficientes meses para dibujar una tendencia.</p>
         ) : null}
@@ -1229,6 +1229,7 @@ const invoiceStatusLabels: Record<SalesDocumentStatus, string> = {
   RECEIVED: 'ENVIADA',
   PENDING_AUTHORIZATION: 'ENVIADA',
   AUTHORIZED: 'AUTORIZADA',
+  HISTORICAL_ISSUED: 'HISTÓRICA · XML FALTANTE',
   NOT_AUTHORIZED: 'NO AUTORIZADA',
   REJECTED: 'RECHAZADA',
   FAILED: 'FALLIDA',
@@ -1242,6 +1243,7 @@ const invoiceStatusTone: Record<SalesDocumentStatus, 'neutral' | 'success' | 'wa
   RECEIVED: 'warning',
   PENDING_AUTHORIZATION: 'warning',
   AUTHORIZED: 'success',
+  HISTORICAL_ISSUED: 'warning',
   NOT_AUTHORIZED: 'danger',
   REJECTED: 'danger',
   FAILED: 'danger',
@@ -1320,6 +1322,7 @@ function addDays(dateValue: string, days: number): string {
 
 type InvoicePanel =
   | { view: 'new' }
+  | { view: 'historical' }
   | { view: 'detail'; id: string }
   | { view: 'credit-note'; invoice: SalesDocument }
 
@@ -1582,6 +1585,61 @@ function NewInvoiceForm({
   )
 }
 
+function HistoricalInvoicePdfForm({
+  token,
+  onCreated,
+  onCancel,
+}: {
+  token: string
+  onCreated: (invoiceId: string) => void
+  onCancel: () => void
+}) {
+  const importPdf = useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return apiRequest<SalesDocument>(token, '/invoices/historical-pdf', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-historical-invoice-pdf') },
+        body: form,
+      })
+    },
+    onSuccess: (invoice) => onCreated(invoice.id),
+  })
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const file = new FormData(event.currentTarget).get('file')
+    if (file instanceof File && file.size > 0) importPdf.mutate(file)
+  }
+
+  return (
+    <ErpFormPanel
+      eyebrow="Migración histórica"
+      title="Cargar RIDE PDF"
+      submitLabel="Crear venta histórica"
+      pending={importPdf.isPending}
+      error={importPdf.error?.message}
+      onSubmit={submit}
+      onCancel={onCancel}
+    >
+      <p className="fine-print">
+        IAERP leerá el número, cliente, fecha y valores del PDF. La venta aparecerá en
+        Facturas y reportes, pero quedará fuera del ATS, cartera y envío fiscal porque no
+        existe XML.
+      </p>
+      <label>
+        RIDE PDF de SkyFranquicias
+        <input name="file" type="file" accept="application/pdf,.pdf" required />
+      </label>
+      <p className="fine-print">
+        El cliente, establecimiento y punto de emisión deben existir. Cada PDF se valida
+        por separado; IAERP no copiará fechas ni importes de otra factura.
+      </p>
+    </ErpFormPanel>
+  )
+}
+
 function CreditNoteForm({
   token,
   invoice,
@@ -1834,6 +1892,12 @@ function InvoiceDetail({
       <p className="section-number">Detalle</p>
       <h2 id="invoice-detail-title">Factura {invoice.sequential}</h2>
       <InvoiceStatusBadge status={invoice.status} />
+      {invoice.status === 'HISTORICAL_ISSUED' ? (
+        <p className="form-warning" role="status">
+          Venta histórica respaldada por este RIDE PDF. El XML no está disponible y el
+          documento no entra al ATS ni a Cartera.
+        </p>
+      ) : null}
       <dl className="invoice-summary invoice-metadata">
         <div><dt>Cliente</dt><dd>{customer?.name ?? 'No disponible'}</dd></div>
         <div><dt>Identificación</dt><dd>{customer?.identificationNumber ?? 'No disponible'}</dd></div>
@@ -1841,10 +1905,11 @@ function InvoiceDetail({
         <div><dt>Fecha</dt><dd>{invoice.issueDate}</dd></div>
         <div><dt>Establecimiento</dt><dd>{establishment ? `${establishment.code} · ${establishment.name}` : 'No disponible'}</dd></div>
         <div><dt>Punto de emisión</dt><dd>{emissionPoint?.code ?? 'No disponible'}</dd></div>
-        <div><dt>Condición de pago</dt><dd>{invoice.installments?.[0]?.dueDate === invoice.issueDate ? 'Contado' : 'Crédito'}</dd></div>
-        <div><dt>Vencimiento</dt><dd>{invoice.installments?.[0]?.dueDate ?? invoice.issueDate}</dd></div>
+        <div><dt>Condición de pago</dt><dd>{invoice.status === 'HISTORICAL_ISSUED' ? 'No consta en el RIDE' : invoice.installments?.[0]?.dueDate === invoice.issueDate ? 'Contado' : 'Crédito'}</dd></div>
+        <div><dt>Vencimiento</dt><dd>{invoice.status === 'HISTORICAL_ISSUED' ? 'No consta en el RIDE' : invoice.installments?.[0]?.dueDate ?? invoice.issueDate}</dd></div>
         <div><dt>Retenciones aplicadas</dt><dd>{Number(invoice.retentionTotal) > 0 ? `$${formatAmount(invoice.retentionTotal)}` : 'Sin retención registrada'}</dd></div>
         {invoice.accessKey ? <div><dt>Clave de acceso</dt><dd>{invoice.accessKey}</dd></div> : null}
+        {invoice.status === 'HISTORICAL_ISSUED' && invoice.authorizationNumber ? <div><dt>Número de autorización</dt><dd>{invoice.authorizationNumber}</dd></div> : null}
       </dl>
 
       <section aria-labelledby="invoice-lines-title">
@@ -1893,6 +1958,8 @@ function InvoiceDetail({
               <div><dt>Número de autorización</dt><dd>{transmission.authorizationNumber}</dd></div>
             ) : null}
           </dl>
+        ) : invoice.status === 'HISTORICAL_ISSUED' ? (
+          <p className="fine-print">Documento histórico: no se retransmite al SRI.</p>
         ) : (
           <p className="fine-print">Sin intentos de transmisión todavía.</p>
         )}
@@ -1968,13 +2035,15 @@ function InvoiceDetail({
               </li>
             ))}
           </ul>
+        ) : invoice.status === 'HISTORICAL_ISSUED' ? (
+          <p className="fine-print">El PDF histórico no está disponible.</p>
         ) : (
           <p className="fine-print">Los archivos estarán disponibles después de firmar la factura.</p>
         )}
       </section>
 
       {ridePreview ? (
-        <PdfPreviewModal title="RIDE autorizado" artifact={ridePreview} onClose={() => setRidePreview(null)} />
+        <PdfPreviewModal title={invoice.status === 'HISTORICAL_ISSUED' ? 'RIDE histórico' : 'RIDE autorizado'} artifact={ridePreview} onClose={() => setRidePreview(null)} />
       ) : null}
 
       {archiving ? (
@@ -2068,23 +2137,27 @@ function InvoiceDetail({
             Nota de crédito
           </ErpButton>
         ) : null}
-        <ErpButton
-          variant="secondary"
-          disabled={duplicateInvoice.isPending}
-          onClick={() => duplicateInvoice.mutate()}
-        >
-          {duplicateInvoice.isPending ? 'Duplicando…' : 'Duplicar'}
-        </ErpButton>
+        {invoice.status !== 'HISTORICAL_ISSUED' ? (
+          <ErpButton
+            variant="secondary"
+            disabled={duplicateInvoice.isPending}
+            onClick={() => duplicateInvoice.mutate()}
+          >
+            {duplicateInvoice.isPending ? 'Duplicando…' : 'Duplicar'}
+          </ErpButton>
+        ) : null}
         {invoice.status === 'REJECTED' || invoice.status === 'NOT_AUTHORIZED' ? (
           <ErpButton variant="danger" onClick={() => setArchiving(true)}>Archivar</ErpButton>
         ) : null}
-        <ErpButton
-          variant="primary"
-          disabled={!canIssue || issueInvoice.isPending}
-          onClick={() => issueInvoice.mutate()}
-        >
-          {issueInvoice.isPending ? 'Emitiendo…' : 'Emitir'}
-        </ErpButton>
+        {invoice.status !== 'HISTORICAL_ISSUED' ? (
+          <ErpButton
+            variant="primary"
+            disabled={!canIssue || issueInvoice.isPending}
+            onClick={() => issueInvoice.mutate()}
+          >
+            {issueInvoice.isPending ? 'Emitiendo…' : 'Emitir'}
+          </ErpButton>
+        ) : null}
       </div>
     </section>
   )
@@ -2157,6 +2230,14 @@ function InvoicesPage({
       </>
     )
   }
+  if (panel?.view === 'historical') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Migración histórica" title="Factura histórica" subtitle="Registra una venta desde su RIDE PDF sin inventar el XML." />
+        <HistoricalInvoicePdfForm token={token} onCreated={(invoiceId) => setPanel({ view: 'detail', id: invoiceId })} onCancel={closePanel} />
+      </>
+    )
+  }
   if (panel?.view === 'detail') {
     return <InvoiceDetail key={panel.id} token={token} invoiceId={panel.id} customers={customers} establishments={establishments} emissionPoints={emissionPoints} onClose={closePanel} onOpenCreditNote={(invoice) => setPanel({ view: 'credit-note', invoice })} onDuplicated={(invoiceId) => setPanel({ view: 'detail', id: invoiceId })} />
   }
@@ -2176,12 +2257,20 @@ function InvoicesPage({
         title="Facturas"
         subtitle="Emisión SRI, seguimiento de autorización y notas de crédito."
         actions={
-          <ErpButton
-            variant="primary"
-            onClick={(event) => openPanel({ view: 'new' }, event.currentTarget)}
-          >
-            Nueva factura
-          </ErpButton>
+          <>
+            <ErpButton
+              variant="secondary"
+              onClick={(event) => openPanel({ view: 'historical' }, event.currentTarget)}
+            >
+              Cargar histórica
+            </ErpButton>
+            <ErpButton
+              variant="primary"
+              onClick={(event) => openPanel({ view: 'new' }, event.currentTarget)}
+            >
+              Nueva factura
+            </ErpButton>
+          </>
         }
       />
       <section className="split-layout erp-list-only">

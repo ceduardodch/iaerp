@@ -192,7 +192,7 @@ async def dashboard_tax_report(
         await session.scalars(
             select(SalesDocument).where(
                 SalesDocument.tenant_id == context.tenant_id,
-                SalesDocument.status == "AUTHORIZED",
+                SalesDocument.status.in_(("AUTHORIZED", "HISTORICAL_ISSUED")),
                 SalesDocument.issue_date >= range_start,
                 SalesDocument.issue_date < range_end,
             )
@@ -241,10 +241,21 @@ async def dashboard_tax_report(
     current_sales = [
         document
         for document in sales_documents
-        if document.issue_date.year == as_of.year and document.issue_date.month == as_of.month
+        if document.status == "AUTHORIZED"
+        and document.issue_date.year == as_of.year
+        and document.issue_date.month == as_of.month
     ]
     authorized_sales_ids = {document.id for document in current_sales}
-    authorized_point = trend[-1]
+    authorized_sales_total = sum(
+        (
+            -document.total if document.document_type == "CREDIT_NOTE" else document.total
+            for document in current_sales
+        ),
+        Decimal("0.00"),
+    )
+    authorized_sales_count = sum(
+        1 for document in current_sales if document.document_type != "CREDIT_NOTE"
+    )
     period = await session.scalar(
         select(TaxPeriod).where(
             TaxPeriod.tenant_id == context.tenant_id,
@@ -257,8 +268,8 @@ async def dashboard_tax_report(
         current = CurrentMonthSnapshot(
             year=as_of.year,
             month=as_of.month,
-            authorized_sales_total=authorized_point.total,
-            authorized_sales_count=authorized_point.invoice_count,
+            authorized_sales_total=authorized_sales_total,
+            authorized_sales_count=authorized_sales_count,
             evidenced_sales_total=Decimal("0.00"),
             evidenced_sales_count=0,
             purchases_total=Decimal("0.00"),
@@ -316,8 +327,8 @@ async def dashboard_tax_report(
     current = CurrentMonthSnapshot(
         year=as_of.year,
         month=as_of.month,
-        authorized_sales_total=authorized_point.total,
-        authorized_sales_count=authorized_point.invoice_count,
+        authorized_sales_total=authorized_sales_total,
+        authorized_sales_count=authorized_sales_count,
         evidenced_sales_total=sum(
             (_signed_amount(document) for document in evidenced_sales), Decimal("0.00")
         ),
