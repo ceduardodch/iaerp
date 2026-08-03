@@ -6,6 +6,14 @@ on:
   push:
     branches: [develop, release, main]
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: >-
+          Desplegar main a produccion al terminar en verde. Sirve para publicar
+          un main sano que el filtro de rutas dejo sin desplegar (por ejemplo
+          cuando el arreglo solo toco tests o documentacion).
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -530,8 +538,17 @@ jobs:
 
   deploy-production:
     name: Deploy production to Coolify
+    # Un push a main despliega solo si toco codigo de app (filtro de rutas). Eso
+    # dejo un hueco real: cuando el CI de un cambio de app sale rojo, la
+    # compuerta lo bloquea bien, pero si el arreglo posterior toca unicamente
+    # tests o documentacion, el filtro ya no ve codigo de app y main se queda
+    # verde SIN publicar. Por eso workflow_dispatch tambien puede desplegar,
+    # pero solo con la casilla marcada a proposito: una corrida manual para
+    # revisar algo no debe republicar produccion sin querer.
     if: >-
-      always() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      always() && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.deploy)) &&
       needs.changes.outputs.deploy == 'true' &&
       (needs.backend.result == 'success' || needs.backend.result == 'skipped') &&
       (needs.migrations.result == 'success' || needs.migrations.result == 'skipped') &&

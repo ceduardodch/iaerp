@@ -22,6 +22,13 @@
   llama a la API de Coolify solo despues de que todos los jobs de CI pasan.
 - No desplegar por SSH ni ejecutar Docker manualmente para sustituir el flujo
   CI/CD. Coolify sigue siendo el unico ejecutor del despliegue.
+- Un push a `main` despliega solo si toco `backend/app/` o `frontend/src/`
+  (filtro de rutas del CI). Si el CI de un cambio de app sale rojo la compuerta
+  lo bloquea, pero cuando el arreglo posterior toca unicamente tests o
+  documentacion, el filtro ya no ve codigo de app y `main` queda verde SIN
+  publicar. Para ese caso: Actions -> CI -> "Run workflow" sobre `main` con la
+  casilla **deploy** marcada. Sin marcarla, una corrida manual no republica
+  produccion.
 - No hacer push, merge ni abrir PR sin autorizacion explicita.
 
 ## Puerta documental
