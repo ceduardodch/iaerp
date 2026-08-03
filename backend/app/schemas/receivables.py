@@ -86,6 +86,7 @@ class RetentionXmlPreviewRead(APIModel):
 
     authorization_number: str = Field(min_length=1, max_length=49)
     supporting_document: str = Field(min_length=1, max_length=20)
+    issue_date: date
     retentions: list[RetentionXmlPreviewItem] = Field(min_length=1)
 
 
@@ -95,6 +96,7 @@ class RetentionBatchItemRead(APIModel):
     authorization_number: str | None = None
     supporting_document: str | None = None
     invoice_sequential: str | None = None
+    issue_date: date | None = None
     total: Decimal = Decimal("0.00")
     status: Literal["MATCHED", "REVIEW_REQUIRED"]
     detail: str

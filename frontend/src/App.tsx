@@ -2032,12 +2032,13 @@ function BatchRetentionImportForm({
           </div>
           <div className="table-wrap" tabIndex={0} aria-label="Resultado de XML de retención">
             <table className="erp-responsive-table">
-              <thead><tr><th>Archivo</th><th>Factura</th><th>Retención</th><th>Valor</th><th>Resultado</th></tr></thead>
+              <thead><tr><th>Archivo</th><th>Factura</th><th>Emisión</th><th>Retención</th><th>Valor</th><th>Resultado</th></tr></thead>
               <tbody>
                 {preview.items.map((item) => (
                   <tr key={item.fileName}>
                     <td>{item.fileName}</td>
                     <td>{item.invoiceSequential ?? item.supportingDocument ?? '—'}</td>
+                    <td>{item.issueDate ?? '—'}</td>
                     <td>{item.authorizationNumber ?? '—'}</td>
                     <td>${formatAmount(item.total)}</td>
                     <td><ErpStatusBadge tone={item.status === 'MATCHED' ? 'success' : 'warning'}>{item.detail}</ErpStatusBadge></td>

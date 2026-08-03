@@ -254,6 +254,16 @@ el saldo de la factura manual recalculado tras el reverso. Para los meses
 anteriores se usa el mismo flujo y el mismo período elegido; no se crean cruces
 por parecido de cliente o importe.
 
+**Carga hacia meses anteriores (2026-08-02).** La fecha efectiva de cada
+retención aplicada a Cartera sale de `infoCompRetencion/fechaEmision`. Volver a
+cargar el mismo XML no duplica la evidencia ni el comprobante: vuelve a validar
+y reconstruye los rubros de IVA/renta. Si una autorización ya estaba aplicada
+con la fecha del día de carga, IAERP solo propone corregirla cuando autorización,
+factura, tipos e importes coinciden exactamente; la confirmación cambia la fecha
+y deja auditoría. El período tributario sigue saliendo de la fecha real del XML
+y la conciliación bancaria usa el mes que la persona elige, aunque el TXT tenga
+movimientos de otros meses.
+
 Notas utiles para quien retome:
 - `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno
   (`index.css`): usa clases propias (`.tax-year-label`, `.tax-subhead`) en vez de

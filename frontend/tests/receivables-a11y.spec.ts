@@ -334,6 +334,42 @@ test('bank statement preview registers only the confirmed exact invoice match', 
   expect(requestCount).toBe(2)
 })
 
+test('historical retention preview shows the XML issue date before correction', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/receivables/retention-batch', (route) =>
+    route.fulfill({
+      json: {
+        items: [{
+          fileName: 'retencion-junio.xml',
+          receivableId: overdueReceivable.id,
+          authorizationNumber: '6'.repeat(49),
+          supportingDocument: '001001000000951',
+          invoiceSequential: '000000951',
+          issueDate: '2025-06-15',
+          total: '13.50',
+          status: 'MATCHED',
+          detail: 'Corregirá la fecha desde el XML',
+        }],
+      },
+    }),
+  )
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: 'Cargar retenciones XML' }).click()
+  await page.getByLabel('XML de comprobantes de retención').setInputFiles({
+    name: 'retencion-junio.xml',
+    mimeType: 'application/xml',
+    buffer: Buffer.from('<retencion/>'),
+  })
+  await page.getByRole('button', { name: 'Revisar XML' }).click()
+
+  const row = page.getByRole('row', { name: /retencion-junio\.xml/ })
+  await expect(row).toContainText('2025-06-15')
+  await expect(row).toContainText('Corregirá la fecha desde el XML')
+  await expect(page.getByRole('button', { name: 'Registrar 1 retención' })).toBeVisible()
+  await expectNoA11yViolations(page)
+})
+
 test('receivables screens reflow at 320 CSS px and at 200% zoom without horizontal scroll', async ({
   page,
 }) => {

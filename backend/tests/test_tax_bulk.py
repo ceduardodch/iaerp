@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import delete, func, select
 
+from app.db.session import SessionFactory
+from app.models.tax import FiscalDocument, FiscalRetention
 from app.services.tax import evidence as evidence_service
 from app.services.tax import ingest as ingest_service
 
@@ -56,6 +59,24 @@ def auth(token: str, key: str | None = None) -> dict[str, str]:
 
 def fixture_file(name: str) -> tuple[str, bytes, str]:
     return (name, (FIXTURES / name).read_bytes(), "application/octet-stream")
+
+
+def legacy_retention_xml() -> bytes:
+    authorization = "6" * 49
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<autorizacion><estado>AUTORIZADO</estado><numeroAutorizacion>{authorization}</numeroAutorizacion>
+<fechaAutorizacion>2025-06-16T09:00:00-05:00</fechaAutorizacion>
+<comprobante><![CDATA[<comprobanteRetencion version="1.0.0">
+  <infoTributaria><ruc>0666666666001</ruc><razonSocial>CLIENTE HISTORICO</razonSocial>
+    <claveAcceso>{authorization}</claveAcceso><estab>001</estab><ptoEmi>001</ptoEmi><secuencial>000000321</secuencial></infoTributaria>
+  <infoCompRetencion><fechaEmision>15/06/2025</fechaEmision>
+    <identificacionSujetoRetenido>1799999999001</identificacionSujetoRetenido>
+    <razonSocialSujetoRetenido>EMPRESA PRUEBA</razonSocialSujetoRetenido></infoCompRetencion>
+  <impuestos>
+    <impuesto><codigo>1</codigo><codigoRetencion>3440</codigoRetencion><baseImponible>100.00</baseImponible><porcentajeRetener>3.00</porcentajeRetener><valorRetenido>3.00</valorRetenido><numDocSustento>001001000000951</numDocSustento></impuesto>
+    <impuesto><codigo>2</codigo><codigoRetencion>2</codigoRetencion><baseImponible>15.00</baseImponible><porcentajeRetener>70.00</porcentajeRetener><valorRetenido>10.50</valorRetenido><numDocSustento>001001000000951</numDocSustento></impuesto>
+  </impuestos>
+</comprobanteRetencion>]]></comprobante></autorizacion>""".encode()
 
 
 async def post_bulk(
@@ -177,6 +198,51 @@ async def test_applying_twice_does_not_duplicate(client, stored_objects) -> None
     period = await find_period(client, token, 2025, 11)
     assert period is not None
     assert len(await list_documents(client, token, period["id"])) == 2
+
+
+async def test_reapplying_legacy_xml_repairs_missing_historical_detail(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    xml = legacy_retention_xml()
+    files = [("retencion-v1.xml", xml, "application/xml")]
+    first = await post_bulk(client, token, [], apply=True, extra_files=files)
+    assert first["created"] == 1
+
+    async with SessionFactory() as session:
+        document = await session.scalar(
+            select(FiscalDocument).where(
+                FiscalDocument.tenant_id == TENANT_A,
+                FiscalDocument.access_key == "6" * 49,
+            )
+        )
+        assert document is not None
+        await session.execute(
+            delete(FiscalRetention).where(
+                FiscalRetention.tenant_id == TENANT_A,
+                FiscalRetention.fiscal_document_id == document.id,
+            )
+        )
+        await session.commit()
+
+    repaired = await post_bulk(client, token, [], apply=True, extra_files=files)
+    assert repaired["created"] == 0
+    assert repaired["updated"] == 1
+    async with SessionFactory() as session:
+        retention_count = await session.scalar(
+            select(func.count(FiscalRetention.id)).where(
+                FiscalRetention.tenant_id == TENANT_A,
+                FiscalRetention.fiscal_document_id == document.id,
+            )
+        )
+        documents = await session.scalar(
+            select(func.count(FiscalDocument.id)).where(
+                FiscalDocument.tenant_id == TENANT_A,
+                FiscalDocument.access_key == "6" * 49,
+            )
+        )
+    assert retention_count == 2
+    assert documents == 1
 
 
 async def test_unreadable_file_does_not_abort_the_batch(client, stored_objects) -> None:

@@ -226,6 +226,48 @@ async def test_bank_statement_does_not_guess_between_equal_invoices(client) -> N
     assert response.json()["matches"] == []
 
 
+async def test_bank_statement_can_reconcile_an_older_selected_month(client) -> None:
+    setup = await _create_receivable_via_event(
+        key_prefix="bank-historical-month",
+        sequential="000000967",
+        total=Decimal("80.00"),
+        issue_date=date(2025, 6, 1),
+    )
+    receivable_id, _masters = await setup(client)
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:write"])
+    content = _statement(
+        _row(
+            occurred_at="06/15/2025 09:00:00.000",
+            reference="HISTORICAL-JUNE",
+            description="TRANSFERENCIA RECIBIDA",
+            sign="+",
+            amount="80.00",
+        ),
+        _row(
+            occurred_at="07/15/2025 09:00:00.000",
+            reference="HISTORICAL-JULY",
+            description="TRANSFERENCIA RECIBIDA",
+            sign="+",
+            amount="80.00",
+        ),
+    )
+
+    preview = await client.post(
+        "/api/v1/receivables/bank-statement",
+        headers=auth(token),
+        data={"apply": "false", "period": "2025-06"},
+        files={"file": ("estado.txt", content, "text/plain")},
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["period"] == "2025-06"
+    assert body["creditRows"] == 1
+    assert body["outsidePeriodCreditCount"] == 1
+    assert body["matchedCount"] == 1
+    assert body["matches"][0]["receivableId"] == receivable_id
+    assert body["matches"][0]["paymentDate"] == "2025-06-15"
+
+
 async def test_bank_statement_period_replaces_manual_payment_with_bank_evidence(client) -> None:
     setup = await _create_receivable_via_event(
         key_prefix="bank-period-replace",

@@ -270,6 +270,7 @@ export type RetentionBatch = {
     authorizationNumber?: string | null
     supportingDocument?: string | null
     invoiceSequential?: string | null
+    issueDate?: string | null
     total: string
     status: 'MATCHED' | 'REVIEW_REQUIRED'
     detail: string

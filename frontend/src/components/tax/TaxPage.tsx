@@ -364,7 +364,7 @@ export function TaxPage({ token }: { token: string }) {
                         {item.status === 'ERROR' ? (
                           <ErpStatusBadge tone="danger">{item.error ?? 'Error'}</ErpStatusBadge>
                         ) : item.status === 'DUPLICADO' ? (
-                          <ErpStatusBadge tone="neutral">Ya cargado</ErpStatusBadge>
+                          <ErpStatusBadge tone="neutral">Ya cargado · se validará de nuevo</ErpStatusBadge>
                         ) : (
                           <ErpStatusBadge tone="success">Listo</ErpStatusBadge>
                         )}

@@ -25,9 +25,10 @@ nunca una columna que pueda desincronizarse (docs/sprints/sprint-03.md decisión
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from xml.etree.ElementTree import Element
@@ -158,7 +159,7 @@ def _decimal_xml(value: str | None, *, field: str) -> Decimal:
 
 def _parse_authorized_retention_xml(
     xml_bytes: bytes,
-) -> tuple[str, str, list[RetentionXmlPreviewItem], str]:
+) -> tuple[str, str, date, list[RetentionXmlPreviewItem], str]:
     """Lee el sobre SRI y su comprobante interno sin ejecutar contenido XML.
 
     Solo admite comprobantes de retención autorizados. El archivo se procesa
@@ -191,10 +192,17 @@ def _parse_authorized_retention_xml(
     access_key = _xml_text(retention_xml, "infoTributaria/claveAcceso")
     issuer_ruc = _xml_text(retention_xml, "infoTributaria/ruc")
     retained_ruc = _xml_text(retention_xml, "infoCompRetencion/identificacionSujetoRetenido")
+    issue_date_text = _xml_text(retention_xml, "infoCompRetencion/fechaEmision")
     if access_key != authorization_number or not issuer_ruc or not retained_ruc:
         raise HTTPException(
             status_code=422, detail="Retention XML authorization evidence is inconsistent"
         )
+    try:
+        issue_date = datetime.strptime(issue_date_text or "", "%d/%m/%Y").date()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail="Retention XML has no valid issue date"
+        ) from exc
 
     entries: list[tuple[Element, str | None]] = []
     for support in retention_xml.findall("docsSustento/docSustento"):
@@ -246,9 +254,46 @@ def _parse_authorized_retention_xml(
     return (
         authorization_number,
         next(iter(supporting_documents)),
+        issue_date,
         items,
         f"{issuer_ruc}|{retained_ruc}",
     )
+
+
+async def _active_retention_movements(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    receivable_id: uuid.UUID,
+    authorization_number: str,
+) -> list[Movement]:
+    return list(
+        await session.scalars(
+            select(Movement).where(
+                Movement.tenant_id == tenant_id,
+                Movement.receivable_id == receivable_id,
+                Movement.movement_type == "RETENTION",
+                Movement.support_reference.like(f"{authorization_number} |%"),
+                Movement.reversed_movement_id.is_(None),
+                Movement.id.not_in(_reversed_movement_ids(tenant_id)),
+            )
+        )
+    )
+
+
+def _retention_movement_signature(movement: Movement) -> tuple[str, Decimal] | None:
+    reference = movement.support_reference or ""
+    for kind in ("RETENTION_RENTA", "RETENTION_IVA"):
+        if f"| {kind}:" in reference:
+            return kind, movement.amount
+    return None
+
+
+def _retention_audit_key(parent_key: str, authorization_number: str) -> str:
+    digest = hashlib.sha256(
+        f"{parent_key}|retention-date|{authorization_number}".encode()
+    ).hexdigest()
+    return f"retention-date:{digest}"
 
 
 async def preview_retention_xml(
@@ -257,11 +302,16 @@ async def preview_retention_xml(
     context: AuthContext,
     receivable_id: uuid.UUID,
     xml_bytes: bytes,
+    include_existing_authorization: bool = False,
 ) -> RetentionXmlPreviewRead:
     """Valida que un XML SRI autorizado respalda retenciones de esta factura."""
-    authorization_number, supporting_document, items, parties = _parse_authorized_retention_xml(
-        xml_bytes
-    )
+    (
+        authorization_number,
+        supporting_document,
+        issue_date,
+        items,
+        parties,
+    ) = _parse_authorized_retention_xml(xml_bytes)
     issuer_ruc, retained_ruc = parties.split("|", maxsplit=1)
     receivable = await get_receivable(
         session, tenant_id=context.tenant_id, receivable_id=receivable_id
@@ -307,13 +357,28 @@ async def preview_retention_xml(
     open_balance = await compute_receivable_balance(
         session, tenant_id=context.tenant_id, receivable=receivable
     )
-    if total > open_balance:
+    existing_total = Decimal("0.00")
+    if include_existing_authorization:
+        existing_total = sum(
+            (
+                movement.amount
+                for movement in await _active_retention_movements(
+                    session,
+                    tenant_id=context.tenant_id,
+                    receivable_id=receivable.id,
+                    authorization_number=authorization_number,
+                )
+            ),
+            Decimal("0.00"),
+        )
+    if total > open_balance + existing_total:
         raise HTTPException(
             status_code=422, detail="Retention total exceeds this invoice open balance"
         )
     return RetentionXmlPreviewRead(
         authorization_number=authorization_number,
         supporting_document=supporting_document,
+        issue_date=issue_date,
         retentions=items,
     )
 
@@ -331,7 +396,7 @@ async def import_retention_xml_batch(
     results: list[RetentionBatchItemRead] = []
     for file_name, xml_bytes in files:
         try:
-            _, support, _, _ = _parse_authorized_retention_xml(xml_bytes)
+            _, support, _, _, _ = _parse_authorized_retention_xml(xml_bytes)
             document = await session.scalar(
                 select(SalesDocument)
                 .join(
@@ -365,41 +430,99 @@ async def import_retention_xml_batch(
             if receivable is None:
                 raise HTTPException(status_code=422, detail="Invoice has no open receivable")
             preview = await preview_retention_xml(
-                session, context=context, receivable_id=receivable.id, xml_bytes=xml_bytes
+                session,
+                context=context,
+                receivable_id=receivable.id,
+                xml_bytes=xml_bytes,
+                include_existing_authorization=True,
             )
             total = sum((item.amount for item in preview.retentions), Decimal("0.00"))
-            if apply:
-                duplicate = await session.scalar(
-                    select(Movement.id).where(
-                        Movement.tenant_id == context.tenant_id,
-                        Movement.receivable_id == receivable.id,
-                        Movement.movement_type == "RETENTION",
-                        Movement.support_reference.like(f"{preview.authorization_number} |%"),
-                    )
+            duplicate_movements = await _active_retention_movements(
+                session,
+                tenant_id=context.tenant_id,
+                receivable_id=receivable.id,
+                authorization_number=preview.authorization_number,
+            )
+            expected_signature = sorted(
+                (item.kind, item.amount) for item in preview.retentions
+            )
+            actual_signature = sorted(
+                signature
+                for movement in duplicate_movements
+                if (signature := _retention_movement_signature(movement)) is not None
+            )
+            if duplicate_movements and actual_signature != expected_signature:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Registered retention differs from the uploaded XML",
                 )
-                if duplicate is not None:
+            needs_date_correction = bool(duplicate_movements) and any(
+                movement.effective_date != preview.issue_date
+                for movement in duplicate_movements
+            )
+            if apply:
+                if duplicate_movements and not needs_date_correction:
                     raise HTTPException(
-                        status_code=422, detail="Retention authorization was already registered"
+                        status_code=422,
+                        detail="Retention authorization was already registered",
                     )
-                await record_payment(
-                    session,
-                    context,
-                    receivable.id,
-                    PaymentInput(
-                        cash_amount=Decimal("0.00"),
-                        payment_date=today_in_fiscal_timezone(),
-                        retentions=[
-                            {
-                                "kind": item.kind,
-                                "amount": item.amount,
-                                "reason": f"Código SRI {item.sri_retention_code}",
-                                "document_reference": preview.authorization_number,
-                            }
-                            for item in preview.retentions
-                        ],
-                    ),
-                    correlation_id=correlation_id,
-                    idempotency_key=idempotency_key,
+                if needs_date_correction:
+                    previous_dates = sorted(
+                        {
+                            movement.effective_date.isoformat()
+                            if movement.effective_date is not None
+                            else None
+                            for movement in duplicate_movements
+                        },
+                        key=lambda value: value or "",
+                    )
+                    for movement in duplicate_movements:
+                        movement.effective_date = preview.issue_date
+                    await append_audit(
+                        session,
+                        context=context,
+                        action="retention.effective_date_corrected",
+                        entity_type="receivable",
+                        entity_id=str(receivable.id),
+                        correlation_id=correlation_id,
+                        idempotency_key=_retention_audit_key(
+                            idempotency_key, preview.authorization_number
+                        ),
+                        details={
+                            "authorization_number": preview.authorization_number,
+                            "movement_ids": [
+                                str(movement.id) for movement in duplicate_movements
+                            ],
+                            "previous_dates": previous_dates,
+                            "effective_date": preview.issue_date.isoformat(),
+                        },
+                    )
+                    await session.flush()
+                else:
+                    await record_payment(
+                        session,
+                        context,
+                        receivable.id,
+                        PaymentInput(
+                            cash_amount=Decimal("0.00"),
+                            payment_date=preview.issue_date,
+                            retentions=[
+                                {
+                                    "kind": item.kind,
+                                    "amount": item.amount,
+                                    "reason": f"Código SRI {item.sri_retention_code}",
+                                    "document_reference": preview.authorization_number,
+                                }
+                                for item in preview.retentions
+                            ],
+                        ),
+                        correlation_id=correlation_id,
+                        idempotency_key=idempotency_key,
+                    )
+            elif duplicate_movements and not needs_date_correction:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Retention authorization was already registered",
                 )
             results.append(
                 RetentionBatchItemRead(
@@ -408,9 +531,18 @@ async def import_retention_xml_batch(
                     authorization_number=preview.authorization_number,
                     supporting_document=preview.supporting_document,
                     invoice_sequential=document.sequential,
+                    issue_date=preview.issue_date,
                     total=total,
                     status="MATCHED",
-                    detail="Registrada" if apply else "Lista para registrar",
+                    detail=(
+                        "Fecha corregida desde el XML"
+                        if apply and needs_date_correction
+                        else "Corregirá la fecha desde el XML"
+                        if needs_date_correction
+                        else "Registrada"
+                        if apply
+                        else "Lista para registrar"
+                    ),
                 )
             )
         except HTTPException as exc:

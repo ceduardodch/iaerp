@@ -7,6 +7,19 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Corrección histórica local: 2026-08-02 `America/Guayaquil`. Al aplicar un
+  XML de retención, Cartera usa ahora `fechaEmision` del comprobante como fecha
+  efectiva, no el día en que se cargó. Si la misma autorización ya existe con
+  importes y tipos iguales pero fecha técnica incorrecta, el previo propone la
+  corrección y la confirmación ajusta solo la fecha con auditoría; no duplica
+  IVA/renta ni cambia el saldo. Reaplicar un XML SRI 1.0 ya guardado vuelve a
+  construir su detalle tributario sin crear otro comprobante. La pantalla
+  muestra la fecha del XML antes de confirmar y avisa que un archivo ya cargado
+  se validará otra vez. Junio de 2025 quedó cubierto como mes bancario elegido,
+  separado de abonos de julio. Ruff, mypy, 64 pruebas tributarias, 22 pruebas
+  históricas dirigidas, build, lint y 46 recorridos Playwright pasan localmente.
+  Cambio integrado en `main` con autorización del operador.
+
 - Corrección local: 2026-08-02 `America/Guayaquil`. La confirmación de una
   corrección bancaria ya no excede el límite de 128 caracteres de PostgreSQL:
   deriva claves internas cortas y estables, y el reverso recalcula el saldo
