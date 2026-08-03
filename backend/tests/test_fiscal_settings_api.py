@@ -127,6 +127,47 @@ async def test_update_sri_environment_never_exposes_secret(client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_invoice_email_template_is_separate_from_collection_email(client) -> None:
+    token = await _token(client, ["organization:read", "organization:write"])
+    initial = await client.get(
+        "/api/v1/organization/invoice-email-template",
+        headers=_headers(token),
+    )
+    assert initial.status_code == 200, initial.text
+    assert "{{vencimiento}}" in initial.json()["body"]
+    assert "{{plazo}}" in initial.json()["availableVariables"]
+    assert initial.json()["fromAddress"] is None
+    assert initial.json()["fromName"] is None
+
+    updated = await client.put(
+        "/api/v1/organization/invoice-email-template",
+        headers=_headers(token, "invoice-email-template-update-key"),
+        json={
+            "subject": "Documento {{numero_factura}}",
+            "body": "Hola {{cliente}}. Paga hasta {{vencimiento}}. Plazo: {{plazo}}.",
+            "fromAddress": "contabilidad@b2b.com.ec",
+            "fromName": "Contabilidad B2B",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["subject"] == "Documento {{numero_factura}}"
+    assert updated.json()["fromAddress"] == "contabilidad@b2b.com.ec"
+    assert updated.json()["fromName"] == "Contabilidad B2B"
+
+    replay = await client.put(
+        "/api/v1/organization/invoice-email-template",
+        headers=_headers(token, "invoice-email-template-update-key"),
+        json={
+            "subject": "Documento {{numero_factura}}",
+            "body": "Hola {{cliente}}. Paga hasta {{vencimiento}}. Plazo: {{plazo}}.",
+            "fromAddress": "contabilidad@b2b.com.ec",
+            "fromName": "Contabilidad B2B",
+        },
+    )
+    assert replay.json() == updated.json()
+
+
+@pytest.mark.asyncio
 async def test_upload_ride_logo_is_tenant_scoped_and_private(client, monkeypatch) -> None:
     token = await _token(client, ["organization:write"])
     logo_bytes = _ride_logo_png()

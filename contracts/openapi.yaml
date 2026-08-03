@@ -819,6 +819,95 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /receivables/collections:
+    get:
+      operationId: getReceivablesCollections
+      summary: Desglose del cobro entre dinero recibido y valor retenido
+      description: >-
+        Responde "de lo que cobré, cuánto es efectivo y cuánto retención".
+        Una retención baja el saldo igual que un cobro pero no es caja: se
+        recupera ante el SRI. Cuenta solo movimientos activos (ni REVERSAL ni
+        movimientos ya revertidos), con la misma regla que el saldo de la
+        cartera, para que ambos números nunca se contradigan. El rango filtra
+        por la fecha real del cobro (effectiveDate).
+      security:
+        - oauth2: ["receivables:read"]
+      parameters:
+        - name: from
+          in: query
+          description: Inicio del rango, sobre la fecha real del cobro.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Fin del rango, sobre la fecha real del cobro.
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Desglose del cobro
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionsBreakdown"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /receivables/bank-statement:
+    post:
+      operationId: importReceivablesBankStatement
+      summary: Conciliar abonos bancarios con facturas autorizadas
+      description: >-
+        Procesa un TXT bancario en memoria. La vista previa no escribe. Al
+        confirmar, registra únicamente abonos del período que cuadran de forma
+        única con una factura autorizada del mismo período. Si la factura ya
+        tiene un cobro manual sin respaldo y el abono más las retenciones
+        documentadas cuadran el total, revierte el manual y registra el banco.
+        Ignora débitos y no aplica coincidencias ambiguas o parciales.
+      security:
+        - oauth2: ["receivables:write"]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Obligatoria al confirmar apply=true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, period, apply]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                period:
+                  type: string
+                  pattern: '^\d{4}-\d{2}$'
+                apply:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Vista previa o resultado del registro confirmado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankStatementImport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Archivo inválido o confirmación sin idempotencia
   /receivables/{receivableId}:
     get:
       operationId: getReceivable
@@ -1819,6 +1908,103 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Aging"
             - type: "null"
+    BankStatementMatch:
+      type: object
+      additionalProperties: false
+      required:
+        - transactionId
+        - paymentDate
+        - reference
+        - description
+        - amount
+        - receivableId
+        - invoiceSequential
+        - originalAmount
+        - retentionTotal
+        - replacesManualPayment
+        - status
+        - detail
+      properties:
+        transactionId:
+          type: string
+          minLength: 64
+          maxLength: 64
+        paymentDate:
+          type: string
+          format: date
+        reference:
+          type: string
+        description:
+          type: string
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        receivableId:
+          type: string
+          format: uuid
+        invoiceSequential:
+          type: string
+          pattern: '^\d{9}$'
+        originalAmount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        retentionTotal:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        replacesManualPayment:
+          type: boolean
+        status:
+          type: string
+          enum: [MATCHED, REGISTERED]
+        detail:
+          type: string
+    BankStatementImport:
+      type: object
+      additionalProperties: false
+      required:
+        - period
+        - fileName
+        - sourceSha256
+        - totalRows
+        - creditRows
+        - outsidePeriodCreditCount
+        - matchedCount
+        - unmatchedCreditCount
+        - ignoredDebitCount
+        - alreadyImportedCount
+        - matches
+      properties:
+        period:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+        fileName:
+          type: string
+        sourceSha256:
+          type: string
+          minLength: 64
+          maxLength: 64
+        totalRows:
+          type: integer
+          minimum: 0
+        creditRows:
+          type: integer
+          minimum: 0
+        outsidePeriodCreditCount:
+          type: integer
+          minimum: 0
+        matchedCount:
+          type: integer
+          minimum: 0
+        unmatchedCreditCount:
+          type: integer
+          minimum: 0
+        ignoredDebitCount:
+          type: integer
+          minimum: 0
+        alreadyImportedCount:
+          type: integer
+          minimum: 0
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/BankStatementMatch"
     PaymentInput:
       type: object
       additionalProperties: false
@@ -1873,7 +2059,7 @@ components:
       type: object
       additionalProperties: false
       description: Aplicacion sobre una cuota de un receivable (cobro, retencion, descuento, nota de credito o reverso).
-      required: [id, receivableId, installmentId, movementType, amount, actorId, createdAt]
+      required: [id, receivableId, installmentId, movementType, amount, effectiveDate, actorId, createdAt]
       properties:
         id:
           type: string
@@ -1889,6 +2075,9 @@ components:
           enum: [PAYMENT, RETENTION, DISCOUNT, CREDIT_NOTE, REVERSAL]
         amount:
           $ref: "#/components/schemas/NonNegativeDecimal"
+        effectiveDate:
+          type: [string, "null"]
+          format: date
         supportReference:
           type: [string, "null"]
         reversedMovementId:
@@ -1973,6 +2162,57 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PartyAgingBucketTotal"
+    CollectionsBreakdown:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cómo se cobró en un rango de fechas. cashAmount es dinero que entró
+        (PAYMENT); retentionAmount es valor retenido por el cliente
+        (RETENTION), recuperable ante el SRI pero no en caja; creditAmount
+        agrupa notas de crédito y descuentos, que bajan la deuda sin cobro.
+        settledAmount es cash + retención. retentionShare es el porcentaje del
+        cobro que se fue en retenciones (0 si no hubo cobro).
+      required:
+        [
+          fromDate,
+          toDate,
+          cashAmount,
+          cashCount,
+          retentionAmount,
+          retentionCount,
+          creditAmount,
+          creditCount,
+          settledAmount,
+          retentionShare,
+        ]
+      properties:
+        fromDate:
+          type: string
+          format: date
+          nullable: true
+        toDate:
+          type: string
+          format: date
+          nullable: true
+        cashAmount:
+          type: string
+        cashCount:
+          type: integer
+          minimum: 0
+        retentionAmount:
+          type: string
+        retentionCount:
+          type: integer
+          minimum: 0
+        creditAmount:
+          type: string
+        creditCount:
+          type: integer
+          minimum: 0
+        settledAmount:
+          type: string
+        retentionShare:
+          type: string
     InstallmentInput:
       type: object
       additionalProperties: false

@@ -31,6 +31,7 @@ from tests.test_billing_api import TENANT_A
 from tests.test_receivables_service import _create_authorized_invoice_stub, _create_party
 
 _sequential_counter = itertools.count(2000)
+_NON_OVERDUE_DUE_DATE = date(2099, 12, 31)
 
 
 def _context(*, tenant_id: uuid.UUID, actor_id: str = "tester@iaerp.local") -> AuthContext:
@@ -81,7 +82,7 @@ async def _create_receivable(
 
 
 async def _setup_single_installment_receivable(
-    *, suffix: str, total: Decimal, due_date: date = date(2026, 8, 1)
+    *, suffix: str, total: Decimal, due_date: date = _NON_OVERDUE_DUE_DATE
 ) -> uuid.UUID:
     async with SessionFactory() as session, session.begin():
         party = await _create_party(session, tenant_id=TENANT_A, suffix=suffix)

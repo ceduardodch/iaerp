@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import EmailStr, Field, field_validator
 
 from app.schemas.base import APIModel
 
@@ -62,6 +62,8 @@ class InvoiceInput(APIModel):
     # pago multiple siga siendo posible.
     installments: list[InstallmentInput] = Field(default_factory=list)
     lines: list[InvoiceLineInput] = Field(min_length=1)
+    # Los servicios puntuales nacen con cobranza apagada.
+    collection_enabled: bool = False
 
 
 class InvoicePreviewInput(APIModel):
@@ -158,6 +160,10 @@ class SalesDocumentRead(APIModel):
     authorization_number: str | None = None
     authorized_at: datetime | None = None
     sri_transmission: SRITransmissionRead | None = None
+    collection_status: Literal["OPEN", "PARTIAL", "OVERDUE", "SETTLED", "VOIDED"] | None = None
+    retention_total: Decimal = Decimal("0.00")
+    collection_enabled: bool = False
+    commercial_snapshot: dict[str, object] | None = None
     lines: list[SalesDocumentLineRead] = Field(default_factory=list)
     installments: list[InstallmentInput] = Field(default_factory=list)
 
@@ -188,3 +194,30 @@ class ArtifactDownloadRead(APIModel):
     download_url: str
     expires_in_seconds: int
     file_name: str
+
+
+class InvoiceEmailInput(APIModel):
+    recipient: EmailStr
+
+
+class InvoiceCollectionUpdate(APIModel):
+    enabled: bool
+
+
+class InvoiceEmailPreviewRead(APIModel):
+    recipient: EmailStr | None
+    sender_address: EmailStr | None
+    sender_name: str | None
+    subject: str
+    message: str
+    attachment_names: list[str]
+    due_date: date
+    payment_terms_days: int
+
+
+class InvoiceEmailRead(APIModel):
+    message_id: str
+    recipient: EmailStr
+    sender_address: EmailStr | None
+    sender_name: str | None
+    attachment_names: list[str]

@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
+import { pickCombobox } from './combobox'
+
 const context = {
   tenantId: '11111111-1111-4111-8111-111111111111',
   ruc: '1799999999001',
@@ -116,8 +118,35 @@ const commercialContract = {
   partyId: customer.id,
   contractNumber: 'CT-2026-001',
   title: 'Servicios administrados AWS',
+  serviceType: 'AWS_MONTHLY',
+  sourceLeadId: null,
+  parentContractId: null,
+  reportRequired: true,
+  collectionEnabled: true,
   status: 'DRAFT',
   currentVersionId: null,
+}
+
+const contractVersion = {
+  id: '71717171-7171-4717-8717-717171717171',
+  contractId: commercialContract.id,
+  versionNumber: 1,
+  status: 'DRAFT',
+  validFrom: '2026-08-01',
+  validTo: '2027-07-31',
+  paymentTermsDays: 30,
+  renewalNoticeDays: null,
+  pricingRules: [],
+  amendsVersionId: null,
+  signedAt: null,
+  sentAt: null,
+  sentArtifactSha256: null,
+  gmailThreadId: null,
+  replyDetectedAt: null,
+  signedArtifactSha256: null,
+  signaturePrecheckStatus: null,
+  signaturePrecheckDetails: null,
+  firmaecConfirmedAt: null,
 }
 
 async function mockApi(page: Page) {
@@ -126,8 +155,15 @@ async function mockApi(page: Page) {
   )
   await page.route('**/api/v1/context', (route) => route.fulfill({ json: context }))
   await page.route('**/api/v1/parties', (route) => route.fulfill({ json: [customer] }))
+  await page.route('**/api/v1/crm/leads**', (route) => route.fulfill({ json: [] }))
+  await page.route('**/api/v1/commercial/billing-proposals**', (route) =>
+    route.fulfill({ json: [] }),
+  )
+  await page.route('**/api/v1/commercial/aws-consumption-cuts**', (route) =>
+    route.fulfill({ json: [] }),
+  )
   await page.route('**/api/v1/commercial/contracts**', (route) => {
-    if (route.request().url().endsWith('/versions')) return route.fulfill({ json: [] })
+    if (route.request().url().endsWith('/versions')) return route.fulfill({ json: [contractVersion] })
     return route.fulfill({ json: [commercialContract] })
   })
   await page.route('**/api/v1/products', (route) => route.fulfill({ json: [product] }))
@@ -177,6 +213,20 @@ async function mockApi(page: Page) {
   await page.route(`**/api/v1/invoices/${duplicatedInvoice.id}`, (route) =>
     route.fulfill({ json: duplicatedInvoice }),
   )
+  await page.route(`**/api/v1/invoices/${authorizedInvoice.id}/email-preview`, (route) =>
+    route.fulfill({
+      json: {
+        recipient: customer.email,
+        senderAddress: 'contabilidad@b2b.com.ec',
+        senderName: 'Contabilidad B2B',
+        subject: 'Factura 001-001-000000002 · IAERP Demo',
+        message: 'Hola Cliente Demo.\n\nFecha límite de pago: 2026-08-04\nPlazo acordado: 31 días.',
+        attachmentNames: ['FACTURA-001-001-000000002.xml', 'FACTURA-001-001-000000002.pdf'],
+        dueDate: '2026-08-04',
+        paymentTermsDays: 31,
+      },
+    }),
+  )
   await page.route('**/api/v1/invoices/*/duplicate', (route) =>
     route.fulfill({ status: 201, json: duplicatedInvoice }),
   )
@@ -203,6 +253,15 @@ async function mockApi(page: Page) {
     }
     return route.fulfill({ json: [] })
   })
+  await page.route(/\/api\/v1\/invoices\/[^/]+\/artifacts\/[^/]+\/download\?inline=true$/, (route) =>
+    route.fulfill({
+      json: {
+        downloadUrl: 'https://documents.example.test/ride.pdf?disposition=inline',
+        expiresInSeconds: 300,
+        fileName: 'FACTURA-001001000000002.pdf',
+      },
+    }),
+  )
 }
 
 async function expectNoA11yViolations(page: Page) {
@@ -282,7 +341,7 @@ test('creating a draft shows backend totals and opens detail with SRI status', a
   await loginAndOpenInvoices(page)
 
   await page.getByRole('button', { name: 'Nueva factura' }).click()
-  await page.getByLabel('Producto 1').selectOption(product.id)
+  await pickCombobox(page, 'Producto 1', product.name)
   await page.getByRole('button', { name: 'Guardar' }).click()
 
   // Toast de éxito (Sprint 8) al crear la factura.
@@ -315,6 +374,14 @@ test('authorized invoice detail shows SRI transmission, artifacts and credit not
   await expect(detail.getByText(authorizedInvoice.sriTransmission.authorizationNumber)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Descargar XML firmado' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Descargar RIDE PDF' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Preparar correo' })).toBeVisible()
+  await page.getByRole('button', { name: 'Preparar correo' }).click()
+  const emailDialog = page.getByRole('dialog', { name: 'Enviar factura por correo' })
+  await expect(emailDialog).toContainText('Contabilidad B2B · contabilidad@b2b.com.ec')
+  await expect(emailDialog).toContainText('Fecha límite de pago')
+  await expect(emailDialog).toContainText('31 días')
+  await expect(emailDialog).toContainText('FACTURA-001-001-000000002.xml')
+  await page.keyboard.press('Escape')
   await expect(page.getByRole('button', { name: 'Volver al listado' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Emitir' })).toBeDisabled()
 
@@ -323,6 +390,28 @@ test('authorized invoice detail shows SRI transmission, artifacts and credit not
   await page.keyboard.press('Enter')
   await expect(page.getByRole('heading', { name: 'Nueva nota de crédito', level: 1 })).toBeVisible()
   await expectNoA11yViolations(page)
+})
+
+test('RIDE opens in the in-app PDF viewer and returns focus when it closes', async ({ page }) => {
+  await loginAndOpenInvoices(page)
+  await page
+    .getByRole('row', { name: new RegExp(authorizedInvoice.sequential) })
+    .getByRole('button', { name: 'Ver' })
+    .click()
+
+  const viewRide = page.getByRole('button', { name: 'Ver RIDE' })
+  await viewRide.click()
+  const dialog = page.getByRole('dialog', { name: 'RIDE autorizado' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('iframe[title="FACTURA-001001000000002.pdf"]')).toHaveAttribute(
+    'src',
+    /disposition=inline/,
+  )
+  await expect(dialog.getByRole('button', { name: 'Abrir en otra pestaña' })).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(viewRide).toBeFocused()
 })
 
 test('rejected invoice shows an accessible SRI message', async ({ page }) => {
@@ -359,6 +448,8 @@ test('contracts are reachable from navigation and customer details', async ({ pa
   await expect(page.getByText('CT-2026-001', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Abrir' }).click()
   await expect(page.getByRole('heading', { name: 'Servicios administrados AWS' })).toBeVisible()
+  await expect(page.getByLabel('PDF terminado')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Cortes AWS' })).toBeVisible()
   await expectNoA11yViolations(page)
 })
 

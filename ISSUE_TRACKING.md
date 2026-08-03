@@ -9,6 +9,24 @@
 > de lint, build, Playwright, WCAG AA y reflow móvil pasaron localmente; queda
 > esperar CI remoto tras el push.
 
+> Corte 2026-08-02: conciliación bancaria por período lista y validada. Un
+> abono respaldado puede sustituir un cobro manual sin referencia solo cuando
+> factura y retenciones cuadran completas; el original se conserva con reverso.
+> Julio de 2026 es el primer período y luego se avanzará hacia atrás.
+
+> Corte 2026-08-02: cambio listo en copia aislada. Tributario separa cada
+> comprobante y muestra su ID; las retenciones enseñan IVA y renta propios. Si
+> el banco respalda una factura y un cobro manual igual quedó en una factura
+> emitida después del abono, IAERP propone un reverso auditable. Sirve para
+> cualquier período elegido. Falta integrar cuando el worktree principal quede
+> libre de cambios de la otra sesión.
+
+> Corte 2026-08-02: Dashboard mensual y Compras listos localmente en `develop`.
+> Ventas usa solo documentos autorizados; Compras usa evidencia recibida y
+> muestra el IVA por tarifa. El IVA del mes queda marcado como estimación si
+> falta evidencia o revisión del campo 564. Validación local verde; falta
+> promoción autorizada.
+
 ---
 
 ## 🎯 Objetivo de este Documento

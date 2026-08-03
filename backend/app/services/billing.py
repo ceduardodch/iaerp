@@ -9,12 +9,15 @@ dispara la transmision SRI (``workers/sri_transmission.py``).
 
 from __future__ import annotations
 
+import asyncio
 import uuid
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
@@ -29,11 +32,16 @@ from app.models.billing import (
     Sequence,
     SRITransmission,
 )
+from app.models.legal_commercial import BillingProposal
 from app.models.masters import EmissionPoint, Establishment, Party, Product, TaxCategory
+from app.models.platform import Tenant
+from app.models.receivables import Movement, Receivable
 from app.schemas.billing import (
     ArtifactDownloadRead,
     CreditNoteInput,
     DocumentArtifactRead,
+    InvoiceEmailPreviewRead,
+    InvoiceEmailRead,
     InvoiceInput,
     InvoicePreviewInput,
     InvoicePreviewLineRead,
@@ -43,7 +51,7 @@ from app.schemas.billing import (
     SRITransmissionRead,
 )
 from app.services import access_key as access_key_service
-from app.services import fiscal_settings, masters, ride, signing, sri_xml, storage
+from app.services import crm_integrations, fiscal_settings, masters, ride, signing, sri_xml, storage
 from app.services.fiscal_policy import FiscalCalculationPolicy, LineInput, resolve_fiscal_policy
 from app.services.unit_of_work import append_audit
 
@@ -51,6 +59,30 @@ from app.services.unit_of_work import append_audit
 # docs/03-domain-model.md (Billing: SalesDocument, Sequence).
 _INVOICE_DOCUMENT_TYPE = "INVOICE"
 _CREDIT_NOTE_DOCUMENT_TYPE = "CREDIT_NOTE"
+
+_RECEIVABLE_STATUS_TO_COLLECTION_STATUS: dict[
+    str, Literal["OPEN", "PARTIAL", "SETTLED", "VOIDED"]
+] = {
+    "OPEN": "OPEN",
+    "PARTIALLY_PAID": "PARTIAL",
+    "PAID": "SETTLED",
+    "VOID": "VOIDED",
+}
+
+
+def _collection_status_from_receivable(
+    status: str | None,
+) -> Literal["OPEN", "PARTIAL", "SETTLED", "VOIDED"] | None:
+    """Traduce el estado persistido de cartera al contrato de Facturas.
+
+    ``Receivable`` conserva valores operativos como ``PAID``; el contrato de
+    lectura usa etiquetas estables para la interfaz. Nunca se debe devolver
+    el valor interno porque Pydantic rechaza una respuesta completa si una
+    factura ya cobrada trae ``PAID``.
+    """
+
+    return _RECEIVABLE_STATUS_TO_COLLECTION_STATUS.get(status or "")
+
 
 # Estados de un SalesDocument que cuentan como "en curso o autorizado" para el
 # control de saldo acreditable de una nota de credito (E4-07, ADR 0008 seccion
@@ -74,6 +106,20 @@ _CREDIT_NOTE_STATUSES_RESERVING_BALANCE = frozenset(
 # Evento outbox que dispara el worker de transmision SRI (workers/tasks.py
 # rutea por event_type; workers/sri_transmission.py es el handler).
 INVOICE_SIGNED_EVENT = "invoice.signed"
+
+
+@dataclass(frozen=True)
+class _InvoiceEmailDelivery:
+    recipient: str | None
+    sender_address: str | None
+    sender_name: str | None
+    subject: str
+    message: str
+    attachment_names: list[str]
+    artifacts: dict[str, DocumentArtifact]
+    report_object_key: str | None
+    due_date: date
+    payment_terms_days: int
 
 
 def _validate_sri_environment_alignment(
@@ -292,6 +338,8 @@ async def create_invoice_draft(
     session: AsyncSession,
     context: AuthContext,
     data: InvoiceInput,
+    *,
+    commercial_snapshot: dict[str, object] | None = None,
 ) -> SalesDocument:
     """Crea un borrador de factura recalculando TODOS los totales en backend.
 
@@ -389,6 +437,8 @@ async def create_invoice_draft(
         tax_total=calculation.tax_total,
         total=calculation.total,
         fiscal_policy_version=policy.version,
+        commercial_snapshot=commercial_snapshot,
+        collection_enabled=data.collection_enabled,
     )
     session.add(document)
     await session.flush()
@@ -426,6 +476,24 @@ async def create_invoice_draft(
             )
         )
 
+    await session.flush()
+    return document
+
+
+async def update_invoice_collection_policy(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+    *,
+    enabled: bool,
+) -> SalesDocument:
+    document = await get_sales_document(session, context, document_id)
+    if document.document_type != "INVOICE" or document.status != "DRAFT":
+        raise HTTPException(
+            status_code=409,
+            detail="Collection preference can only change on a draft invoice",
+        )
+    document.collection_enabled = enabled
     await session.flush()
     return document
 
@@ -988,6 +1056,27 @@ async def to_sales_document_read(
     lines = await list_sales_document_lines(session, context, document.id)
     installments = await list_sales_document_installments(session, context, document.id)
     transmission = await _get_latest_sri_transmission(session, context, document.id)
+    receivable = await session.scalar(
+        select(Receivable).where(
+            Receivable.tenant_id == context.tenant_id,
+            Receivable.sales_document_id == document.id,
+        )
+    )
+    reversed_movement_ids = select(Movement.reversed_movement_id).where(
+        Movement.tenant_id == context.tenant_id,
+        Movement.reversed_movement_id.is_not(None),
+    )
+    retention_total = Decimal("0.00")
+    if receivable is not None:
+        retention_total = await session.scalar(
+            select(func.coalesce(func.sum(Movement.amount), Decimal("0.00"))).where(
+                Movement.tenant_id == context.tenant_id,
+                Movement.receivable_id == receivable.id,
+                Movement.movement_type == "RETENTION",
+                Movement.reversed_movement_id.is_(None),
+                Movement.id.not_in(reversed_movement_ids),
+            )
+        ) or Decimal("0.00")
     sri_transmission = (
         SRITransmissionRead(
             status=transmission.status,
@@ -1017,6 +1106,12 @@ async def to_sales_document_read(
         authorization_number=document.authorization_number,
         authorized_at=document.authorized_at,
         sri_transmission=sri_transmission,
+        collection_status=_collection_status_from_receivable(
+            receivable.status if receivable is not None else None
+        ),
+        retention_total=retention_total,
+        collection_enabled=document.collection_enabled,
+        commercial_snapshot=document.commercial_snapshot,
         lines=[
             SalesDocumentLineRead(
                 id=line.id,
@@ -1196,9 +1291,7 @@ async def issue_document(
             tenant_commercial_address=establishment.address,
             buyer=party,
             environment_code=fiscal.sri_environment,
-            electronic_invoicing_provider_ruc=(
-                runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
-            ),
+            electronic_invoicing_provider_ruc=(runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC),
         )
     else:
         (
@@ -1223,9 +1316,7 @@ async def issue_document(
             related_invoice_access_key=related_invoice.access_key or "",
             reason=document.reason or "",
             environment_code=fiscal.sri_environment,
-            electronic_invoicing_provider_ruc=(
-                runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
-            ),
+            electronic_invoicing_provider_ruc=(runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC),
         )
 
     signing_result = signing.sign_xml(
@@ -1358,6 +1449,8 @@ async def create_artifact_download(
     context: AuthContext,
     document_id: uuid.UUID,
     artifact_id: uuid.UUID,
+    *,
+    inline: bool = False,
 ) -> ArtifactDownloadRead:
     """Emite una URL prefirmada de corta duracion para descargar un artefacto.
 
@@ -1377,9 +1470,164 @@ async def create_artifact_download(
         object_key=artifact.object_key,
         file_name=file_name,
         content_type=content_type,
+        content_disposition="inline" if inline and extension == "pdf" else "attachment",
     )
     return ArtifactDownloadRead(
         download_url=download_url,
         expires_in_seconds=int(storage.PRESIGNED_URL_EXPIRY.total_seconds()),
         file_name=file_name,
+    )
+
+
+async def send_invoice_email(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+    *,
+    recipient: str,
+) -> InvoiceEmailRead:
+    """Envía una factura autorizada con su XML y RIDE por acción humana."""
+    delivery = await _prepare_invoice_email(session, context, document_id)
+    xml_data, ride_data = await asyncio.gather(
+        storage.download_artifact(object_key=delivery.artifacts["xml-signed"].object_key),
+        storage.download_artifact(object_key=delivery.artifacts["ride-pdf"].object_key),
+    )
+    attachments = [
+        (delivery.attachment_names[0], "application/xml", xml_data),
+        (delivery.attachment_names[1], "application/pdf", ride_data),
+    ]
+    if delivery.report_object_key is not None:
+        report_data = await storage.download_artifact(object_key=delivery.report_object_key)
+        attachments.append((delivery.attachment_names[2], "application/pdf", report_data))
+    message_id = await crm_integrations.send_google_email(
+        session,
+        context,
+        recipient=recipient,
+        subject=delivery.subject,
+        message=delivery.message,
+        attachments=attachments,
+        sender_address=delivery.sender_address,
+        sender_name=delivery.sender_name,
+        reply_to=delivery.sender_address,
+    )
+    return InvoiceEmailRead(
+        message_id=message_id,
+        recipient=recipient,
+        sender_address=delivery.sender_address,
+        sender_name=delivery.sender_name,
+        attachment_names=delivery.attachment_names,
+    )
+
+
+async def preview_invoice_email(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+) -> InvoiceEmailPreviewRead:
+    """Muestra exactamente el correo fiscal antes de la confirmación humana."""
+    delivery = await _prepare_invoice_email(session, context, document_id)
+    return InvoiceEmailPreviewRead(
+        recipient=delivery.recipient,
+        sender_address=delivery.sender_address,
+        sender_name=delivery.sender_name,
+        subject=delivery.subject,
+        message=delivery.message,
+        attachment_names=delivery.attachment_names,
+        due_date=delivery.due_date,
+        payment_terms_days=delivery.payment_terms_days,
+    )
+
+
+async def _prepare_invoice_email(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+) -> _InvoiceEmailDelivery:
+    document = await get_sales_document(session, context, document_id)
+    if document.document_type != "INVOICE" or document.status != "AUTHORIZED":
+        raise HTTPException(status_code=422, detail="Only authorized invoices can be emailed")
+
+    artifacts = list(
+        await session.scalars(
+            select(DocumentArtifact)
+            .where(
+                DocumentArtifact.tenant_id == context.tenant_id,
+                DocumentArtifact.sales_document_id == document_id,
+                DocumentArtifact.artifact_type.in_(("xml-signed", "ride-pdf")),
+            )
+            .order_by(DocumentArtifact.version.desc())
+        )
+    )
+    latest = {artifact.artifact_type: artifact for artifact in reversed(artifacts)}
+    if set(latest) != {"xml-signed", "ride-pdf"}:
+        raise HTTPException(
+            status_code=422,
+            detail="Authorized invoice requires both signed XML and RIDE before email",
+        )
+
+    establishment = await session.get(Establishment, document.establishment_id)
+    emission_point = await session.get(EmissionPoint, document.emission_point_id)
+    if establishment is None or emission_point is None:
+        raise HTTPException(status_code=422, detail="Invoice numbering data is incomplete")
+    invoice_number = f"{establishment.code}-{emission_point.code}-{document.sequential}"
+    attachment_names = [f"FACTURA-{invoice_number}.xml", f"FACTURA-{invoice_number}.pdf"]
+    proposal = await session.scalar(
+        select(BillingProposal).where(
+            BillingProposal.tenant_id == context.tenant_id,
+            BillingProposal.sales_document_id == document.id,
+        )
+    )
+    if proposal is not None and proposal.report_required and proposal.report_approved_at is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Approve the required monthly report before emailing the invoice",
+        )
+    report_object_key = None
+    if proposal is not None and proposal.report_approved_at is not None:
+        if not proposal.report_object_key:
+            raise HTTPException(status_code=422, detail="Approved report file is missing")
+        report_object_key = proposal.report_object_key
+        attachment_names.append(proposal.report_file_name or "INFORME-MENSUAL.pdf")
+    party = await session.get(Party, document.party_id)
+    tenant = await session.get(Tenant, context.tenant_id)
+    template = await fiscal_settings.get_or_create(session, context.tenant_id)
+    if party is None or tenant is None:
+        raise HTTPException(status_code=422, detail="Invoice customer or company is incomplete")
+    due_dates = list(
+        await session.scalars(
+            select(SalesDocumentInstallment.due_date).where(
+                SalesDocumentInstallment.tenant_id == context.tenant_id,
+                SalesDocumentInstallment.sales_document_id == document_id,
+            )
+        )
+    )
+    due_date = max(due_dates, default=document.issue_date)
+    payment_terms_days = max(0, (due_date - document.issue_date).days)
+    values = {
+        "{{cliente}}": party.name,
+        "{{empresa}}": tenant.name,
+        "{{numero_factura}}": invoice_number,
+        "{{fecha_emision}}": document.issue_date.isoformat(),
+        "{{vencimiento}}": due_date.isoformat(),
+        "{{plazo}}": "Pago inmediato" if payment_terms_days == 0 else f"{payment_terms_days} días",
+        "{{plazo_dias}}": str(payment_terms_days),
+        "{{total}}": f"{document.total:.2f}",
+    }
+
+    def render(value: str) -> str:
+        for variable, replacement in values.items():
+            value = value.replace(variable, replacement)
+        return value
+
+    return _InvoiceEmailDelivery(
+        recipient=party.email,
+        sender_address=template.invoice_email_from_address,
+        sender_name=template.invoice_email_from_name,
+        subject=render(template.invoice_email_subject),
+        message=render(template.invoice_email_body),
+        attachment_names=attachment_names,
+        artifacts=latest,
+        report_object_key=report_object_key,
+        due_date=due_date,
+        payment_terms_days=payment_terms_days,
     )

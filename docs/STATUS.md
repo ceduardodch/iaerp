@@ -7,6 +7,203 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Dashboard mensual y lectura de compras listos en `develop`: 2026-08-02
+  `America/Guayaquil`. Resumen muestra la evolución neta de ventas autorizadas
+  de los últimos 12 meses y compara el mes actual con compras recibidas desde
+  evidencia tributaria. El IVA a pagar se etiqueta como estimación: queda
+  preliminar si faltan ventas por importar a Tributario o si el crédito de IVA
+  requiere validar el campo 564 con respaldo contable. El menú Compras lista
+  facturas, notas y liquidaciones recibidas por mes, con proveedor, número,
+  subtotal, total y desglose de IVA tomado del XML/TXT; no permite crear cifras
+  manuales. Ruff, mypy y 71 pruebas tributarias pasan; la suite completa deja
+  375 aprobadas y 33 omitidas. Solo falla `test_health.py` porque Redis/Docker
+  local no está levantado, condición previa ya documentada. Build y lint pasan,
+  con tres avisos previos; 78 recorridos Playwright de Dashboard, Compras,
+  Tributario y accesibilidad pasan en escritorio y móvil. Falta promoción
+  autorizada; `main` no cambió.
+
+- Contratos simples integrados en `main`: 2026-08-02
+  `America/Guayaquil`. Contratos enlaza cliente, oportunidad ganada y
+  documentos accesorios; cada versión guarda vigencia, plazo y tipo de cobro.
+  La persona sube el PDF terminado, lo envía por Gmail y revisa solo ese hilo.
+  Un PDF recibido pasa una revisión técnica básica, pero no queda firmado ni
+  activo hasta que una persona lo valide en FirmaEC. PDF enviado y firmado son
+  inmutables. Mensual fijo, AWS con reporte StreamOne privado y total manual, e
+  hitos preparan una tarea comercial; `Crear borrador` genera la factura con
+  fecha fiscal actual y snapshot, sin emitirla. Un informe obligatorio bloquea
+  el correo, no la emisión, y el envío añade informe aprobado, RIDE y XML. La
+  cobranza exige política general, permiso de factura y consentimiento del
+  cliente; servicios puntuales nacen apagados. Validado con Ruff, mypy, OpenAPI,
+  SQL offline de migración PostgreSQL, 365 pruebas backend (33 omitidas por
+  dependencias opcionales), build/lint frontend y Playwright de Contratos en
+  escritorio y móvil. Docker/Redis local no estaba activo, por lo que la prueba
+  aislada de salud y la migración PostgreSQL en vivo quedan para CI. El cambio
+  quedó unido a la tolerancia documental y al remitente de facturas antes del
+  push autorizado a producción.
+
+- Remitente de facturas por alias: 2026-08-02 `America/Guayaquil`. Cada tenant
+  puede configurar en `Empresa -> Envío de facturas` un correo y nombre de
+  remitente habilitados por Gmail como `Enviar como`. La vista previa muestra
+  el remitente antes de confirmar; el mensaje usa ese alias tanto en `From`
+  como en `Reply-To`, mientras la cuenta personal conectada queda oculta. Si
+  Google rechaza el alias, no se envía el correo y se pide revisar su alta en
+  Gmail. RIDE y XML siguen adjuntos. Ruff, mypy, 64 pruebas tributarias, 25
+  pruebas dirigidas de configuración/facturación/Gmail, build, lint y 44
+  recorridos Playwright de Facturas y Tributario pasan sobre el conjunto unido.
+
+- Tolerancia documental de cartera: 2026-08-02 `America/Guayaquil`. Al aplicar
+  un XML autorizado de retención, IAERP permite cerrar una diferencia máxima
+  de `0.01` frente al saldo de la factura. Conserva completos y separados el
+  abono bancario y las retenciones de IVA/renta; no modifica los valores de la
+  evidencia. La diferencia queda visible en el previo y en auditoría. Desde
+  `0.02` el archivo sigue en revisión y no crea movimientos. El caso reproducido
+  de `65.41 - 57.74 - 7.68` cierra en `0.00`. Ruff, mypy, 64 pruebas
+  tributarias, 31 pruebas dirigidas de cartera, build, lint y 24 recorridos
+  Playwright tributarios pasan sobre el conjunto unido en `main`.
+
+- Entrega de factura y orden tributario local: 2026-08-02
+  `America/Guayaquil`. La factura autorizada muestra ahora un bloque claro de
+  entrega al cliente. Antes de enviar, la persona revisa destinatario, asunto,
+  mensaje, vencimiento, plazo y nombres de los adjuntos; el correo usa siempre
+  el RIDE PDF y XML firmado vigentes. La plantilla se configura por tenant en
+  `Empresa -> Envío de facturas`, separada de la plantilla de Cobranza, y sus
+  datos de pago salen del plan guardado en la factura. Tributario agrupa los
+  comprobantes del periodo en ventas emitidas, compras recibidas, retenciones
+  recibidas y otros; cada grupo muestra cantidad y total, se puede plegar y
+  conserva el ID IAERP y la historia por documento. Ruff, mypy, build, lint,
+  pruebas API de plantilla/envío y 44 recorridos Playwright pasan localmente.
+
+- Corrección histórica local: 2026-08-02 `America/Guayaquil`. Al aplicar un
+  XML de retención, Cartera usa ahora `fechaEmision` del comprobante como fecha
+  efectiva, no el día en que se cargó. Si la misma autorización ya existe con
+  importes y tipos iguales pero fecha técnica incorrecta, el previo propone la
+  corrección y la confirmación ajusta solo la fecha con auditoría; no duplica
+  IVA/renta ni cambia el saldo. Reaplicar un XML SRI 1.0 ya guardado vuelve a
+  construir su detalle tributario sin crear otro comprobante. La pantalla
+  muestra la fecha del XML antes de confirmar y avisa que un archivo ya cargado
+  se validará otra vez. Junio de 2025 quedó cubierto como mes bancario elegido,
+  separado de abonos de julio. Ruff, mypy, 64 pruebas tributarias, 22 pruebas
+  históricas dirigidas, build, lint y 46 recorridos Playwright pasan localmente.
+  Cambio integrado en `main` con autorización del operador.
+
+- Corrección local: 2026-08-02 `America/Guayaquil`. La confirmación de una
+  corrección bancaria ya no excede el límite de 128 caracteres de PostgreSQL:
+  deriva claves internas cortas y estables, y el reverso recalcula el saldo
+  después de guardar el movimiento. Los comprobantes de retención SRI 1.0
+  también alimentan Tributario; IVA y renta siguen separados. Facturas añade
+  un envío manual para comprobantes autorizados, con destinatario visible,
+  confirmación y los dos adjuntos vigentes: RIDE PDF y XML firmado. El envío es
+  idempotente y deja auditoría. Ruff, mypy, 63 pruebas tributarias, 23 pruebas
+  de banco/facturación, build, lint y 24 recorridos Playwright tributarios
+  pasan. Cambio integrado en `main` con autorización del operador.
+
+- Reconciliación de ramas: 2026-08-02 `America/Guayaquil`. Se revisó la rama
+  local `release` contra `main`. Sus cambios útiles ya llegaron a producción:
+  perfiles de retención esperada, transmisión SRI, control de ambiente y RIDE,
+  duplicado de facturas rechazadas, contratos, contactos sin WhatsApp y
+  correcciones de migraciones. Una prueba de integración aislada mostró
+  conflictos con versiones más nuevas de Contratos, Tributario, el visor PDF y
+  la navegación; por eso no se mezcló la rama antigua. `main` conserva la
+  versión vigente y la puerta completa de CI/CD terminó correctamente.
+
+- Actualización local: 2026-08-02 `America/Guayaquil`. La carga documental
+  prevalece sobre cobros manuales sin borrar su historia. Si un abono bancario
+  ya está ligado a la factura correcta y existe un cobro manual igual en otra
+  factura del mismo cliente, IAERP propone el reverso solo con prueba
+  inequívoca: la factura manual fue emitida después del abono. La persona ve la
+  corrección antes de confirmarla; el movimiento original queda en auditoría.
+  Tributario separa cada comprobante en una tarjeta, muestra y permite copiar
+  su `ID IAERP`, conserva aparte la clave SRI y desglosa el IVA y la renta en el
+  propio comprobante de retención. La regla usa el período elegido, por lo que
+  sirve para julio, junio y los meses anteriores. Ruff, mypy, 67 pruebas de
+  banco/tributario, build, lint y 42 recorridos Playwright pasan en una copia
+  aislada de `origin/main`. El cambio ya está integrado en `main`.
+
+- Actualización local: 2026-08-02 `America/Guayaquil`. Cartera permite cargar
+  el TXT de Banco Bolivariano y conciliar un mes elegido. Factura y abono deben
+  pertenecer al mismo período; esto permite separar pagos iguales que se
+  repiten cada mes. La evidencia subida tiene prioridad: si abono bancario más
+  retenciones documentadas cuadran el total, se revierte el cobro manual sin
+  referencia y se crea uno con respaldo bancario, sin borrar el original ni
+  tocar las retenciones. La fecha efectiva conserva el día real del banco.
+  Descuentos, notas de crédito, pagos con referencia, cruces ambiguos y montos
+  parciales quedan para revisión. El TXT real tiene 205 movimientos, 23 abonos;
+  para julio hay 6 abonos y uno de `1780.92`, fechado `2026-07-14`. Ruff, mypy,
+  75 pruebas dirigidas y 42 pruebas Playwright pasan; build y lint también.
+
+- Actualización local: 2026-08-02 `America/Guayaquil`. Los periodos
+  tributarios cambian de estado al ingerir evidencia: sin comprobantes quedan
+  pendientes, con algún documento preliminar muestran evidencia incompleta y
+  con respaldo completo quedan listos para revisar. La pantalla exige una
+  confirmación humana para marcar primero "Listo para declarar" y otra para
+  registrar que ya fue declarado; la API impide saltar pasos, usa idempotencia
+  y deja auditoría. Un periodo declarado no se reabre de forma automática.
+  Validado con Ruff, mypy, 41 pruebas tributarias, build, lint y 16 pruebas
+  Playwright de Tributario.
+
+- Revisión documental: la guía del formulario IVA publicada por el SRI y
+  actualizada el 15 de junio de 2026 confirma que el casillero 507 corresponde
+  a adquisiciones y pagos brutos gravados con tarifa 0%, mientras el 517 es el
+  valor neto. También se corrigió el 411 como ventas gravadas netas y se
+  separaron los valores brutos y netos de 401, 500 y 510. El 500, 510 y 564
+  quedan para revisión humana: el SRI exige probar el derecho a crédito y
+  determinar el crédito aplicable por proporcionalidad o contabilidad; los XML
+  por sí solos no prueban esos datos.
+
+- Actualización local: 2026-08-02 `America/Guayaquil`. Tributario conecta ATS
+  al periodo: toma comprobantes fiscales y sus impuestos/retenciones, genera
+  XML y ZIP privados idempotentes, permite descarga temporal y registra los
+  errores del SRI. La pantalla tiene "Generar ATS", descarga y lista los
+  errores registrados. La ingesta conserva `formaPago` desde cada XML
+  autorizado; una transferencia `20` llega al ATS y se muestra como tal. No
+  genera un anexo si el documento es preliminar o falta ese respaldo, y nunca
+  completa el dato con un código ficticio. Ruff, mypy, 39 pruebas
+  tributarias, build, lint y Playwright tributario pasan localmente. El
+  dispatcher además crea pendientes idempotentes para bajar evidencia,
+  completarla, revisar IVA y preparar ATS; todos exigen aprobación humana y no
+  hacen envíos, entregas ni pagos. Pendiente commit y push.
+
+- Actualización local: 2026-07-31 `America/Guayaquil`.
+  Cartera muestra el número de factura de cada cuenta y permite abrir su
+  historial de movimientos. Ahí se ven cobros, retenciones, descuentos, notas
+  de crédito y reversos, con fecha, valor y referencia; una retención muestra
+  la autorización SRI asociada. Facturas expone el total de retenciones
+  activas en el listado y el detalle. “Sin retención” significa que todavía no
+  existe una retención registrada, no que el cliente esté excluido de retener.
+  Los reversos dejan de contar en el total. Validado con Ruff, mypy, pruebas
+  API de facturas/cartera y lint/build frontend; pendiente commit, CI y
+  promoción autorizada.
+
+- Actualización local: 2026-07-31 `America/Guayaquil`.
+  Cartera permite cargar hasta 50 XML de comprobantes de retención en una sola
+  operación. Primero muestra el cruce verificable de cada archivo con su
+  factura (establecimiento, punto de emisión y secuencial), autorización y
+  valor; después una persona confirma el registro de las coincidencias. Los
+  archivos no se guardan. Cada retención confirmada crea sus movimientos contra
+  la cuenta por cobrar y reduce el saldo de la factura; los XML que no cuadran
+  quedan marcados para revisión sin modificar cartera. La confirmación exige
+  idempotencia, conserva auditoría y no puede duplicar una autorización.
+  Validado con Ruff, mypy, pruebas API de XML/batch y lint/build frontend;
+  pendiente commit, CI y promoción autorizada.
+
+- Actualización local: 2026-07-31 `America/Guayaquil`.
+  Todo PDF disponible en IAERP se visualiza dentro de la aplicación: tanto el
+  RIDE de Facturas como el PDF firmado de Contratos usan un visor común,
+  accesible y con cierre por teclado. La URL privada vence en cinco minutos y
+  el visor pide al almacenamiento una respuesta `inline`; la descarga normal
+  sigue usando `attachment`. No modifica XML, RIDE ni el estado de un
+  comprobante fiscal existente. Facturas además traduce el estado persistido
+  de cartera (`PAID`/`PARTIALLY_PAID`) a su etiqueta pública antes de responder;
+  evita que una factura cobrada deje el listado en error 500. Validado con
+  Ruff, mypy, pruebas API de artefactos/facturas, lint, build y Playwright de
+  Facturas.
+
+- Actualización local: 2026-07-30 `America/Guayaquil`.
+  Cartera queda limitada a cuentas por cobrar, aging, cobros y recordatorios.
+  La política de mensajes automáticos se configura únicamente en Empresa →
+  Automatizaciones de cobranza. Validado con lint, build y Playwright de
+  Cartera en escritorio y móvil.
+
 - Actualización local: 2026-07-30 `America/Guayaquil`.
   Contratos ya tiene interfaz: menú propio, filtro por cliente, alta de
   contrato, versiones comerciales y carga privada de PDF firmado con checksum

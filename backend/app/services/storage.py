@@ -224,11 +224,12 @@ def _presigned_download_url_sync(
     expiry: timedelta,
     file_name: str | None,
     content_type: str | None,
+    content_disposition: str,
 ) -> str:
     response_headers: dict[str, str | list[str] | tuple[str]] | None = None
     if file_name and content_type:
         response_headers = {
-            "response-content-disposition": f'attachment; filename="{file_name}"',
+            "response-content-disposition": f'{content_disposition}; filename="{file_name}"',
             "response-content-type": content_type,
         }
     return client.presigned_get_object(
@@ -246,13 +247,18 @@ async def generate_presigned_download_url(
     expiry: timedelta = PRESIGNED_URL_EXPIRY,
     file_name: str | None = None,
     content_type: str | None = None,
+    content_disposition: str = "attachment",
 ) -> str:
     """Genera una URL prefirmada de corta duracion para descargar un objeto.
 
     El llamador (endpoint REST) debe validar autorizacion ANTES de invocar
     esta funcion: esta funcion no repite ninguna verificacion de scope o
-    tenant, solo genera la URL firmada por MinIO.
+    tenant, solo genera la URL firmada por MinIO. La vista embebida usa
+    ``inline`` y la descarga normal usa ``attachment``.
     """
+
+    if content_disposition not in {"attachment", "inline"}:
+        raise ValueError("Unsupported content disposition")
 
     settings = get_settings()
     resolved_bucket = bucket_name or settings.MINIO_DOCUMENTS_BUCKET
@@ -265,6 +271,7 @@ async def generate_presigned_download_url(
         expiry=expiry,
         file_name=file_name,
         content_type=content_type,
+        content_disposition=content_disposition,
     )
 
 

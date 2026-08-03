@@ -42,6 +42,19 @@ from app.models.receivables import (
     Receivable,
     ReceivableInstallment,
 )
+from app.models.tax import (
+    FiscalDocument,
+    FiscalDocumentTax,
+    FiscalRetention,
+    SRIValidationIssue,
+    TaxAnnex,
+    TaxEvidence,
+    TaxFormFieldMap,
+    TaxPeriod,
+    TaxReturnDraft,
+    TaxTask,
+    TenantTaxProfile,
+)
 
 __all__ = [
     "AuditEvent",
@@ -83,4 +96,15 @@ __all__ = [
     "Tenant",
     "TenantFiscalSettings",
     "User",
+    "FiscalDocument",
+    "FiscalDocumentTax",
+    "FiscalRetention",
+    "SRIValidationIssue",
+    "TaxAnnex",
+    "TaxEvidence",
+    "TaxFormFieldMap",
+    "TaxPeriod",
+    "TaxReturnDraft",
+    "TaxTask",
+    "TenantTaxProfile",
 ]

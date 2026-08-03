@@ -18,16 +18,20 @@ Este módulo contiene la lógica de negocio de cartera de clientes:
 - ``reverse_movement``: reverso auditado sin editar el original
 
 Todas las operaciones de escritura usan ``lock_receivable`` para garantizar
-que el saldo nunca sea negativo bajo concurrencia (misma transacción que
-inserta los ``Movement``). El saldo es siempre derivado: ``amount - sum(movs)``,
-nunca una columna que pueda desincronizarse (docs/sprints/sprint-03.md decisión 2).
+que el saldo no se sobreaplique bajo concurrencia. La única excepción es una
+diferencia documental de hasta un centavo al aplicar un XML de retención
+autorizado: se conservan sus valores exactos, se audita la diferencia y el
+saldo visible cierra en cero. El saldo es siempre derivado:
+``amount - sum(movs)``, nunca una columna que pueda desincronizarse
+(docs/sprints/sprint-03.md decisión 2).
 """
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from xml.etree.ElementTree import Element
@@ -42,8 +46,9 @@ from app.core.timezones import today_in_fiscal_timezone
 from app.integrations.notifications.protocol import Notifier, ReminderRequest
 from app.models.billing import SalesDocument, SalesDocumentInstallment
 from app.models.masters import EmissionPoint, Establishment, Party
-from app.models.platform import Tenant
+from app.models.platform import AuditEvent, Tenant
 from app.models.receivables import (
+    CollectionPolicy,
     CollectionReminder,
     CustomerCredit,
     Movement,
@@ -56,15 +61,22 @@ from app.schemas.receivables import (
     AgingBucketTotalRead,
     AgingRead,
     AgingSummaryRead,
+    CollectionsBreakdownRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
     ReminderInput,
+    RetentionBatchItemRead,
+    RetentionBatchRead,
     RetentionXmlPreviewItem,
     RetentionXmlPreviewRead,
 )
+from app.services.collection_email import render_collection_email
+from app.services.tax.formatting import format_amount
 from app.services.unit_of_work import append_audit
 
 MAX_RETENTION_XML_BYTES = 2 * 1024 * 1024
+RETENTION_SETTLEMENT_TOLERANCE = Decimal("0.01")
+_RETENTION_TOLERANCE_AUDIT_ACTION = "retention.settled_with_rounding_tolerance"
 
 # Estados de AccountItem (contrato) -> filtros sobre Receivable.status persistido
 _ACCOUNT_STATUS_TO_RECEIVABLE_STATUSES: dict[str, tuple[str, ...]] = {
@@ -122,6 +134,7 @@ class ReceivableSummary:
 
     id: uuid.UUID
     party_id: uuid.UUID
+    invoice_sequential: str | None
     status: str
     original_amount: Decimal
     open_amount: Decimal
@@ -152,7 +165,7 @@ def _decimal_xml(value: str | None, *, field: str) -> Decimal:
 
 def _parse_authorized_retention_xml(
     xml_bytes: bytes,
-) -> tuple[str, str, list[RetentionXmlPreviewItem], str]:
+) -> tuple[str, str, date, list[RetentionXmlPreviewItem], str]:
     """Lee el sobre SRI y su comprobante interno sin ejecutar contenido XML.
 
     Solo admite comprobantes de retención autorizados. El archivo se procesa
@@ -185,10 +198,17 @@ def _parse_authorized_retention_xml(
     access_key = _xml_text(retention_xml, "infoTributaria/claveAcceso")
     issuer_ruc = _xml_text(retention_xml, "infoTributaria/ruc")
     retained_ruc = _xml_text(retention_xml, "infoCompRetencion/identificacionSujetoRetenido")
+    issue_date_text = _xml_text(retention_xml, "infoCompRetencion/fechaEmision")
     if access_key != authorization_number or not issuer_ruc or not retained_ruc:
         raise HTTPException(
             status_code=422, detail="Retention XML authorization evidence is inconsistent"
         )
+    try:
+        issue_date = datetime.strptime(issue_date_text or "", "%d/%m/%Y").date()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail="Retention XML has no valid issue date"
+        ) from exc
 
     entries: list[tuple[Element, str | None]] = []
     for support in retention_xml.findall("docsSustento/docSustento"):
@@ -240,9 +260,53 @@ def _parse_authorized_retention_xml(
     return (
         authorization_number,
         next(iter(supporting_documents)),
+        issue_date,
         items,
         f"{issuer_ruc}|{retained_ruc}",
     )
+
+
+async def _active_retention_movements(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    receivable_id: uuid.UUID,
+    authorization_number: str,
+) -> list[Movement]:
+    return list(
+        await session.scalars(
+            select(Movement).where(
+                Movement.tenant_id == tenant_id,
+                Movement.receivable_id == receivable_id,
+                Movement.movement_type == "RETENTION",
+                Movement.support_reference.like(f"{authorization_number} |%"),
+                Movement.reversed_movement_id.is_(None),
+                Movement.id.not_in(_reversed_movement_ids(tenant_id)),
+            )
+        )
+    )
+
+
+def _retention_movement_signature(movement: Movement) -> tuple[str, Decimal] | None:
+    reference = movement.support_reference or ""
+    for kind in ("RETENTION_RENTA", "RETENTION_IVA"):
+        if f"| {kind}:" in reference:
+            return kind, movement.amount
+    return None
+
+
+def _retention_audit_key(parent_key: str, authorization_number: str) -> str:
+    digest = hashlib.sha256(
+        f"{parent_key}|retention-date|{authorization_number}".encode()
+    ).hexdigest()
+    return f"retention-date:{digest}"
+
+
+def _retention_tolerance_audit_key(parent_key: str, authorization_number: str) -> str:
+    digest = hashlib.sha256(
+        f"{parent_key}|retention-tolerance|{authorization_number}".encode()
+    ).hexdigest()
+    return f"retention-tolerance:{digest}"
 
 
 async def preview_retention_xml(
@@ -251,11 +315,17 @@ async def preview_retention_xml(
     context: AuthContext,
     receivable_id: uuid.UUID,
     xml_bytes: bytes,
+    include_existing_authorization: bool = False,
+    settlement_tolerance: Decimal = Decimal("0.00"),
 ) -> RetentionXmlPreviewRead:
     """Valida que un XML SRI autorizado respalda retenciones de esta factura."""
-    authorization_number, supporting_document, items, parties = _parse_authorized_retention_xml(
-        xml_bytes
-    )
+    (
+        authorization_number,
+        supporting_document,
+        issue_date,
+        items,
+        parties,
+    ) = _parse_authorized_retention_xml(xml_bytes)
     issuer_ruc, retained_ruc = parties.split("|", maxsplit=1)
     receivable = await get_receivable(
         session, tenant_id=context.tenant_id, receivable_id=receivable_id
@@ -301,15 +371,220 @@ async def preview_retention_xml(
     open_balance = await compute_receivable_balance(
         session, tenant_id=context.tenant_id, receivable=receivable
     )
-    if total > open_balance:
+    existing_total = Decimal("0.00")
+    if include_existing_authorization:
+        existing_total = sum(
+            (
+                movement.amount
+                for movement in await _active_retention_movements(
+                    session,
+                    tenant_id=context.tenant_id,
+                    receivable_id=receivable.id,
+                    authorization_number=authorization_number,
+                )
+            ),
+            Decimal("0.00"),
+        )
+    if not Decimal("0.00") <= settlement_tolerance <= RETENTION_SETTLEMENT_TOLERANCE:
+        raise ValueError("Unsupported retention settlement tolerance")
+    if total > open_balance + existing_total + settlement_tolerance:
         raise HTTPException(
             status_code=422, detail="Retention total exceeds this invoice open balance"
         )
     return RetentionXmlPreviewRead(
         authorization_number=authorization_number,
         supporting_document=supporting_document,
+        issue_date=issue_date,
         retentions=items,
     )
+
+
+async def import_retention_xml_batch(
+    session: AsyncSession,
+    *,
+    context: AuthContext,
+    files: list[tuple[str, bytes]],
+    apply: bool,
+    correlation_id: str,
+    idempotency_key: str,
+) -> RetentionBatchRead:
+    """Relaciona XML SRI con factura y opcionalmente registra retenciones exactas."""
+    results: list[RetentionBatchItemRead] = []
+    for file_name, xml_bytes in files:
+        try:
+            _, support, _, _, _ = _parse_authorized_retention_xml(xml_bytes)
+            document = await session.scalar(
+                select(SalesDocument)
+                .join(
+                    Establishment,
+                    (Establishment.tenant_id == SalesDocument.tenant_id)
+                    & (Establishment.id == SalesDocument.establishment_id),
+                )
+                .join(
+                    EmissionPoint,
+                    (EmissionPoint.tenant_id == SalesDocument.tenant_id)
+                    & (EmissionPoint.id == SalesDocument.emission_point_id),
+                )
+                .where(
+                    SalesDocument.tenant_id == context.tenant_id,
+                    SalesDocument.document_type == "INVOICE",
+                    SalesDocument.sequential == support[-9:],
+                    Establishment.code == support[:3],
+                    EmissionPoint.code == support[3:6],
+                )
+            )
+            if document is None:
+                raise HTTPException(
+                    status_code=422, detail="No invoice matches the supporting document"
+                )
+            receivable = await session.scalar(
+                select(Receivable).where(
+                    Receivable.tenant_id == context.tenant_id,
+                    Receivable.sales_document_id == document.id,
+                )
+            )
+            if receivable is None:
+                raise HTTPException(status_code=422, detail="Invoice has no open receivable")
+            preview = await preview_retention_xml(
+                session,
+                context=context,
+                receivable_id=receivable.id,
+                xml_bytes=xml_bytes,
+                include_existing_authorization=True,
+                settlement_tolerance=RETENTION_SETTLEMENT_TOLERANCE,
+            )
+            total = sum((item.amount for item in preview.retentions), Decimal("0.00"))
+            duplicate_movements = await _active_retention_movements(
+                session,
+                tenant_id=context.tenant_id,
+                receivable_id=receivable.id,
+                authorization_number=preview.authorization_number,
+            )
+            expected_signature = sorted((item.kind, item.amount) for item in preview.retentions)
+            actual_signature = sorted(
+                signature
+                for movement in duplicate_movements
+                if (signature := _retention_movement_signature(movement)) is not None
+            )
+            if duplicate_movements and actual_signature != expected_signature:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Registered retention differs from the uploaded XML",
+                )
+            needs_date_correction = bool(duplicate_movements) and any(
+                movement.effective_date != preview.issue_date for movement in duplicate_movements
+            )
+            open_balance = await compute_receivable_balance(
+                session, tenant_id=context.tenant_id, receivable=receivable
+            )
+            existing_total = sum(
+                (movement.amount for movement in duplicate_movements), Decimal("0.00")
+            )
+            settlement_difference = max(
+                total - open_balance - existing_total, Decimal("0.00")
+            )
+            if apply:
+                if duplicate_movements and not needs_date_correction:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Retention authorization was already registered",
+                    )
+                if needs_date_correction:
+                    previous_dates = sorted(
+                        {
+                            movement.effective_date.isoformat()
+                            if movement.effective_date is not None
+                            else None
+                            for movement in duplicate_movements
+                        },
+                        key=lambda value: value or "",
+                    )
+                    for movement in duplicate_movements:
+                        movement.effective_date = preview.issue_date
+                    await append_audit(
+                        session,
+                        context=context,
+                        action="retention.effective_date_corrected",
+                        entity_type="receivable",
+                        entity_id=str(receivable.id),
+                        correlation_id=correlation_id,
+                        idempotency_key=_retention_audit_key(
+                            idempotency_key, preview.authorization_number
+                        ),
+                        details={
+                            "authorization_number": preview.authorization_number,
+                            "movement_ids": [str(movement.id) for movement in duplicate_movements],
+                            "previous_dates": previous_dates,
+                            "effective_date": preview.issue_date.isoformat(),
+                        },
+                    )
+                    await session.flush()
+                else:
+                    await record_payment(
+                        session,
+                        context,
+                        receivable.id,
+                        PaymentInput(
+                            cash_amount=Decimal("0.00"),
+                            payment_date=preview.issue_date,
+                            retentions=[
+                                {
+                                    "kind": item.kind,
+                                    "amount": item.amount,
+                                    "reason": f"Código SRI {item.sri_retention_code}",
+                                    "document_reference": preview.authorization_number,
+                                }
+                                for item in preview.retentions
+                            ],
+                        ),
+                        correlation_id=correlation_id,
+                        idempotency_key=idempotency_key,
+                        settlement_tolerance=RETENTION_SETTLEMENT_TOLERANCE,
+                        settlement_reference=preview.authorization_number,
+                    )
+            elif duplicate_movements and not needs_date_correction:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Retention authorization was already registered",
+                )
+            results.append(
+                RetentionBatchItemRead(
+                    file_name=file_name,
+                    receivable_id=receivable.id,
+                    authorization_number=preview.authorization_number,
+                    supporting_document=preview.supporting_document,
+                    invoice_sequential=document.sequential,
+                    issue_date=preview.issue_date,
+                    total=total,
+                    status="MATCHED",
+                    detail=(
+                        "Fecha corregida desde el XML"
+                        if apply and needs_date_correction
+                        else "Corregirá la fecha desde el XML"
+                        if needs_date_correction
+                        else (
+                            "Registrada; cerró con diferencia tolerada de "
+                            f"{format_amount(settlement_difference)}"
+                        )
+                        if apply and settlement_difference > 0
+                        else (
+                            "Lista para registrar; cerrará con diferencia tolerada de "
+                            f"{format_amount(settlement_difference)}"
+                        )
+                        if settlement_difference > 0
+                        else "Registrada"
+                        if apply
+                        else "Lista para registrar"
+                    ),
+                )
+            )
+        except HTTPException as exc:
+            results.append(
+                RetentionBatchItemRead(
+                    file_name=file_name, status="REVIEW_REQUIRED", detail=str(exc.detail)
+                )
+            )
+    return RetentionBatchRead(items=results)
 
 
 # --- Aging (E5-05): función pura y agregados ----------------------------------
@@ -415,8 +690,9 @@ async def compute_receivable_balance(
     """Calcula el saldo completo de un receivable sumando todas sus cuotas.
 
     ``sum(compute_installment_balance)`` para todos los ``ReceivableInstallment``
-    del ``Receivable``. Usado por el endpoint ``GET /receivables/{id}`` para
-    calcular ``open_amount`` on-demand.
+    del ``Receivable``. Una diferencia negativa de hasta un centavo se muestra
+    como cero solo si existe la auditoría creada al aplicar un XML autorizado.
+    Usado por ``GET /receivables/{id}`` para calcular ``open_amount`` on-demand.
     """
     stmt = select(ReceivableInstallment).where(
         ReceivableInstallment.tenant_id == tenant_id,
@@ -428,6 +704,17 @@ async def compute_receivable_balance(
         total += await compute_installment_balance(
             session, tenant_id=tenant_id, installment=installment
         )
+    if -RETENTION_SETTLEMENT_TOLERANCE <= total < Decimal("0.00"):
+        tolerance_audit = await session.scalar(
+            select(AuditEvent.id).where(
+                AuditEvent.tenant_id == tenant_id,
+                AuditEvent.action == _RETENTION_TOLERANCE_AUDIT_ACTION,
+                AuditEvent.entity_type == "receivable",
+                AuditEvent.entity_id == str(receivable.id),
+            )
+        )
+        if tolerance_audit is not None:
+            return Decimal("0.00")
     return total
 
 
@@ -550,6 +837,94 @@ async def compute_aging_summary(
     return AgingSummaryRead(as_of=as_of, buckets=buckets_read, by_party=by_party_read)
 
 
+# Cómo se agrupan los tipos de movimiento en el desglose de cobro.
+_CASH_MOVEMENTS = ("PAYMENT",)
+_RETENTION_MOVEMENTS = ("RETENTION",)
+_CREDIT_MOVEMENTS = ("CREDIT_NOTE", "DISCOUNT")
+
+
+async def compute_collections_breakdown(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> CollectionsBreakdownRead:
+    """Desglosa el cobro en dinero recibido vs retenido (``GET /receivables/collections``).
+
+    Una retención NO es caja: es valor que el cliente retuvo y que se recupera
+    ante el SRI. Separarla del efectivo evita leer como liquidez algo que aún
+    no lo es. ``CREDIT_NOTE``/``DISCOUNT`` van aparte porque bajan la deuda sin
+    que entre dinero.
+
+    Cuenta solo movimientos activos con la MISMA regla que
+    ``compute_installment_balance`` (ni ``REVERSAL`` ni movimientos ya
+    revertidos), para que este desglose y el saldo de la cartera nunca se
+    contradigan.
+
+    El filtro de fechas usa ``Movement.effective_date`` (fecha real del cobro).
+    Los movimientos históricos sin ``effective_date`` caen fuera de cualquier
+    rango acotado; sin rango se incluyen todos.
+    """
+    tenant_id = context.tenant_id
+
+    stmt = (
+        select(
+            Movement.movement_type,
+            func.coalesce(func.sum(Movement.amount), Decimal("0.00")),
+            func.count(Movement.id),
+        )
+        .where(
+            Movement.tenant_id == tenant_id,
+            Movement.reversed_movement_id.is_(None),
+            Movement.id.not_in(_reversed_movement_ids(tenant_id)),
+        )
+        .group_by(Movement.movement_type)
+    )
+    if from_date is not None:
+        stmt = stmt.where(Movement.effective_date >= from_date)
+    if to_date is not None:
+        stmt = stmt.where(Movement.effective_date <= to_date)
+
+    totals: dict[str, tuple[Decimal, int]] = {
+        movement_type: (Decimal(str(amount)), int(count))
+        for movement_type, amount, count in await session.execute(stmt)
+    }
+
+    def group(types: tuple[str, ...]) -> tuple[Decimal, int]:
+        amount = Decimal("0.00")
+        count = 0
+        for movement_type in types:
+            group_amount, group_count = totals.get(movement_type, (Decimal("0.00"), 0))
+            amount += group_amount
+            count += group_count
+        return amount.quantize(Decimal("0.01")), count
+
+    cash_amount, cash_count = group(_CASH_MOVEMENTS)
+    retention_amount, retention_count = group(_RETENTION_MOVEMENTS)
+    credit_amount, credit_count = group(_CREDIT_MOVEMENTS)
+
+    settled_amount = cash_amount + retention_amount
+    retention_share = (
+        (retention_amount / settled_amount * 100).quantize(Decimal("0.01"))
+        if settled_amount > 0
+        else Decimal("0.00")
+    )
+
+    return CollectionsBreakdownRead(
+        from_date=from_date,
+        to_date=to_date,
+        cash_amount=cash_amount,
+        cash_count=cash_count,
+        retention_amount=retention_amount,
+        retention_count=retention_count,
+        credit_amount=credit_amount,
+        credit_count=credit_count,
+        settled_amount=settled_amount,
+        retention_share=retention_share,
+    )
+
+
 # --- Consultas: GET /receivables, GET /receivables/{id} ----------------------
 
 
@@ -601,6 +976,7 @@ async def list_receivables(
             AccountItemRead(
                 id=entity.id,
                 party_id=entity.party_id,
+                invoice_sequential=summary.invoice_sequential,
                 status=summary.status,
                 original_amount=entity.original_amount,
                 open_amount=summary.open_amount,
@@ -752,10 +1128,17 @@ async def to_receivable_summary(
             ReceivableInstallment.receivable_id == receivable.id,
         )
     )
+    invoice_sequential = await session.scalar(
+        select(SalesDocument.sequential).where(
+            SalesDocument.tenant_id == tenant_id,
+            SalesDocument.id == receivable.sales_document_id,
+        )
+    )
 
     return ReceivableSummary(
         id=receivable.id,
         party_id=receivable.party_id,
+        invoice_sequential=invoice_sequential,
         status=status,
         original_amount=receivable.original_amount,
         open_amount=open_amount,
@@ -834,11 +1217,15 @@ async def record_payment(
     *,
     correlation_id: str,
     idempotency_key: str,
+    settlement_tolerance: Decimal = Decimal("0.00"),
+    settlement_reference: str | None = None,
 ) -> ReceivableSummary:
     """Registra un cobro parcial o total con retenciones/descuentos (E5-03/E5-04).
 
     Aplica el cobro oldest-first (cuota más antigua primero) y valida que
-    la suma total (cash + retenciones + descuentos) nunca exceda el saldo abierto.
+    la suma total (cash + retenciones + descuentos) no exceda el saldo abierto.
+    El importador de XML autorizado puede habilitar una tolerancia máxima de un
+    centavo, solo para retenciones sin efectivo ni descuentos, con auditoría.
     Crea múltiples ``Movement``: uno ``PAYMENT`` por cuota tocada, uno
     ``RETENTION`` y uno ``DISCOUNT`` por cada elemento de las listas anidadas.
 
@@ -870,7 +1257,18 @@ async def record_payment(
     locked = await lock_receivable(session, tenant_id=tenant_id, receivable_id=receivable_id)
     open_balance = await compute_receivable_balance(session, tenant_id=tenant_id, receivable=locked)
 
-    if total_application > open_balance:
+    overapplication = max(total_application - open_balance, Decimal("0.00"))
+    tolerance_is_valid = (
+        Decimal("0.00") <= settlement_tolerance <= RETENTION_SETTLEMENT_TOLERANCE
+    )
+    if total_application > open_balance and (
+        not tolerance_is_valid
+        or overapplication > settlement_tolerance
+        or settlement_reference is None
+        or payment.cash_amount != Decimal("0.00")
+        or bool(payment.discounts)
+        or not payment.retentions
+    ):
         raise HTTPException(
             status_code=422,
             detail=f"Payment total {total_application} exceeds open balance {open_balance}",
@@ -917,6 +1315,7 @@ async def record_payment(
             installment_id=installment.id,
             movement_type="PAYMENT",
             amount=apply_amount,
+            effective_date=payment.payment_date,
             support_reference=payment.reference,
             actor_id=context.actor_id,
         )
@@ -934,6 +1333,7 @@ async def record_payment(
                     installment_id=first_installment.id,
                     movement_type="RETENTION",
                     amount=retention.amount,
+                    effective_date=payment.payment_date,
                     support_reference=(
                         f"{retention.document_reference} | {retention.kind}: {retention.reason}"
                     ),
@@ -951,6 +1351,7 @@ async def record_payment(
                     installment_id=first_installment.id,
                     movement_type="DISCOUNT",
                     amount=discount.amount,
+                    effective_date=payment.payment_date,
                     support_reference=discount.reason,
                     actor_id=context.actor_id,
                 )
@@ -962,9 +1363,35 @@ async def record_payment(
     # quedaria sobrestimado.
     await session.flush()
 
+    if overapplication > 0:
+        assert settlement_reference is not None
+        await append_audit(
+            session,
+            context=context,
+            action=_RETENTION_TOLERANCE_AUDIT_ACTION,
+            entity_type="receivable",
+            entity_id=str(receivable_id),
+            correlation_id=correlation_id,
+            idempotency_key=_retention_tolerance_audit_key(
+                idempotency_key, settlement_reference
+            ),
+            details={
+                "authorization_number": settlement_reference,
+                "open_balance": format_amount(open_balance),
+                "retention_total": format_amount(retentions_total),
+                "settlement_difference": format_amount(overapplication),
+                "maximum_tolerance": format_amount(settlement_tolerance),
+            },
+        )
+        # La consulta de saldo solo puede cerrar el centavo si ya ve la
+        # evidencia de auditoría dentro de esta misma transacción.
+        await session.flush()
+
     # Actualizar status del receivable
     new_balance = open_balance - total_application
-    if new_balance == Decimal("0.00"):
+    if new_balance == Decimal("0.00") or (
+        overapplication > 0 and overapplication <= settlement_tolerance
+    ):
         locked.status = "PAID"
     elif locked.status == "OPEN":
         locked.status = "PARTIALLY_PAID"
@@ -1158,6 +1585,9 @@ async def reverse_movement(
         actor_id=context.actor_id,
     )
     session.add(reversal)
+    # ``autoflush`` está desactivado: el reverso debe llegar a la base antes de
+    # recalcular el saldo o se conservaría el estado anterior del cobro.
+    await session.flush()
 
     # Si el original era CREDIT_NOTE, reducir CustomerCredit si hubo excedente
     if original.movement_type == "CREDIT_NOTE" and original.support_reference:
@@ -1258,6 +1688,9 @@ async def send_reminder(
     receivable = await session.scalar(stmt)
     if receivable is None:
         raise HTTPException(status_code=404, detail="Receivable not found")
+    policy = await session.get(CollectionPolicy, tenant_id)
+    if not receivable.collection_enabled or policy is None or not policy.enabled:
+        raise HTTPException(status_code=422, detail="Collection messages are disabled")
 
     # Buscar party para validar consent_opt_out y obtener el destinatario
     from app.models.masters import Party
@@ -1298,6 +1731,70 @@ async def send_reminder(
     return reminder_record
 
 
+async def _render_receivable_email(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    receivable: Receivable,
+    party_name: str,
+    body_override: str | None,
+) -> tuple[str, str, str]:
+    """Arma el correo de cobro de un receivable con la plantilla del tenant.
+
+    El envío manual usa exactamente la misma plantilla que el recordatorio
+    programado (``services/collection_email.py``), para que el cliente reciba
+    siempre el mismo formato y los mismos datos de pago sin importar quién
+    disparó el correo.
+
+    El vencimiento que se comunica es el de la cuota abierta más antigua: es la
+    que está en mora y la que el cliente debe atender primero. Si no queda
+    ninguna cuota abierta se usa la más reciente, para no inventar una fecha.
+    """
+    policy = await session.get(CollectionPolicy, tenant_id)
+    if policy is None:
+        policy = CollectionPolicy(tenant_id=tenant_id)
+        session.add(policy)
+        await session.flush()
+
+    tenant = await session.get(Tenant, tenant_id)
+    company_name = tenant.name if tenant is not None else "Nuestra empresa"
+
+    installments = list(
+        await session.scalars(
+            select(ReceivableInstallment)
+            .where(
+                ReceivableInstallment.tenant_id == tenant_id,
+                ReceivableInstallment.receivable_id == receivable.id,
+            )
+            .order_by(ReceivableInstallment.due_date)
+        )
+    )
+    open_installments = [
+        installment
+        for installment in installments
+        if await compute_installment_balance(session, tenant_id=tenant_id, installment=installment)
+        > 0
+    ]
+    reference = (
+        open_installments[0] if open_installments else (installments[-1] if installments else None)
+    )
+    due_date = reference.due_date if reference is not None else today_in_fiscal_timezone()
+
+    open_amount = await compute_receivable_balance(
+        session, tenant_id=tenant_id, receivable=receivable
+    )
+
+    return render_collection_email(
+        policy=policy,
+        company_name=company_name,
+        party_name=party_name,
+        open_amount=open_amount,
+        due_date=due_date,
+        as_of=today_in_fiscal_timezone(),
+        body_override=body_override,
+    )
+
+
 async def send_real_reminder(
     session: AsyncSession,
     context: AuthContext,
@@ -1317,6 +1814,9 @@ async def send_real_reminder(
     )
     if receivable is None:
         raise HTTPException(status_code=404, detail="Receivable not found")
+    policy = await session.get(CollectionPolicy, context.tenant_id)
+    if not receivable.collection_enabled or policy is None or not policy.enabled:
+        raise HTTPException(status_code=422, detail="Collection messages are disabled")
     from app.models.masters import Party
 
     party = await session.scalar(
@@ -1354,12 +1854,20 @@ async def send_real_reminder(
             "Por favor contáctenos si ya realizó el pago."
         )
         if channel == "EMAIL":
+            subject, message, html_message = await _render_receivable_email(
+                session,
+                tenant_id=context.tenant_id,
+                receivable=receivable,
+                party_name=party.name,
+                body_override=reminder.message,
+            )
             await crm_integrations.send_google_email(
                 session,
                 context,
                 recipient=recipient,
-                subject="Recordatorio de pago",
+                subject=subject,
                 message=message,
+                html_message=html_message,
             )
         elif channel == "WHATSAPP":
             await crm_integrations.send_whatsapp_message(

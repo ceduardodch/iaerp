@@ -176,6 +176,7 @@ async def handle_invoice_authorized(
         original_amount=document.total,
         currency=document.currency,
         status="OPEN",
+        collection_enabled=document.collection_enabled,
     )
     session.add(receivable)
     await session.flush()

@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -88,6 +89,9 @@ class SalesDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base
     # su evidencia, XML/RIDE ni rastro de transmision con el SRI.
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     archived_reason: Mapped[str | None] = mapped_column(String(500))
+    # Respaldo comercial: nunca sustituye al XML/RIDE ni cambia su ciclo SRI.
+    commercial_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    collection_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class SalesDocumentLine(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):

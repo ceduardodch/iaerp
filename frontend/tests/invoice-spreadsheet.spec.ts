@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { pickCombobox } from './combobox'
+
 const product = {
   id: '16161616-1616-4616-8616-161616161616',
   name: 'Servicio de prueba',
@@ -97,7 +99,6 @@ test('shows the editable invoice spreadsheet with its complete header', async ({
   await expect(table).toBeVisible()
   await expect(table.getByRole('columnheader')).toHaveText([
     'Producto',
-    'Descripción',
     'Cantidad',
     'P. Unit.',
     'Desc.',
@@ -126,11 +127,11 @@ test('removes an invoice line when more than one exists', async ({ page }) => {
 })
 
 test('shows backend-calculated totals after editing quantity', async ({ page }) => {
-  await page.getByLabel('Producto 1').selectOption(product.id)
+  await pickCombobox(page, 'Producto 1', product.name)
   await page.getByLabel('Cantidad 1').fill('2')
 
   const firstRow = page.locator('.invoice-spreadsheet tbody tr').first()
-  await expect(firstRow.locator('td').nth(7)).toContainText('$23,00', { timeout: 15_000 })
+  await expect(firstRow.locator('td').nth(6)).toContainText('$23,00', { timeout: 15_000 })
   await expect(page.locator('.invoice-spreadsheet tfoot')).toContainText('$23,00', { timeout: 15_000 })
 })
 

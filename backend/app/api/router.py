@@ -1,5 +1,6 @@
 import hashlib
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
@@ -11,6 +12,7 @@ from app.core.auth import AuthContext, create_dev_token, require_scopes
 from app.core.config import get_settings
 from app.db.session import get_session
 from app.models.billing import SalesDocument
+from app.models.legal_commercial import ContractVersion
 from app.models.platform import (
     AutomationSettings,
     Membership,
@@ -19,10 +21,15 @@ from app.models.platform import (
     User,
 )
 from app.models.receivables import CollectionPolicy
+from app.schemas.bank_reconciliation import BankStatementImportRead
 from app.schemas.billing import (
     ArtifactDownloadRead,
     CreditNoteInput,
     DocumentArtifactRead,
+    InvoiceCollectionUpdate,
+    InvoiceEmailInput,
+    InvoiceEmailPreviewRead,
+    InvoiceEmailRead,
     InvoiceInput,
     InvoicePreviewInput,
     InvoicePreviewRead,
@@ -37,6 +44,9 @@ from app.schemas.legal_commercial import (
     CommercialContractCreate,
     CommercialContractRead,
     ContractArtifactDownloadRead,
+    ContractBillingPrepare,
+    ContractEmailSend,
+    ContractEmailSyncRead,
     ContractVersionCreate,
     ContractVersionRead,
 )
@@ -60,6 +70,8 @@ from app.schemas.platform import (
     DevTokenRequest,
     FiscalSettingsRead,
     FiscalSettingsUpdate,
+    InvoiceEmailTemplateRead,
+    InvoiceEmailTemplateUpdate,
     MembershipRead,
     OperationRead,
     OrganizationProfileRead,
@@ -76,16 +88,25 @@ from app.schemas.receivables import (
     AgingSummaryRead,
     CollectionPolicyRead,
     CollectionPolicyUpdate,
+    CollectionsBreakdownRead,
     MovementRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
     ReceivableDueDateUpdate,
     ReminderInput,
     ReminderRead,
+    RetentionBatchRead,
     RetentionXmlPreviewRead,
     ReversalInput,
 )
-from app.services import billing, fiscal_settings, legal_commercial, masters, receivables
+from app.services import (
+    bank_reconciliation,
+    billing,
+    fiscal_settings,
+    legal_commercial,
+    masters,
+    receivables,
+)
 from app.services.unit_of_work import append_audit, execute_idempotent
 
 router = APIRouter()
@@ -120,6 +141,8 @@ ALL_DEV_SCOPES = {
     "communications:write",
     "commercial:read",
     "commercial:write",
+    "tax:read",
+    "tax:write",
 }
 
 IdempotencyKey = Annotated[
@@ -352,6 +375,43 @@ async def put_fiscal_settings(
         idempotency_key=idempotency_key,
         request_payload=data.model_dump(mode="json"),
         action="organization.fiscal_settings.updated",
+        entity_type="tenant_fiscal_settings",
+        callback=update,
+    )
+
+
+@router.get(
+    "/organization/invoice-email-template",
+    response_model=InvoiceEmailTemplateRead,
+)
+async def get_invoice_email_template(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:read"))],
+) -> InvoiceEmailTemplateRead:
+    return await fiscal_settings.read_invoice_email_template(session, context)
+
+
+@router.put(
+    "/organization/invoice-email-template",
+    response_model=InvoiceEmailTemplateRead,
+)
+async def put_invoice_email_template(
+    data: InvoiceEmailTemplateUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        response = await fiscal_settings.update_invoice_email_template(session, context, data)
+        return str(context.tenant_id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="organization.invoice_email_template.update",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="organization.invoice_email_template.updated",
         entity_type="tenant_fiscal_settings",
         callback=update,
     )
@@ -709,6 +769,213 @@ async def get_contract_versions(
 
 
 @router.post(
+    "/commercial/contracts/{contract_id}/versions/{version_id}/sent-pdf",
+    response_model=ContractVersionRead,
+)
+async def post_sent_contract_pdf(
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    file: Annotated[UploadFile, File()],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    data = await file.read(legal_commercial.MAX_SIGNED_CONTRACT_BYTES + 1)
+
+    async def upload() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.upload_sent_contract(
+            session,
+            context,
+            contract_id=contract_id,
+            version_id=version_id,
+            filename=file.filename,
+            data=data,
+        )
+        return str(entity.id), ContractVersionRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.contract_versions.sent_pdf.upload",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "contract_id": str(contract_id),
+            "version_id": str(version_id),
+            "filename": file.filename,
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+        action="commercial_contract_version.sent_pdf_uploaded",
+        entity_type="commercial_contract_version",
+        callback=upload,
+    )
+
+
+@router.get(
+    "/commercial/contracts/{contract_id}/versions/{version_id}/sent-pdf",
+    response_model=ContractArtifactDownloadRead,
+)
+async def get_sent_contract_pdf(
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:read"))],
+    inline: bool = Query(default=False),
+) -> ContractArtifactDownloadRead:
+    download_url, file_name = await legal_commercial.sent_contract_download(
+        session, context, contract_id=contract_id, version_id=version_id, inline=inline
+    )
+    return ContractArtifactDownloadRead(
+        download_url=download_url, expires_in_seconds=300, file_name=file_name
+    )
+
+
+@router.post(
+    "/commercial/contracts/{contract_id}/versions/{version_id}/email",
+    response_model=ContractVersionRead,
+)
+async def post_contract_email(
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    data: ContractEmailSend,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[
+        AuthContext, Depends(require_scopes("commercial:write", "communications:write"))
+    ],
+) -> dict[str, object]:
+    async def send() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.send_contract_email(
+            session, context, contract_id=contract_id, version_id=version_id, data=data
+        )
+        return str(entity.id), ContractVersionRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.contract_versions.email",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "contract_id": str(contract_id),
+            "version_id": str(version_id),
+            **data.model_dump(mode="json"),
+        },
+        action="commercial_contract_version.emailed",
+        entity_type="commercial_contract_version",
+        callback=send,
+    )
+
+
+@router.post(
+    "/commercial/contracts/{contract_id}/versions/{version_id}/email-sync",
+    response_model=ContractEmailSyncRead,
+)
+async def post_contract_email_sync(
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[
+        AuthContext, Depends(require_scopes("commercial:write", "communications:read"))
+    ],
+) -> dict[str, object]:
+    async def sync() -> tuple[str, dict[str, object]]:
+        result = await legal_commercial.sync_contract_email(
+            session, context, contract_id=contract_id, version_id=version_id
+        )
+        return str(version_id), result.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.contract_versions.email_sync",
+        idempotency_key=idempotency_key,
+        request_payload={"contract_id": str(contract_id), "version_id": str(version_id)},
+        action="commercial_contract_version.email_synced",
+        entity_type="commercial_contract_version",
+        callback=sync,
+    )
+
+
+async def _contract_version_action(
+    *,
+    session: AsyncSession,
+    context: AuthContext,
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    idempotency_key: str,
+    operation: str,
+    action: str,
+    callback: Callable[..., Awaitable[ContractVersion]],
+) -> dict[str, object]:
+    async def run() -> tuple[str, dict[str, object]]:
+        entity = await callback(session, context, contract_id=contract_id, version_id=version_id)
+        return str(entity.id), ContractVersionRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        request_payload={"contract_id": str(contract_id), "version_id": str(version_id)},
+        action=action,
+        entity_type="commercial_contract_version",
+        callback=run,
+    )
+
+
+@router.post(
+    "/commercial/contracts/{contract_id}/versions/{version_id}/confirm-firmaec",
+    response_model=ContractVersionRead,
+)
+async def post_contract_firmaec_confirmation(
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    return await _contract_version_action(
+        session=session,
+        context=context,
+        contract_id=contract_id,
+        version_id=version_id,
+        idempotency_key=idempotency_key,
+        operation="commercial.contract_versions.confirm_firmaec",
+        action="commercial_contract_version.firmaec_confirmed",
+        callback=legal_commercial.confirm_firmaec,
+    )
+
+
+@router.post(
+    "/commercial/contracts/{contract_id}/versions/{version_id}/activate",
+    response_model=ContractVersionRead,
+)
+async def post_contract_activation(
+    contract_id: uuid.UUID,
+    version_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    return await _contract_version_action(
+        session=session,
+        context=context,
+        contract_id=contract_id,
+        version_id=version_id,
+        idempotency_key=idempotency_key,
+        operation="commercial.contract_versions.activate",
+        action="commercial_contract_version.activated",
+        callback=legal_commercial.activate_contract,
+    )
+
+
+@router.post(
     "/commercial/contracts/{contract_id}/versions/{version_id}/signed-pdf",
     response_model=ContractVersionRead,
 )
@@ -737,7 +1004,9 @@ async def post_signed_contract_pdf(
         )
 
     return await execute_idempotent(
-        session, context=context, operation="commercial.contract_versions.signed_pdf.upload",
+        session,
+        context=context,
+        operation="commercial.contract_versions.signed_pdf.upload",
         idempotency_key=idempotency_key,
         request_payload={
             "contract_id": str(contract_id),
@@ -746,7 +1015,8 @@ async def post_signed_contract_pdf(
             "sha256": hashlib.sha256(data).hexdigest(),
         },
         action="commercial_contract_version.signed_pdf_uploaded",
-        entity_type="commercial_contract_version", callback=upload,
+        entity_type="commercial_contract_version",
+        callback=upload,
     )
 
 
@@ -759,9 +1029,10 @@ async def get_signed_contract_pdf(
     version_id: uuid.UUID,
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("commercial:read"))],
+    inline: bool = Query(default=False),
 ) -> ContractArtifactDownloadRead:
     download_url, file_name = await legal_commercial.signed_contract_download(
-        session, context, contract_id=contract_id, version_id=version_id
+        session, context, contract_id=contract_id, version_id=version_id, inline=inline
     )
     return ContractArtifactDownloadRead(
         download_url=download_url, expires_in_seconds=300, file_name=file_name
@@ -795,6 +1066,83 @@ async def post_aws_consumption_cut(
     )
 
 
+@router.get("/commercial/aws-consumption-cuts", response_model=list[AwsConsumptionCutRead])
+async def get_aws_consumption_cuts(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:read"))],
+    party_id: uuid.UUID | None = None,
+) -> list[AwsConsumptionCutRead]:
+    return [
+        AwsConsumptionCutRead.model_validate(entity)
+        for entity in await legal_commercial.list_aws_cuts(session, context, party_id=party_id)
+    ]
+
+
+@router.post(
+    "/commercial/aws-consumption-cuts/{cut_id}/evidence",
+    response_model=AwsConsumptionCutRead,
+)
+async def post_aws_consumption_evidence(
+    cut_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    file: Annotated[UploadFile, File()],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    data = await file.read(legal_commercial.MAX_REPORT_BYTES + 1)
+
+    async def upload() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.upload_aws_evidence(
+            session, context, cut_id=cut_id, filename=file.filename, data=data
+        )
+        return str(entity.id), AwsConsumptionCutRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.aws_cuts.evidence.upload",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "cut_id": str(cut_id),
+            "filename": file.filename,
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+        action="aws_consumption_cut.evidence_uploaded",
+        entity_type="aws_consumption_cut",
+        callback=upload,
+    )
+
+
+@router.post(
+    "/commercial/aws-consumption-cuts/{cut_id}/confirm",
+    response_model=AwsConsumptionCutRead,
+)
+async def post_aws_consumption_confirmation(
+    cut_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    async def confirm() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.confirm_aws_cut(session, context, cut_id)
+        return str(entity.id), AwsConsumptionCutRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.aws_cuts.confirm",
+        idempotency_key=idempotency_key,
+        request_payload={"cut_id": str(cut_id)},
+        action="aws_consumption_cut.reviewed",
+        entity_type="aws_consumption_cut",
+        callback=confirm,
+    )
+
+
 @router.post("/commercial/billing-proposals", response_model=BillingProposalRead, status_code=201)
 async def post_billing_proposal(
     data: BillingProposalCreate,
@@ -817,6 +1165,145 @@ async def post_billing_proposal(
         action="commercial_billing_proposal.created",
         entity_type="commercial_billing_proposal",
         callback=create,
+    )
+
+
+@router.get("/commercial/billing-proposals", response_model=list[BillingProposalRead])
+async def get_billing_proposals(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:read"))],
+    contract_id: uuid.UUID | None = None,
+) -> list[BillingProposalRead]:
+    return [
+        BillingProposalRead.model_validate(entity)
+        for entity in await legal_commercial.list_billing_proposals(
+            session, context, contract_id=contract_id
+        )
+    ]
+
+
+@router.post(
+    "/commercial/contracts/{contract_id}/prepare-billing",
+    response_model=BillingProposalRead,
+    status_code=201,
+)
+async def post_prepare_contract_billing(
+    contract_id: uuid.UUID,
+    data: ContractBillingPrepare,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    async def prepare() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.prepare_contract_billing(
+            session, context, contract_id=contract_id, data=data
+        )
+        return str(entity.id), BillingProposalRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.contracts.prepare_billing",
+        idempotency_key=idempotency_key,
+        request_payload={"contract_id": str(contract_id), **data.model_dump(mode="json")},
+        action="commercial_billing_proposal.prepared",
+        entity_type="commercial_billing_proposal",
+        callback=prepare,
+    )
+
+
+@router.post(
+    "/commercial/billing-proposals/{proposal_id}/report",
+    response_model=BillingProposalRead,
+)
+async def post_billing_proposal_report(
+    proposal_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    file: Annotated[UploadFile, File()],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    data = await file.read(legal_commercial.MAX_REPORT_BYTES + 1)
+
+    async def upload() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.upload_billing_report(
+            session, context, proposal_id=proposal_id, filename=file.filename, data=data
+        )
+        return str(entity.id), BillingProposalRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.billing_proposals.report.upload",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "proposal_id": str(proposal_id),
+            "filename": file.filename,
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+        action="commercial_billing_proposal.report_uploaded",
+        entity_type="commercial_billing_proposal",
+        callback=upload,
+    )
+
+
+@router.post(
+    "/commercial/billing-proposals/{proposal_id}/report/approve",
+    response_model=BillingProposalRead,
+)
+async def post_billing_proposal_report_approval(
+    proposal_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write"))],
+) -> dict[str, object]:
+    async def approve() -> tuple[str, dict[str, object]]:
+        entity = await legal_commercial.approve_billing_report(session, context, proposal_id)
+        return str(entity.id), BillingProposalRead.model_validate(entity).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.billing_proposals.report.approve",
+        idempotency_key=idempotency_key,
+        request_payload={"proposal_id": str(proposal_id)},
+        action="commercial_billing_proposal.report_approved",
+        entity_type="commercial_billing_proposal",
+        callback=approve,
+    )
+
+
+@router.post(
+    "/commercial/billing-proposals/{proposal_id}/create-invoice-draft",
+    response_model=SalesDocumentRead,
+    status_code=201,
+)
+async def post_billing_proposal_conversion(
+    proposal_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("commercial:write", "invoices:write"))],
+) -> dict[str, object]:
+    async def convert() -> tuple[str, dict[str, object]]:
+        _, document = await legal_commercial.convert_billing_proposal(session, context, proposal_id)
+        response = await billing.to_sales_document_read(session, context, document)
+        return str(document.id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="commercial.billing_proposals.create_invoice_draft",
+        idempotency_key=idempotency_key,
+        request_payload={"proposal_id": str(proposal_id)},
+        action="invoice.draft_created_from_commercial_proposal",
+        entity_type="sales_document",
+        callback=convert,
     )
 
 
@@ -985,6 +1472,33 @@ async def post_invoice_duplicate(
     )
 
 
+@router.put("/invoices/{invoice_id}/collection-policy", response_model=SalesDocumentRead)
+async def put_invoice_collection_policy(
+    invoice_id: uuid.UUID,
+    data: InvoiceCollectionUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        entity = await billing.update_invoice_collection_policy(
+            session, context, invoice_id, enabled=data.enabled
+        )
+        response = await billing.to_sales_document_read(session, context, entity)
+        return str(entity.id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="invoices.collection_policy.update",
+        idempotency_key=idempotency_key,
+        request_payload={"invoice_id": str(invoice_id), **data.model_dump(mode="json")},
+        action="invoice.collection_policy_updated",
+        entity_type="sales_document",
+        callback=update,
+    )
+
+
 @router.get("/invoices", response_model=list[SalesDocumentRead])
 async def get_invoices(
     session: Session,
@@ -1061,8 +1575,51 @@ async def get_invoice_artifact_download(
     artifact_id: uuid.UUID,
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+    inline: bool = Query(default=False),
 ) -> ArtifactDownloadRead:
-    return await billing.create_artifact_download(session, context, invoice_id, artifact_id)
+    return await billing.create_artifact_download(
+        session, context, invoice_id, artifact_id, inline=inline
+    )
+
+
+@router.post("/invoices/{invoice_id}/email", response_model=InvoiceEmailRead)
+async def post_invoice_email(
+    invoice_id: uuid.UUID,
+    data: InvoiceEmailInput,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:write"))],
+) -> dict[str, object]:
+    """Envía, tras confirmación humana, el RIDE y XML de una factura autorizada."""
+
+    async def send() -> tuple[str, dict[str, object]]:
+        result = await billing.send_invoice_email(
+            session, context, invoice_id, recipient=str(data.recipient)
+        )
+        return result.message_id, result.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="invoices.email",
+        idempotency_key=idempotency_key,
+        request_payload={"invoice_id": str(invoice_id), "recipient": str(data.recipient)},
+        action="invoice.emailed",
+        entity_type="sales_document",
+        callback=send,
+    )
+
+
+@router.get(
+    "/invoices/{invoice_id}/email-preview",
+    response_model=InvoiceEmailPreviewRead,
+)
+async def get_invoice_email_preview(
+    invoice_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+) -> InvoiceEmailPreviewRead:
+    return await billing.preview_invoice_email(session, context, invoice_id)
 
 
 @router.post("/invoices/{invoice_id}/issue", response_model=OperationRead, status_code=202)
@@ -1213,6 +1770,7 @@ def _summary_to_account_item(summary: receivables.ReceivableSummary) -> AccountI
     return AccountItemRead(
         id=summary.id,
         party_id=summary.party_id,
+        invoice_sequential=summary.invoice_sequential,
         status=summary.status,
         original_amount=summary.original_amount,
         open_amount=summary.open_amount,
@@ -1289,6 +1847,28 @@ async def get_receivables_aging(
             for party_bucket in summary.by_party
         ],
     ).model_dump(mode="json", by_alias=True)
+
+
+@router.get("/receivables/collections", response_model=CollectionsBreakdownRead)
+async def get_receivables_collections(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+    from_date: Annotated[date | None, Query(alias="from")] = None,
+    to_date: Annotated[date | None, Query(alias="to")] = None,
+) -> dict[str, object]:
+    """Desglose del cobro: cuánto entró en dinero y cuánto quedó retenido.
+
+    Ruta estatica declarada ANTES de ``GET /receivables/{receivable_id}``, por
+    la misma razon que ``/receivables/aging``. El calculo vive integramente en
+    ``services/receivables.py::compute_collections_breakdown``, que reusa la
+    regla de movimientos activos de ``compute_installment_balance`` para que el
+    desglose jamas contradiga el saldo de la cartera.
+    """
+
+    breakdown = await receivables.compute_collections_breakdown(
+        session, context=context, from_date=from_date, to_date=to_date
+    )
+    return breakdown.model_dump(mode="json", by_alias=True)
 
 
 @router.get("/receivables/collection-policy", response_model=CollectionPolicyRead)
@@ -1408,6 +1988,7 @@ async def get_receivable_movements(
             installment_id=movement.installment_id,
             movement_type=movement.movement_type,
             amount=movement.amount,
+            effective_date=movement.effective_date,
             support_reference=movement.support_reference,
             reversed_movement_id=movement.reversed_movement_id,
             actor_id=movement.actor_id,
@@ -1448,6 +2029,143 @@ async def put_receivable_due_date(
         action="receivable.due_date_corrected",
         entity_type="receivable",
         callback=update,
+    )
+
+
+@router.post(
+    "/receivables/retention-batch",
+    response_model=RetentionBatchRead,
+)
+async def post_retention_batch(
+    files: Annotated[list[UploadFile], File()],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:write"))],
+    apply: Annotated[bool, Form()] = False,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> dict[str, object]:
+    """Relaciona varios XML autorizados y registra solo las coincidencias exactas."""
+    if not files:
+        raise HTTPException(status_code=422, detail="At least one XML file is required")
+    if len(files) > 50:
+        raise HTTPException(status_code=422, detail="A maximum of 50 XML files is allowed")
+    parsed_files = [
+        (file.filename or "retencion.xml", await file.read(receivables.MAX_RETENTION_XML_BYTES + 1))
+        for file in files
+    ]
+    if not apply:
+        result = await receivables.import_retention_xml_batch(
+            session,
+            context=context,
+            files=parsed_files,
+            apply=False,
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key=f"preview-{uuid.uuid4()}",
+        )
+        return result.model_dump(mode="json", by_alias=True)
+
+    if idempotency_key is None or not 16 <= len(idempotency_key) <= 128:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "An Idempotency-Key between 16 and 128 characters is required "
+                "to register retentions"
+            ),
+        )
+
+    async def register_batch() -> tuple[str, dict[str, object]]:
+        result = await receivables.import_retention_xml_batch(
+            session,
+            context=context,
+            files=parsed_files,
+            apply=True,
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key=idempotency_key,
+        )
+        return str(context.tenant_id), result.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.retention_batch.register",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "files": [
+                {"name": name, "sha256": hashlib.sha256(content).hexdigest()}
+                for name, content in parsed_files
+            ],
+        },
+        action="receivable.retention_batch_registered",
+        entity_type="receivable_batch",
+        callback=register_batch,
+    )
+
+
+@router.post(
+    "/receivables/bank-statement",
+    response_model=BankStatementImportRead,
+)
+async def post_bank_statement(
+    file: Annotated[UploadFile, File()],
+    period: Annotated[str, Form(pattern=r"^\d{4}-\d{2}$")],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:write"))],
+    apply: Annotated[bool, Form()] = False,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> dict[str, object]:
+    """Cruza abonos del periodo y registra solo cobros totales con match único."""
+    try:
+        period_date = datetime.strptime(period, "%Y-%m").date().replace(day=1)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Period must use YYYY-MM") from exc
+    content = await file.read(bank_reconciliation.MAX_BANK_STATEMENT_BYTES + 1)
+    file_name = file.filename or "estado-bancario.txt"
+    if not apply:
+        result = await bank_reconciliation.import_bank_statement(
+            session,
+            context=context,
+            file_name=file_name,
+            content=content,
+            period=period_date,
+            apply=False,
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key=f"preview-{uuid.uuid4()}",
+        )
+        return result.model_dump(mode="json", by_alias=True)
+    if idempotency_key is None or not 16 <= len(idempotency_key) <= 128:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "An Idempotency-Key between 16 and 128 characters is required "
+                "to register bank payments"
+            ),
+        )
+
+    async def register_matches() -> tuple[str, dict[str, object]]:
+        result = await bank_reconciliation.import_bank_statement(
+            session,
+            context=context,
+            file_name=file_name,
+            content=content,
+            period=period_date,
+            apply=True,
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key=idempotency_key,
+        )
+        return str(context.tenant_id), result.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.bank_statement.register",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "file_name": file_name,
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "period": period,
+        },
+        action="receivable.bank_statement_registered",
+        entity_type="receivable_batch",
+        callback=register_matches,
     )
 
 

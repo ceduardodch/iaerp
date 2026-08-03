@@ -79,6 +79,7 @@ ensure_default_scope() {
 for scope in \
   leads:read leads:write \
   communications:read communications:write \
+  commercial:read commercial:write \
   receivables:read receivables:write receivables:notify; do
   ensure_default_scope "$scope"
 done

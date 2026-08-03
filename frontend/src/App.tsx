@@ -1,9 +1,11 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CalendarClock, DollarSign, History, Mail } from 'lucide-react'
 import {
   lazy,
   startTransition,
   Suspense,
   useDeferredValue,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -15,17 +17,26 @@ import {
   type AccountItem,
   type AccountItemStatus,
   type ArtifactDownload,
+  type BankStatementImport,
+  type BillingProposal,
   type CollectionPolicy,
+  type CollectionsBreakdown,
   type CommercialContract,
   type ContractArtifactDownload,
+  type ContractEmailSync,
   type ContractVersion,
+  type AwsConsumptionCut,
   type DiscountInput,
   type DocumentArtifact,
+  type DashboardTax,
   type EmissionPoint,
   type EvolutionWhatsAppIntegration,
   type Establishment,
   type FiscalSettings,
   type InvoiceLineInput,
+  type InvoiceEmailResult,
+  type InvoiceEmailPreview,
+  type InvoiceEmailTemplate,
   type InvoicePreview,
   type IntegrationStatus,
   type Lead,
@@ -36,7 +47,9 @@ import {
   type Product,
   type ReminderInput,
   type ReceivableDueDateUpdate,
+  type ReceivableMovement,
   type RetentionInput,
+  type RetentionBatch,
   type RetentionXmlPreview,
   type SalesDocument,
   type SalesDocumentStatus,
@@ -50,11 +63,13 @@ import {
   ErpButton,
   ErpEmptyState,
   ErpFormPanel,
+  ErpMetricGrid,
   ErpPageHeader,
   ErpPanel,
   ErpStatusBadge,
   ErpToolbar,
 } from './components/erp'
+import { ErpCombobox } from './components/erp/ErpCombobox'
 import { ErpModal } from './components/erp/ErpModal'
 // Code-splitting (Sprint 7): la sección CRM arrastra dependencias pesadas
 // (@dnd-kit + framer-motion) y es la menos usada en el arranque; se carga
@@ -62,13 +77,20 @@ import { ErpModal } from './components/erp/ErpModal'
 const LeadsPage = lazy(() =>
   import('./components/crm').then((module) => ({ default: module.LeadsPage })),
 )
+// La sección tributaria también se carga bajo demanda: solo la usa quien declara.
+const TaxPage = lazy(() =>
+  import('./components/tax').then((module) => ({ default: module.TaxPage })),
+)
+const PurchasesPage = lazy(() =>
+  import('./components/purchases').then((module) => ({ default: module.PurchasesPage })),
+)
 import { InvoiceSpreadsheet } from './components/InvoiceSpreadsheet'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionLoadingSkeleton } from './components/LoadingSkeleton'
 import { useToast } from './components/Toast'
 
-type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'contracts' | 'crm'
+type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'purchases' | 'receivables' | 'organization' | 'contracts' | 'crm' | 'tax'
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
   minimumFractionDigits: 2,
@@ -82,6 +104,28 @@ function formatAmount(value: string | number): string {
 
 function formatPercent(value: string | number): string {
   return `${formatAmount(value)} %`
+}
+
+function PdfPreviewModal({
+  title,
+  artifact,
+  onClose,
+}: {
+  title: string
+  artifact: Pick<ArtifactDownload, 'downloadUrl' | 'fileName'>
+  onClose: () => void
+}) {
+  return (
+    <ErpModal title={title} size="lg" onClose={onClose}>
+      <iframe className="pdf-preview-frame" src={artifact.downloadUrl} title={artifact.fileName} />
+      <div className="erp-form-actions pdf-preview-actions">
+        <ErpButton variant="secondary" onClick={() => window.open(artifact.downloadUrl, '_blank', 'noopener,noreferrer')}>
+          Abrir en otra pestaña
+        </ErpButton>
+        <ErpButton variant="primary" onClick={onClose}>Cerrar</ErpButton>
+      </div>
+    </ErpModal>
+  )
 }
 
 function DevLogin() {
@@ -215,16 +259,18 @@ function Overview({
   context: TenantContext
   token: string
 }) {
-  const [invoicesQuery, receivablesQuery, leadsQuery] = useQueries({
+  const [invoicesQuery, receivablesQuery, leadsQuery, taxDashboardQuery] = useQueries({
     queries: [
       { queryKey: ['invoices', 'overview'], queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices') },
       { queryKey: ['receivables', 'overview'], queryFn: () => apiRequest<AccountItem[]>(token, '/receivables') },
       { queryKey: ['crm', 'leads', 'overview'], queryFn: () => apiRequest<Lead[]>(token, '/crm/leads') },
+      { queryKey: ['tax', 'dashboard'], queryFn: () => apiRequest<DashboardTax>(token, '/tax/dashboard'), enabled: context.scopes.includes('tax:read') },
     ],
   })
   const invoices = invoicesQuery.data ?? []
   const receivables = receivablesQuery.data ?? []
   const leads = leadsQuery.data ?? []
+  const taxDashboard = taxDashboardQuery.data
   const today = todayInFiscalTimezone().slice(0, 7)
   const outstanding = receivables.reduce((sum, item) => sum + Number(item.openAmount), 0)
   const overdue = receivables.filter((item) => item.status === 'OVERDUE').reduce((sum, item) => sum + Number(item.openAmount), 0)
@@ -232,6 +278,11 @@ function Overview({
     invoice.issueDate.startsWith(today) && invoice.type === 'INVOICE' && invoice.status === 'AUTHORIZED',
   ).length
   const openPipeline = leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).reduce((sum, lead) => sum + Number(lead.estimatedValue ?? 0), 0)
+  const trendMaximum = Math.max(...(taxDashboard?.trend.map((point) => Math.max(Number(point.total), 0)) ?? [0]), 1)
+  const currentTax = taxDashboard?.currentMonth
+  const currentTaxMonth = currentTax
+    ? new Date(currentTax.year, currentTax.month - 1, 1).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })
+    : ''
   return (
     <>
       <ErpPageHeader
@@ -240,7 +291,7 @@ function Overview({
         subtitle="El pulso de cobranza, emisión y oportunidades de tu empresa."
         meta={<span className="date-chip">RUC {context.ruc}</span>}
       />
-      <section className="metric-grid" aria-label="Indicadores operativos">
+      <ErpMetricGrid ariaLabel="Indicadores operativos">
         <article className="metric-card">
           <span className="metric-label">Por cobrar</span>
           <strong>${formatAmount(outstanding)}</strong>
@@ -261,6 +312,55 @@ function Overview({
           <strong className="metric-success">${formatAmount(openPipeline)}</strong>
           <p>{leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).length} oportunidades CRM activas.</p>
         </article>
+      </ErpMetricGrid>
+      <section className="dashboard-financial-grid" aria-label="Ventas y corte tributario">
+        <ErpPanel title="Evolución de ventas" actions={<ErpStatusBadge>Últimos 12 meses</ErpStatusBadge>}>
+          {taxDashboardQuery.isPending ? <p aria-busy="true">Cargando evolución…</p> : null}
+          {taxDashboardQuery.error ? <p className="form-error" role="alert">No se pudo cargar el corte tributario.</p> : null}
+          {taxDashboard ? (
+            <ol className="sales-trend" aria-label="Ventas autorizadas netas por mes">
+              {taxDashboard.trend.map((point) => {
+                const label = new Date(point.year, point.month - 1, 1).toLocaleDateString('es-EC', { month: 'short', year: '2-digit' })
+                const width = Math.max((Math.max(Number(point.total), 0) / trendMaximum) * 100, Number(point.total) ? 2 : 0)
+                return (
+                  <li key={`${point.year}-${point.month}`} aria-label={`${label}: ${formatAmount(point.total)} dólares`}>
+                    <span className="sales-trend-label">{label}</span>
+                    <span className="sales-trend-track" aria-hidden="true"><span style={{ width: `${width}%` }} /></span>
+                    <strong>${formatAmount(point.total)}</strong>
+                  </li>
+                )
+              })}
+            </ol>
+          ) : null}
+        </ErpPanel>
+        <ErpPanel
+          title={currentTax ? `Compras vs. ventas · ${currentTaxMonth}` : 'Compras vs. ventas'}
+          actions={currentTax ? <ErpStatusBadge tone={currentTax.isPreliminary ? 'warning' : 'success'}>{currentTax.isPreliminary ? 'Preliminar' : 'Respaldado'}</ErpStatusBadge> : undefined}
+        >
+          {currentTax ? (
+            <div className="monthly-tax-card">
+              <dl className="monthly-tax-comparison">
+                <div><dt>Ventas autorizadas</dt><dd>${formatAmount(currentTax.authorizedSalesTotal)}</dd></div>
+                {currentTax.authorizedSalesTotal !== currentTax.evidencedSalesTotal ? <div><dt>Ventas ya cargadas en Tributario</dt><dd>${formatAmount(currentTax.evidencedSalesTotal)}</dd></div> : null}
+                <div><dt>Compras desde XML</dt><dd>${formatAmount(currentTax.purchasesTotal)}</dd></div>
+                <div><dt>IVA generado</dt><dd>${formatAmount(currentTax.ivaGenerated)}</dd></div>
+                <div><dt>IVA de compras</dt><dd>− ${formatAmount(currentTax.ivaCredit)}</dd></div>
+                <div><dt>Retención de IVA</dt><dd>− ${formatAmount(currentTax.retainedIva)}</dd></div>
+              </dl>
+              <div className="monthly-tax-result">
+                <span>IVA estimado a pagar</span>
+                <strong>${formatAmount(currentTax.ivaPayable)}</strong>
+                {Number(currentTax.ivaCreditBalance) > 0 ? <small>Crédito estimado a favor: ${formatAmount(currentTax.ivaCreditBalance)}</small> : null}
+              </div>
+              {currentTax.isPreliminary ? (
+                <div className="tax-estimate-warning" role="alert">
+                  <strong>Estimación, no declaración.</strong>
+                  <ul>{currentTax.preliminaryReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+                </div>
+              ) : <p className="fine-print">Calculado con la evidencia tributaria del periodo. Declarar y pagar aún exige revisión humana.</p>}
+            </div>
+          ) : null}
+        </ErpPanel>
       </section>
       <section className="readiness-panel">
         <div>
@@ -467,10 +567,18 @@ function PartiesPage({
 
 function ContractsPage({
   parties,
+  products,
+  taxes,
+  establishments,
+  emissionPoints,
   token,
   initialPartyId,
 }: {
   parties: Party[]
+  products: Product[]
+  taxes: TaxCategory[]
+  establishments: Establishment[]
+  emissionPoints: EmissionPoint[]
   token: string
   initialPartyId?: string
 }) {
@@ -479,17 +587,40 @@ function ContractsPage({
   const [partyId, setPartyId] = useState(initialPartyId ?? '')
   const [selected, setSelected] = useState<CommercialContract | null>(null)
   const [creating, setCreating] = useState(false)
+  const [newPartyId, setNewPartyId] = useState(initialPartyId ?? '')
+  const [pdfPreview, setPdfPreview] = useState<ContractArtifactDownload | null>(null)
+  const [syncResult, setSyncResult] = useState<{ versionId: string; result: ContractEmailSync } | null>(null)
+  const wonLeadsQuery = useQuery({
+    queryKey: ['crm', 'leads', 'WON'],
+    queryFn: () => apiRequest<Lead[]>(token, '/crm/leads?status=WON'),
+  })
   const contractsQuery = useQuery({
     queryKey: ['commercial', 'contracts', partyId],
     queryFn: () => apiRequest<CommercialContract[]>(token, `/commercial/contracts${partyId ? `?party_id=${partyId}` : ''}`),
   })
+  const currentContract = contractsQuery.data?.find((contract) => contract.id === selected?.id) ?? selected
   const versionsQuery = useQuery({
     queryKey: ['commercial', 'contracts', selected?.id, 'versions'],
     queryFn: () => apiRequest<ContractVersion[]>(token, `/commercial/contracts/${selected?.id}/versions`),
     enabled: Boolean(selected),
   })
+  const proposalsQuery = useQuery({
+    queryKey: ['commercial', 'billing-proposals', selected?.id],
+    queryFn: () => apiRequest<BillingProposal[]>(token, `/commercial/billing-proposals?contract_id=${selected?.id}`),
+    enabled: Boolean(selected),
+  })
+  const awsCutsQuery = useQuery({
+    queryKey: ['commercial', 'aws-cuts', currentContract?.partyId],
+    queryFn: () => apiRequest<AwsConsumptionCut[]>(token, `/commercial/aws-consumption-cuts?party_id=${currentContract?.partyId}`),
+    enabled: currentContract?.serviceType === 'AWS_MONTHLY',
+  })
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts'] })
+    void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts', selected?.id, 'versions'] })
+    void queryClient.invalidateQueries({ queryKey: ['commercial', 'billing-proposals', selected?.id] })
+  }
   const createContract = useMutation({
-    mutationFn: (data: { partyId: string; contractNumber: string; title: string }) =>
+    mutationFn: (data: Record<string, unknown>) =>
       apiRequest<CommercialContract>(token, '/commercial/contracts', {
         method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract') }, body: JSON.stringify(data),
       }),
@@ -504,94 +635,203 @@ function ContractsPage({
     mutationFn: (data: Record<string, unknown>) => apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions`, {
       method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-version') }, body: JSON.stringify(data),
     }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts', selected?.id, 'versions'] }),
+    onSuccess: refresh,
   })
-  const uploadSigned = useMutation({
-    mutationFn: async ({ versionId, file }: { versionId: string; file: File }) => {
+  const uploadContractPdf = useMutation({
+    mutationFn: async ({ versionId, file, kind }: { versionId: string; file: File; kind: 'sent' | 'signed' }) => {
       const form = new FormData()
       form.append('file', file)
-      return apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/signed-pdf`, {
-        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-pdf') }, body: form,
+      return apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/${kind}-pdf`, {
+        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey(`web-contract-${kind}-pdf`) }, body: form,
       })
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts', selected?.id, 'versions'] })
-      void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts'] })
-    },
+    onSuccess: refresh,
   })
-  const downloadSigned = useMutation({
-    mutationFn: (versionId: string) => apiRequest<ContractArtifactDownload>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/signed-pdf`),
-    onSuccess: (artifact) => window.open(artifact.downloadUrl, '_blank', 'noopener,noreferrer'),
+  const downloadPdf = useMutation({
+    mutationFn: ({ versionId, kind }: { versionId: string; kind: 'sent' | 'signed' }) => apiRequest<ContractArtifactDownload>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/${kind}-pdf?inline=true`),
+    onSuccess: setPdfPreview,
+  })
+  const sendEmail = useMutation({
+    mutationFn: ({ versionId, subject, message }: { versionId: string; subject: string; message: string }) => apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/email`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-email') }, body: JSON.stringify({ subject, message }),
+    }),
+    onSuccess: refresh,
+  })
+  const syncEmail = useMutation({
+    mutationFn: (versionId: string) => apiRequest<ContractEmailSync>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/email-sync`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-email-sync') },
+    }),
+    onSuccess: (result, versionId) => { setSyncResult({ versionId, result }); refresh() },
+  })
+  const versionAction = useMutation({
+    mutationFn: ({ versionId, action }: { versionId: string; action: 'confirm-firmaec' | 'activate' }) => apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/${action}`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey(`web-contract-${action}`) },
+    }),
+    onSuccess: refresh,
+  })
+  const createAwsCut = useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiRequest<AwsConsumptionCut>(token, '/commercial/aws-consumption-cuts', {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-aws-cut') }, body: JSON.stringify(data),
+    }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commercial', 'aws-cuts', currentContract?.partyId] }),
+  })
+  const uploadAwsEvidence = useMutation({
+    mutationFn: async ({ cutId, file }: { cutId: string; file: File }) => {
+      const form = new FormData(); form.append('file', file)
+      return apiRequest<AwsConsumptionCut>(token, `/commercial/aws-consumption-cuts/${cutId}/evidence`, {
+        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-aws-evidence') }, body: form,
+      })
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commercial', 'aws-cuts'] }),
+  })
+  const confirmAwsCut = useMutation({
+    mutationFn: (cutId: string) => apiRequest<AwsConsumptionCut>(token, `/commercial/aws-consumption-cuts/${cutId}/confirm`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-aws-confirm') },
+    }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commercial', 'aws-cuts'] }),
+  })
+  const prepareBilling = useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiRequest<BillingProposal>(token, `/commercial/contracts/${selected?.id}/prepare-billing`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-billing') }, body: JSON.stringify(data),
+    }),
+    onSuccess: refresh,
+  })
+  const uploadReport = useMutation({
+    mutationFn: async ({ proposalId, file }: { proposalId: string; file: File }) => {
+      const form = new FormData(); form.append('file', file)
+      return apiRequest<BillingProposal>(token, `/commercial/billing-proposals/${proposalId}/report`, {
+        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-billing-report') }, body: form,
+      })
+    },
+    onSuccess: refresh,
+  })
+  const proposalAction = useMutation({
+    mutationFn: ({ proposalId, action }: { proposalId: string; action: 'report/approve' | 'create-invoice-draft' }) => apiRequest<BillingProposal | SalesDocument>(token, `/commercial/billing-proposals/${proposalId}/${action}`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey(`web-proposal-${action}`) },
+    }),
+    onSuccess: refresh,
   })
 
   function submitContract(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
-    createContract.mutate({ partyId: String(data.get('partyId')), contractNumber: String(data.get('contractNumber')).trim(), title: String(data.get('title')).trim() })
+    createContract.mutate({
+      partyId: String(data.get('partyId')),
+      contractNumber: String(data.get('contractNumber')).trim(),
+      title: String(data.get('title')).trim(),
+      serviceType: String(data.get('serviceType')),
+      sourceLeadId: data.get('sourceLeadId') || null,
+      parentContractId: data.get('parentContractId') || null,
+      reportRequired: data.get('reportRequired') === 'on',
+      collectionEnabled: data.get('collectionEnabled') === 'on',
+    })
   }
   function submitVersion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
+    const product = products.find((item) => item.id === String(data.get('productId')))
+    const tax = taxes.find((item) => item.id === product?.taxCategoryId)
+    const invoiceRule = {
+      type: currentContract?.serviceType,
+      establishmentId: String(data.get('establishmentId')),
+      emissionPointId: String(data.get('emissionPointId')),
+      productId: product?.id,
+      taxCode: tax?.sriCode,
+      description: String(data.get('description') || currentContract?.title || '').trim(),
+      currency: 'USD',
+    }
+    let pricingRules: Array<Record<string, unknown>> = []
+    if (currentContract?.serviceType === 'FIXED_MONTHLY') pricingRules = [{ ...invoiceRule, amount: String(data.get('amount')) }]
+    if (currentContract?.serviceType === 'AWS_MONTHLY') pricingRules = [invoiceRule]
+    if (currentContract?.serviceType === 'MILESTONE') {
+      const baseAmount = String(data.get('baseAmount'))
+      pricingRules = String(data.get('milestones')).split(',').map((part, index) => {
+        const value = part.trim()
+        return value.endsWith('%')
+          ? { ...invoiceRule, label: `Hito ${index + 1}`, percentage: value.slice(0, -1), baseAmount }
+          : { ...invoiceRule, label: `Hito ${index + 1}`, amount: value }
+      }).filter((rule) => ('amount' in rule && Boolean(rule.amount)) || ('percentage' in rule && Boolean(rule.percentage)))
+    }
     createVersion.mutate({
       validFrom: String(data.get('validFrom')),
       validTo: String(data.get('validTo')) || null,
       paymentTermsDays: Number(data.get('paymentTermsDays')),
       renewalNoticeDays: data.get('renewalNoticeDays') === '' ? null : Number(data.get('renewalNoticeDays')),
-      pricingRules: [{ type: 'FIXED_MONTHLY', amount: String(data.get('amount')), currency: 'USD' }],
+      pricingRules,
       amendsVersionId: versionsQuery.data?.[0]?.id ?? null,
     })
   }
-  function submitPdf(event: FormEvent<HTMLFormElement>, versionId: string) {
+  function submitPdf(event: FormEvent<HTMLFormElement>, versionId: string, kind: 'sent' | 'signed') {
     event.preventDefault()
     const file = new FormData(event.currentTarget).get('file')
-    if (file instanceof File && file.size > 0) uploadSigned.mutate({ versionId, file })
+    if (file instanceof File && file.size > 0) uploadContractPdf.mutate({ versionId, file, kind })
   }
+  const activeVersion = versionsQuery.data?.find((version) => version.status === 'ACTIVE')
+  const billingNeedsConfig = currentContract?.serviceType !== 'ACCESSORY' && currentContract?.serviceType !== 'ONE_OFF'
+  const error = createContract.error ?? createVersion.error ?? uploadContractPdf.error ?? sendEmail.error ?? syncEmail.error ?? versionAction.error ?? createAwsCut.error ?? uploadAwsEvidence.error ?? confirmAwsCut.error ?? prepareBilling.error ?? uploadReport.error ?? proposalAction.error
 
   if (creating) return (
     <>
       <ErpPageHeader eyebrow="Comercial" title="Nuevo contrato" subtitle="Crea el registro comercial antes de agregar versiones o el PDF firmado." />
       <ErpFormPanel eyebrow="Contrato" title="Datos del contrato" submitLabel="Guardar contrato" pending={createContract.isPending} error={createContract.error?.message} onSubmit={submitContract} onCancel={() => setCreating(false)}>
-        <label>Cliente<select name="partyId" defaultValue={partyId} required><option value="" disabled>Selecciona un cliente</option>{customers.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label>
+        <label>Cliente<select name="partyId" value={newPartyId} onChange={(event) => { setNewPartyId(event.target.value); setPartyId(event.target.value) }} required><option value="" disabled>Selecciona un cliente</option>{customers.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label>
+        <label>Oportunidad ganada (opcional)<select name="sourceLeadId" defaultValue=""><option value="">Sin vínculo</option>{(wonLeadsQuery.data ?? []).filter((lead) => lead.partyId === newPartyId).map((lead) => <option key={lead.id} value={lead.id}>{lead.title}</option>)}</select></label>
         <label>Número de contrato<input name="contractNumber" maxLength={80} required placeholder="CT-2026-001" /></label>
         <label>Nombre o asunto<input name="title" maxLength={200} required placeholder="Servicios administrados AWS" /></label>
+        <label>Tipo de servicio<select name="serviceType" defaultValue="FIXED_MONTHLY"><option value="FIXED_MONTHLY">Mensual fijo</option><option value="AWS_MONTHLY">AWS por consumo</option><option value="MILESTONE">Por hitos</option><option value="ACCESSORY">Documento accesorio</option></select></label>
+        <label>Contrato principal (solo accesorios)<select name="parentContractId" defaultValue=""><option value="">No aplica</option>{(contractsQuery.data ?? []).filter((contract) => contract.partyId === newPartyId && contract.serviceType !== 'ACCESSORY').map((contract) => <option key={contract.id} value={contract.id}>{contract.contractNumber} · {contract.title}</option>)}</select></label>
+        <label className="checkbox-field"><input name="reportRequired" type="checkbox" /> Exige informe mensual antes de enviar la factura</label>
+        <label className="checkbox-field"><input name="collectionEnabled" type="checkbox" /> Permitir mensajes de cobranza</label>
       </ErpFormPanel>
     </>
   )
 
-  if (selected) return (
+  if (selected && currentContract) return (
     <>
-      <ErpPageHeader eyebrow="Contrato comercial" title={selected.title} subtitle={`Contrato ${selected.contractNumber}. Las versiones firmadas no se editan: se agrega una nueva versión.`} actions={<ErpButton variant="secondary" onClick={() => setSelected(null)}>Volver al listado</ErpButton>} />
+      <ErpPageHeader eyebrow="Contrato comercial" title={currentContract.title} subtitle={`Contrato ${currentContract.contractNumber}. El PDF se prepara fuera de IAERP y cada envío queda fijo.`} actions={<ErpButton variant="secondary" onClick={() => setSelected(null)}>Volver al listado</ErpButton>} />
       <section className="split-layout">
         <ErpPanel title="Versiones" count={versionsQuery.data?.length ?? 0}>
           {versionsQuery.isPending ? <p>Cargando versiones…</p> : null}
           {(versionsQuery.data ?? []).map((version) => (
             <article key={version.id} className="contract-version">
               <div><strong>Versión {version.versionNumber}</strong><p>{version.validFrom}{version.validTo ? ` a ${version.validTo}` : ' en adelante'} · {version.paymentTermsDays} días de pago</p></div>
-              <ErpStatusBadge tone={version.status === 'SIGNED' || version.status === 'ACTIVE' ? 'success' : 'warning'}>{version.status === 'SIGNED' ? 'Firmada' : 'Borrador'}</ErpStatusBadge>
-              {version.signedArtifactSha256 ? <><p className="fine-print">PDF privado registrado · SHA-256 {version.signedArtifactSha256.slice(0, 12)}…</p><ErpButton variant="ghost" onClick={() => downloadSigned.mutate(version.id)} disabled={downloadSigned.isPending}>Ver PDF firmado</ErpButton></> : (
-                <form className="inline-form" onSubmit={(event) => submitPdf(event, version.id)}><label>PDF firmado<input name="file" type="file" accept="application/pdf,.pdf" required /></label><ErpButton variant="secondary" type="submit" disabled={uploadSigned.isPending}>{uploadSigned.isPending ? 'Guardando…' : 'Guardar PDF y firmar'}</ErpButton></form>
-              )}
+              <ErpStatusBadge tone={version.status === 'SIGNED' || version.status === 'ACTIVE' ? 'success' : 'warning'}>{version.status === 'ACTIVE' ? 'Activo' : version.status === 'SIGNED' ? 'Firmado' : version.status === 'PENDING_SIGNATURE' ? 'Esperando firma' : version.status === 'EXPIRED' ? 'Vencido' : 'Borrador'}</ErpStatusBadge>
+              {!version.sentArtifactSha256 ? <form className="inline-form" onSubmit={(event) => submitPdf(event, version.id, 'sent')}><label>PDF terminado<input name="file" type="file" accept="application/pdf,.pdf" required /></label><ErpButton variant="secondary" type="submit" disabled={uploadContractPdf.isPending}>Guardar PDF</ErpButton></form> : null}
+              {version.sentArtifactSha256 ? <div className="inline-form"><span className="fine-print">PDF enviado · SHA-256 {version.sentArtifactSha256.slice(0, 12)}…</span><ErpButton variant="ghost" onClick={() => downloadPdf.mutate({ versionId: version.id, kind: 'sent' })}>Ver enviado</ErpButton></div> : null}
+              {version.status === 'DRAFT' && version.sentArtifactSha256 ? <form className="vertical-form" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); sendEmail.mutate({ versionId: version.id, subject: String(data.get('subject')), message: String(data.get('message')) }) }}><label>Asunto<input name="subject" defaultValue={`Contrato ${currentContract.contractNumber} para revisión`} required /></label><label>Mensaje<textarea name="message" defaultValue="Adjuntamos el contrato para su revisión. Por favor responda en este mismo hilo con el PDF firmado." required /></label><ErpButton variant="primary" type="submit" disabled={sendEmail.isPending}>Enviar por Gmail</ErpButton></form> : null}
+              {version.gmailThreadId && !version.firmaecConfirmedAt ? <div className="inline-form"><ErpButton variant="secondary" onClick={() => syncEmail.mutate(version.id)} disabled={syncEmail.isPending}>Revisar respuesta en Gmail</ErpButton>{syncResult?.versionId === version.id ? <span role="status">{syncResult.result.signedPdfReceived ? 'PDF firmado recibido' : syncResult.result.replyDetected ? 'Hay respuesta, aún sin PDF nuevo' : 'Sin respuesta nueva'}</span> : null}</div> : null}
+              {!version.signedArtifactSha256 && version.status === 'PENDING_SIGNATURE' ? <form className="inline-form" onSubmit={(event) => submitPdf(event, version.id, 'signed')}><label>O cargar PDF recibido<input name="file" type="file" accept="application/pdf,.pdf" required /></label><ErpButton variant="secondary" type="submit" disabled={uploadContractPdf.isPending}>Guardar firmado</ErpButton></form> : null}
+              {version.signedArtifactSha256 ? <><p className="fine-print">PDF firmado · SHA-256 {version.signedArtifactSha256.slice(0, 12)}… · {version.signaturePrecheckStatus === 'SIGNATURE_FOUND' ? 'firma técnica encontrada' : 'la revisión técnica no encontró firma'}</p><div className="inline-form"><ErpButton variant="ghost" onClick={() => downloadPdf.mutate({ versionId: version.id, kind: 'signed' })}>Ver firmado</ErpButton>{!version.firmaecConfirmedAt ? <ErpButton variant="secondary" onClick={() => versionAction.mutate({ versionId: version.id, action: 'confirm-firmaec' })}>Ya validé en FirmaEC</ErpButton> : null}{version.status === 'SIGNED' ? <ErpButton variant="primary" onClick={() => versionAction.mutate({ versionId: version.id, action: 'activate' })}>Activar contrato</ErpButton> : null}</div></> : null}
             </article>
           ))}
           {versionsQuery.error ? <p className="form-error" role="alert">{versionsQuery.error.message}</p> : null}
+          {downloadPdf.error ? <p className="form-error" role="alert">{downloadPdf.error.message}</p> : null}
         </ErpPanel>
-        <ErpFormPanel eyebrow="Nueva versión" title="Términos comerciales" submitLabel="Agregar versión" pending={createVersion.isPending} error={createVersion.error?.message} onSubmit={submitVersion} onCancel={() => setSelected(null)}>
+        <ErpFormPanel eyebrow="Nueva versión" title="Vigencia y cobro" submitLabel="Agregar versión" pending={createVersion.isPending} error={createVersion.error?.message} onSubmit={submitVersion} onCancel={() => setSelected(null)}>
           <label>Vigente desde<input name="validFrom" type="date" defaultValue={todayInFiscalTimezone()} required /></label>
           <label>Vigente hasta (opcional)<input name="validTo" type="date" /></label>
           <div className="field-row"><label>Pago en días<input name="paymentTermsDays" type="number" min="0" max="365" defaultValue="30" required /></label><label>Aviso de renovación (días)<input name="renewalNoticeDays" type="number" min="0" max="365" /></label></div>
-          <label>Valor mensual USD<input name="amount" type="number" min="0" step="0.01" required /></label>
+          {billingNeedsConfig ? <><label>Establecimiento<select name="establishmentId" required><option value="">Selecciona</option>{establishments.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label><label>Punto de emisión<select name="emissionPointId" required><option value="">Selecciona</option>{emissionPoints.map((item) => <option key={item.id} value={item.id}>{item.code}</option>)}</select></label><label>Servicio del catálogo<select name="productId" required><option value="">Selecciona</option>{products.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Texto de la factura<input name="description" defaultValue={currentContract.title} required /></label></> : null}
+          {currentContract.serviceType === 'FIXED_MONTHLY' ? <label>Valor mensual USD<input name="amount" type="number" min="0" step="0.01" required /></label> : null}
+          {currentContract.serviceType === 'MILESTONE' ? <><label>Hitos separados por coma<input name="milestones" placeholder="40%, 20%, 40%" required /></label><label>Valor total para porcentajes<input name="baseAmount" type="number" min="0" step="0.01" required /></label></> : null}
+          {currentContract.serviceType === 'AWS_MONTHLY' ? <p className="fine-print">El valor se tomará del corte mensual de StreamOne revisado.</p> : null}
           <p className="fine-print">Esta versión es comercial. No crea ni emite una factura SRI.</p>
         </ErpFormPanel>
       </section>
+      {currentContract.serviceType === 'AWS_MONTHLY' ? <ErpPanel title="Cortes AWS" count={awsCutsQuery.data?.length ?? 0}><form className="inline-form" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); createAwsCut.mutate({ partyId: currentContract.partyId, periodStart: data.get('periodStart'), periodEnd: data.get('periodEnd'), source: 'XLSX_UPLOAD', totalCost: data.get('totalCost'), currency: 'USD', reconciliationSummary: { source: 'StreamOne', totalEnteredManually: true } }) }}><label>Desde<input name="periodStart" type="date" required /></label><label>Hasta<input name="periodEnd" type="date" required /></label><label>Total conciliado<input name="totalCost" type="number" min="0" step="0.01" required /></label><ErpButton variant="secondary" type="submit">Crear corte</ErpButton></form>{(awsCutsQuery.data ?? []).map((cut) => <article className="contract-version" key={cut.id}><strong>{cut.periodStart} a {cut.periodEnd} · ${cut.totalCost}</strong><span>{cut.status}</span>{!cut.evidenceSha256 ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const file = new FormData(event.currentTarget).get('file'); if (file instanceof File) uploadAwsEvidence.mutate({ cutId: cut.id, file }) }}><label>Reporte privado<input name="file" type="file" accept=".csv,.xls,.xlsx,.pdf" required /></label><ErpButton variant="secondary" type="submit">Guardar reporte</ErpButton></form> : null}{cut.status === 'RECONCILED' ? <ErpButton variant="primary" onClick={() => confirmAwsCut.mutate(cut.id)}>Confirmar total revisado</ErpButton> : null}</article>)}</ErpPanel> : null}
+      {currentContract.status === 'ACTIVE' && activeVersion && billingNeedsConfig ? <ErpFormPanel eyebrow="Facturación" title="Preparar cobro" submitLabel="Preparar para revisar" pending={prepareBilling.isPending} error={prepareBilling.error?.message} onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); prepareBilling.mutate({ periodStart: data.get('periodStart'), periodEnd: data.get('periodEnd'), pricingRuleIndex: Number(data.get('pricingRuleIndex') || 0), awsConsumptionCutId: data.get('awsConsumptionCutId') || null, manualTotal: data.get('manualTotal') || null }) }} onCancel={() => undefined}><label>Período desde<input name="periodStart" type="date" required /></label><label>Período hasta<input name="periodEnd" type="date" required /></label>{currentContract.serviceType === 'MILESTONE' ? <label>Hito<select name="pricingRuleIndex">{activeVersion.pricingRules.map((rule, index) => <option key={index} value={index}>{String(rule.label ?? `Hito ${index + 1}`)}</option>)}</select></label> : null}{currentContract.serviceType === 'AWS_MONTHLY' ? <><label>Corte revisado<select name="awsConsumptionCutId" required><option value="">Selecciona</option>{(awsCutsQuery.data ?? []).filter((cut) => cut.status === 'REVIEWED').map((cut) => <option key={cut.id} value={cut.id}>{cut.periodStart} · ${cut.totalCost}</option>)}</select></label><label>Total escrito y conciliado<input name="manualTotal" type="number" min="0" step="0.01" required /></label></> : null}<p className="fine-print">Esto crea una tarea para revisar, no una factura.</p></ErpFormPanel> : null}
+      <ErpPanel title="Cobros preparados" count={proposalsQuery.data?.length ?? 0}>{(proposalsQuery.data ?? []).map((proposal) => <article className="contract-version" key={proposal.id}><div><strong>{proposal.periodStart ?? proposal.issueDate} · ${proposal.totalAmount}</strong><p>{proposal.billingType} · {proposal.collectionEnabled ? 'Cobranza permitida' : 'Sin cobranza'}</p></div><ErpStatusBadge tone={proposal.status === 'CONVERTED' ? 'success' : 'warning'}>{proposal.status === 'CONVERTED' ? 'Borrador creado' : 'Por revisar'}</ErpStatusBadge>{proposal.reportRequired && !proposal.reportSha256 ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const file = new FormData(event.currentTarget).get('file'); if (file instanceof File) uploadReport.mutate({ proposalId: proposal.id, file }) }}><label>Informe mensual PDF<input name="file" type="file" accept="application/pdf,.pdf" required /></label><ErpButton variant="secondary" type="submit">Guardar informe</ErpButton></form> : null}{proposal.reportSha256 && !proposal.reportApprovedAt ? <ErpButton variant="secondary" onClick={() => proposalAction.mutate({ proposalId: proposal.id, action: 'report/approve' })}>Aprobar informe</ErpButton> : null}{proposal.status === 'READY_FOR_REVIEW' ? <ErpButton variant="primary" onClick={() => proposalAction.mutate({ proposalId: proposal.id, action: 'create-invoice-draft' })}>Crear borrador</ErpButton> : null}</article>)}{!proposalsQuery.isPending && (proposalsQuery.data ?? []).length === 0 ? <ErpEmptyState title="No hay cobros preparados" description="Cuando el contrato esté activo, prepara el período que vas a facturar." /> : null}</ErpPanel>
+      {error ? <p className="form-error" role="alert">{error.message}</p> : null}
+      {pdfPreview ? <PdfPreviewModal title="Documento del contrato" artifact={pdfPreview} onClose={() => setPdfPreview(null)} /> : null}
     </>
   )
 
   return (
     <>
-      <ErpPageHeader eyebrow="Comercial" title="Contratos" subtitle="Contratos y versiones comerciales por cliente. Los PDF firmados se guardan de forma privada." actions={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} />
+      <ErpPageHeader eyebrow="Comercial" title="Contratos" subtitle="PDF, firma, vigencia y cobros en un solo lugar. Las cláusulas se preparan fuera de IAERP." actions={<ErpButton variant="primary" onClick={() => { setNewPartyId(partyId); setCreating(true) }}>Nuevo contrato</ErpButton>} />
       <ErpToolbar ariaLabel="Filtros de contratos"><label>Cliente<select value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Todos los clientes</option>{customers.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label></ErpToolbar>
       <ErpPanel title="Listado comercial" count={contractsQuery.data?.length ?? 0}>
-        <div className="table-wrap" tabIndex={0} aria-label="Listado de contratos"><table className="erp-responsive-table"><thead><tr><th>Contrato</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{(contractsQuery.data ?? []).map((contract) => <tr key={contract.id}><td><strong>{contract.contractNumber}</strong><small>{contract.title}</small></td><td>{parties.find((party) => party.id === contract.partyId)?.name ?? 'Cliente'}</td><td><ErpStatusBadge tone={contract.status === 'SIGNED' || contract.status === 'ACTIVE' ? 'success' : 'warning'}>{contract.status === 'SIGNED' ? 'Firmado' : 'Borrador'}</ErpStatusBadge></td><td><ErpActionCell><ErpButton variant="ghost" onClick={() => setSelected(contract)}>Abrir</ErpButton></ErpActionCell></td></tr>)}</tbody></table>{!contractsQuery.isPending && (contractsQuery.data ?? []).length === 0 ? <ErpEmptyState title="No hay contratos" description="Crea un contrato para un cliente y agrega su primera versión." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} /> : null}</div>
+        <div className="table-wrap" tabIndex={0} aria-label="Listado de contratos"><table className="erp-responsive-table"><thead><tr><th>Contrato</th><th>Cliente</th><th>Tipo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{(contractsQuery.data ?? []).map((contract) => <tr key={contract.id}><td><strong>{contract.contractNumber}</strong><small>{contract.title}</small></td><td>{parties.find((party) => party.id === contract.partyId)?.name ?? 'Cliente'}</td><td>{contract.serviceType === 'AWS_MONTHLY' ? 'AWS' : contract.serviceType === 'FIXED_MONTHLY' ? 'Mensual fijo' : contract.serviceType === 'MILESTONE' ? 'Hitos' : 'Accesorio'}</td><td><ErpStatusBadge tone={contract.status === 'SIGNED' || contract.status === 'ACTIVE' ? 'success' : 'warning'}>{contract.status === 'ACTIVE' ? 'Activo' : contract.status === 'SIGNED' ? 'Firmado' : contract.status === 'PENDING_SIGNATURE' ? 'Esperando firma' : 'Borrador'}</ErpStatusBadge></td><td><ErpActionCell><ErpButton variant="ghost" onClick={() => setSelected(contract)}>Abrir</ErpButton></ErpActionCell></td></tr>)}</tbody></table>{!contractsQuery.isPending && (contractsQuery.data ?? []).length === 0 ? <ErpEmptyState title="No hay contratos" description="Crea un contrato para un cliente y agrega su primera versión." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} /> : null}</div>
         {contractsQuery.error ? <p className="form-error" role="alert">{contractsQuery.error.message}</p> : null}
       </ErpPanel>
     </>
@@ -881,6 +1121,17 @@ function InvoiceStatusBadge({ status }: { status: SalesDocumentStatus }) {
   return <ErpStatusBadge tone={invoiceStatusTone[status]}>{invoiceStatusLabels[status]}</ErpStatusBadge>
 }
 
+function CollectionStatusBadge({ status }: { status: AccountItemStatus | null | undefined }) {
+  if (!status) return <span className="fine-print">—</span>
+  const labels: Record<AccountItemStatus, string> = {
+    OPEN: 'Pendiente', PARTIAL: 'Parcial', OVERDUE: 'Vencida', SETTLED: '✓ Pagada', VOIDED: 'Anulada',
+  }
+  const tones: Record<AccountItemStatus, 'neutral' | 'success' | 'warning' | 'danger'> = {
+    OPEN: 'neutral', PARTIAL: 'warning', OVERDUE: 'danger', SETTLED: 'success', VOIDED: 'danger',
+  }
+  return <ErpStatusBadge tone={tones[status]}>{labels[status]}</ErpStatusBadge>
+}
+
 const sriTransmissionStatusLabels: Record<string, string> = {
   PENDING: 'PENDIENTE DE ENVÍO',
   RECEIVED: 'RECIBIDA POR SRI',
@@ -983,6 +1234,17 @@ function NewInvoiceForm({
 
   const availableEmissionPoints = emissionPoints.filter(
     (point) => point.establishmentId === establishmentId,
+  )
+  // La identificación va como pista buscable: dos clientes pueden llamarse casi
+  // igual y el RUC es lo que los distingue.
+  const customerOptions = useMemo(
+    () =>
+      customers.map((customer) => ({
+        value: customer.id,
+        label: customer.name,
+        hint: customer.identificationNumber,
+      })),
+    [customers],
   )
   const previewPayload = JSON.stringify({
     issueDate,
@@ -1090,15 +1352,17 @@ function NewInvoiceForm({
     >
       <label>
         Cliente
-        <select value={customerId} onChange={(event) => {
-          const nextId = event.target.value
-          setCustomerId(nextId)
-          setPaymentTermsDays(customers.find((customer) => customer.id === nextId)?.paymentTermsDays ?? defaultPaymentTermsDays)
-        }} required>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>{customer.name}</option>
-          ))}
-        </select>
+        <ErpCombobox
+          ariaLabel="Cliente"
+          placeholder="Buscar por nombre o identificación…"
+          options={customerOptions}
+          value={customerId}
+          onChange={(nextId) => {
+            setCustomerId(nextId)
+            setPaymentTermsDays(customers.find((customer) => customer.id === nextId)?.paymentTermsDays ?? defaultPaymentTermsDays)
+          }}
+          required
+        />
       </label>
       <div className="field-row">
         <label>
@@ -1294,6 +1558,9 @@ function InvoiceDetail({
 }) {
   const queryClient = useQueryClient()
   const [ridePreview, setRidePreview] = useState<ArtifactDownload | null>(null)
+  const [emailing, setEmailing] = useState(false)
+  const [emailRecipient, setEmailRecipient] = useState('')
+  const [sentEmail, setSentEmail] = useState<InvoiceEmailResult | null>(null)
   const [archiving, setArchiving] = useState(false)
   const [archiveReason, setArchiveReason] = useState('Prueba de emisión SRI; comprobante no autorizado.')
   const invoiceQuery = useQuery({
@@ -1311,6 +1578,11 @@ function InvoiceDetail({
     queryFn: () => apiRequest<DocumentArtifact[]>(token, `/invoices/${invoiceId}/artifacts`),
     enabled: Boolean(invoiceQuery.data),
   })
+  const emailPreviewQuery = useQuery({
+    queryKey: ['invoices', invoiceId, 'email-preview'],
+    queryFn: () => apiRequest<InvoiceEmailPreview>(token, `/invoices/${invoiceId}/email-preview`),
+    enabled: emailing && invoiceQuery.data?.status === 'AUTHORIZED',
+  })
 
   const issueInvoice = useMutation({
     mutationFn: () =>
@@ -1321,6 +1593,19 @@ function InvoiceDetail({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       void invoiceQuery.refetch()
+    },
+  })
+
+  const updateCollection = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiRequest<SalesDocument>(token, `/invoices/${invoiceId}/collection-policy`, {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('web-invoice-collection') },
+        body: JSON.stringify({ enabled }),
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['invoices', invoiceId], updated)
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
   })
 
@@ -1349,6 +1634,18 @@ function InvoiceDetail({
     },
   })
 
+  const emailInvoice = useMutation({
+    mutationFn: () => apiRequest<InvoiceEmailResult>(token, `/invoices/${invoiceId}/email`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey('web-email-invoice') },
+      body: JSON.stringify({ recipient: emailRecipient.trim() }),
+    }),
+    onSuccess: (result) => {
+      setSentEmail(result)
+      setEmailing(false)
+    },
+  })
+
   async function downloadArtifact(artifactId: string) {
     const download = await apiRequest<ArtifactDownload>(
       token,
@@ -1357,13 +1654,13 @@ function InvoiceDetail({
     window.open(download.downloadUrl, '_blank', 'noopener,noreferrer')
   }
 
-  async function previewRide(artifactId: string) {
-    const download = await apiRequest<ArtifactDownload>(
+  const previewRide = useMutation({
+    mutationFn: (artifactId: string) => apiRequest<ArtifactDownload>(
       token,
-      `/invoices/${invoiceId}/artifacts/${artifactId}/download`,
-    )
-    setRidePreview(download)
-  }
+      `/invoices/${invoiceId}/artifacts/${artifactId}/download?inline=true`,
+    ),
+    onSuccess: setRidePreview,
+  })
 
   if (invoiceQuery.isPending) {
     return (
@@ -1415,6 +1712,7 @@ function InvoiceDetail({
         <div><dt>Punto de emisión</dt><dd>{emissionPoint?.code ?? 'No disponible'}</dd></div>
         <div><dt>Condición de pago</dt><dd>{invoice.installments?.[0]?.dueDate === invoice.issueDate ? 'Contado' : 'Crédito'}</dd></div>
         <div><dt>Vencimiento</dt><dd>{invoice.installments?.[0]?.dueDate ?? invoice.issueDate}</dd></div>
+        <div><dt>Retenciones aplicadas</dt><dd>{Number(invoice.retentionTotal) > 0 ? `$${formatAmount(invoice.retentionTotal)}` : 'Sin retención registrada'}</dd></div>
         {invoice.accessKey ? <div><dt>Clave de acceso</dt><dd>{invoice.accessKey}</dd></div> : null}
       </dl>
 
@@ -1469,6 +1767,22 @@ function InvoiceDetail({
         )}
       </section>
 
+      {invoice.status === 'DRAFT' ? (
+        <section aria-labelledby="invoice-collection-title">
+          <p className="section-number" id="invoice-collection-title">Cobranza</p>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={invoice.collectionEnabled}
+              disabled={updateCollection.isPending}
+              onChange={(event) => updateCollection.mutate(event.target.checked)}
+            />
+            Permitir mensajes de cobranza para esta factura
+          </label>
+          <p className="fine-print">Los servicios puntuales empiezan apagados. También se respeta la política general y la decisión del cliente.</p>
+        </section>
+      ) : null}
+
       {issueInvoice.error ? (
         <p className="form-error" role="alert">{issueInvoice.error.message}</p>
       ) : null}
@@ -1477,6 +1791,20 @@ function InvoiceDetail({
       ) : null}
       {archiveInvoice.error ? (
         <p className="form-error" role="alert">{archiveInvoice.error.message}</p>
+      ) : null}
+      {emailInvoice.error ? (
+        <p className="form-error" role="alert">{emailInvoice.error.message}</p>
+      ) : null}
+      {updateCollection.error ? (
+        <p className="form-error" role="alert">{updateCollection.error.message}</p>
+      ) : null}
+      {sentEmail ? (
+        <p className="form-success" role="status">
+          Factura enviada a {sentEmail.recipient} con RIDE y XML.
+        </p>
+      ) : null}
+      {previewRide.error ? (
+        <p className="form-error" role="alert">{previewRide.error.message}</p>
       ) : null}
 
       <section aria-labelledby="invoice-artifacts-title">
@@ -1493,7 +1821,14 @@ function InvoiceDetail({
                 <div>
                   <strong>{artifact.artifactType === 'xml-signed' ? 'XML firmado' : 'RIDE PDF vigente'}</strong>
                   {artifact.artifactType === 'ride-pdf' ? (
-                    <ErpButton variant="ghost" onClick={() => void previewRide(artifact.id)}>Ver RIDE</ErpButton>
+                    <ErpButton
+                      variant="ghost"
+                      onClick={() => {
+                        if (!previewRide.isPending) previewRide.mutate(artifact.id)
+                      }}
+                    >
+                      Ver RIDE
+                    </ErpButton>
                   ) : null}
                   <ErpButton variant="ghost" onClick={() => void downloadArtifact(artifact.id)}>
                     {artifact.artifactType === 'xml-signed' ? 'Descargar XML firmado' : 'Descargar RIDE PDF'}
@@ -1508,9 +1843,7 @@ function InvoiceDetail({
       </section>
 
       {ridePreview ? (
-        <ErpModal title="RIDE autorizado" size="lg" onClose={() => setRidePreview(null)}>
-          <iframe className="ride-preview-frame" src={ridePreview.downloadUrl} title={ridePreview.fileName} />
-        </ErpModal>
+        <PdfPreviewModal title="RIDE autorizado" artifact={ridePreview} onClose={() => setRidePreview(null)} />
       ) : null}
 
       {archiving ? (
@@ -1527,6 +1860,74 @@ function InvoiceDetail({
             </ErpButton>
           </div>
         </ErpModal>
+      ) : null}
+
+      {emailing ? (
+        <ErpModal title="Enviar factura por correo" size="sm" onClose={() => setEmailing(false)}>
+          <p className="fine-print">
+            Se enviarán el RIDE PDF y el XML firmado vigentes. Nada saldrá hasta que confirmes aquí.
+          </p>
+          <label>
+            Correo del destinatario
+            <input
+              type="email"
+              value={emailRecipient}
+              onChange={(event) => setEmailRecipient(event.target.value)}
+              required
+              autoFocus
+            />
+          </label>
+          {emailPreviewQuery.isPending ? <p className="fine-print">Preparando vista previa…</p> : null}
+          {emailPreviewQuery.error ? (
+            <p className="form-error" role="alert">{emailPreviewQuery.error.message}</p>
+          ) : null}
+          {emailPreviewQuery.data ? (
+            <section className="invoice-email-preview" aria-label="Vista previa del correo">
+              <dl>
+                <div><dt>Remitente</dt><dd>{emailPreviewQuery.data.senderAddress ? `${emailPreviewQuery.data.senderName ? `${emailPreviewQuery.data.senderName} · ` : ''}${emailPreviewQuery.data.senderAddress}` : 'Cuenta de Google conectada'}</dd></div>
+                <div><dt>Asunto</dt><dd>{emailPreviewQuery.data.subject}</dd></div>
+                <div><dt>Fecha límite de pago</dt><dd>{emailPreviewQuery.data.dueDate}</dd></div>
+                <div><dt>Plazo</dt><dd>{emailPreviewQuery.data.paymentTermsDays === 0 ? 'Pago inmediato' : `${emailPreviewQuery.data.paymentTermsDays} días`}</dd></div>
+              </dl>
+              <p className="invoice-email-message">{emailPreviewQuery.data.message}</p>
+              <p className="fine-print">
+                Adjuntos: {emailPreviewQuery.data.attachmentNames.join(' · ')}
+              </p>
+            </section>
+          ) : null}
+          <div className="erp-form-actions">
+            <ErpButton variant="secondary" onClick={() => setEmailing(false)} disabled={emailInvoice.isPending}>Cancelar</ErpButton>
+            <ErpButton
+              variant="primary"
+              disabled={emailInvoice.isPending || emailPreviewQuery.isPending || !emailRecipient.trim()}
+              onClick={() => emailInvoice.mutate()}
+            >
+              {emailInvoice.isPending ? 'Enviando…' : 'Confirmar envío'}
+            </ErpButton>
+          </div>
+        </ErpModal>
+      ) : null}
+
+      {invoice.status === 'AUTHORIZED' ? (
+        <section className="invoice-delivery-panel" aria-labelledby="invoice-delivery-title">
+          <div>
+            <p className="section-number" id="invoice-delivery-title">Entrega al cliente</p>
+            <h3>Enviar factura autorizada</h3>
+            <p>
+              El correo incluye el plazo y la fecha límite de pago. Se adjuntan el RIDE PDF y el XML firmado.
+            </p>
+          </div>
+          <ErpButton
+            variant="primary"
+            onClick={() => {
+              setEmailRecipient(emailPreviewQuery.data?.recipient ?? customer?.email ?? '')
+              setSentEmail(null)
+              setEmailing(true)
+            }}
+          >
+            <Mail size={18} aria-hidden="true" /> Preparar correo
+          </ErpButton>
+        </section>
       ) : null}
 
       <div className="erp-form-actions">
@@ -1585,6 +1986,12 @@ function InvoicesPage({
     queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices'),
   })
   const invoices = invoicesQuery.data ?? []
+  const invoiceMonths = invoices.reduce<Record<string, SalesDocument[]>>((groups, invoice) => {
+    const key = invoice.issueDate.slice(0, 7)
+    ;(groups[key] ??= []).push(invoice)
+    return groups
+  }, {})
+  const invoiceMonthEntries = Object.entries(invoiceMonths).sort(([left], [right]) => right.localeCompare(left))
   const partiesById = new Map(customers.map((party) => [party.id, party]))
   const archiveInvoice = useMutation({
     mutationFn: () => {
@@ -1648,25 +2055,35 @@ function InvoicesPage({
       />
       <section className="split-layout erp-list-only">
         <ErpPanel title="Documentos" count={invoices.length}>
-          <div className="table-wrap" tabIndex={0} aria-label="Listado de facturas">
-            <table className="erp-responsive-table">
+          <div className="invoice-month-list" aria-label="Listado de facturas">
+            {invoiceMonthEntries.map(([month, monthInvoices], index) => <details key={month} className="invoice-month-accordion" open={index === 0}>
+              <summary>
+                <span className="invoice-month-title">{new Date(`${month}-01T12:00:00`).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })}</span>
+                <span className="invoice-month-summary">{monthInvoices.length} factura{monthInvoices.length === 1 ? '' : 's'} · ${formatAmount(monthInvoices.reduce((total, invoice) => total + Number(invoice.total), 0))}</span>
+              </summary>
+            <div className="table-wrap" tabIndex={0} aria-label={`Facturas de ${month}`}>
+              <table className="erp-responsive-table">
               <thead>
                 <tr>
                   <th>Número</th>
                   <th>Cliente</th>
                   <th>Fecha</th>
                   <th>Estado</th>
+                  <th>Cobro</th>
+                  <th>Retenciones</th>
                   <th>Total</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {invoices.map((invoice) => (
+                {monthInvoices.map((invoice) => (
                   <tr key={invoice.id}>
                     <td><strong>{invoice.sequential}</strong></td>
                     <td>{partiesById.get(invoice.partyId)?.name ?? '—'}</td>
                     <td>{invoice.issueDate}</td>
                     <td><InvoiceStatusBadge status={invoice.status} /></td>
+                    <td><CollectionStatusBadge status={invoice.collectionStatus} /></td>
+                    <td><ErpStatusBadge tone={Number(invoice.retentionTotal) > 0 ? 'success' : 'neutral'}>{Number(invoice.retentionTotal) > 0 ? `$${formatAmount(invoice.retentionTotal)}` : 'Sin retención'}</ErpStatusBadge></td>
                     <td>${formatAmount(invoice.total)}</td>
                     <td>
                       <ErpActionCell>
@@ -1689,7 +2106,9 @@ function InvoicesPage({
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
+            </details>)}
             {invoices.length === 0 ? (
               <ErpEmptyState
                 title="No hay facturas"
@@ -1783,6 +2202,9 @@ type ReceivablePanel =
   | { view: 'payment'; receivable: AccountItem }
   | { view: 'reminder'; receivable: AccountItem }
   | { view: 'due-date'; receivable: AccountItem }
+  | { view: 'history'; receivable: AccountItem }
+  | { view: 'retention-batch' }
+  | { view: 'bank-statement' }
 
 function emptyRetention(): RetentionInput & { key: string } {
   return { key: crypto.randomUUID(), kind: 'RETENTION_IVA', amount: '0.00', reason: '', documentReference: '' }
@@ -1790,6 +2212,326 @@ function emptyRetention(): RetentionInput & { key: string } {
 
 function emptyDiscount(): DiscountInput & { key: string } {
   return { key: crypto.randomUUID(), amount: '0.00', reason: '' }
+}
+
+function BatchRetentionImportForm({
+  token,
+  onRegistered,
+  onCancel,
+}: {
+  token: string
+  onRegistered: () => void
+  onCancel: () => void
+}) {
+  const [files, setFiles] = useState<File[]>([])
+  const [preview, setPreview] = useState<RetentionBatch | null>(null)
+  const [registered, setRegistered] = useState(false)
+
+  function batchFormData(apply: boolean) {
+    const formData = new FormData()
+    files.forEach((file) => formData.append('files', file))
+    formData.append('apply', String(apply))
+    return formData
+  }
+
+  const previewBatch = useMutation({
+    mutationFn: () => {
+      if (files.length === 0) throw new Error('Selecciona al menos un XML de retención.')
+      return apiRequest<RetentionBatch>(token, '/receivables/retention-batch', {
+        method: 'POST',
+        body: batchFormData(false),
+      })
+    },
+    onSuccess: (result) => {
+      setPreview(result)
+      setRegistered(false)
+    },
+  })
+  const registerBatch = useMutation({
+    mutationFn: () => apiRequest<RetentionBatch>(token, '/receivables/retention-batch', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey('web-retention-batch') },
+      body: batchFormData(true),
+    }),
+    onSuccess: (result) => {
+      setPreview(result)
+      setRegistered(true)
+      onRegistered()
+    },
+  })
+  const matched = preview?.items.filter((item) => item.status === 'MATCHED') ?? []
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    previewBatch.mutate()
+  }
+
+  return (
+    <ErpFormPanel
+      eyebrow="Cobranzas"
+      title="Cargar retenciones XML"
+      submitLabel="Revisar XML"
+      pendingLabel="Revisando…"
+      pending={previewBatch.isPending}
+      error={previewBatch.error?.message}
+      onSubmit={submit}
+      onCancel={onCancel}
+    >
+      <p className="fine-print">Carga hasta 50 XML autorizados por SRI. No guardamos los archivos: leemos sus datos, los cruzamos con la factura y solo registramos los que confirmes.</p>
+      <label>
+        XML de comprobantes de retención
+        <input
+          type="file"
+          accept=".xml,text/xml,application/xml"
+          multiple
+          onChange={(event) => {
+            setFiles(Array.from(event.target.files ?? []))
+            setPreview(null)
+            setRegistered(false)
+          }}
+        />
+      </label>
+      {files.length > 0 ? <p className="fine-print">{files.length} archivo{files.length === 1 ? '' : 's'} seleccionado{files.length === 1 ? '' : 's'}.</p> : null}
+      {preview ? (
+        <section className="retention-batch-results" aria-live="polite">
+          <div className="retention-batch-heading">
+            <h3>Resultado de la revisión</h3>
+            <span>{matched.length} listo{matched.length === 1 ? '' : 's'} · {preview.items.length - matched.length} a revisar</span>
+          </div>
+          <div className="table-wrap" tabIndex={0} aria-label="Resultado de XML de retención">
+            <table className="erp-responsive-table">
+              <thead><tr><th>Archivo</th><th>Factura</th><th>Emisión</th><th>Retención</th><th>Valor</th><th>Resultado</th></tr></thead>
+              <tbody>
+                {preview.items.map((item) => (
+                  <tr key={item.fileName}>
+                    <td>{item.fileName}</td>
+                    <td>{item.invoiceSequential ?? item.supportingDocument ?? '—'}</td>
+                    <td>{item.issueDate ?? '—'}</td>
+                    <td>{item.authorizationNumber ?? '—'}</td>
+                    <td>${formatAmount(item.total)}</td>
+                    <td><ErpStatusBadge tone={item.status === 'MATCHED' ? 'success' : 'warning'}>{item.detail}</ErpStatusBadge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {registerBatch.error ? <p className="form-error" role="alert">{registerBatch.error.message}</p> : null}
+          {registered ? <p className="fine-print">Las retenciones mostradas como registradas ya redujeron el saldo de su factura. Las restantes no se modificaron.</p> : null}
+          {!registered ? (
+            <ErpButton variant="primary" disabled={matched.length === 0 || registerBatch.isPending} onClick={() => registerBatch.mutate()}>
+              {registerBatch.isPending ? 'Registrando…' : `Registrar ${matched.length} retención${matched.length === 1 ? '' : 'es'}`}
+            </ErpButton>
+          ) : null}
+        </section>
+      ) : null}
+    </ErpFormPanel>
+  )
+}
+
+function BankStatementImportForm({
+  token,
+  onRegistered,
+  onCancel,
+}: {
+  token: string
+  onRegistered: () => void
+  onCancel: () => void
+}) {
+  const [period, setPeriod] = useState(() => {
+    const previousMonth = new Date()
+    previousMonth.setDate(1)
+    previousMonth.setMonth(previousMonth.getMonth() - 1)
+    return `${previousMonth.getFullYear()}-${String(previousMonth.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<BankStatementImport | null>(null)
+  const [registered, setRegistered] = useState(false)
+
+  function statementFormData(apply: boolean) {
+    if (!file) throw new Error('Selecciona el TXT del banco.')
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('period', period)
+    formData.append('apply', String(apply))
+    return formData
+  }
+
+  const previewStatement = useMutation({
+    mutationFn: () => apiRequest<BankStatementImport>(token, '/receivables/bank-statement', {
+      method: 'POST',
+      body: statementFormData(false),
+    }),
+    onSuccess: (result) => {
+      setPreview(result)
+      setRegistered(false)
+    },
+  })
+  const registerMatches = useMutation({
+    mutationFn: () => apiRequest<BankStatementImport>(token, '/receivables/bank-statement', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey('web-bank-statement') },
+      body: statementFormData(true),
+    }),
+    onSuccess: (result) => {
+      setPreview(result)
+      setRegistered(true)
+      onRegistered()
+    },
+  })
+
+  return (
+    <ErpFormPanel
+      eyebrow="Cobranzas"
+      title="Conciliar estado bancario"
+      submitLabel="Revisar movimientos"
+      pendingLabel="Revisando…"
+      pending={previewStatement.isPending}
+      error={previewStatement.error?.message}
+      onSubmit={(event) => { event.preventDefault(); previewStatement.mutate() }}
+      onCancel={onCancel}
+    >
+      <p className="fine-print">El TXT se procesa en memoria. Ignoramos débitos y solo proponemos abonos que saldan una única factura autorizada, con sus retenciones ya descontadas. Si existe un cobro manual sin referencia, el banco lo reemplaza mediante un reverso auditable. Nada se registra hasta que confirmes.</p>
+      <label>
+        Período a conciliar
+        <input
+          type="month"
+          required
+          value={period}
+          onChange={(event) => {
+            setPeriod(event.target.value)
+            setPreview(null)
+            setRegistered(false)
+          }}
+        />
+      </label>
+      <label>
+        Estado de cuenta bancario
+        <input
+          type="file"
+          accept=".txt,text/plain"
+          required
+          onChange={(event) => {
+            setFile(event.target.files?.[0] ?? null)
+            setPreview(null)
+            setRegistered(false)
+          }}
+        />
+      </label>
+      {file ? <p className="fine-print">Archivo seleccionado: {file.name}</p> : null}
+      {preview ? (
+        <section className="retention-batch-results" aria-live="polite">
+          <div className="retention-batch-heading">
+            <h3>Resultado de la conciliación</h3>
+            <span>{preview.matchedCount} coincidencia{preview.matchedCount === 1 ? '' : 's'} · {preview.manualCorrectionCount} {preview.manualCorrectionCount === 1 ? 'corrección' : 'correcciones'} · {preview.unmatchedCreditCount} abono{preview.unmatchedCreditCount === 1 ? '' : 's'} sin aplicar</span>
+          </div>
+          <p className="fine-print">Período {preview.period}. Se leyeron {preview.totalRows} movimientos: {preview.creditRows} abonos del período, {preview.outsidePeriodCreditCount} de otros meses, {preview.ignoredDebitCount} débitos ignorados y {preview.alreadyImportedCount} abono{preview.alreadyImportedCount === 1 ? '' : 's'} ya registrado{preview.alreadyImportedCount === 1 ? '' : 's'}.</p>
+          {preview.matches.length > 0 ? (
+            <div className="table-wrap" tabIndex={0} aria-label="Coincidencias del estado bancario">
+              <table className="erp-responsive-table">
+                <thead><tr><th>Fecha</th><th>Referencia bancaria</th><th>Factura</th><th>Original</th><th>Retenciones</th><th>Abono</th><th>Resultado</th></tr></thead>
+                <tbody>
+                  {preview.matches.map((match) => (
+                    <tr key={match.transactionId}>
+                      <td>{match.paymentDate}</td>
+                      <td>{match.reference}</td>
+                      <td>{match.invoiceSequential}</td>
+                      <td>${formatAmount(match.originalAmount)}</td>
+                      <td>${formatAmount(match.retentionTotal)}</td>
+                      <td>${formatAmount(match.amount)}</td>
+                      <td><ErpStatusBadge tone="success">{match.detail}</ErpStatusBadge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {preview.manualCorrections.length > 0 ? (
+            <div className="table-wrap" tabIndex={0} aria-label="Correcciones de cobros manuales">
+              <table className="erp-responsive-table">
+                <thead><tr><th>Fecha banco</th><th>Referencia</th><th>Factura correcta</th><th>Factura manual</th><th>Valor</th><th>Resultado</th></tr></thead>
+                <tbody>
+                  {preview.manualCorrections.map((correction) => (
+                    <tr key={`${correction.transactionId}-${correction.manualMovementId}`}>
+                      <td>{correction.paymentDate}</td>
+                      <td>{correction.reference}</td>
+                      <td>{correction.targetInvoiceSequential}</td>
+                      <td>{correction.manualInvoiceSequential}</td>
+                      <td>${formatAmount(correction.amount)}</td>
+                      <td><ErpStatusBadge tone={correction.status === 'CORRECTED' ? 'success' : 'warning'}>{correction.detail}</ErpStatusBadge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {preview.matches.length === 0 && preview.manualCorrections.length === 0 ? (
+            <ErpEmptyState title="Sin coincidencias exactas" description="Los abonos dudosos o sin una factura única no modificaron Cartera." />
+          ) : null}
+          {registerMatches.error ? <p className="form-error" role="alert">{registerMatches.error.message}</p> : null}
+          {registered ? <p className="fine-print">La conciliación terminó. Solo los cobros indicados como registrados modificaron Cartera.</p> : null}
+          {!registered ? (
+            <ErpButton variant="primary" disabled={(preview.matchedCount + preview.manualCorrectionCount) === 0 || registerMatches.isPending} onClick={() => registerMatches.mutate()}>
+              {registerMatches.isPending ? 'Registrando…' : `Confirmar ${preview.matchedCount + preview.manualCorrectionCount} cambio${(preview.matchedCount + preview.manualCorrectionCount) === 1 ? '' : 's'}`}
+            </ErpButton>
+          ) : null}
+        </section>
+      ) : null}
+    </ErpFormPanel>
+  )
+}
+
+function ReceivableMovementHistory({
+  token,
+  receivable,
+  onClose,
+}: {
+  token: string
+  receivable: AccountItem
+  onClose: () => void
+}) {
+  const movementsQuery = useQuery({
+    queryKey: ['receivables', receivable.id, 'movements'],
+    queryFn: () => apiRequest<ReceivableMovement[]>(token, `/receivables/${receivable.id}/movements`),
+  })
+  const movementLabels: Record<ReceivableMovement['movementType'], string> = {
+    PAYMENT: 'Cobro',
+    RETENTION: 'Retención',
+    DISCOUNT: 'Descuento',
+    CREDIT_NOTE: 'Nota de crédito',
+    REVERSAL: 'Reverso',
+  }
+
+  return (
+    <section className="form-panel erp-form-panel erp-full-page-form">
+      <p className="section-number">Cobranzas</p>
+      <h2>Movimientos de factura {receivable.invoiceSequential ?? '—'}</h2>
+      <p className="fine-print">Cliente y factura se relacionan por esta cuenta por cobrar. Cada retención muestra su autorización SRI en la referencia.</p>
+      {movementsQuery.isPending ? <p>Cargando movimientos…</p> : null}
+      {movementsQuery.error ? <p className="form-error" role="alert">{movementsQuery.error.message}</p> : null}
+      {movementsQuery.data ? (
+        movementsQuery.data.length > 0 ? (
+          <div className="table-wrap" tabIndex={0} aria-label="Movimientos de la factura">
+            <table className="erp-responsive-table">
+              <thead><tr><th>Fecha</th><th>Tipo</th><th>Valor</th><th>Referencia</th></tr></thead>
+              <tbody>
+                {movementsQuery.data.map((movement) => (
+                  <tr key={movement.id}>
+                    <td>{movement.effectiveDate
+                      ? movement.effectiveDate.split('-').reverse().join('/')
+                      : new Date(movement.createdAt).toLocaleString('es-EC')}</td>
+                    <td><ErpStatusBadge tone={movement.movementType === 'RETENTION' ? 'success' : 'neutral'}>{movementLabels[movement.movementType]}</ErpStatusBadge></td>
+                    <td>${formatAmount(movement.amount)}</td>
+                    <td>{movement.supportReference ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <ErpEmptyState title="Sin movimientos" description="Todavía no se ha registrado ningún cobro, retención o descuento." />
+      ) : null}
+      <div className="erp-form-actions"><ErpButton variant="secondary" onClick={onClose}>Volver a Cartera</ErpButton></div>
+    </section>
+  )
 }
 
 function EditReceivableDueDateForm({
@@ -2142,16 +2884,30 @@ function SendReminderForm({
   onCancel: () => void
 }) {
   const [channel, setChannel] = useState<ReminderInput['channel']>('EMAIL')
-  const [templateId, setTemplateId] = useState('')
   const [scheduledAt, setScheduledAt] = useState('')
   const [message, setMessage] = useState('')
+
+  // Se lee la plantilla configurada solo para mostrar qué se va a enviar; el
+  // servidor la vuelve a renderizar con los valores reales del receivable.
+  const policyQuery = useQuery({
+    queryKey: ['receivables', 'collection-policy'],
+    queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
+  })
+  const policy = policyQuery.data
 
   const sendReminder = useMutation({
     mutationFn: () =>
       apiRequest<Operation>(token, `/receivables/${receivable.id}/reminders`, {
         method: 'POST',
         headers: { 'Idempotency-Key': idempotencyKey('web-receivable-reminder') },
-        body: JSON.stringify({ channel, templateId, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null, message: message || null } satisfies ReminderInput),
+        body: JSON.stringify({
+          channel,
+          // El identificador solo etiqueta el envío en el historial: el texto
+          // sale de la plantilla del tenant, no de este campo.
+          templateId: channel === 'EMAIL' ? policy?.emailTemplateId : policy?.whatsappTemplateId,
+          scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+          message: message || null,
+        } satisfies ReminderInput),
       }),
     onSuccess: () => onSent(),
   })
@@ -2161,11 +2917,13 @@ function SendReminderForm({
     sendReminder.mutate()
   }
 
+  const missingBankDetails = channel === 'EMAIL' && policy !== undefined && !policy.paymentInstructions
+
   return (
     <ErpFormPanel
-      eyebrow="Recordatorio"
-      title="Enviar recordatorio"
-      submitLabel="Enviar"
+      eyebrow="Cobranza"
+      title="Enviar correo de cobro"
+      submitLabel={scheduledAt ? 'Programar' : 'Enviar ahora'}
       pendingLabel="Enviando…"
       pending={sendReminder.isPending}
       error={sendReminder.error?.message}
@@ -2180,16 +2938,38 @@ function SendReminderForm({
           <option value="WHATSAPP">WhatsApp</option>
         </select>
       </label>
+      {channel === 'EMAIL' && policy ? (
+        <section className="reminder-template-preview" aria-label="Plantilla que se enviará">
+          <p className="fine-print">
+            Se envía con la plantilla configurada en <strong>Configuración → Cobranza</strong>.
+          </p>
+          <dl>
+            <div><dt>Asunto</dt><dd>{policy.emailSubject}</dd></div>
+            <div><dt>Cuerpo</dt><dd className="reminder-template-body">{message || policy.emailBody}</dd></div>
+            <div>
+              <dt>Datos para pago</dt>
+              <dd className="reminder-template-body">
+                {policy.paymentInstructions || 'Sin configurar'}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+      {missingBankDetails ? (
+        <p className="form-warning" role="status">
+          Aún no hay datos bancarios configurados: el correo saldrá sin cuenta a la cual
+          transferir. Complétalos en Configuración → Cobranza → Datos para pago.
+        </p>
+      ) : null}
       <label>
-        Plantilla
-        <input
-          value={templateId}
-          onChange={(event) => setTemplateId(event.target.value)}
-          placeholder="ID de plantilla"
-          required
+        Mensaje personalizado
+        <textarea
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          rows={4}
+          placeholder="Opcional: reemplaza el cuerpo. El saldo y los datos de pago se agregan igual."
         />
       </label>
-      <label>Mensaje personalizado<textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={4} placeholder="Opcional" /></label>
       <label>Programar para<input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
     </ErpFormPanel>
   )
@@ -2275,6 +3055,129 @@ function CollectionPolicyEditor({
   )
 }
 
+function InvoiceEmailTemplateEditor({
+  template,
+  pending,
+  error,
+  onSave,
+}: {
+  template: InvoiceEmailTemplate
+  pending: boolean
+  error?: string
+  onSave: (template: Pick<InvoiceEmailTemplate, 'subject' | 'body' | 'fromAddress' | 'fromName'>) => void
+}) {
+  const [subject, setSubject] = useState(template.subject)
+  const [body, setBody] = useState(template.body)
+  const [fromAddress, setFromAddress] = useState(template.fromAddress ?? '')
+  const [fromName, setFromName] = useState(template.fromName ?? '')
+
+  return (
+    <form
+      className="fiscal-panel-body"
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSave({
+          subject: subject.trim(),
+          body: body.trim(),
+          fromAddress: fromAddress.trim() || null,
+          fromName: fromName.trim() || null,
+        })
+      }}
+    >
+      <p className="fiscal-panel-copy">
+        Esta plantilla se usa al entregar una factura autorizada. No corresponde a cobranza ni envía nada por sí sola.
+      </p>
+      <div className="field-row">
+        <label>
+          Correo remitente
+          <input
+            type="email"
+            value={fromAddress}
+            onChange={(event) => setFromAddress(event.target.value)}
+            placeholder="contabilidad@empresa.com"
+          />
+        </label>
+        <label>
+          Nombre del remitente
+          <input
+            value={fromName}
+            onChange={(event) => setFromName(event.target.value)}
+            maxLength={200}
+            placeholder="Contabilidad"
+          />
+        </label>
+      </div>
+      <p className="fine-print">
+        El correo debe estar habilitado en Gmail como “Enviar como”. Si lo dejas vacío, se usa la cuenta conectada.
+      </p>
+      <label>
+        Asunto
+        <input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={500} required />
+      </label>
+      <label>
+        Mensaje
+        <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={10} maxLength={5000} required />
+      </label>
+      <p className="fine-print">
+        Datos disponibles: {template.availableVariables.join(', ')}. El plazo, vencimiento y total salen de la factura guardada.
+      </p>
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      <ErpButton variant="primary" type="submit" disabled={pending || !subject.trim() || !body.trim()}>
+        {pending ? 'Guardando…' : 'Guardar plantilla de factura'}
+      </ErpButton>
+    </form>
+  )
+}
+
+/**
+ * Cuánto del cobro entró en dinero y cuánto se fue en retenciones.
+ *
+ * Sin esta separación el total cobrado se lee como liquidez, y no lo es: la
+ * retención es valor que el cliente retuvo y que se recupera ante el SRI, no en
+ * caja. Los importes vienen calculados del servidor (`GET /receivables/collections`),
+ * con la misma regla de movimientos activos que el saldo.
+ */
+function CollectionsBreakdownStrip({ breakdown }: { breakdown?: CollectionsBreakdown }) {
+  if (!breakdown) return null
+
+  return (
+    <section aria-label="Desglose del cobro">
+      <dl className="collections-breakdown">
+        <div>
+          <dt>Cobrado en dinero</dt>
+          <dd>
+            ${formatAmount(breakdown.cashAmount)}
+            <small>{breakdown.cashCount} cobro(s) recibidos en banco o caja</small>
+          </dd>
+        </div>
+        <div>
+          <dt>Retenciones</dt>
+          <dd>
+            ${formatAmount(breakdown.retentionAmount)}
+            <small>{breakdown.retentionCount} comprobante(s); se recuperan ante el SRI</small>
+          </dd>
+        </div>
+        <div>
+          <dt>Total saldado</dt>
+          <dd>
+            ${formatAmount(breakdown.settledAmount)}
+            <small>{formatAmount(breakdown.retentionShare)} % del cobro fue retención</small>
+          </dd>
+        </div>
+        {Number(breakdown.creditAmount) > 0 ? (
+          <div>
+            <dt>Notas de crédito y descuentos</dt>
+            <dd>
+              ${formatAmount(breakdown.creditAmount)}
+              <small>Bajan la deuda sin que entre dinero</small>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </section>
+  )
+}
+
 function ReceivablesPage({
   token,
   parties,
@@ -2287,19 +3190,6 @@ function ReceivablesPage({
   const [panel, setPanel] = useState<ReceivablePanel | undefined>(undefined)
   const lastTriggerRef = useRef<HTMLElement | null>(null)
   const partiesById = new Map(parties.map((party) => [party.id, party]))
-  const collectionPolicyQuery = useQuery({
-    queryKey: ['receivables', 'collection-policy'],
-    queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
-  })
-  const updateCollectionPolicy = useMutation({
-    mutationFn: (policy: Omit<CollectionPolicy, 'updatedAt'>) => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy', {
-      method: 'PUT',
-      headers: { 'Idempotency-Key': idempotencyKey('web-collection-policy') },
-      body: JSON.stringify(policy),
-    }),
-    onSuccess: (policy) => queryClient.setQueryData(['receivables', 'collection-policy'], policy),
-  })
-
   const receivablesQuery = useQuery({
     queryKey: ['receivables', statusFilter],
     queryFn: () =>
@@ -2313,6 +3203,10 @@ function ReceivablesPage({
       ? ['OPEN', 'PARTIAL', 'OVERDUE'].includes(item.status)
       : true,
   )
+  const collectionsQuery = useQuery({
+    queryKey: ['receivables', 'collections'],
+    queryFn: () => apiRequest<CollectionsBreakdown>(token, '/receivables/collections'),
+  })
 
   function openPanel(next: ReceivablePanel, trigger?: HTMLElement) {
     lastTriggerRef.current = trigger ?? null
@@ -2343,7 +3237,7 @@ function ReceivablesPage({
   if (panel?.view === 'reminder') {
     return (
       <>
-        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Enviar recordatorio" subtitle={`Saldo pendiente: $${formatAmount(panel.receivable.openAmount)}`} />
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Enviar correo de cobro" subtitle={`Saldo pendiente: $${formatAmount(panel.receivable.openAmount)}`} />
         <SendReminderForm key={panel.receivable.id} token={token} receivable={panel.receivable} onSent={closePanel} onCancel={closePanel} />
       </>
     )
@@ -2356,6 +3250,38 @@ function ReceivablesPage({
       </>
     )
   }
+  if (panel?.view === 'history') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Movimientos" subtitle={`Factura ${panel.receivable.invoiceSequential ?? 'sin número disponible'}`} />
+        <ReceivableMovementHistory token={token} receivable={panel.receivable} onClose={closePanel} />
+      </>
+    )
+  }
+  if (panel?.view === 'retention-batch') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Cargar retenciones" subtitle="Cruza cada XML autorizado con su factura y registra solo los comprobantes confirmados." />
+        <BatchRetentionImportForm
+          token={token}
+          onRegistered={() => void queryClient.invalidateQueries({ queryKey: ['receivables'] })}
+          onCancel={closePanel}
+        />
+      </>
+    )
+  }
+  if (panel?.view === 'bank-statement') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Conciliar banco" subtitle="Registra únicamente abonos que cuadran de forma única con una factura autorizada." />
+        <BankStatementImportForm
+          token={token}
+          onRegistered={() => void queryClient.invalidateQueries({ queryKey: ['receivables'] })}
+          onCancel={closePanel}
+        />
+      </>
+    )
+  }
 
   return (
     <>
@@ -2364,15 +3290,6 @@ function ReceivablesPage({
         title="Cartera"
         subtitle="Cartera trazable a la factura de origen, con saldo y aging calculados por el servidor."
       />
-      {collectionPolicyQuery.data ? (
-        <CollectionPolicyEditor
-          key={collectionPolicyQuery.data.updatedAt}
-          policy={collectionPolicyQuery.data}
-          pending={updateCollectionPolicy.isPending}
-          error={updateCollectionPolicy.error?.message}
-          onSave={(policy) => updateCollectionPolicy.mutate(policy)}
-        />
-      ) : null}
       <ErpToolbar>
         <label className="search-field">
           <span>Filtrar por estado</span>
@@ -2389,7 +3306,14 @@ function ReceivablesPage({
             <option value="">Todos los estados</option>
           </select>
         </label>
+        <ErpButton variant="primary" onClick={(event) => openPanel({ view: 'retention-batch' }, event.currentTarget)}>
+          Cargar retenciones XML
+        </ErpButton>
+        <ErpButton variant="secondary" onClick={(event) => openPanel({ view: 'bank-statement' }, event.currentTarget)}>
+          Cargar estado bancario
+        </ErpButton>
       </ErpToolbar>
+      <CollectionsBreakdownStrip breakdown={collectionsQuery.data} />
       <section className="split-layout erp-list-only">
         <ErpPanel title="Cuentas por cobrar" count={receivables.length}>
           <div className="table-wrap" tabIndex={0} aria-label="Listado de cuentas por cobrar">
@@ -2397,6 +3321,7 @@ function ReceivablesPage({
               <thead>
                 <tr>
                   <th>Cliente</th>
+                  <th>Factura</th>
                   <th>Monto original</th>
                   <th>Saldo</th>
                   <th>Estado</th>
@@ -2408,34 +3333,54 @@ function ReceivablesPage({
                 {receivables.map((receivable) => (
                   <tr key={receivable.id}>
                     <td><strong>{partiesById.get(receivable.partyId)?.name ?? receivable.partyId}</strong></td>
+                    <td>{receivable.invoiceSequential ?? '—'}</td>
                     <td>${formatAmount(receivable.originalAmount)}</td>
                     <td>${formatAmount(receivable.openAmount)}</td>
                     <td><ReceivableStatusBadge status={receivable.status} /></td>
                     <td><AgingChip dueDate={receivable.dueDate} /></td>
                     <td>
+                      {/* Iconos y no texto: cuatro acciones escritas empujaban la
+                          tabla a lo ancho y tapaban el saldo. El nombre completo
+                          sigue disponible en aria-label y en el tooltip. */}
                       <ErpActionCell>
                         <ErpButton
                           variant="ghost"
+                          className="erp-icon-button"
                           aria-label={`Registrar cobro para ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          title="Registrar cobro"
                           onClick={(event) => openPanel({ view: 'payment', receivable }, event.currentTarget)}
                           disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
-                          Registrar cobro
+                          <DollarSign size={16} aria-hidden="true" />
                         </ErpButton>
                         <ErpButton
                           variant="ghost"
-                          aria-label={`Enviar recordatorio para ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          className="erp-icon-button"
+                          aria-label={`Ver movimientos de ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          title="Ver movimientos"
+                          onClick={(event) => openPanel({ view: 'history', receivable }, event.currentTarget)}
+                        >
+                          <History size={16} aria-hidden="true" />
+                        </ErpButton>
+                        <ErpButton
+                          variant="ghost"
+                          className="erp-icon-button"
+                          aria-label={`Enviar correo de cobro a ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          title="Enviar correo de cobro"
                           onClick={(event) => openPanel({ view: 'reminder', receivable }, event.currentTarget)}
                           disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
-                          Recordatorio
+                          <Mail size={16} aria-hidden="true" />
                         </ErpButton>
                         <ErpButton
                           variant="ghost"
+                          className="erp-icon-button"
+                          aria-label={`Editar vencimiento de ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          title="Editar vencimiento"
                           onClick={(event) => openPanel({ view: 'due-date', receivable }, event.currentTarget)}
                           disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
-                          Editar vencimiento
+                          <CalendarClock size={16} aria-hidden="true" />
                         </ErpButton>
                       </ErpActionCell>
                     </td>
@@ -2466,6 +3411,7 @@ function OrganizationPage({
   token: string
 }) {
   const queryClient = useQueryClient()
+  const [settingsSection, setSettingsSection] = useState<'fiscal' | 'invoicing' | 'collections' | 'integrations'>('fiscal')
   const fiscalQuery = useQuery({
     queryKey: ['organization', 'fiscal-settings'],
     queryFn: () => apiRequest<FiscalSettings>(token, '/organization/fiscal-settings'),
@@ -2477,6 +3423,19 @@ function OrganizationPage({
   const collectionPolicyQuery = useQuery({
     queryKey: ['receivables', 'collection-policy'],
     queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
+  })
+  const invoiceEmailTemplateQuery = useQuery({
+    queryKey: ['organization', 'invoice-email-template'],
+    queryFn: () => apiRequest<InvoiceEmailTemplate>(token, '/organization/invoice-email-template'),
+  })
+  const updateInvoiceEmailTemplate = useMutation({
+    mutationFn: (template: Pick<InvoiceEmailTemplate, 'subject' | 'body' | 'fromAddress' | 'fromName'>) =>
+      apiRequest<InvoiceEmailTemplate>(token, '/organization/invoice-email-template', {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('web-invoice-email-template') },
+        body: JSON.stringify(template),
+      }),
+    onSuccess: (template) => queryClient.setQueryData(['organization', 'invoice-email-template'], template),
   })
   const updateCollectionPolicy = useMutation({
     mutationFn: (policy: Omit<CollectionPolicy, 'updatedAt'>) => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy', {
@@ -2618,7 +3577,14 @@ function OrganizationPage({
         subtitle="Datos del contribuyente y estructura de emisión."
         meta={<ErpStatusBadge tone="success">Tenant activo</ErpStatusBadge>}
       />
+      <ErpToolbar ariaLabel="Secciones de empresa">
+        <ErpButton variant={settingsSection === 'fiscal' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('fiscal')}>Datos fiscales</ErpButton>
+        <ErpButton variant={settingsSection === 'invoicing' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('invoicing')}>Envío de facturas</ErpButton>
+        <ErpButton variant={settingsSection === 'collections' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('collections')}>Cobranza automática</ErpButton>
+        <ErpButton variant={settingsSection === 'integrations' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('integrations')}>Canales e integraciones</ErpButton>
+      </ErpToolbar>
       <section className="company-grid company-grid-expanded">
+        {settingsSection === 'fiscal' ? <>
         <article className="company-identity company-profile-editor">
           <p className="section-number">Contribuyente</p>
           <form onSubmit={submitProfile}>
@@ -2711,6 +3677,23 @@ function OrganizationPage({
             </form>
           </div>
         </ErpPanel>
+        </> : null}
+        {settingsSection === 'invoicing' ? (
+          <ErpPanel title="Correo de entrega de factura" className="fiscal-settings-panel">
+            {invoiceEmailTemplateQuery.isPending ? <p className="fiscal-panel-copy">Cargando plantilla…</p> : null}
+            {invoiceEmailTemplateQuery.error ? <p className="form-error" role="alert">{invoiceEmailTemplateQuery.error.message}</p> : null}
+            {invoiceEmailTemplateQuery.data ? (
+              <InvoiceEmailTemplateEditor
+                key={`${invoiceEmailTemplateQuery.data.subject}-${invoiceEmailTemplateQuery.data.body}`}
+                template={invoiceEmailTemplateQuery.data}
+                pending={updateInvoiceEmailTemplate.isPending}
+                error={updateInvoiceEmailTemplate.error?.message}
+                onSave={(template) => updateInvoiceEmailTemplate.mutate(template)}
+              />
+            ) : null}
+          </ErpPanel>
+        ) : null}
+        {settingsSection === 'collections' ? <>
         <ErpPanel title="Automatizaciones de cobranza" className="fiscal-settings-panel">
           <p className="fiscal-panel-copy">Define aquí las plantillas, canales y reglas automáticas. La pantalla de Cartera queda reservada para gestionar saldos y cobros.</p>
           {collectionPolicyQuery.data && Array.isArray(collectionPolicyQuery.data.offsetsDays) && Array.isArray(collectionPolicyQuery.data.channels) ? (
@@ -2723,6 +3706,8 @@ function OrganizationPage({
             />
           ) : null}
         </ErpPanel>
+        </> : null}
+        {settingsSection === 'integrations' ? <>
         <ErpPanel title="Google Workspace" actions={<ErpStatusBadge tone={integrationsQuery.data?.googleConnected ? 'success' : 'warning'}>{integrationsQuery.data?.googleConnected ? 'Conectado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
           <div className="fiscal-panel-body">
             {integrationsQuery.data?.googleConnected ? <p>Cuenta conectada: <strong>{integrationsQuery.data.googleEmail}</strong></p> : <p className="fiscal-panel-copy">Conecta tu cuenta para enviar correos y sincronizar conversaciones del CRM.</p>}
@@ -2767,6 +3752,7 @@ function OrganizationPage({
             <ErpButton variant="primary" type="submit" disabled={!integrationsQuery.data?.evolutionConfigurationAvailable || saveEvolutionWhatsApp.isPending}>{saveEvolutionWhatsApp.isPending ? 'Preparando QR…' : evolutionQrCode ? 'Generar otro QR' : 'Generar QR y conectar WhatsApp'}</ErpButton>
           </form>
         </ErpPanel>
+        </> : null}
       </section>
     </>
   )
@@ -2775,6 +3761,7 @@ function OrganizationPage({
 function Workspace() {
   const auth = useAuth()
   const [section, setSection] = useState<Section>('overview')
+  const [navigationVersion, setNavigationVersion] = useState(0)
   const [contractPartyId, setContractPartyId] = useState<string | undefined>()
   const tokenQuery = useQueries({
     queries: [{
@@ -2814,13 +3801,16 @@ function Workspace() {
         currentSection={section}
         onNavigate={(newSection) => {
           if (newSection !== 'contracts') setContractPartyId(undefined)
-          startTransition(() => setSection(newSection))
+          startTransition(() => {
+            setSection(newSection)
+            setNavigationVersion((current) => current + 1)
+          })
         }}
         organizationName={contextQuery.data.name}
         ruc={contextQuery.data.ruc}
       />
       <main id="main-content" tabIndex={-1}>
-       <div key={section} className="section-fade">
+       <div key={`${section}-${navigationVersion}`} className="section-fade">
         {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}
         {section === 'parties' ? <PartiesPage parties={parties} token={token} onOpenContracts={(partyId) => { setContractPartyId(partyId); startTransition(() => setSection('contracts')) }} /> : null}
         {section === 'catalogs' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
@@ -2835,13 +3825,27 @@ function Workspace() {
             defaultPaymentTermsDays={contextQuery.data.defaultPaymentTermsDays}
           />
         ) : null}
+        {section === 'purchases' ? (
+          <ErrorBoundary label="Compras">
+            <Suspense fallback={<SectionLoadingSkeleton label="Cargando compras…" />}>
+              <PurchasesPage token={token} />
+            </Suspense>
+          </ErrorBoundary>
+        ) : null}
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
-        {section === 'contracts' ? <ContractsPage key={contractPartyId ?? 'all-contracts'} parties={parties} token={token} initialPartyId={contractPartyId} /> : null}
+        {section === 'contracts' ? <ContractsPage key={contractPartyId ?? 'all-contracts'} parties={parties} products={products} taxes={taxesQuery.data ?? []} establishments={establishmentsQuery.data ?? []} emissionPoints={emissionPointsQuery.data ?? []} token={token} initialPartyId={contractPartyId} /> : null}
         {section === 'crm' ? (
           <ErrorBoundary label="el CRM">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando CRM…" />}>
               <LeadsPage token={token} parties={parties} products={products} />
+            </Suspense>
+          </ErrorBoundary>
+        ) : null}
+        {section === 'tax' ? (
+          <ErrorBoundary label="el módulo tributario">
+            <Suspense fallback={<SectionLoadingSkeleton label="Cargando Tributario…" />}>
+              <TaxPage token={token} />
             </Suspense>
           </ErrorBoundary>
         ) : null}

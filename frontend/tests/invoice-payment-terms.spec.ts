@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { pickCombobox } from './combobox'
+
 // Sprint 6 (HU-17): el formulario de nueva factura muestra si la condición de
 // pago aplicada proviene del override del cliente o del default de la empresa.
 
@@ -83,7 +85,7 @@ test('badge muestra "empresa" cuando el cliente no tiene override', async ({ pag
 })
 
 test('badge cambia a "cliente" al elegir un cliente con override', async ({ page }) => {
-  await page.getByLabel('Cliente').selectOption(customerWithOverride.id)
+  await pickCombobox(page, 'Cliente', customerWithOverride.name)
 
   const badge = page.locator('.payment-terms-source')
   await expect(badge).toHaveAttribute('data-terms-source', 'customer')

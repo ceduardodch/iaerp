@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import Field
+from pydantic import EmailStr, Field, field_validator
 
 from app.schemas.base import APIModel
 
@@ -54,6 +54,27 @@ class FiscalSettingsRead(FiscalSettingsUpdate):
     certificate_valid_from: datetime | None = None
     certificate_valid_to: datetime | None = None
     certificate_uploaded_at: datetime | None = None
+
+
+class InvoiceEmailTemplateUpdate(APIModel):
+    subject: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1, max_length=5000)
+    from_address: EmailStr | None = None
+    from_name: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @field_validator("from_name")
+    @classmethod
+    def validate_from_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if "\r" in normalized or "\n" in normalized:
+            raise ValueError("Sender name cannot contain line breaks")
+        return normalized
+
+
+class InvoiceEmailTemplateRead(InvoiceEmailTemplateUpdate):
+    available_variables: list[str]
 
 
 class SigningCertificateRead(FiscalSettingsRead):

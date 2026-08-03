@@ -81,7 +81,24 @@ Repetir con otro tenant conecta **otra** cuenta, aislada por `tenant_id`. Un sol
 
 ---
 
-## Parte D — Abrirlo a clientes externos (cuando salgas de pruebas)
+## Parte D — Enviar facturas desde un alias
+
+1. El administrador crea el alias en Google Workspace y el usuario confirma que
+   aparece en Gmail bajo **Configuración → Cuentas → Enviar como**.
+2. En IAERP, ve a **Empresa → Envío de facturas**.
+3. Guarda el correo remitente (por ejemplo, `contabilidad@empresa.com`) y el
+   nombre visible. Si se dejan vacíos, IAERP usa la cuenta conectada.
+4. Antes de enviar una factura, la vista previa muestra el remitente. IAERP usa
+   el alias también como `Reply-To`, por lo que las respuestas llegan por la
+   ruta configurada para ese alias.
+
+IAERP no crea ni verifica alias de Google. Si Gmail no lo tiene habilitado como
+`Enviar como`, el envío se detiene con un error y no sustituye silenciosamente
+el remitente por la cuenta personal.
+
+---
+
+## Parte E — Abrirlo a clientes externos (cuando salgas de pruebas)
 
 Los scopes `gmail.readonly` y `gmail.send` son **restringidos** por Google.
 Mientras la app esté en **modo prueba**, solo los *usuarios de prueba* pueden

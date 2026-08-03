@@ -8,9 +8,9 @@ from app.db.session import SessionFactory
 from app.models.masters import Party
 from app.models.platform import OutboxEvent
 from app.models.receivables import CollectionPolicy, CollectionReminder
+from app.services.collection_email import render_collection_email
 from app.workers.collections import (
     COLLECTION_REMINDER_DUE_EVENT,
-    _render_collection_email,
     dispatch_due_reminders_once,
     handle_collection_reminder_due,
 )
@@ -26,7 +26,7 @@ def test_collection_email_renders_tenant_template_and_payment_table() -> None:
         email_body="Saldo {{saldo}}; atraso {{dias_atraso}} días.",
         payment_instructions="Banco ejemplo\nCuenta 123456",
     )
-    subject, plain, html = _render_collection_email(
+    subject, plain, html = render_collection_email(
         policy=policy,
         company_name="Empresa prueba",
         party_name="Cliente prueba",
@@ -41,7 +41,7 @@ def test_collection_email_renders_tenant_template_and_payment_table() -> None:
     assert "Días de atraso" in html
 
 
-async def test_due_reminder_is_queued_once_and_failure_is_visible() -> None:
+async def test_due_reminder_is_queued_once_and_disabled_policy_is_visible() -> None:
     async with SessionFactory() as session, session.begin():
         party = Party(
             tenant_id=TENANT_A,
@@ -95,6 +95,6 @@ async def test_due_reminder_is_queued_once_and_failure_is_visible() -> None:
     async with SessionFactory() as session:
         reminder = await session.get(CollectionReminder, reminder_id)
         assert reminder is not None
-        assert reminder.status == "FAILED"
-        assert reminder.error_message == "Google Workspace is not connected"
+        assert reminder.status == "SKIPPED"
+        assert reminder.error_message == "Collection messages are disabled"
         assert message.event_type == COLLECTION_REMINDER_DUE_EVENT

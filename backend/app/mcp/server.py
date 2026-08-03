@@ -592,6 +592,7 @@ async def receivables_record_payment(
             item = AccountItemRead(
                 id=summary.id,
                 party_id=summary.party_id,
+                invoice_sequential=summary.invoice_sequential,
                 status=summary.status,
                 original_amount=summary.original_amount,
                 open_amount=summary.open_amount,

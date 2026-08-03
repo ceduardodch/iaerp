@@ -33,6 +33,8 @@ from tests.test_billing_api import TENANT_A, TENANT_B, auth, token_for
 from tests.test_receivables_payment_service import _authorized_credit_note_stub, _create_receivable
 from tests.test_receivables_service import _create_authorized_invoice_stub, _create_party
 
+_NON_OVERDUE_DUE_DATE = date(2099, 12, 31)
+
 
 def _context(
     *, tenant_id: uuid.UUID = TENANT_A, actor_id: str = "tester@iaerp.local"
@@ -64,7 +66,7 @@ async def _setup_receivable_with_payment(
             sales_document_id=invoice.id,
             original_amount=total,
             installment_amounts=[total],
-            due_date=date(2026, 8, 1),
+            due_date=_NON_OVERDUE_DUE_DATE,
         )
         receivable_id = receivable.id
 

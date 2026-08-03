@@ -80,6 +80,22 @@ async function mockApi(page: Page) {
       json: currentReceivables,
     })
   })
+  await page.route('**/api/v1/receivables/collections', (route) =>
+    route.fulfill({
+      json: {
+        fromDate: null,
+        toDate: null,
+        cashAmount: '400.00',
+        cashCount: 2,
+        retentionAmount: '100.00',
+        retentionCount: 1,
+        creditAmount: '0.00',
+        creditCount: 0,
+        settledAmount: '500.00',
+        retentionShare: '20.00',
+      },
+    }),
+  )
   await page.route('**/api/v1/receivables/collection-policy', (route) =>
     route.fulfill({
       json: {
@@ -89,6 +105,9 @@ async function mockApi(page: Page) {
         sendHour: 9,
         emailTemplateId: 'payment_reminder',
         whatsappTemplateId: 'payment_reminder',
+        emailSubject: 'Recordatorio de pago - {{empresa}}',
+        emailBody: 'Estimado/a {{cliente}}, podemos acordar un plan de pagos.',
+        paymentInstructions: 'BANCO SINTETICO\nCUENTA CORRIENTE\n0000000000',
         updatedAt: '2026-07-05T12:00:00Z',
       },
     }),
@@ -169,7 +188,7 @@ test('settled receivable is available only when explicitly requested', async ({ 
     name: /\$80,00/,
   })
   await expect(settledRow.getByRole('button', { name: /Registrar cobro/ })).toBeDisabled()
-  await expect(settledRow.getByRole('button', { name: /recordatorio/i })).toBeDisabled()
+  await expect(settledRow.getByRole('button', { name: /correo de cobro/i })).toBeDisabled()
 })
 
 test('register payment full-page view is keyboard reachable, labelled and passes axe', async ({ page }) => {
@@ -214,29 +233,141 @@ test('registering a payment shows the backend-computed balance, never client mat
   await expectNoA11yViolations(page)
 })
 
-test('send reminder full-page view is keyboard reachable, labelled and passes axe', async ({ page }) => {
+test('send collection email view is keyboard reachable, labelled and passes axe', async ({ page }) => {
   await loginAndOpenReceivables(page)
 
-  const reminderButton = page.getByRole('button', { name: `Enviar recordatorio para ${customer.name}` }).first()
+  const reminderButton = page
+    .getByRole('button', { name: `Enviar correo de cobro a ${customer.name}` })
+    .first()
   await reminderButton.focus()
   await page.keyboard.press('Enter')
 
-  await expect(page.getByRole('heading', { name: 'Enviar recordatorio', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Enviar correo de cobro', level: 1 })).toBeVisible()
   await expect(page.getByLabel('Canal')).toBeVisible()
-  await expect(page.getByLabel('Plantilla')).toBeVisible()
   await expectNoA11yViolations(page)
 
-  await page.getByLabel('Plantilla').fill('11111111-1111-4111-8111-111111111111')
-  await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+  // Ya no se pide escribir un id de plantilla: se muestra la configurada, con
+  // sus datos bancarios, y se envía directo.
+  const preview = page.getByRole('region', { name: 'Plantilla que se enviará' })
+  await expect(preview).toContainText('Recordatorio de pago - {{empresa}}')
+  await expect(preview).toContainText('plan de pagos')
+  await expect(preview).toContainText('BANCO SINTETICO')
 
-  await expect(page.getByRole('heading', { name: 'Enviar recordatorio' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Enviar ahora', exact: true }).click()
+
+  await expect(page.getByRole('heading', { name: 'Enviar correo de cobro' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+})
+
+test('collections strip separates cash from retentions', async ({ page }) => {
+  await loginAndOpenReceivables(page)
+
+  // Una retención baja el saldo pero no es caja: debe verse aparte del dinero.
+  const strip = page.getByRole('region', { name: 'Desglose del cobro' })
+  await expect(strip).toContainText('Cobrado en dinero')
+  await expect(strip).toContainText('$400,00')
+  await expect(strip).toContainText('Retenciones')
+  await expect(strip).toContainText('$100,00')
+  await expect(strip).toContainText('20,00 % del cobro fue retención')
 })
 
 test('status filter narrows the receivables list', async ({ page }) => {
   await loginAndOpenReceivables(page)
   await page.getByLabel('Filtrar por estado').selectOption('SETTLED')
   await expect(page.getByRole('cell', { name: 'SALDADA' })).toBeVisible()
+})
+
+test('bank statement preview registers only the confirmed exact invoice match', async ({
+  page,
+}) => {
+  let requestCount = 0
+  await page.route('**/api/v1/receivables/bank-statement', (route) => {
+    requestCount += 1
+    const registered = requestCount > 1
+    return route.fulfill({
+      json: {
+        period: '2026-07',
+        fileName: 'estado.txt',
+        sourceSha256: 'a'.repeat(64),
+        totalRows: 3,
+        creditRows: 2,
+        outsidePeriodCreditCount: 0,
+        matchedCount: 1,
+        unmatchedCreditCount: 1,
+        ignoredDebitCount: 1,
+        alreadyImportedCount: 0,
+        manualCorrectionCount: 0,
+        matches: [{
+          transactionId: 'b'.repeat(64),
+          paymentDate: '2026-07-14',
+          reference: '22525496-2451',
+          description: 'TRANSFERENCIA RECIBIDA',
+          amount: '136.50',
+          receivableId: overdueReceivable.id,
+          invoiceSequential: '000000961',
+          originalAmount: '150.00',
+          retentionTotal: '13.50',
+          replacesManualPayment: false,
+          status: registered ? 'REGISTERED' : 'MATCHED',
+          detail: registered ? 'Cobro registrado' : 'Lista para registrar',
+        }],
+        manualCorrections: [],
+      },
+    })
+  })
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: 'Cargar estado bancario' }).click()
+  await expect(page.getByRole('heading', { name: 'Conciliar banco', level: 1 })).toBeVisible()
+  await page.getByLabel('Estado de cuenta bancario').setInputFiles({
+    name: 'estado.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('estado bancario sintetico'),
+  })
+  await page.getByRole('button', { name: 'Revisar movimientos' }).click()
+  await expect(page.getByRole('cell', { name: '000000961' })).toBeVisible()
+  await expect(page.getByText('1 coincidencia · 0 correcciones · 1 abono sin aplicar')).toBeVisible()
+  await expectNoA11yViolations(page)
+
+  await page.getByRole('button', { name: 'Confirmar 1 cambio' }).click()
+  await expect(page.getByText('Cobro registrado')).toBeVisible()
+  await expect(page.getByText(/Solo los cobros indicados como registrados/)).toBeVisible()
+  expect(requestCount).toBe(2)
+})
+
+test('historical retention preview shows the XML issue date before correction', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/receivables/retention-batch', (route) =>
+    route.fulfill({
+      json: {
+        items: [{
+          fileName: 'retencion-junio.xml',
+          receivableId: overdueReceivable.id,
+          authorizationNumber: '6'.repeat(49),
+          supportingDocument: '001001000000951',
+          invoiceSequential: '000000951',
+          issueDate: '2025-06-15',
+          total: '13.50',
+          status: 'MATCHED',
+          detail: 'Corregirá la fecha desde el XML',
+        }],
+      },
+    }),
+  )
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: 'Cargar retenciones XML' }).click()
+  await page.getByLabel('XML de comprobantes de retención').setInputFiles({
+    name: 'retencion-junio.xml',
+    mimeType: 'application/xml',
+    buffer: Buffer.from('<retencion/>'),
+  })
+  await page.getByRole('button', { name: 'Revisar XML' }).click()
+
+  const row = page.getByRole('row', { name: /retencion-junio\.xml/ })
+  await expect(row).toContainText('2025-06-15')
+  await expect(row).toContainText('Corregirá la fecha desde el XML')
+  await expect(page.getByRole('button', { name: 'Registrar 1 retención' })).toBeVisible()
+  await expectNoA11yViolations(page)
 })
 
 test('receivables screens reflow at 320 CSS px and at 200% zoom without horizontal scroll', async ({
@@ -246,10 +377,11 @@ test('receivables screens reflow at 320 CSS px and at 200% zoom without horizont
   await loginAndOpenReceivables(page)
   await expectNoHorizontalOverflow(page)
 
-  await page
+  const registerPaymentButton = page
     .getByRole('button', { name: `Registrar cobro para ${customer.name}` })
     .first()
-    .click()
+  await expect(registerPaymentButton).toBeInViewport()
+  await registerPaymentButton.click()
   await expect(page.getByRole('heading', { name: 'Registrar cobro', level: 1 })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

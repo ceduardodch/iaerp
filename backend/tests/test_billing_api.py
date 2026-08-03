@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.db.session import SessionFactory, engine
-from app.models.billing import SalesDocument, Sequence
+from app.models.billing import DocumentArtifact, SalesDocument, Sequence
 from app.models.platform import AuditEvent, OutboxEvent
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
@@ -155,6 +155,131 @@ async def test_create_invoice_draft_recalculates_totals_ignoring_client_amounts(
     )
     assert get_response.status_code == 200
     assert get_response.json() == body
+
+
+async def test_authorized_invoice_email_requires_confirmation_and_attaches_ride_and_xml(
+    client, monkeypatch
+):
+    setup_token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(client, setup_token, key_prefix="email-invoice")
+    token = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["invoices:write", "invoices:read"]
+    )
+    created = await client.post(
+        "/api/v1/invoices",
+        headers=auth(token, "email-invoice-create-0001"),
+        json=_invoice_payload(masters),
+    )
+    assert created.status_code == 201, created.text
+    document_id = uuid.UUID(created.json()["id"])
+    async with SessionFactory() as session:
+        document = await session.get(SalesDocument, document_id)
+        assert document is not None
+        document.status = "AUTHORIZED"
+        session.add_all(
+            [
+                DocumentArtifact(
+                    tenant_id=TENANT_A,
+                    sales_document_id=document_id,
+                    artifact_type="xml-signed",
+                    object_key="private/invoice.xml",
+                    sha256="a" * 64,
+                    version=1,
+                ),
+                DocumentArtifact(
+                    tenant_id=TENANT_A,
+                    sales_document_id=document_id,
+                    artifact_type="ride-pdf",
+                    object_key="private/invoice.pdf",
+                    sha256="b" * 64,
+                    version=1,
+                ),
+            ]
+        )
+        await session.commit()
+
+    sent: list[dict[str, object]] = []
+
+    async def fake_download(*, object_key: str, bucket_name=None) -> bytes:
+        del bucket_name
+        return b"<xml/>" if object_key.endswith(".xml") else b"%PDF-1.4"
+
+    async def fake_send(_session, _context, **kwargs) -> str:
+        sent.append(kwargs)
+        return "gmail-message-1"
+
+    monkeypatch.setattr("app.services.billing.storage.download_artifact", fake_download)
+    monkeypatch.setattr("app.services.billing.crm_integrations.send_google_email", fake_send)
+    sender = await client.put(
+        "/api/v1/organization/invoice-email-template",
+        headers=auth(setup_token, "email-invoice-sender-0001"),
+        json={
+            "subject": "Factura {{numero_factura}} · {{empresa}}",
+            "body": (
+                "Hola {{cliente}}. Fecha límite de pago: {{vencimiento}}. "
+                "Plazo acordado: {{plazo}}. Total: ${{total}}"
+            ),
+            "fromAddress": "contabilidad@b2b.com.ec",
+            "fromName": "Contabilidad B2B",
+        },
+    )
+    assert sender.status_code == 200, sender.text
+    preview = await client.get(
+        f"/api/v1/invoices/{document_id}/email-preview",
+        headers=auth(token),
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["dueDate"] == "2026-08-04"
+    assert preview.json()["paymentTermsDays"] == 31
+    assert preview.json()["senderAddress"] == "contabilidad@b2b.com.ec"
+    assert preview.json()["senderName"] == "Contabilidad B2B"
+    assert preview.json()["subject"] == "Factura 001-001-000000001 · Tenant A"
+    assert "Fecha límite de pago: 2026-08-04" in preview.json()["message"]
+    assert "Plazo acordado: 31 días" in preview.json()["message"]
+    assert "Total: $115.00" in preview.json()["message"]
+    assert preview.json()["attachmentNames"] == [
+        "FACTURA-001-001-000000001.xml",
+        "FACTURA-001-001-000000001.pdf",
+    ]
+
+    request_headers = auth(token, "email-invoice-send-0001")
+    response = await client.post(
+        f"/api/v1/invoices/{document_id}/email",
+        headers=request_headers,
+        json={"recipient": "facturas@cliente.example"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["recipient"] == "facturas@cliente.example"
+    assert response.json()["senderAddress"] == "contabilidad@b2b.com.ec"
+    assert response.json()["senderName"] == "Contabilidad B2B"
+    assert response.json()["attachmentNames"] == [
+        "FACTURA-001-001-000000001.xml",
+        "FACTURA-001-001-000000001.pdf",
+    ]
+    assert len(sent) == 1
+    assert sent[0]["subject"] == preview.json()["subject"]
+    assert sent[0]["message"] == preview.json()["message"]
+    assert sent[0]["sender_address"] == "contabilidad@b2b.com.ec"
+    assert sent[0]["sender_name"] == "Contabilidad B2B"
+    assert sent[0]["reply_to"] == "contabilidad@b2b.com.ec"
+    assert [item[1] for item in sent[0]["attachments"]] == [
+        "application/xml",
+        "application/pdf",
+    ]
+
+    replay = await client.post(
+        f"/api/v1/invoices/{document_id}/email",
+        headers=request_headers,
+        json={"recipient": "facturas@cliente.example"},
+    )
+    assert replay.status_code == 200
+    assert replay.json() == response.json()
+    assert len(sent) == 1
 
 
 async def test_create_invoice_draft_ignores_client_supplied_totals(client):

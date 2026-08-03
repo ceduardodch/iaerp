@@ -45,6 +45,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.collection_defaults import DEFAULT_COLLECTION_EMAIL_BODY
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.masters import TenantEntityMixin
 
@@ -97,6 +98,7 @@ class Receivable(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     original_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     status: Mapped[str] = mapped_column(String(20), default="OPEN")
+    collection_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class ReceivableInstallment(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
@@ -200,6 +202,9 @@ class Movement(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     installment_id: Mapped[uuid.UUID]
     movement_type: Mapped[str] = mapped_column(String(20))
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    # Fecha real del cobro o retencion. ``created_at`` conserva la fecha
+    # tecnica en que IAERP registro el movimiento.
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Texto libre: numero de retencion, motivo de descuento, id/clave de NC.
     support_reference: Mapped[str | None] = mapped_column(String(200))
     reversed_movement_id: Mapped[uuid.UUID | None]
@@ -317,14 +322,7 @@ class CollectionPolicy(TimestampMixin, Base):
     email_subject: Mapped[str] = mapped_column(
         String(200), default="Recordatorio de pago - {{empresa}}"
     )
-    email_body: Mapped[str] = mapped_column(
-        String(5000),
-        default=(
-            "Estimado/a {{cliente}},\n\n"
-            "Le recordamos que mantiene un saldo pendiente. "
-            "Revise el detalle y realice el pago hasta {{vencimiento}}."
-        ),
-    )
+    email_body: Mapped[str] = mapped_column(String(5000), default=DEFAULT_COLLECTION_EMAIL_BODY)
     payment_instructions: Mapped[str] = mapped_column(String(1500), default="")
 
 

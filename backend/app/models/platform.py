@@ -55,6 +55,24 @@ class TenantFiscalSettings(TimestampMixin, Base):
     certificate_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ride_logo_object_key: Mapped[str | None] = mapped_column(String(500))
     ride_logo_sha256: Mapped[str | None] = mapped_column(String(64))
+    invoice_email_subject: Mapped[str] = mapped_column(
+        String(500),
+        default="Factura {{numero_factura}} · {{empresa}}",
+    )
+    invoice_email_body: Mapped[str] = mapped_column(
+        Text,
+        default=(
+            "Hola {{cliente}},\n\n"
+            "Adjuntamos la factura {{numero_factura}}, su RIDE en PDF y el XML firmado.\n\n"
+            "Fecha de emisión: {{fecha_emision}}\n"
+            "Fecha límite de pago: {{vencimiento}}\n"
+            "Plazo acordado: {{plazo}}\n"
+            "Total: ${{total}}\n\n"
+            "Nota de pago: por favor realiza el pago hasta la fecha indicada."
+        ),
+    )
+    invoice_email_from_address: Mapped[str | None] = mapped_column(String(320))
+    invoice_email_from_name: Mapped[str | None] = mapped_column(String(200))
 
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -48,6 +48,22 @@
 - Propuestas comerciales de cargo fijo, consumo variable o ambas, vinculables
   a factura y cartera sin sustituir el comprobante SRI.
 
+### Modulo tributario (ADR 0012)
+
+- Carga manual de evidencia del SRI (XML, TXT, PDF, ZIP) por entidad, RUC y
+  periodo, con hash y trazabilidad; el portal del SRI no se automatiza.
+- Comprobantes recibidos (compras) construidos desde la evidencia importada.
+- Preparacion del IVA mensual (formulario 104) con valores listos para copiar y
+  la lista de documentos que respalda cada cifra.
+- Generacion del ATS (XML y ZIP) con validacion previa y ciclo de correccion de
+  los errores devueltos por el SRI.
+- Los PDF son solo evidencia: los valores se toman del XML o del TXT.
+- El sistema no inventa valores; lo que carece de soporte queda marcado como
+  preliminar y se reporta como faltante.
+- Declarar, entregar un anexo o pagar exige aprobacion humana explicita.
+- RDEP y ADI quedan fuera hasta definir el origen de los datos de nomina/IESS y
+  contar con la ficha tecnica vigente del anexo.
+
 ## Restricciones vinculantes
 
 - Pais Ecuador, moneda USD y zona `America/Guayaquil`.
@@ -64,7 +80,6 @@
 ## Fuera del MVP
 
 - Contabilidad general, diario, mayor, balances y cierres.
-- Declaraciones tributarias y anexos.
 - Conciliacion o integracion bancaria.
 - Ejecucion de transferencias.
 - Inventario, compras con ordenes y logistica.
