@@ -27,6 +27,21 @@ const dashboard = {
   },
 }
 
+const aging = [
+  { bucket: 'CURRENT', total: '1200.00', installmentCount: 3 },
+  { bucket: '1-15', total: '400.00', installmentCount: 1 },
+  { bucket: '16-30', total: '250.00', installmentCount: 1 },
+  { bucket: '31-60', total: '0.00', installmentCount: 0 },
+  { bucket: '61-90', total: '0.00', installmentCount: 0 },
+  { bucket: '90+', total: '900.00', installmentCount: 2 },
+]
+
+const collectionMonths = [
+  { year: 2026, month: 6, cashAmount: '500.00', retentionAmount: '50.00', settledAmount: '550.00' },
+  { year: 2026, month: 7, cashAmount: '700.00', retentionAmount: '100.00', settledAmount: '800.00' },
+  { year: 2026, month: 8, cashAmount: '880.00', retentionAmount: '120.00', settledAmount: '1000.00' },
+]
+
 const purchases = [
   {
     id: '11111111-2222-4333-8444-555555555555',
@@ -63,6 +78,12 @@ async function mockApi(page: Page) {
   for (const path of ['parties', 'products', 'tax-categories', 'establishments', 'emission-points', 'invoices', 'receivables', 'crm/leads']) {
     await page.route(`**/api/v1/${path}`, (route) => route.fulfill({ json: [] }))
   }
+  await page.route('**/api/v1/receivables/aging', (route) => route.fulfill({
+    json: { asOf: '2026-08-15', buckets: aging, byParty: [] },
+  }))
+  await page.route('**/api/v1/receivables/collections/monthly**', (route) => route.fulfill({
+    json: { months: collectionMonths },
+  }))
   await page.route('**/api/v1/tax/dashboard', (route) => route.fulfill({ json: dashboard }))
   await page.route('**/api/v1/tax/purchases', (route) => route.fulfill({ json: purchases }))
 }
@@ -75,12 +96,39 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('dashboard muestra evolución y corte mensual documentado', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Evolución de ventas' })).toBeVisible()
-  await expect(page.getByLabel('Ventas autorizadas netas por mes')).toContainText('2.300,00')
-  await expect(page.getByRole('heading', { name: /Compras vs. ventas/ })).toBeVisible()
-  await expect(page.getByText('IVA estimado a pagar')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Ventas autorizadas' })).toBeVisible()
+  // El valor de cada mes vive en la tabla equivalente del gráfico, que es como
+  // lo lee un lector de pantalla: la línea solo rotula el extremo.
+  await expect(
+    page.getByRole('table', { name: /Ventas autorizadas netas por mes/ }),
+  ).toContainText('2.300,00')
+  await expect(page.getByRole('heading', { name: 'Ventas y compras del mes' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /IVA estimado/ })).toBeVisible()
   await expect(page.getByText('$61,99')).toBeVisible()
+  await expect(page.getByText('a pagar')).toBeVisible()
   await expect(page.getByRole('alert')).toContainText('campo 564')
+})
+
+test('la sección de caja separa el dinero de las retenciones', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: 'Caja y cobranza' })).toBeVisible()
+
+  // La antigüedad usa rampa ordinal: el orden de los tramos es parte del dato.
+  await expect(page.getByRole('table', { name: /antigüedad/i })).toContainText('$900,00')
+
+  // Una retención no es caja: se muestra aparte del dinero recibido.
+  await expect(page.getByText('Se fue en retenciones')).toBeVisible()
+  await expect(page.getByText('$120,00 recuperables ante el SRI, no en caja.')).toBeVisible()
+
+  // 1.000 este mes contra 800 el anterior = +25 %, calculado del servidor.
+  await expect(page.getByText(/25,00 % vs. mes anterior/)).toBeVisible()
+})
+
+test('el tablero completo pasa la auditoría de accesibilidad', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: 'Caja y cobranza' })).toBeVisible()
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(results.violations).toEqual([])
 })
 
 test('Compras agrupa XML por mes y muestra el desglose de IVA', async ({ page }) => {

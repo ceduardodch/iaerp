@@ -14,7 +14,10 @@ from decimal import Decimal
 from app.core.auth import AuthContext
 from app.db.session import SessionFactory
 from app.models.receivables import Movement
-from app.services.receivables import compute_collections_breakdown
+from app.services.receivables import (
+    compute_collections_breakdown,
+    compute_collections_history,
+)
 from tests.test_billing_api import TENANT_A, auth, token_for
 from tests.test_receivables_service import (
     _create_authorized_invoice_stub,
@@ -226,3 +229,111 @@ async def test_endpoint_requires_receivables_read_scope(client) -> None:
     token = await token_for(client, "a@iaerp.local", TENANT_A, ["parties:read"])
     response = await client.get("/api/v1/receivables/collections", headers=auth(token))
     assert response.status_code == 403
+
+
+# --- Serie mensual: la tendencia debe cuadrar con el total ------------------
+
+
+async def test_history_returns_every_month_even_without_collections() -> None:
+    async with SessionFactory() as session:
+        history = await compute_collections_history(
+            session, _context(), months=6, as_of=date(2026, 7, 15)
+        )
+
+    # Seis meses completos, del mas viejo al mas nuevo, sin huecos: una serie
+    # con meses faltantes dibuja una tendencia falsa.
+    assert [(item.year, item.month) for item in history.months] == [
+        (2026, 2),
+        (2026, 3),
+        (2026, 4),
+        (2026, 5),
+        (2026, 6),
+        (2026, 7),
+    ]
+    assert all(item.settled_amount == Decimal("0.00") for item in history.months)
+
+
+async def test_history_places_each_movement_in_its_effective_month() -> None:
+    await _seed_movements(
+        suffix="hist1",
+        entries=[
+            ("PAYMENT", Decimal("100.00"), date(2026, 5, 20)),
+            ("PAYMENT", Decimal("250.00"), date(2026, 7, 3)),
+            ("RETENTION", Decimal("50.00"), date(2026, 7, 28)),
+        ],
+    )
+
+    async with SessionFactory() as session:
+        history = await compute_collections_history(
+            session, _context(), months=3, as_of=date(2026, 7, 15)
+        )
+
+    by_month = {(item.year, item.month): item for item in history.months}
+    assert by_month[(2026, 5)].cash_amount == Decimal("100.00")
+    assert by_month[(2026, 6)].settled_amount == Decimal("0.00")
+    # Julio incluye el ultimo dia del mes aunque ``as_of`` sea el 15.
+    assert by_month[(2026, 7)].cash_amount == Decimal("250.00")
+    assert by_month[(2026, 7)].retention_amount == Decimal("50.00")
+    assert by_month[(2026, 7)].settled_amount == Decimal("300.00")
+
+
+async def test_history_excludes_reversed_movements_like_the_total() -> None:
+    movements = await _seed_movements(
+        suffix="hist2",
+        entries=[
+            ("PAYMENT", Decimal("400.00"), date(2026, 7, 10)),
+            ("PAYMENT", Decimal("600.00"), date(2026, 7, 11)),
+        ],
+    )
+    reversed_movement = movements[1]
+
+    async with SessionFactory() as session, session.begin():
+        session.add(
+            Movement(
+                tenant_id=TENANT_A,
+                receivable_id=reversed_movement.receivable_id,
+                installment_id=reversed_movement.installment_id,
+                movement_type="REVERSAL",
+                amount=Decimal("600.00"),
+                effective_date=date(2026, 7, 12),
+                support_reference="Cobro duplicado",
+                reversed_movement_id=reversed_movement.id,
+                actor_id="tester@iaerp.local",
+            )
+        )
+
+    async with SessionFactory() as session:
+        history = await compute_collections_history(
+            session, _context(), months=1, as_of=date(2026, 7, 31)
+        )
+        breakdown = await compute_collections_breakdown(
+            session, _context(), from_date=date(2026, 7, 1), to_date=date(2026, 7, 31)
+        )
+
+    # La serie y el total salen de la misma regla: no pueden contradecirse.
+    assert history.months[0].cash_amount == Decimal("400.00")
+    assert history.months[0].cash_amount == breakdown.cash_amount
+
+
+async def test_history_endpoint_is_scoped_and_camel_case(client) -> None:
+    await _seed_movements(
+        suffix="hist3", entries=[("PAYMENT", Decimal("77.00"), date(2026, 7, 9))]
+    )
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:read"])
+
+    response = await client.get(
+        "/api/v1/receivables/collections/monthly?months=2&asOf=2026-07-31",
+        headers=auth(token),
+    )
+
+    assert response.status_code == 200, response.text
+    months = response.json()["months"]
+    assert len(months) == 2
+    assert months[-1]["cashAmount"] == "77.00"
+    assert months[-1]["settledAmount"] == "77.00"
+
+    denied = await client.get(
+        "/api/v1/receivables/collections/monthly",
+        headers=auth(await token_for(client, "a@iaerp.local", TENANT_A, ["parties:read"])),
+    )
+    assert denied.status_code == 403

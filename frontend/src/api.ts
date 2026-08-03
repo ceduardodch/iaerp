@@ -446,6 +446,33 @@ export type CollectionsBreakdown = {
   retentionShare: string
 }
 
+/** Tramos de antigüedad de cartera, en orden: el orden es parte del dato. */
+export type AgingBucket = 'CURRENT' | '1-15' | '16-30' | '31-60' | '61-90' | '90+'
+
+export type AgingSummary = {
+  asOf: string
+  buckets: Array<{ bucket: AgingBucket; total: string; installmentCount: number }>
+  byParty: Array<{ partyId: string; bucket: AgingBucket; total: string; installmentCount: number }>
+}
+
+/**
+ * Serie mensual de cobro (`GET /receivables/collections/monthly`).
+ *
+ * Siempre trae todos los meses del rango, con cero donde no hubo cobro: una
+ * serie con huecos dibujaría una tendencia falsa.
+ */
+export type MonthlyCollection = {
+  year: number
+  month: number
+  cashAmount: string
+  retentionAmount: string
+  settledAmount: string
+}
+
+export type CollectionsHistory = {
+  months: MonthlyCollection[]
+}
+
 export type CollectionPolicy = {
   enabled: boolean
   offsetsDays: number[]

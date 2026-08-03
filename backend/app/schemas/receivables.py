@@ -229,6 +229,30 @@ class CollectionsBreakdownRead(APIModel):
     retention_share: Decimal
 
 
+class MonthlyCollectionRead(APIModel):
+    """Un mes de la serie de cobro (``GET /receivables/collections/monthly``)."""
+
+    year: int
+    month: int
+    cash_amount: Decimal
+    retention_amount: Decimal
+    settled_amount: Decimal
+
+
+class CollectionsHistoryRead(APIModel):
+    """Serie mensual de cobro, para leer la tendencia y no solo el total.
+
+    Un total sin comparación no dice si vas mejor o peor. Esta serie alimenta
+    la minigráfica y la variación contra el mes anterior en el tablero.
+
+    Los meses SIN cobro aparecen en cero en vez de faltar: una serie con huecos
+    dibuja una tendencia falsa, porque la línea saltaría de un mes a otro no
+    contiguo como si fueran consecutivos.
+    """
+
+    months: list[MonthlyCollectionRead]
+
+
 class ReminderInput(APIModel):
     """Input para envío manual de recordatorio (Sprint 3, decisión 8).
 

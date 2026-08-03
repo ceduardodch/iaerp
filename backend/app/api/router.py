@@ -89,6 +89,7 @@ from app.schemas.receivables import (
     CollectionPolicyRead,
     CollectionPolicyUpdate,
     CollectionsBreakdownRead,
+    CollectionsHistoryRead,
     MovementRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
@@ -1869,6 +1870,26 @@ async def get_receivables_collections(
         session, context=context, from_date=from_date, to_date=to_date
     )
     return breakdown.model_dump(mode="json", by_alias=True)
+
+
+@router.get("/receivables/collections/monthly", response_model=CollectionsHistoryRead)
+async def get_receivables_collections_monthly(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+    months: Annotated[int, Query(ge=1, le=36)] = 12,
+    as_of: Annotated[date | None, Query(alias="asOf")] = None,
+) -> dict[str, object]:
+    """Serie mensual de cobro, para leer la tendencia y no solo el total.
+
+    Ruta estatica declarada ANTES de ``GET /receivables/{receivable_id}``.
+    ``asOf`` fija el mes final de la ventana para pruebas reproducibles; por
+    defecto es hoy en ``America/Guayaquil``.
+    """
+
+    history = await receivables.compute_collections_history(
+        session, context=context, months=months, as_of=as_of
+    )
+    return history.model_dump(mode="json", by_alias=True)
 
 
 @router.get("/receivables/collection-policy", response_model=CollectionPolicyRead)
