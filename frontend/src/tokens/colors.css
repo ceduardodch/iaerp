@@ -13,4 +13,39 @@
   --accent: var(--blue-600); --accent-hover: var(--blue-700); --accent-soft: var(--blue-50); --accent-soft-text: var(--blue-700);
   --success: var(--emerald-600); --success-hover: var(--emerald-700); --success-text: var(--emerald-700); --danger-text: var(--red-600); --warning-text: var(--amber-700);
   --badge-info-bg: var(--blue-100); --badge-info-text: var(--blue-800); --badge-success-bg: var(--emerald-100); --badge-success-text: var(--emerald-800); --badge-warning-bg: var(--amber-100); --badge-warning-text: var(--amber-900); --badge-danger-bg: var(--red-100); --badge-danger-text: var(--red-800); --badge-neutral-bg: var(--slate-100); --badge-neutral-text: var(--slate-700);
+
+  /* ── Colores de gráfico ───────────────────────────────────────────────────
+     Pasos propios, NO los de interfaz. Los de arriba no sirven como color de
+     serie y está medido, no opinado: --blue-600 (#1e3a5f) tiene OKLCH L 0.346
+     cuando la banda legible es 0.43–0.77 y croma 0.074 bajo el piso de 0.10
+     (en un gráfico se lee como gris), y --amber-700 contra --red-600 dan
+     ΔE 2.8 bajo deuteranopía y 9.9 en visión normal — por debajo de los
+     umbrales 8 y 15, o sea indistinguibles incluso con visión de color plena.
+
+     Estos pasos conservan las mismas familias de tono y pasan las seis
+     comprobaciones (banda de luminosidad, piso de croma, separación CVD,
+     piso de visión normal, contraste). Verificable con el validador del skill
+     dataviz:
+       node scripts/validate_palette.js "#2f6bab,#0e9f6e,#c07a06" \
+         --mode light --surface "#ffffff" --pairs all
+     Resultado: peor par ΔE 9.3 (protan) / 19.7 (normal), todos ≥ 3:1.
+
+     Tres ranuras, en orden fijo, asignadas en secuencia y jamás recicladas.
+     El orden ES el mecanismo de seguridad para daltonismo: no lo cambies. */
+  --chart-1: #2f6bab; --chart-2: #0e9f6e; --chart-3: #c07a06;
+
+  /* Rampa ordinal para escalas con orden propio (antigüedad de cartera, etapas
+     de embudo): un solo tono, claro→oscuro, para que el color muestre el orden.
+     Validada con --ordinal: L monótona, salto ≥ 0.06 entre pasos, extremo
+     claro a 2.14:1 sobre blanco. NO uses rojo aquí: el rojo está reservado
+     para estado y un rojo de escala se confundiría con una alerta. */
+  --chart-ordinal-1: #93b4dd; --chart-ordinal-2: #749ed2; --chart-ordinal-3: #5889c4;
+  --chart-ordinal-4: #3b73b6; --chart-ordinal-5: #225ea2; --chart-ordinal-6: #0e4a89;
+
+  /* Cuadrícula y ejes: un paso por encima de la superficie, línea de 1px sólida
+     (nunca punteada: el punteado se lee como "proyección" o "umbral"). */
+  --chart-grid: var(--slate-200); --chart-axis: var(--slate-300);
+  --chart-muted: var(--slate-400);
+  /* Relleno de área: un lavado del tono de la serie, nunca un bloque saturado. */
+  --chart-area-opacity: .10;
 }

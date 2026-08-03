@@ -19,7 +19,9 @@ import {
   type ArtifactDownload,
   type BankStatementImport,
   type BillingProposal,
+  type AgingSummary,
   type CollectionPolicy,
+  type CollectionsHistory,
   type CollectionsBreakdown,
   type CommercialContract,
   type ContractArtifactDownload,
@@ -63,12 +65,18 @@ import {
   ErpButton,
   ErpEmptyState,
   ErpFormPanel,
-  ErpMetricGrid,
   ErpPageHeader,
   ErpPanel,
   ErpStatusBadge,
   ErpToolbar,
 } from './components/erp'
+import {
+  ErpLineChart,
+  ErpOrdinalColumns,
+  ErpCompareBars,
+  ErpStackedBars,
+  ErpStatTile,
+} from './components/charts'
 import { ErpCombobox } from './components/erp/ErpCombobox'
 import { ErpModal } from './components/erp/ErpModal'
 // Code-splitting (Sprint 7): la sección CRM arrastra dependencias pesadas
@@ -252,6 +260,48 @@ function LoadingScreen() {
   )
 }
 
+/** Tramos tal como los nombra el servidor (`AgingSummary`), no el chip local. */
+type ServerAgingBucket = AgingSummary['buckets'][number]['bucket']
+
+const BUCKET_LABELS: Record<ServerAgingBucket, string> = {
+  CURRENT: 'Al día',
+  '1-15': '1-15',
+  '16-30': '16-30',
+  '31-60': '31-60',
+  '61-90': '61-90',
+  '90+': '90+',
+}
+const BUCKET_ORDER: ServerAgingBucket[] = ['CURRENT', '1-15', '16-30', '31-60', '61-90', '90+']
+
+function monthLabel(year: number, month: number, style: 'short' | 'long' = 'short'): string {
+  return new Date(year, month - 1, 1).toLocaleDateString('es-EC', {
+    month: style,
+    year: style === 'short' ? '2-digit' : 'numeric',
+  })
+}
+
+/**
+ * Variación porcentual contra el periodo anterior.
+ *
+ * Devuelve ``undefined`` cuando no hay base con qué comparar: un porcentaje
+ * sobre cero no significa nada y mostrar "+100 %" porque antes no había nada
+ * sería inventar una mejora.
+ */
+function percentChange(current: number, previous: number): number | undefined {
+  if (previous <= 0) return undefined
+  return ((current - previous) / previous) * 100
+}
+
+function SectionHeading({ index, title, subtitle }: { index: number; title: string; subtitle: string }) {
+  return (
+    <div className="dash-section-head">
+      <span className="dash-section-num" aria-hidden="true">{index}</span>
+      <h2>{title}</h2>
+      <span className="dash-section-sub">{subtitle}</span>
+    </div>
+  )
+}
+
 function Overview({
   context,
   token,
@@ -259,30 +309,57 @@ function Overview({
   context: TenantContext
   token: string
 }) {
-  const [invoicesQuery, receivablesQuery, leadsQuery, taxDashboardQuery] = useQueries({
+  const canReadTax = context.scopes.includes('tax:read')
+  const [invoicesQuery, receivablesQuery, leadsQuery, taxDashboardQuery, agingQuery, historyQuery] = useQueries({
     queries: [
       { queryKey: ['invoices', 'overview'], queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices') },
       { queryKey: ['receivables', 'overview'], queryFn: () => apiRequest<AccountItem[]>(token, '/receivables') },
       { queryKey: ['crm', 'leads', 'overview'], queryFn: () => apiRequest<Lead[]>(token, '/crm/leads') },
-      { queryKey: ['tax', 'dashboard'], queryFn: () => apiRequest<DashboardTax>(token, '/tax/dashboard'), enabled: context.scopes.includes('tax:read') },
+      { queryKey: ['tax', 'dashboard'], queryFn: () => apiRequest<DashboardTax>(token, '/tax/dashboard'), enabled: canReadTax },
+      { queryKey: ['receivables', 'aging'], queryFn: () => apiRequest<AgingSummary>(token, '/receivables/aging') },
+      { queryKey: ['receivables', 'collections', 'monthly'], queryFn: () => apiRequest<CollectionsHistory>(token, '/receivables/collections/monthly?months=12') },
     ],
   })
   const invoices = invoicesQuery.data ?? []
   const receivables = receivablesQuery.data ?? []
   const leads = leadsQuery.data ?? []
   const taxDashboard = taxDashboardQuery.data
+  const months = historyQuery.data?.months ?? []
+
   const today = todayInFiscalTimezone().slice(0, 7)
   const outstanding = receivables.reduce((sum, item) => sum + Number(item.openAmount), 0)
-  const overdue = receivables.filter((item) => item.status === 'OVERDUE').reduce((sum, item) => sum + Number(item.openAmount), 0)
+  const overdueItems = receivables.filter((item) => item.status === 'OVERDUE')
+  const overdue = overdueItems.reduce((sum, item) => sum + Number(item.openAmount), 0)
   const monthlyInvoices = invoices.filter((invoice) =>
     invoice.issueDate.startsWith(today) && invoice.type === 'INVOICE' && invoice.status === 'AUTHORIZED',
   ).length
-  const openPipeline = leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).reduce((sum, lead) => sum + Number(lead.estimatedValue ?? 0), 0)
-  const trendMaximum = Math.max(...(taxDashboard?.trend.map((point) => Math.max(Number(point.total), 0)) ?? [0]), 1)
+  const openLeads = leads.filter((lead) => !['WON', 'LOST'].includes(lead.status))
+  const openPipeline = openLeads.reduce((sum, lead) => sum + Number(lead.estimatedValue ?? 0), 0)
+
+  // Cobro: el mes en curso frente al anterior, ambos del servidor.
+  const currentMonth = months.at(-1)
+  const previousMonth = months.at(-2)
+  const collectedNow = Number(currentMonth?.settledAmount ?? 0)
+  const collectedDelta = percentChange(collectedNow, Number(previousMonth?.settledAmount ?? 0))
+  const retainedNow = Number(currentMonth?.retentionAmount ?? 0)
+  const retentionShare = collectedNow > 0 ? (retainedNow / collectedNow) * 100 : 0
+
+  const agingBars = (agingQuery.data?.buckets ?? [])
+    .slice()
+    .sort((left, right) => BUCKET_ORDER.indexOf(left.bucket) - BUCKET_ORDER.indexOf(right.bucket))
+    .map((bucket) => ({ label: BUCKET_LABELS[bucket.bucket], value: Number(bucket.total) }))
+
+  const collectionRows = months.slice(-3).map((month) => ({
+    label: monthLabel(month.year, month.month),
+    parts: [Number(month.cashAmount), Number(month.retentionAmount)],
+  }))
+
   const currentTax = taxDashboard?.currentMonth
-  const currentTaxMonth = currentTax
-    ? new Date(currentTax.year, currentTax.month - 1, 1).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })
-    : ''
+  const salesTrend = (taxDashboard?.trend ?? []).map((point) => ({
+    label: monthLabel(point.year, point.month),
+    value: Math.max(Number(point.total), 0),
+  }))
+
   return (
     <>
       <ErpPageHeader
@@ -291,88 +368,142 @@ function Overview({
         subtitle="El pulso de cobranza, emisión y oportunidades de tu empresa."
         meta={<span className="date-chip">RUC {context.ruc}</span>}
       />
-      <ErpMetricGrid ariaLabel="Indicadores operativos">
-        <article className="metric-card">
-          <span className="metric-label">Por cobrar</span>
-          <strong>${formatAmount(outstanding)}</strong>
-          <p>{receivables.length} cuentas activas.</p>
+
+      <SectionHeading index={1} title="Caja y cobranza" subtitle="¿Hay plata y quién me debe?" />
+
+      <div className="dash-hero-row">
+        <article className="dash-hero">
+          <span className="erp-stat-label">Por cobrar</span>
+          {/* Cifra guía del tablero: una sola por vista, en la misma tipografía
+              sans que el resto. Sin tabular-nums, que a este tamaño separa los
+              dígitos y hace ver flojo el número. */}
+          <strong className="dash-hero-value">${formatAmount(outstanding)}</strong>
+          <p className="erp-stat-foot">{receivables.length} cuentas en cartera.</p>
         </article>
-        <article className="metric-card">
-          <span className="metric-label">Vencido</span>
-          <strong className={overdue > 0 ? 'metric-danger' : ''}>${formatAmount(overdue)}</strong>
-          <p>Saldo que requiere seguimiento.</p>
-        </article>
-        <article className="metric-card">
-          <span className="metric-label">Facturas autorizadas del mes</span>
-          <strong>{monthlyInvoices}</strong>
-          <p>No incluye rechazos ni documentos no autorizados.</p>
-        </article>
-        <article className="metric-card">
-          <span className="metric-label">Pipeline abierto</span>
-          <strong className="metric-success">${formatAmount(openPipeline)}</strong>
-          <p>{leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).length} oportunidades CRM activas.</p>
-        </article>
-      </ErpMetricGrid>
-      <section className="dashboard-financial-grid" aria-label="Ventas y corte tributario">
-        <ErpPanel title="Evolución de ventas" actions={<ErpStatusBadge>Últimos 12 meses</ErpStatusBadge>}>
-          {taxDashboardQuery.isPending ? <p aria-busy="true">Cargando evolución…</p> : null}
-          {taxDashboardQuery.error ? <p className="form-error" role="alert">No se pudo cargar el corte tributario.</p> : null}
-          {taxDashboard ? (
-            <ol className="sales-trend" aria-label="Ventas autorizadas netas por mes">
-              {taxDashboard.trend.map((point) => {
-                const label = new Date(point.year, point.month - 1, 1).toLocaleDateString('es-EC', { month: 'short', year: '2-digit' })
-                const width = Math.max((Math.max(Number(point.total), 0) / trendMaximum) * 100, Number(point.total) ? 2 : 0)
-                return (
-                  <li key={`${point.year}-${point.month}`} aria-label={`${label}: ${formatAmount(point.total)} dólares`}>
-                    <span className="sales-trend-label">{label}</span>
-                    <span className="sales-trend-track" aria-hidden="true"><span style={{ width: `${width}%` }} /></span>
-                    <strong>${formatAmount(point.total)}</strong>
-                  </li>
-                )
-              })}
-            </ol>
+        <div className="dash-tiles">
+          <ErpStatTile
+            label="Vencido"
+            value={`$${formatAmount(overdue)}`}
+            tone={overdue > 0 ? 'danger' : undefined}
+            footnote={`${overdueItems.length} cuenta(s) pasadas de fecha.`}
+          />
+          <ErpStatTile
+            label="Cobrado este mes"
+            value={`$${formatAmount(collectedNow)}`}
+            delta={collectedDelta === undefined ? undefined : { value: collectedDelta, goodWhen: 'up' }}
+            spark={months.map((month) => Number(month.settledAmount))}
+          />
+          <ErpStatTile
+            label="Se fue en retenciones"
+            value={`${formatAmount(retentionShare)} %`}
+            footnote={<>${formatAmount(retainedNow)} recuperables ante el SRI, no en caja.</>}
+          />
+        </div>
+      </div>
+
+      <section className="dash-grid-2">
+        <ErpPanel title="Antigüedad del saldo" actions={<span className="dash-panel-note">Más oscuro = más vencido</span>}>
+          {agingQuery.isPending ? <p aria-busy="true">Cargando antigüedad…</p> : null}
+          {agingBars.length > 0 ? (
+            <ErpOrdinalColumns bars={agingBars} label="Saldo abierto por tramo de antigüedad" emphasizeLast />
+          ) : !agingQuery.isPending ? (
+            <p className="fine-print">Sin saldo abierto que clasificar.</p>
           ) : null}
         </ErpPanel>
-        <ErpPanel
-          title={currentTax ? `Compras vs. ventas · ${currentTaxMonth}` : 'Compras vs. ventas'}
-          actions={currentTax ? <ErpStatusBadge tone={currentTax.isPreliminary ? 'warning' : 'success'}>{currentTax.isPreliminary ? 'Preliminar' : 'Respaldado'}</ErpStatusBadge> : undefined}
-        >
-          {currentTax ? (
-            <div className="monthly-tax-card">
-              <dl className="monthly-tax-comparison">
-                <div><dt>Ventas autorizadas</dt><dd>${formatAmount(currentTax.authorizedSalesTotal)}</dd></div>
-                {currentTax.authorizedSalesTotal !== currentTax.evidencedSalesTotal ? <div><dt>Ventas ya cargadas en Tributario</dt><dd>${formatAmount(currentTax.evidencedSalesTotal)}</dd></div> : null}
-                <div><dt>Compras desde XML</dt><dd>${formatAmount(currentTax.purchasesTotal)}</dd></div>
-                <div><dt>IVA generado</dt><dd>${formatAmount(currentTax.ivaGenerated)}</dd></div>
-                <div><dt>IVA de compras</dt><dd>− ${formatAmount(currentTax.ivaCredit)}</dd></div>
-                <div><dt>Retención de IVA</dt><dd>− ${formatAmount(currentTax.retainedIva)}</dd></div>
-              </dl>
-              <div className="monthly-tax-result">
-                <span>IVA estimado a pagar</span>
-                <strong>${formatAmount(currentTax.ivaPayable)}</strong>
-                {Number(currentTax.ivaCreditBalance) > 0 ? <small>Crédito estimado a favor: ${formatAmount(currentTax.ivaCreditBalance)}</small> : null}
-              </div>
-              {currentTax.isPreliminary ? (
+        <ErpPanel title="Cómo se cobró">
+          {collectionRows.length > 0 ? (
+            <>
+              <ErpStackedBars
+                rows={collectionRows}
+                seriesNames={['Dinero recibido', 'Retención']}
+                label="Cobro mensual dividido entre dinero recibido y retenciones"
+              />
+              <p className="fine-print">La retención baja el saldo pero no entra en caja.</p>
+            </>
+          ) : (
+            <p className="fine-print">Aún no hay cobros registrados en el periodo.</p>
+          )}
+        </ErpPanel>
+      </section>
+
+      {canReadTax ? (
+        <>
+          <SectionHeading index={2} title="Tributario" subtitle="¿Qué debo declarar?" />
+          <section className="dash-grid-2">
+            <ErpPanel
+              title={currentTax ? `IVA estimado · ${monthLabel(currentTax.year, currentTax.month, 'long')}` : 'IVA estimado'}
+              actions={currentTax ? <ErpStatusBadge tone={currentTax.isPreliminary ? 'warning' : 'success'}>{currentTax.isPreliminary ? 'Preliminar' : 'Respaldado'}</ErpStatusBadge> : undefined}
+            >
+              {taxDashboardQuery.isPending ? <p aria-busy="true">Cargando corte tributario…</p> : null}
+              {taxDashboardQuery.error ? <p className="form-error" role="alert">No se pudo cargar el corte tributario.</p> : null}
+              {currentTax ? (
+                <div className="dash-tax">
+                  <p className="dash-tax-figure">
+                    <strong>${formatAmount(currentTax.ivaPayable)}</strong>
+                    <span>a pagar</span>
+                  </p>
+                  <dl className="dash-tax-detail">
+                    <div><dt>IVA generado</dt><dd>${formatAmount(currentTax.ivaGenerated)}</dd></div>
+                    <div><dt>IVA de compras</dt><dd>− ${formatAmount(currentTax.ivaCredit)}</dd></div>
+                    <div><dt>Retención de IVA</dt><dd>− ${formatAmount(currentTax.retainedIva)}</dd></div>
+                    {Number(currentTax.ivaCreditBalance) > 0 ? (
+                      <div><dt>Crédito a favor</dt><dd>${formatAmount(currentTax.ivaCreditBalance)}</dd></div>
+                    ) : null}
+                  </dl>
+                </div>
+              ) : null}
+              {currentTax?.isPreliminary ? (
                 <div className="tax-estimate-warning" role="alert">
                   <strong>Estimación, no declaración.</strong>
                   <ul>{currentTax.preliminaryReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
                 </div>
-              ) : <p className="fine-print">Calculado con la evidencia tributaria del periodo. Declarar y pagar aún exige revisión humana.</p>}
-            </div>
-          ) : null}
-        </ErpPanel>
-      </section>
-      <section className="readiness-panel">
-        <div>
-          <p className="section-number">Próximo hito</p>
-          <h2>Preparación fiscal</h2>
-        </div>
-        <ol className="readiness-list">
-          <li><span>✓</span> Verificar establecimiento y punto de emisión</li>
-          <li><span>✓</span> Completar catálogo y contactos</li>
-          <li><span>✓</span> Cargar certificado de firma de forma segura</li>
-        </ol>
-      </section>
+              ) : currentTax ? (
+                <p className="fine-print">Calculado con la evidencia tributaria del periodo. Declarar y pagar aún exige revisión humana.</p>
+              ) : null}
+            </ErpPanel>
+            <ErpPanel title="Ventas y compras del mes">
+              {currentTax ? (
+                <>
+                  <ErpCompareBars
+                    bars={[
+                      { label: 'Ventas', value: Number(currentTax.authorizedSalesTotal) },
+                      { label: 'Compras', value: Number(currentTax.purchasesTotal) },
+                    ]}
+                    label="Ventas autorizadas frente a compras del mes"
+                  />
+                  <p className="fine-print">
+                    {currentTax.authorizedSalesCount} venta(s) autorizadas y {currentTax.purchaseCount} compra(s) con comprobante cargado.
+                  </p>
+                </>
+              ) : null}
+            </ErpPanel>
+          </section>
+        </>
+      ) : null}
+
+      <SectionHeading index={canReadTax ? 3 : 2} title="Comercial" subtitle="¿Cómo viene la venta?" />
+
+      <ErpPanel title="Ventas autorizadas" actions={<ErpStatusBadge>Últimos 12 meses</ErpStatusBadge>}>
+        {taxDashboardQuery.isPending ? <p aria-busy="true">Cargando evolución…</p> : null}
+        {salesTrend.length > 1 ? (
+          <ErpLineChart points={salesTrend} label="Ventas autorizadas netas por mes, últimos doce meses" />
+        ) : !taxDashboardQuery.isPending ? (
+          <p className="fine-print">Aún no hay suficientes meses para dibujar una tendencia.</p>
+        ) : null}
+      </ErpPanel>
+      <div className="dash-tiles dash-tiles-pair">
+        <ErpStatTile
+          label="Facturas autorizadas del mes"
+          value={String(monthlyInvoices)}
+          footnote="No incluye rechazos ni documentos no autorizados."
+        />
+        <ErpStatTile
+          label="Pipeline abierto"
+          value={`$${formatAmount(openPipeline)}`}
+          tone="success"
+          footnote={`${openLeads.length} oportunidad(es) CRM activas.`}
+        />
+      </div>
     </>
   )
 }

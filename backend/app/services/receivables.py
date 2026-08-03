@@ -31,7 +31,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 from xml.etree.ElementTree import Element
@@ -62,6 +62,8 @@ from app.schemas.receivables import (
     AgingRead,
     AgingSummaryRead,
     CollectionsBreakdownRead,
+    CollectionsHistoryRead,
+    MonthlyCollectionRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
     ReminderInput,
@@ -923,6 +925,90 @@ async def compute_collections_breakdown(
         settled_amount=settled_amount,
         retention_share=retention_share,
     )
+
+
+async def compute_collections_history(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    months: int = 12,
+    as_of: date | None = None,
+) -> CollectionsHistoryRead:
+    """Serie mensual de cobro (``GET /receivables/collections/monthly``).
+
+    Agrupa los mismos movimientos activos que ``compute_collections_breakdown``
+    por mes de ``effective_date``, para que la tendencia y el total nunca
+    discrepen.
+
+    Devuelve SIEMPRE los ``months`` meses, rellenando con cero los que no
+    tuvieron cobro: una serie con huecos dibuja una tendencia falsa, porque la
+    línea uniría dos meses no contiguos como si fueran consecutivos.
+    """
+    if as_of is None:
+        as_of = today_in_fiscal_timezone()
+
+    # Ventana de meses completos que termina en el mes de ``as_of``.
+    keys: list[tuple[int, int]] = []
+    year, month = as_of.year, as_of.month
+    for _ in range(months):
+        keys.append((year, month))
+        month -= 1
+        if month == 0:
+            year, month = year - 1, 12
+    keys.reverse()
+
+    first_year, first_month = keys[0]
+    window_start = date(first_year, first_month, 1)
+    window_end = _last_day_of_month(as_of.year, as_of.month)
+
+    rows = await session.execute(
+        select(
+            Movement.effective_date,
+            Movement.movement_type,
+            func.coalesce(func.sum(Movement.amount), Decimal("0.00")),
+        )
+        .where(
+            Movement.tenant_id == context.tenant_id,
+            Movement.reversed_movement_id.is_(None),
+            Movement.id.not_in(_reversed_movement_ids(context.tenant_id)),
+            Movement.effective_date >= window_start,
+            Movement.effective_date <= window_end,
+            Movement.movement_type.in_(_CASH_MOVEMENTS + _RETENTION_MOVEMENTS),
+        )
+        .group_by(Movement.effective_date, Movement.movement_type)
+    )
+
+    cash: dict[tuple[int, int], Decimal] = {key: Decimal("0.00") for key in keys}
+    retention: dict[tuple[int, int], Decimal] = {key: Decimal("0.00") for key in keys}
+    for effective_date, movement_type, amount in rows:
+        if effective_date is None:
+            continue
+        key = (effective_date.year, effective_date.month)
+        if key not in cash:
+            continue
+        bucket = cash if movement_type in _CASH_MOVEMENTS else retention
+        bucket[key] += Decimal(str(amount))
+
+    return CollectionsHistoryRead(
+        months=[
+            MonthlyCollectionRead(
+                year=year,
+                month=month,
+                cash_amount=cash[(year, month)].quantize(Decimal("0.01")),
+                retention_amount=retention[(year, month)].quantize(Decimal("0.01")),
+                settled_amount=(cash[(year, month)] + retention[(year, month)]).quantize(
+                    Decimal("0.01")
+                ),
+            )
+            for year, month in keys
+        ]
+    )
+
+
+def _last_day_of_month(year: int, month: int) -> date:
+    if month == 12:
+        return date(year, 12, 31)
+    return date(year, month + 1, 1) - timedelta(days=1)
 
 
 # --- Consultas: GET /receivables, GET /receivables/{id} ----------------------
