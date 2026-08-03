@@ -18,9 +18,12 @@ Este módulo contiene la lógica de negocio de cartera de clientes:
 - ``reverse_movement``: reverso auditado sin editar el original
 
 Todas las operaciones de escritura usan ``lock_receivable`` para garantizar
-que el saldo nunca sea negativo bajo concurrencia (misma transacción que
-inserta los ``Movement``). El saldo es siempre derivado: ``amount - sum(movs)``,
-nunca una columna que pueda desincronizarse (docs/sprints/sprint-03.md decisión 2).
+que el saldo no se sobreaplique bajo concurrencia. La única excepción es una
+diferencia documental de hasta un centavo al aplicar un XML de retención
+autorizado: se conservan sus valores exactos, se audita la diferencia y el
+saldo visible cierra en cero. El saldo es siempre derivado:
+``amount - sum(movs)``, nunca una columna que pueda desincronizarse
+(docs/sprints/sprint-03.md decisión 2).
 """
 
 from __future__ import annotations
@@ -43,7 +46,7 @@ from app.core.timezones import today_in_fiscal_timezone
 from app.integrations.notifications.protocol import Notifier, ReminderRequest
 from app.models.billing import SalesDocument, SalesDocumentInstallment
 from app.models.masters import EmissionPoint, Establishment, Party
-from app.models.platform import Tenant
+from app.models.platform import AuditEvent, Tenant
 from app.models.receivables import (
     CollectionPolicy,
     CollectionReminder,
@@ -68,9 +71,12 @@ from app.schemas.receivables import (
     RetentionXmlPreviewRead,
 )
 from app.services.collection_email import render_collection_email
+from app.services.tax.formatting import format_amount
 from app.services.unit_of_work import append_audit
 
 MAX_RETENTION_XML_BYTES = 2 * 1024 * 1024
+RETENTION_SETTLEMENT_TOLERANCE = Decimal("0.01")
+_RETENTION_TOLERANCE_AUDIT_ACTION = "retention.settled_with_rounding_tolerance"
 
 # Estados de AccountItem (contrato) -> filtros sobre Receivable.status persistido
 _ACCOUNT_STATUS_TO_RECEIVABLE_STATUSES: dict[str, tuple[str, ...]] = {
@@ -296,6 +302,13 @@ def _retention_audit_key(parent_key: str, authorization_number: str) -> str:
     return f"retention-date:{digest}"
 
 
+def _retention_tolerance_audit_key(parent_key: str, authorization_number: str) -> str:
+    digest = hashlib.sha256(
+        f"{parent_key}|retention-tolerance|{authorization_number}".encode()
+    ).hexdigest()
+    return f"retention-tolerance:{digest}"
+
+
 async def preview_retention_xml(
     session: AsyncSession,
     *,
@@ -303,6 +316,7 @@ async def preview_retention_xml(
     receivable_id: uuid.UUID,
     xml_bytes: bytes,
     include_existing_authorization: bool = False,
+    settlement_tolerance: Decimal = Decimal("0.00"),
 ) -> RetentionXmlPreviewRead:
     """Valida que un XML SRI autorizado respalda retenciones de esta factura."""
     (
@@ -371,7 +385,9 @@ async def preview_retention_xml(
             ),
             Decimal("0.00"),
         )
-    if total > open_balance + existing_total:
+    if not Decimal("0.00") <= settlement_tolerance <= RETENTION_SETTLEMENT_TOLERANCE:
+        raise ValueError("Unsupported retention settlement tolerance")
+    if total > open_balance + existing_total + settlement_tolerance:
         raise HTTPException(
             status_code=422, detail="Retention total exceeds this invoice open balance"
         )
@@ -435,6 +451,7 @@ async def import_retention_xml_batch(
                 receivable_id=receivable.id,
                 xml_bytes=xml_bytes,
                 include_existing_authorization=True,
+                settlement_tolerance=RETENTION_SETTLEMENT_TOLERANCE,
             )
             total = sum((item.amount for item in preview.retentions), Decimal("0.00"))
             duplicate_movements = await _active_retention_movements(
@@ -456,6 +473,15 @@ async def import_retention_xml_batch(
                 )
             needs_date_correction = bool(duplicate_movements) and any(
                 movement.effective_date != preview.issue_date for movement in duplicate_movements
+            )
+            open_balance = await compute_receivable_balance(
+                session, tenant_id=context.tenant_id, receivable=receivable
+            )
+            existing_total = sum(
+                (movement.amount for movement in duplicate_movements), Decimal("0.00")
+            )
+            settlement_difference = max(
+                total - open_balance - existing_total, Decimal("0.00")
             )
             if apply:
                 if duplicate_movements and not needs_date_correction:
@@ -513,6 +539,8 @@ async def import_retention_xml_batch(
                         ),
                         correlation_id=correlation_id,
                         idempotency_key=idempotency_key,
+                        settlement_tolerance=RETENTION_SETTLEMENT_TOLERANCE,
+                        settlement_reference=preview.authorization_number,
                     )
             elif duplicate_movements and not needs_date_correction:
                 raise HTTPException(
@@ -534,6 +562,16 @@ async def import_retention_xml_batch(
                         if apply and needs_date_correction
                         else "Corregirá la fecha desde el XML"
                         if needs_date_correction
+                        else (
+                            "Registrada; cerró con diferencia tolerada de "
+                            f"{format_amount(settlement_difference)}"
+                        )
+                        if apply and settlement_difference > 0
+                        else (
+                            "Lista para registrar; cerrará con diferencia tolerada de "
+                            f"{format_amount(settlement_difference)}"
+                        )
+                        if settlement_difference > 0
                         else "Registrada"
                         if apply
                         else "Lista para registrar"
@@ -652,8 +690,9 @@ async def compute_receivable_balance(
     """Calcula el saldo completo de un receivable sumando todas sus cuotas.
 
     ``sum(compute_installment_balance)`` para todos los ``ReceivableInstallment``
-    del ``Receivable``. Usado por el endpoint ``GET /receivables/{id}`` para
-    calcular ``open_amount`` on-demand.
+    del ``Receivable``. Una diferencia negativa de hasta un centavo se muestra
+    como cero solo si existe la auditoría creada al aplicar un XML autorizado.
+    Usado por ``GET /receivables/{id}`` para calcular ``open_amount`` on-demand.
     """
     stmt = select(ReceivableInstallment).where(
         ReceivableInstallment.tenant_id == tenant_id,
@@ -665,6 +704,17 @@ async def compute_receivable_balance(
         total += await compute_installment_balance(
             session, tenant_id=tenant_id, installment=installment
         )
+    if -RETENTION_SETTLEMENT_TOLERANCE <= total < Decimal("0.00"):
+        tolerance_audit = await session.scalar(
+            select(AuditEvent.id).where(
+                AuditEvent.tenant_id == tenant_id,
+                AuditEvent.action == _RETENTION_TOLERANCE_AUDIT_ACTION,
+                AuditEvent.entity_type == "receivable",
+                AuditEvent.entity_id == str(receivable.id),
+            )
+        )
+        if tolerance_audit is not None:
+            return Decimal("0.00")
     return total
 
 
@@ -1167,11 +1217,15 @@ async def record_payment(
     *,
     correlation_id: str,
     idempotency_key: str,
+    settlement_tolerance: Decimal = Decimal("0.00"),
+    settlement_reference: str | None = None,
 ) -> ReceivableSummary:
     """Registra un cobro parcial o total con retenciones/descuentos (E5-03/E5-04).
 
     Aplica el cobro oldest-first (cuota más antigua primero) y valida que
-    la suma total (cash + retenciones + descuentos) nunca exceda el saldo abierto.
+    la suma total (cash + retenciones + descuentos) no exceda el saldo abierto.
+    El importador de XML autorizado puede habilitar una tolerancia máxima de un
+    centavo, solo para retenciones sin efectivo ni descuentos, con auditoría.
     Crea múltiples ``Movement``: uno ``PAYMENT`` por cuota tocada, uno
     ``RETENTION`` y uno ``DISCOUNT`` por cada elemento de las listas anidadas.
 
@@ -1203,7 +1257,18 @@ async def record_payment(
     locked = await lock_receivable(session, tenant_id=tenant_id, receivable_id=receivable_id)
     open_balance = await compute_receivable_balance(session, tenant_id=tenant_id, receivable=locked)
 
-    if total_application > open_balance:
+    overapplication = max(total_application - open_balance, Decimal("0.00"))
+    tolerance_is_valid = (
+        Decimal("0.00") <= settlement_tolerance <= RETENTION_SETTLEMENT_TOLERANCE
+    )
+    if total_application > open_balance and (
+        not tolerance_is_valid
+        or overapplication > settlement_tolerance
+        or settlement_reference is None
+        or payment.cash_amount != Decimal("0.00")
+        or bool(payment.discounts)
+        or not payment.retentions
+    ):
         raise HTTPException(
             status_code=422,
             detail=f"Payment total {total_application} exceeds open balance {open_balance}",
@@ -1298,9 +1363,35 @@ async def record_payment(
     # quedaria sobrestimado.
     await session.flush()
 
+    if overapplication > 0:
+        assert settlement_reference is not None
+        await append_audit(
+            session,
+            context=context,
+            action=_RETENTION_TOLERANCE_AUDIT_ACTION,
+            entity_type="receivable",
+            entity_id=str(receivable_id),
+            correlation_id=correlation_id,
+            idempotency_key=_retention_tolerance_audit_key(
+                idempotency_key, settlement_reference
+            ),
+            details={
+                "authorization_number": settlement_reference,
+                "open_balance": format_amount(open_balance),
+                "retention_total": format_amount(retentions_total),
+                "settlement_difference": format_amount(overapplication),
+                "maximum_tolerance": format_amount(settlement_tolerance),
+            },
+        )
+        # La consulta de saldo solo puede cerrar el centavo si ya ve la
+        # evidencia de auditoría dentro de esta misma transacción.
+        await session.flush()
+
     # Actualizar status del receivable
     new_balance = open_balance - total_application
-    if new_balance == Decimal("0.00"):
+    if new_balance == Decimal("0.00") or (
+        overapplication > 0 and overapplication <= settlement_tolerance
+    ):
         locked.status = "PAID"
     elif locked.status == "OPEN":
         locked.status = "PARTIALLY_PAID"

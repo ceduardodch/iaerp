@@ -25,6 +25,16 @@ alcance y las decisiones.
   aislada de salud y la migración PostgreSQL en vivo quedan para CI. Sin commit,
   push, PR ni despliegue.
 
+- Tolerancia documental de cartera: 2026-08-02 `America/Guayaquil`. Al aplicar
+  un XML autorizado de retención, IAERP permite cerrar una diferencia máxima
+  de `0.01` frente al saldo de la factura. Conserva completos y separados el
+  abono bancario y las retenciones de IVA/renta; no modifica los valores de la
+  evidencia. La diferencia queda visible en el previo y en auditoría. Desde
+  `0.02` el archivo sigue en revisión y no crea movimientos. El caso reproducido
+  de `65.41 - 57.74 - 7.68` cierra en `0.00`. Ruff, mypy, 64 pruebas
+  tributarias, 31 pruebas dirigidas de cartera, build, lint y 24 recorridos
+  Playwright tributarios pasan en una copia aislada de `main`.
+
 - Entrega de factura y orden tributario local: 2026-08-02
   `America/Guayaquil`. La factura autorizada muestra ahora un bloque claro de
   entrega al cliente. Antes de enviar, la persona revisa destinatario, asunto,

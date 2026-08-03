@@ -254,6 +254,14 @@ el saldo de la factura manual recalculado tras el reverso. Para los meses
 anteriores se usa el mismo flujo y el mismo período elegido; no se crean cruces
 por parecido de cliente o importe.
 
+**Tolerancia documental de centavos (2026-08-02).** Cuando el abono bancario y
+un XML autorizado de retención superan el saldo de la factura por exactamente
+`0.01`, Cartera conserva ambos valores completos, muestra la diferencia antes
+de confirmar, deja auditoría y cierra el saldo visible en `0.00`. Esta excepción
+solo se habilita desde el importador del XML autorizado, sin efectivo ni
+descuentos en esa misma aplicación. Una diferencia de `0.02` o más sigue como
+`REVIEW_REQUIRED`; no se ajusta ni se inventa ningún valor fiscal.
+
 **Carga hacia meses anteriores (2026-08-02).** La fecha efectiva de cada
 retención aplicada a Cartera sale de `infoCompRetencion/fechaEmision`. Volver a
 cargar el mismo XML no duplica la evidencia ni el comprobante: vuelve a validar
