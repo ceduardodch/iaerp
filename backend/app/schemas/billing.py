@@ -206,6 +206,8 @@ class InvoiceCollectionUpdate(APIModel):
 
 class InvoiceEmailPreviewRead(APIModel):
     recipient: EmailStr | None
+    sender_address: EmailStr | None
+    sender_name: str | None
     subject: str
     message: str
     attachment_names: list[str]
@@ -216,4 +218,6 @@ class InvoiceEmailPreviewRead(APIModel):
 class InvoiceEmailRead(APIModel):
     message_id: str
     recipient: EmailStr
+    sender_address: EmailStr | None
+    sender_name: str | None
     attachment_names: list[str]

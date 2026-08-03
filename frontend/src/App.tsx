@@ -1823,6 +1823,7 @@ function InvoiceDetail({
           {emailPreviewQuery.data ? (
             <section className="invoice-email-preview" aria-label="Vista previa del correo">
               <dl>
+                <div><dt>Remitente</dt><dd>{emailPreviewQuery.data.senderAddress ? `${emailPreviewQuery.data.senderName ? `${emailPreviewQuery.data.senderName} · ` : ''}${emailPreviewQuery.data.senderAddress}` : 'Cuenta de Google conectada'}</dd></div>
                 <div><dt>Asunto</dt><dd>{emailPreviewQuery.data.subject}</dd></div>
                 <div><dt>Fecha límite de pago</dt><dd>{emailPreviewQuery.data.dueDate}</dd></div>
                 <div><dt>Plazo</dt><dd>{emailPreviewQuery.data.paymentTermsDays === 0 ? 'Pago inmediato' : `${emailPreviewQuery.data.paymentTermsDays} días`}</dd></div>
@@ -3002,21 +3003,51 @@ function InvoiceEmailTemplateEditor({
   template: InvoiceEmailTemplate
   pending: boolean
   error?: string
-  onSave: (template: Pick<InvoiceEmailTemplate, 'subject' | 'body'>) => void
+  onSave: (template: Pick<InvoiceEmailTemplate, 'subject' | 'body' | 'fromAddress' | 'fromName'>) => void
 }) {
   const [subject, setSubject] = useState(template.subject)
   const [body, setBody] = useState(template.body)
+  const [fromAddress, setFromAddress] = useState(template.fromAddress ?? '')
+  const [fromName, setFromName] = useState(template.fromName ?? '')
 
   return (
     <form
       className="fiscal-panel-body"
       onSubmit={(event) => {
         event.preventDefault()
-        onSave({ subject: subject.trim(), body: body.trim() })
+        onSave({
+          subject: subject.trim(),
+          body: body.trim(),
+          fromAddress: fromAddress.trim() || null,
+          fromName: fromName.trim() || null,
+        })
       }}
     >
       <p className="fiscal-panel-copy">
         Esta plantilla se usa al entregar una factura autorizada. No corresponde a cobranza ni envía nada por sí sola.
+      </p>
+      <div className="field-row">
+        <label>
+          Correo remitente
+          <input
+            type="email"
+            value={fromAddress}
+            onChange={(event) => setFromAddress(event.target.value)}
+            placeholder="contabilidad@empresa.com"
+          />
+        </label>
+        <label>
+          Nombre del remitente
+          <input
+            value={fromName}
+            onChange={(event) => setFromName(event.target.value)}
+            maxLength={200}
+            placeholder="Contabilidad"
+          />
+        </label>
+      </div>
+      <p className="fine-print">
+        El correo debe estar habilitado en Gmail como “Enviar como”. Si lo dejas vacío, se usa la cuenta conectada.
       </p>
       <label>
         Asunto
@@ -3337,7 +3368,7 @@ function OrganizationPage({
     queryFn: () => apiRequest<InvoiceEmailTemplate>(token, '/organization/invoice-email-template'),
   })
   const updateInvoiceEmailTemplate = useMutation({
-    mutationFn: (template: Pick<InvoiceEmailTemplate, 'subject' | 'body'>) =>
+    mutationFn: (template: Pick<InvoiceEmailTemplate, 'subject' | 'body' | 'fromAddress' | 'fromName'>) =>
       apiRequest<InvoiceEmailTemplate>(token, '/organization/invoice-email-template', {
         method: 'PUT',
         headers: { 'Idempotency-Key': idempotencyKey('web-invoice-email-template') },

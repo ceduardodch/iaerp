@@ -215,6 +215,20 @@ async def test_authorized_invoice_email_requires_confirmation_and_attaches_ride_
 
     monkeypatch.setattr("app.services.billing.storage.download_artifact", fake_download)
     monkeypatch.setattr("app.services.billing.crm_integrations.send_google_email", fake_send)
+    sender = await client.put(
+        "/api/v1/organization/invoice-email-template",
+        headers=auth(setup_token, "email-invoice-sender-0001"),
+        json={
+            "subject": "Factura {{numero_factura}} · {{empresa}}",
+            "body": (
+                "Hola {{cliente}}. Fecha límite de pago: {{vencimiento}}. "
+                "Plazo acordado: {{plazo}}. Total: ${{total}}"
+            ),
+            "fromAddress": "contabilidad@b2b.com.ec",
+            "fromName": "Contabilidad B2B",
+        },
+    )
+    assert sender.status_code == 200, sender.text
     preview = await client.get(
         f"/api/v1/invoices/{document_id}/email-preview",
         headers=auth(token),
@@ -222,6 +236,8 @@ async def test_authorized_invoice_email_requires_confirmation_and_attaches_ride_
     assert preview.status_code == 200, preview.text
     assert preview.json()["dueDate"] == "2026-08-04"
     assert preview.json()["paymentTermsDays"] == 31
+    assert preview.json()["senderAddress"] == "contabilidad@b2b.com.ec"
+    assert preview.json()["senderName"] == "Contabilidad B2B"
     assert preview.json()["subject"] == "Factura 001-001-000000001 · Tenant A"
     assert "Fecha límite de pago: 2026-08-04" in preview.json()["message"]
     assert "Plazo acordado: 31 días" in preview.json()["message"]
@@ -239,6 +255,8 @@ async def test_authorized_invoice_email_requires_confirmation_and_attaches_ride_
     )
     assert response.status_code == 200, response.text
     assert response.json()["recipient"] == "facturas@cliente.example"
+    assert response.json()["senderAddress"] == "contabilidad@b2b.com.ec"
+    assert response.json()["senderName"] == "Contabilidad B2B"
     assert response.json()["attachmentNames"] == [
         "FACTURA-001-001-000000001.xml",
         "FACTURA-001-001-000000001.pdf",
@@ -246,6 +264,9 @@ async def test_authorized_invoice_email_requires_confirmation_and_attaches_ride_
     assert len(sent) == 1
     assert sent[0]["subject"] == preview.json()["subject"]
     assert sent[0]["message"] == preview.json()["message"]
+    assert sent[0]["sender_address"] == "contabilidad@b2b.com.ec"
+    assert sent[0]["sender_name"] == "Contabilidad B2B"
+    assert sent[0]["reply_to"] == "contabilidad@b2b.com.ec"
     assert [item[1] for item in sent[0]["attachments"]] == [
         "application/xml",
         "application/pdf",

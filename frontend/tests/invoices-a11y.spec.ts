@@ -217,6 +217,8 @@ async function mockApi(page: Page) {
     route.fulfill({
       json: {
         recipient: customer.email,
+        senderAddress: 'contabilidad@b2b.com.ec',
+        senderName: 'Contabilidad B2B',
         subject: 'Factura 001-001-000000002 · IAERP Demo',
         message: 'Hola Cliente Demo.\n\nFecha límite de pago: 2026-08-04\nPlazo acordado: 31 días.',
         attachmentNames: ['FACTURA-001-001-000000002.xml', 'FACTURA-001-001-000000002.pdf'],
@@ -375,6 +377,7 @@ test('authorized invoice detail shows SRI transmission, artifacts and credit not
   await expect(page.getByRole('button', { name: 'Preparar correo' })).toBeVisible()
   await page.getByRole('button', { name: 'Preparar correo' }).click()
   const emailDialog = page.getByRole('dialog', { name: 'Enviar factura por correo' })
+  await expect(emailDialog).toContainText('Contabilidad B2B · contabilidad@b2b.com.ec')
   await expect(emailDialog).toContainText('Fecha límite de pago')
   await expect(emailDialog).toContainText('31 días')
   await expect(emailDialog).toContainText('FACTURA-001-001-000000002.xml')

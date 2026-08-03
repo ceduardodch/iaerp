@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
-from email.utils import parseaddr
+from email.utils import formataddr, parseaddr
 from typing import cast
 from urllib.parse import urlencode
 
@@ -462,6 +462,9 @@ async def send_google_email(
     message: str,
     html_message: str | None = None,
     attachments: list[tuple[str, str, bytes]] | None = None,
+    sender_address: str | None = None,
+    sender_name: str | None = None,
+    reply_to: str | None = None,
 ) -> str:
     sent = await send_google_email_with_thread(
         session,
@@ -488,7 +491,10 @@ async def send_google_email_with_thread(
     entity, token = await _google_access_token(session, context)
     email = EmailMessage()
     email["To"] = recipient
-    email["From"] = entity.email or "me"
+    from_address = sender_address or entity.email or "me"
+    email["From"] = formataddr((sender_name or "", from_address))
+    if reply_to:
+        email["Reply-To"] = reply_to
     email["Subject"] = subject
     email.set_content(message)
     if html_message:
@@ -504,6 +510,14 @@ async def send_google_email_with_thread(
             json={"raw": raw},
         )
     if response.is_error:
+        if sender_address:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Google could not send from the configured alias. "
+                    "Verify it under Gmail 'Send mail as'."
+                ),
+            )
         raise HTTPException(status_code=502, detail="Google could not send the email")
     payload = response.json()
     return GoogleSentMessage(

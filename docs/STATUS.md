@@ -25,6 +25,16 @@ alcance y las decisiones.
   aislada de salud y la migración PostgreSQL en vivo quedan para CI. Sin commit,
   push, PR ni despliegue.
 
+- Remitente de facturas por alias: 2026-08-02 `America/Guayaquil`. Cada tenant
+  puede configurar en `Empresa -> Envío de facturas` un correo y nombre de
+  remitente habilitados por Gmail como `Enviar como`. La vista previa muestra
+  el remitente antes de confirmar; el mensaje usa ese alias tanto en `From`
+  como en `Reply-To`, mientras la cuenta personal conectada queda oculta. Si
+  Google rechaza el alias, no se envía el correo y se pide revisar su alta en
+  Gmail. RIDE y XML siguen adjuntos. Ruff, mypy, 64 pruebas tributarias, 25
+  pruebas dirigidas de configuración/facturación/Gmail, build, lint y 44
+  recorridos Playwright de Facturas y Tributario pasan en copia aislada.
+
 - Tolerancia documental de cartera: 2026-08-02 `America/Guayaquil`. Al aplicar
   un XML autorizado de retención, IAERP permite cerrar una diferencia máxima
   de `0.01` frente al saldo de la factura. Conserva completos y separados el

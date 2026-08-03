@@ -256,11 +256,15 @@ export type ArtifactDownload = {
 export type InvoiceEmailResult = {
   messageId: string
   recipient: string
+  senderAddress?: string | null
+  senderName?: string | null
   attachmentNames: string[]
 }
 
 export type InvoiceEmailPreview = {
   recipient?: string | null
+  senderAddress?: string | null
+  senderName?: string | null
   subject: string
   message: string
   attachmentNames: string[]
@@ -271,6 +275,8 @@ export type InvoiceEmailPreview = {
 export type InvoiceEmailTemplate = {
   subject: string
   body: string
+  fromAddress?: string | null
+  fromName?: string | null
   availableVariables: string[]
 }
 

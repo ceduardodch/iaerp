@@ -116,6 +116,8 @@ def invoice_email_template_read(entity: TenantFiscalSettings) -> InvoiceEmailTem
     return InvoiceEmailTemplateRead(
         subject=entity.invoice_email_subject,
         body=entity.invoice_email_body,
+        from_address=entity.invoice_email_from_address,
+        from_name=entity.invoice_email_from_name,
         available_variables=INVOICE_EMAIL_VARIABLES,
     )
 
@@ -135,6 +137,10 @@ async def update_invoice_email_template(
     entity = await get_or_create(session, context.tenant_id)
     entity.invoice_email_subject = data.subject
     entity.invoice_email_body = data.body
+    entity.invoice_email_from_address = (
+        str(data.from_address).strip().lower() if data.from_address is not None else None
+    )
+    entity.invoice_email_from_name = data.from_name
     await session.flush()
     return invoice_email_template_read(entity)
 

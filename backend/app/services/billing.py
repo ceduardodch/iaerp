@@ -111,6 +111,8 @@ INVOICE_SIGNED_EVENT = "invoice.signed"
 @dataclass(frozen=True)
 class _InvoiceEmailDelivery:
     recipient: str | None
+    sender_address: str | None
+    sender_name: str | None
     subject: str
     message: str
     attachment_names: list[str]
@@ -1504,10 +1506,15 @@ async def send_invoice_email(
         subject=delivery.subject,
         message=delivery.message,
         attachments=attachments,
+        sender_address=delivery.sender_address,
+        sender_name=delivery.sender_name,
+        reply_to=delivery.sender_address,
     )
     return InvoiceEmailRead(
         message_id=message_id,
         recipient=recipient,
+        sender_address=delivery.sender_address,
+        sender_name=delivery.sender_name,
         attachment_names=delivery.attachment_names,
     )
 
@@ -1521,6 +1528,8 @@ async def preview_invoice_email(
     delivery = await _prepare_invoice_email(session, context, document_id)
     return InvoiceEmailPreviewRead(
         recipient=delivery.recipient,
+        sender_address=delivery.sender_address,
+        sender_name=delivery.sender_name,
         subject=delivery.subject,
         message=delivery.message,
         attachment_names=delivery.attachment_names,
@@ -1612,6 +1621,8 @@ async def _prepare_invoice_email(
 
     return _InvoiceEmailDelivery(
         recipient=party.email,
+        sender_address=template.invoice_email_from_address,
+        sender_name=template.invoice_email_from_name,
         subject=render(template.invoice_email_subject),
         message=render(template.invoice_email_body),
         attachment_names=attachment_names,

@@ -136,6 +136,8 @@ async def test_invoice_email_template_is_separate_from_collection_email(client) 
     assert initial.status_code == 200, initial.text
     assert "{{vencimiento}}" in initial.json()["body"]
     assert "{{plazo}}" in initial.json()["availableVariables"]
+    assert initial.json()["fromAddress"] is None
+    assert initial.json()["fromName"] is None
 
     updated = await client.put(
         "/api/v1/organization/invoice-email-template",
@@ -143,10 +145,14 @@ async def test_invoice_email_template_is_separate_from_collection_email(client) 
         json={
             "subject": "Documento {{numero_factura}}",
             "body": "Hola {{cliente}}. Paga hasta {{vencimiento}}. Plazo: {{plazo}}.",
+            "fromAddress": "contabilidad@b2b.com.ec",
+            "fromName": "Contabilidad B2B",
         },
     )
     assert updated.status_code == 200, updated.text
     assert updated.json()["subject"] == "Documento {{numero_factura}}"
+    assert updated.json()["fromAddress"] == "contabilidad@b2b.com.ec"
+    assert updated.json()["fromName"] == "Contabilidad B2B"
 
     replay = await client.put(
         "/api/v1/organization/invoice-email-template",
@@ -154,6 +160,8 @@ async def test_invoice_email_template_is_separate_from_collection_email(client) 
         json={
             "subject": "Documento {{numero_factura}}",
             "body": "Hola {{cliente}}. Paga hasta {{vencimiento}}. Plazo: {{plazo}}.",
+            "fromAddress": "contabilidad@b2b.com.ec",
+            "fromName": "Contabilidad B2B",
         },
     )
     assert replay.json() == updated.json()

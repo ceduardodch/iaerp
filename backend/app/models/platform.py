@@ -71,6 +71,8 @@ class TenantFiscalSettings(TimestampMixin, Base):
             "Nota de pago: por favor realiza el pago hasta la fecha indicada."
         ),
     )
+    invoice_email_from_address: Mapped[str | None] = mapped_column(String(320))
+    invoice_email_from_name: Mapped[str | None] = mapped_column(String(200))
 
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
