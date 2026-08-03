@@ -98,6 +98,7 @@ class Receivable(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     original_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     status: Mapped[str] = mapped_column(String(20), default="OPEN")
+    collection_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class ReceivableInstallment(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):

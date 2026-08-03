@@ -443,9 +443,7 @@ async def import_retention_xml_batch(
                 receivable_id=receivable.id,
                 authorization_number=preview.authorization_number,
             )
-            expected_signature = sorted(
-                (item.kind, item.amount) for item in preview.retentions
-            )
+            expected_signature = sorted((item.kind, item.amount) for item in preview.retentions)
             actual_signature = sorted(
                 signature
                 for movement in duplicate_movements
@@ -457,8 +455,7 @@ async def import_retention_xml_batch(
                     detail="Registered retention differs from the uploaded XML",
                 )
             needs_date_correction = bool(duplicate_movements) and any(
-                movement.effective_date != preview.issue_date
-                for movement in duplicate_movements
+                movement.effective_date != preview.issue_date for movement in duplicate_movements
             )
             if apply:
                 if duplicate_movements and not needs_date_correction:
@@ -490,9 +487,7 @@ async def import_retention_xml_batch(
                         ),
                         details={
                             "authorization_number": preview.authorization_number,
-                            "movement_ids": [
-                                str(movement.id) for movement in duplicate_movements
-                            ],
+                            "movement_ids": [str(movement.id) for movement in duplicate_movements],
                             "previous_dates": previous_dates,
                             "effective_date": preview.issue_date.isoformat(),
                         },
@@ -1602,6 +1597,9 @@ async def send_reminder(
     receivable = await session.scalar(stmt)
     if receivable is None:
         raise HTTPException(status_code=404, detail="Receivable not found")
+    policy = await session.get(CollectionPolicy, tenant_id)
+    if not receivable.collection_enabled or policy is None or not policy.enabled:
+        raise HTTPException(status_code=422, detail="Collection messages are disabled")
 
     # Buscar party para validar consent_opt_out y obtener el destinatario
     from app.models.masters import Party
@@ -1683,15 +1681,11 @@ async def _render_receivable_email(
     open_installments = [
         installment
         for installment in installments
-        if await compute_installment_balance(
-            session, tenant_id=tenant_id, installment=installment
-        )
+        if await compute_installment_balance(session, tenant_id=tenant_id, installment=installment)
         > 0
     ]
     reference = (
-        open_installments[0]
-        if open_installments
-        else (installments[-1] if installments else None)
+        open_installments[0] if open_installments else (installments[-1] if installments else None)
     )
     due_date = reference.due_date if reference is not None else today_in_fiscal_timezone()
 
@@ -1729,6 +1723,9 @@ async def send_real_reminder(
     )
     if receivable is None:
         raise HTTPException(status_code=404, detail="Receivable not found")
+    policy = await session.get(CollectionPolicy, context.tenant_id)
+    if not receivable.collection_enabled or policy is None or not policy.enabled:
+        raise HTTPException(status_code=422, detail="Collection messages are disabled")
     from app.models.masters import Party
 
     party = await session.scalar(

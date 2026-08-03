@@ -32,6 +32,7 @@ from app.models.billing import (
     Sequence,
     SRITransmission,
 )
+from app.models.legal_commercial import BillingProposal
 from app.models.masters import EmissionPoint, Establishment, Party, Product, TaxCategory
 from app.models.platform import Tenant
 from app.models.receivables import Movement, Receivable
@@ -114,6 +115,7 @@ class _InvoiceEmailDelivery:
     message: str
     attachment_names: list[str]
     artifacts: dict[str, DocumentArtifact]
+    report_object_key: str | None
     due_date: date
     payment_terms_days: int
 
@@ -334,6 +336,8 @@ async def create_invoice_draft(
     session: AsyncSession,
     context: AuthContext,
     data: InvoiceInput,
+    *,
+    commercial_snapshot: dict[str, object] | None = None,
 ) -> SalesDocument:
     """Crea un borrador de factura recalculando TODOS los totales en backend.
 
@@ -431,6 +435,8 @@ async def create_invoice_draft(
         tax_total=calculation.tax_total,
         total=calculation.total,
         fiscal_policy_version=policy.version,
+        commercial_snapshot=commercial_snapshot,
+        collection_enabled=data.collection_enabled,
     )
     session.add(document)
     await session.flush()
@@ -468,6 +474,24 @@ async def create_invoice_draft(
             )
         )
 
+    await session.flush()
+    return document
+
+
+async def update_invoice_collection_policy(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+    *,
+    enabled: bool,
+) -> SalesDocument:
+    document = await get_sales_document(session, context, document_id)
+    if document.document_type != "INVOICE" or document.status != "DRAFT":
+        raise HTTPException(
+            status_code=409,
+            detail="Collection preference can only change on a draft invoice",
+        )
+    document.collection_enabled = enabled
     await session.flush()
     return document
 
@@ -1084,6 +1108,8 @@ async def to_sales_document_read(
             receivable.status if receivable is not None else None
         ),
         retention_total=retention_total,
+        collection_enabled=document.collection_enabled,
+        commercial_snapshot=document.commercial_snapshot,
         lines=[
             SalesDocumentLineRead(
                 id=line.id,
@@ -1263,9 +1289,7 @@ async def issue_document(
             tenant_commercial_address=establishment.address,
             buyer=party,
             environment_code=fiscal.sri_environment,
-            electronic_invoicing_provider_ruc=(
-                runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
-            ),
+            electronic_invoicing_provider_ruc=(runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC),
         )
     else:
         (
@@ -1290,9 +1314,7 @@ async def issue_document(
             related_invoice_access_key=related_invoice.access_key or "",
             reason=document.reason or "",
             environment_code=fiscal.sri_environment,
-            electronic_invoicing_provider_ruc=(
-                runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
-            ),
+            electronic_invoicing_provider_ruc=(runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC),
         )
 
     signing_result = signing.sign_xml(
@@ -1468,16 +1490,20 @@ async def send_invoice_email(
         storage.download_artifact(object_key=delivery.artifacts["xml-signed"].object_key),
         storage.download_artifact(object_key=delivery.artifacts["ride-pdf"].object_key),
     )
+    attachments = [
+        (delivery.attachment_names[0], "application/xml", xml_data),
+        (delivery.attachment_names[1], "application/pdf", ride_data),
+    ]
+    if delivery.report_object_key is not None:
+        report_data = await storage.download_artifact(object_key=delivery.report_object_key)
+        attachments.append((delivery.attachment_names[2], "application/pdf", report_data))
     message_id = await crm_integrations.send_google_email(
         session,
         context,
         recipient=recipient,
         subject=delivery.subject,
         message=delivery.message,
-        attachments=[
-            (delivery.attachment_names[0], "application/xml", xml_data),
-            (delivery.attachment_names[1], "application/pdf", ride_data),
-        ],
+        attachments=attachments,
     )
     return InvoiceEmailRead(
         message_id=message_id,
@@ -1536,6 +1562,23 @@ async def _prepare_invoice_email(
         raise HTTPException(status_code=422, detail="Invoice numbering data is incomplete")
     invoice_number = f"{establishment.code}-{emission_point.code}-{document.sequential}"
     attachment_names = [f"FACTURA-{invoice_number}.xml", f"FACTURA-{invoice_number}.pdf"]
+    proposal = await session.scalar(
+        select(BillingProposal).where(
+            BillingProposal.tenant_id == context.tenant_id,
+            BillingProposal.sales_document_id == document.id,
+        )
+    )
+    if proposal is not None and proposal.report_required and proposal.report_approved_at is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Approve the required monthly report before emailing the invoice",
+        )
+    report_object_key = None
+    if proposal is not None and proposal.report_approved_at is not None:
+        if not proposal.report_object_key:
+            raise HTTPException(status_code=422, detail="Approved report file is missing")
+        report_object_key = proposal.report_object_key
+        attachment_names.append(proposal.report_file_name or "INFORME-MENSUAL.pdf")
     party = await session.get(Party, document.party_id)
     tenant = await session.get(Tenant, context.tenant_id)
     template = await fiscal_settings.get_or_create(session, context.tenant_id)
@@ -1573,6 +1616,7 @@ async def _prepare_invoice_email(
         message=render(template.invoice_email_body),
         attachment_names=attachment_names,
         artifacts=latest,
+        report_object_key=report_object_key,
         due_date=due_date,
         payment_terms_days=payment_terms_days,
     )

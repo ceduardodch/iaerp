@@ -7,6 +7,24 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Contratos simples listos en cambios locales: 2026-08-02
+  `America/Guayaquil`. Contratos enlaza cliente, oportunidad ganada y
+  documentos accesorios; cada versión guarda vigencia, plazo y tipo de cobro.
+  La persona sube el PDF terminado, lo envía por Gmail y revisa solo ese hilo.
+  Un PDF recibido pasa una revisión técnica básica, pero no queda firmado ni
+  activo hasta que una persona lo valide en FirmaEC. PDF enviado y firmado son
+  inmutables. Mensual fijo, AWS con reporte StreamOne privado y total manual, e
+  hitos preparan una tarea comercial; `Crear borrador` genera la factura con
+  fecha fiscal actual y snapshot, sin emitirla. Un informe obligatorio bloquea
+  el correo, no la emisión, y el envío añade informe aprobado, RIDE y XML. La
+  cobranza exige política general, permiso de factura y consentimiento del
+  cliente; servicios puntuales nacen apagados. Validado con Ruff, mypy, OpenAPI,
+  SQL offline de migración PostgreSQL, 365 pruebas backend (33 omitidas por
+  dependencias opcionales), build/lint frontend y Playwright de Contratos en
+  escritorio y móvil. Docker/Redis local no estaba activo, por lo que la prueba
+  aislada de salud y la migración PostgreSQL en vivo quedan para CI. Sin commit,
+  push, PR ni despliegue.
+
 - Entrega de factura y orden tributario local: 2026-08-02
   `America/Guayaquil`. La factura autorizada muestra ahora un bloque claro de
   entrega al cliente. Antes de enviar, la persona revisa destinatario, asunto,

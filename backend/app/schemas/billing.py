@@ -62,6 +62,8 @@ class InvoiceInput(APIModel):
     # pago multiple siga siendo posible.
     installments: list[InstallmentInput] = Field(default_factory=list)
     lines: list[InvoiceLineInput] = Field(min_length=1)
+    # Los servicios puntuales nacen con cobranza apagada.
+    collection_enabled: bool = False
 
 
 class InvoicePreviewInput(APIModel):
@@ -160,6 +162,8 @@ class SalesDocumentRead(APIModel):
     sri_transmission: SRITransmissionRead | None = None
     collection_status: Literal["OPEN", "PARTIAL", "OVERDUE", "SETTLED", "VOIDED"] | None = None
     retention_total: Decimal = Decimal("0.00")
+    collection_enabled: bool = False
+    commercial_snapshot: dict[str, object] | None = None
     lines: list[SalesDocumentLineRead] = Field(default_factory=list)
     installments: list[InstallmentInput] = Field(default_factory=list)
 
@@ -194,6 +198,10 @@ class ArtifactDownloadRead(APIModel):
 
 class InvoiceEmailInput(APIModel):
     recipient: EmailStr
+
+
+class InvoiceCollectionUpdate(APIModel):
+    enabled: bool
 
 
 class InvoiceEmailPreviewRead(APIModel):

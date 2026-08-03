@@ -1,7 +1,7 @@
 # ADR 0011: expediente legal-comercial versionado y evidencia AWS
 
-- Estado: Proposed
-- Fecha: 2026-07-29
+- Estado: Accepted
+- Fecha: 2026-08-02
 
 ## Contexto
 
@@ -15,25 +15,42 @@ Se incorpora un contexto `legal_commercial` tenant-scoped, separado de Billing
 y del SRI. Sus contratos tienen versiones inmutables después de firmarse y cada
 archivo se guarda privado con SHA-256, tipo, autor, fecha y control de descarga.
 
-Una versión contiene vigencia, firmantes, condiciones de pago, renovación,
-servicios y reglas de cobro `FIXED_MONTHLY`, `AWS_COST_PLUS_MARGIN` o ambas. Un
-corte de consumo AWS normalizado proviene de un conector de solo lectura o de
-una carga CSV/XLSX; requiere conciliación y revisión antes de usarse.
+IAERP no edita cláusulas ni crea plantillas legales. La persona prepara el PDF
+fuera del sistema, sube la versión final y la envía por Gmail. IAERP guarda el
+ID del mensaje y del hilo; al revisar respuestas consulta solo ese hilo. Una
+respuesta con PDF crea evidencia pendiente, nunca activa el contrato.
 
-Una propuesta de facturación une versión contractual, corte y regla de precio,
-y guarda un snapshot comercial al crear el borrador de factura. La ausencia de
-contrato activo no bloquea facturar: exige advertencia, motivo y auditoría. La
-factura autorizada conserva su régimen fiscal y no se modifica por el contrato.
+La revisión de firma busca estructuras técnicas básicas del PDF. Una persona
+valida el archivo en FirmaEC, registra esa confirmación y luego activa la
+versión. El PDF enviado y el firmado son inmutables; cualquier cambio crea otra
+versión. Un contrato puede apuntar a una oportunidad ganada y otro contrato del
+mismo cliente como documento accesorio.
 
-La IA solo extrae un esquema cerrado con evidencia por página/fragmento y
-confianza. REST y MCP exponen consultas tenant-scoped; no hay tools MCP de
-escritura ni firma/e-mail automáticos en la primera versión.
+Una versión contiene vigencia, plazo y reglas de cobro `FIXED_MONTHLY`,
+`AWS_MONTHLY` o `MILESTONE`. Para AWS se guarda el reporte privado de StreamOne,
+el total escrito por la persona y su confirmación. No se importan líneas ni se
+consulta StreamOne de forma automática.
+
+Una propuesta de facturación une versión, periodo, corte y regla de precio, y
+guarda un snapshot comercial al crear el borrador de factura. El botón `Crear
+borrador` usa la fecha fiscal actual; no emite ni envía al SRI. Los servicios
+puntuales siguen el flujo normal de Facturas, nacen con cobranza apagada y no
+requieren contrato.
+
+Si el contrato exige informe, la factura puede emitirse, pero su correo queda
+bloqueado hasta subir y aprobar el PDF. El envío incluye XML, RIDE e informe.
+Los recordatorios exigen a la vez política general activa, permiso en la
+factura y consentimiento del cliente.
+
+No se extraen cláusulas ni se interpreta contenido legal. No se agregan tools
+MCP de escritura. REST conserva aislamiento por tenant, idempotencia y
+auditoría en cada acción.
 
 ## Consecuencias
 
-- Se requiere migración, API, UI, artefactos privados, auditoría y pruebas de
-  aislamiento, integridad, conciliación y prompt injection.
+- Se requiere migración, API, UI, artefactos privados y pruebas de aislamiento,
+  integridad, duplicados de Gmail, vigencia, cobros e informes.
 - La firma electrónica con proveedor y la asesoría/validación jurídica humana
   permanecen fuera de alcance.
-- El alcance MVP se amplía de manera controlada; este ADR debe pasar a
-  `Accepted` antes de implementar persistencia o endpoints.
+- FirmaEC y Gmail siguen siendo sistemas externos; un fallo de integración no
+  cambia por sí solo el estado legal ni fiscal.

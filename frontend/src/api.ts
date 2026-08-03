@@ -53,6 +53,11 @@ export type CommercialContract = {
   partyId: string
   contractNumber: string
   title: string
+  serviceType: 'FIXED_MONTHLY' | 'AWS_MONTHLY' | 'MILESTONE' | 'ONE_OFF' | 'ACCESSORY'
+  sourceLeadId: string | null
+  parentContractId: string | null
+  reportRequired: boolean
+  collectionEnabled: boolean
   status: 'DRAFT' | 'PENDING_SIGNATURE' | 'SIGNED' | 'ACTIVE' | 'EXPIRED' | 'SUPERSEDED' | 'CANCELLED'
   currentVersionId: string | null
 }
@@ -69,7 +74,55 @@ export type ContractVersion = {
   pricingRules: Array<Record<string, unknown>>
   amendsVersionId: string | null
   signedAt: string | null
+  sentAt: string | null
+  sentArtifactSha256: string | null
+  gmailThreadId: string | null
+  replyDetectedAt: string | null
   signedArtifactSha256: string | null
+  signaturePrecheckStatus: 'SIGNATURE_FOUND' | 'SIGNATURE_NOT_FOUND' | 'CHECK_FAILED' | null
+  signaturePrecheckDetails: Record<string, unknown> | null
+  firmaecConfirmedAt: string | null
+}
+
+export type ContractEmailSync = {
+  messagesChecked: number
+  replyDetected: boolean
+  signedPdfReceived: boolean
+  duplicateIgnored: boolean
+}
+
+export type AwsConsumptionCut = {
+  id: string
+  partyId: string
+  periodStart: string
+  periodEnd: string
+  source: 'AWS_COST_EXPLORER' | 'CSV_UPLOAD' | 'XLSX_UPLOAD'
+  status: 'IMPORTED' | 'RECONCILED' | 'REVIEWED' | 'REJECTED' | 'BILLED'
+  totalCost: string
+  currency: 'USD'
+  evidenceSha256: string | null
+}
+
+export type BillingProposal = {
+  id: string
+  partyId: string
+  issueDate: string
+  totalAmount: string
+  contractVersionId: string | null
+  awsConsumptionCutId: string | null
+  salesDocumentId: string | null
+  exceptionReason: string | null
+  commercialSnapshot: Record<string, unknown>
+  periodStart: string | null
+  periodEnd: string | null
+  pricingRuleIndex: number
+  billingType: CommercialContract['serviceType']
+  reportRequired: boolean
+  collectionEnabled: boolean
+  reportSha256: string | null
+  reportFileName: string | null
+  reportApprovedAt: string | null
+  status: 'DRAFT' | 'READY_FOR_REVIEW' | 'CONVERTED' | 'CANCELLED'
 }
 
 export type ContractArtifactDownload = {
@@ -148,6 +201,8 @@ export type SalesDocument = {
   collectionStatus?: AccountItemStatus | null
   installments?: Array<{ dueDate: string; amount: string }>
   retentionTotal: string
+  collectionEnabled: boolean
+  commercialSnapshot?: Record<string, unknown> | null
 }
 
 export type InvoiceLineInput = {
@@ -166,6 +221,7 @@ export type InvoiceInput = {
   issueDate: string
   installments: Array<{ dueDate: string; amount: string }>
   lines: InvoiceLineInput[]
+  collectionEnabled?: boolean
 }
 
 export type CreditNoteInput = {

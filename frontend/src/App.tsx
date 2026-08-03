@@ -18,11 +18,14 @@ import {
   type AccountItemStatus,
   type ArtifactDownload,
   type BankStatementImport,
+  type BillingProposal,
   type CollectionPolicy,
   type CollectionsBreakdown,
   type CommercialContract,
   type ContractArtifactDownload,
+  type ContractEmailSync,
   type ContractVersion,
+  type AwsConsumptionCut,
   type DiscountInput,
   type DocumentArtifact,
   type EmissionPoint,
@@ -503,10 +506,18 @@ function PartiesPage({
 
 function ContractsPage({
   parties,
+  products,
+  taxes,
+  establishments,
+  emissionPoints,
   token,
   initialPartyId,
 }: {
   parties: Party[]
+  products: Product[]
+  taxes: TaxCategory[]
+  establishments: Establishment[]
+  emissionPoints: EmissionPoint[]
   token: string
   initialPartyId?: string
 }) {
@@ -515,18 +526,40 @@ function ContractsPage({
   const [partyId, setPartyId] = useState(initialPartyId ?? '')
   const [selected, setSelected] = useState<CommercialContract | null>(null)
   const [creating, setCreating] = useState(false)
-  const [signedPdfPreview, setSignedPdfPreview] = useState<ContractArtifactDownload | null>(null)
+  const [newPartyId, setNewPartyId] = useState(initialPartyId ?? '')
+  const [pdfPreview, setPdfPreview] = useState<ContractArtifactDownload | null>(null)
+  const [syncResult, setSyncResult] = useState<{ versionId: string; result: ContractEmailSync } | null>(null)
+  const wonLeadsQuery = useQuery({
+    queryKey: ['crm', 'leads', 'WON'],
+    queryFn: () => apiRequest<Lead[]>(token, '/crm/leads?status=WON'),
+  })
   const contractsQuery = useQuery({
     queryKey: ['commercial', 'contracts', partyId],
     queryFn: () => apiRequest<CommercialContract[]>(token, `/commercial/contracts${partyId ? `?party_id=${partyId}` : ''}`),
   })
+  const currentContract = contractsQuery.data?.find((contract) => contract.id === selected?.id) ?? selected
   const versionsQuery = useQuery({
     queryKey: ['commercial', 'contracts', selected?.id, 'versions'],
     queryFn: () => apiRequest<ContractVersion[]>(token, `/commercial/contracts/${selected?.id}/versions`),
     enabled: Boolean(selected),
   })
+  const proposalsQuery = useQuery({
+    queryKey: ['commercial', 'billing-proposals', selected?.id],
+    queryFn: () => apiRequest<BillingProposal[]>(token, `/commercial/billing-proposals?contract_id=${selected?.id}`),
+    enabled: Boolean(selected),
+  })
+  const awsCutsQuery = useQuery({
+    queryKey: ['commercial', 'aws-cuts', currentContract?.partyId],
+    queryFn: () => apiRequest<AwsConsumptionCut[]>(token, `/commercial/aws-consumption-cuts?party_id=${currentContract?.partyId}`),
+    enabled: currentContract?.serviceType === 'AWS_MONTHLY',
+  })
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts'] })
+    void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts', selected?.id, 'versions'] })
+    void queryClient.invalidateQueries({ queryKey: ['commercial', 'billing-proposals', selected?.id] })
+  }
   const createContract = useMutation({
-    mutationFn: (data: { partyId: string; contractNumber: string; title: string }) =>
+    mutationFn: (data: Record<string, unknown>) =>
       apiRequest<CommercialContract>(token, '/commercial/contracts', {
         method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract') }, body: JSON.stringify(data),
       }),
@@ -541,96 +574,203 @@ function ContractsPage({
     mutationFn: (data: Record<string, unknown>) => apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions`, {
       method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-version') }, body: JSON.stringify(data),
     }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts', selected?.id, 'versions'] }),
+    onSuccess: refresh,
   })
-  const uploadSigned = useMutation({
-    mutationFn: async ({ versionId, file }: { versionId: string; file: File }) => {
+  const uploadContractPdf = useMutation({
+    mutationFn: async ({ versionId, file, kind }: { versionId: string; file: File; kind: 'sent' | 'signed' }) => {
       const form = new FormData()
       form.append('file', file)
-      return apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/signed-pdf`, {
-        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-pdf') }, body: form,
+      return apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/${kind}-pdf`, {
+        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey(`web-contract-${kind}-pdf`) }, body: form,
       })
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts', selected?.id, 'versions'] })
-      void queryClient.invalidateQueries({ queryKey: ['commercial', 'contracts'] })
-    },
+    onSuccess: refresh,
   })
-  const downloadSigned = useMutation({
-    mutationFn: (versionId: string) => apiRequest<ContractArtifactDownload>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/signed-pdf?inline=true`),
-    onSuccess: setSignedPdfPreview,
+  const downloadPdf = useMutation({
+    mutationFn: ({ versionId, kind }: { versionId: string; kind: 'sent' | 'signed' }) => apiRequest<ContractArtifactDownload>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/${kind}-pdf?inline=true`),
+    onSuccess: setPdfPreview,
+  })
+  const sendEmail = useMutation({
+    mutationFn: ({ versionId, subject, message }: { versionId: string; subject: string; message: string }) => apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/email`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-email') }, body: JSON.stringify({ subject, message }),
+    }),
+    onSuccess: refresh,
+  })
+  const syncEmail = useMutation({
+    mutationFn: (versionId: string) => apiRequest<ContractEmailSync>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/email-sync`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-email-sync') },
+    }),
+    onSuccess: (result, versionId) => { setSyncResult({ versionId, result }); refresh() },
+  })
+  const versionAction = useMutation({
+    mutationFn: ({ versionId, action }: { versionId: string; action: 'confirm-firmaec' | 'activate' }) => apiRequest<ContractVersion>(token, `/commercial/contracts/${selected?.id}/versions/${versionId}/${action}`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey(`web-contract-${action}`) },
+    }),
+    onSuccess: refresh,
+  })
+  const createAwsCut = useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiRequest<AwsConsumptionCut>(token, '/commercial/aws-consumption-cuts', {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-aws-cut') }, body: JSON.stringify(data),
+    }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commercial', 'aws-cuts', currentContract?.partyId] }),
+  })
+  const uploadAwsEvidence = useMutation({
+    mutationFn: async ({ cutId, file }: { cutId: string; file: File }) => {
+      const form = new FormData(); form.append('file', file)
+      return apiRequest<AwsConsumptionCut>(token, `/commercial/aws-consumption-cuts/${cutId}/evidence`, {
+        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-aws-evidence') }, body: form,
+      })
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commercial', 'aws-cuts'] }),
+  })
+  const confirmAwsCut = useMutation({
+    mutationFn: (cutId: string) => apiRequest<AwsConsumptionCut>(token, `/commercial/aws-consumption-cuts/${cutId}/confirm`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-aws-confirm') },
+    }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['commercial', 'aws-cuts'] }),
+  })
+  const prepareBilling = useMutation({
+    mutationFn: (data: Record<string, unknown>) => apiRequest<BillingProposal>(token, `/commercial/contracts/${selected?.id}/prepare-billing`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-contract-billing') }, body: JSON.stringify(data),
+    }),
+    onSuccess: refresh,
+  })
+  const uploadReport = useMutation({
+    mutationFn: async ({ proposalId, file }: { proposalId: string; file: File }) => {
+      const form = new FormData(); form.append('file', file)
+      return apiRequest<BillingProposal>(token, `/commercial/billing-proposals/${proposalId}/report`, {
+        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-billing-report') }, body: form,
+      })
+    },
+    onSuccess: refresh,
+  })
+  const proposalAction = useMutation({
+    mutationFn: ({ proposalId, action }: { proposalId: string; action: 'report/approve' | 'create-invoice-draft' }) => apiRequest<BillingProposal | SalesDocument>(token, `/commercial/billing-proposals/${proposalId}/${action}`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey(`web-proposal-${action}`) },
+    }),
+    onSuccess: refresh,
   })
 
   function submitContract(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
-    createContract.mutate({ partyId: String(data.get('partyId')), contractNumber: String(data.get('contractNumber')).trim(), title: String(data.get('title')).trim() })
+    createContract.mutate({
+      partyId: String(data.get('partyId')),
+      contractNumber: String(data.get('contractNumber')).trim(),
+      title: String(data.get('title')).trim(),
+      serviceType: String(data.get('serviceType')),
+      sourceLeadId: data.get('sourceLeadId') || null,
+      parentContractId: data.get('parentContractId') || null,
+      reportRequired: data.get('reportRequired') === 'on',
+      collectionEnabled: data.get('collectionEnabled') === 'on',
+    })
   }
   function submitVersion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
+    const product = products.find((item) => item.id === String(data.get('productId')))
+    const tax = taxes.find((item) => item.id === product?.taxCategoryId)
+    const invoiceRule = {
+      type: currentContract?.serviceType,
+      establishmentId: String(data.get('establishmentId')),
+      emissionPointId: String(data.get('emissionPointId')),
+      productId: product?.id,
+      taxCode: tax?.sriCode,
+      description: String(data.get('description') || currentContract?.title || '').trim(),
+      currency: 'USD',
+    }
+    let pricingRules: Array<Record<string, unknown>> = []
+    if (currentContract?.serviceType === 'FIXED_MONTHLY') pricingRules = [{ ...invoiceRule, amount: String(data.get('amount')) }]
+    if (currentContract?.serviceType === 'AWS_MONTHLY') pricingRules = [invoiceRule]
+    if (currentContract?.serviceType === 'MILESTONE') {
+      const baseAmount = String(data.get('baseAmount'))
+      pricingRules = String(data.get('milestones')).split(',').map((part, index) => {
+        const value = part.trim()
+        return value.endsWith('%')
+          ? { ...invoiceRule, label: `Hito ${index + 1}`, percentage: value.slice(0, -1), baseAmount }
+          : { ...invoiceRule, label: `Hito ${index + 1}`, amount: value }
+      }).filter((rule) => ('amount' in rule && Boolean(rule.amount)) || ('percentage' in rule && Boolean(rule.percentage)))
+    }
     createVersion.mutate({
       validFrom: String(data.get('validFrom')),
       validTo: String(data.get('validTo')) || null,
       paymentTermsDays: Number(data.get('paymentTermsDays')),
       renewalNoticeDays: data.get('renewalNoticeDays') === '' ? null : Number(data.get('renewalNoticeDays')),
-      pricingRules: [{ type: 'FIXED_MONTHLY', amount: String(data.get('amount')), currency: 'USD' }],
+      pricingRules,
       amendsVersionId: versionsQuery.data?.[0]?.id ?? null,
     })
   }
-  function submitPdf(event: FormEvent<HTMLFormElement>, versionId: string) {
+  function submitPdf(event: FormEvent<HTMLFormElement>, versionId: string, kind: 'sent' | 'signed') {
     event.preventDefault()
     const file = new FormData(event.currentTarget).get('file')
-    if (file instanceof File && file.size > 0) uploadSigned.mutate({ versionId, file })
+    if (file instanceof File && file.size > 0) uploadContractPdf.mutate({ versionId, file, kind })
   }
+  const activeVersion = versionsQuery.data?.find((version) => version.status === 'ACTIVE')
+  const billingNeedsConfig = currentContract?.serviceType !== 'ACCESSORY' && currentContract?.serviceType !== 'ONE_OFF'
+  const error = createContract.error ?? createVersion.error ?? uploadContractPdf.error ?? sendEmail.error ?? syncEmail.error ?? versionAction.error ?? createAwsCut.error ?? uploadAwsEvidence.error ?? confirmAwsCut.error ?? prepareBilling.error ?? uploadReport.error ?? proposalAction.error
 
   if (creating) return (
     <>
       <ErpPageHeader eyebrow="Comercial" title="Nuevo contrato" subtitle="Crea el registro comercial antes de agregar versiones o el PDF firmado." />
       <ErpFormPanel eyebrow="Contrato" title="Datos del contrato" submitLabel="Guardar contrato" pending={createContract.isPending} error={createContract.error?.message} onSubmit={submitContract} onCancel={() => setCreating(false)}>
-        <label>Cliente<select name="partyId" defaultValue={partyId} required><option value="" disabled>Selecciona un cliente</option>{customers.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label>
+        <label>Cliente<select name="partyId" value={newPartyId} onChange={(event) => { setNewPartyId(event.target.value); setPartyId(event.target.value) }} required><option value="" disabled>Selecciona un cliente</option>{customers.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label>
+        <label>Oportunidad ganada (opcional)<select name="sourceLeadId" defaultValue=""><option value="">Sin vínculo</option>{(wonLeadsQuery.data ?? []).filter((lead) => lead.partyId === newPartyId).map((lead) => <option key={lead.id} value={lead.id}>{lead.title}</option>)}</select></label>
         <label>Número de contrato<input name="contractNumber" maxLength={80} required placeholder="CT-2026-001" /></label>
         <label>Nombre o asunto<input name="title" maxLength={200} required placeholder="Servicios administrados AWS" /></label>
+        <label>Tipo de servicio<select name="serviceType" defaultValue="FIXED_MONTHLY"><option value="FIXED_MONTHLY">Mensual fijo</option><option value="AWS_MONTHLY">AWS por consumo</option><option value="MILESTONE">Por hitos</option><option value="ACCESSORY">Documento accesorio</option></select></label>
+        <label>Contrato principal (solo accesorios)<select name="parentContractId" defaultValue=""><option value="">No aplica</option>{(contractsQuery.data ?? []).filter((contract) => contract.partyId === newPartyId && contract.serviceType !== 'ACCESSORY').map((contract) => <option key={contract.id} value={contract.id}>{contract.contractNumber} · {contract.title}</option>)}</select></label>
+        <label className="checkbox-field"><input name="reportRequired" type="checkbox" /> Exige informe mensual antes de enviar la factura</label>
+        <label className="checkbox-field"><input name="collectionEnabled" type="checkbox" /> Permitir mensajes de cobranza</label>
       </ErpFormPanel>
     </>
   )
 
-  if (selected) return (
+  if (selected && currentContract) return (
     <>
-      <ErpPageHeader eyebrow="Contrato comercial" title={selected.title} subtitle={`Contrato ${selected.contractNumber}. Las versiones firmadas no se editan: se agrega una nueva versión.`} actions={<ErpButton variant="secondary" onClick={() => setSelected(null)}>Volver al listado</ErpButton>} />
+      <ErpPageHeader eyebrow="Contrato comercial" title={currentContract.title} subtitle={`Contrato ${currentContract.contractNumber}. El PDF se prepara fuera de IAERP y cada envío queda fijo.`} actions={<ErpButton variant="secondary" onClick={() => setSelected(null)}>Volver al listado</ErpButton>} />
       <section className="split-layout">
         <ErpPanel title="Versiones" count={versionsQuery.data?.length ?? 0}>
           {versionsQuery.isPending ? <p>Cargando versiones…</p> : null}
           {(versionsQuery.data ?? []).map((version) => (
             <article key={version.id} className="contract-version">
               <div><strong>Versión {version.versionNumber}</strong><p>{version.validFrom}{version.validTo ? ` a ${version.validTo}` : ' en adelante'} · {version.paymentTermsDays} días de pago</p></div>
-              <ErpStatusBadge tone={version.status === 'SIGNED' || version.status === 'ACTIVE' ? 'success' : 'warning'}>{version.status === 'SIGNED' ? 'Firmada' : 'Borrador'}</ErpStatusBadge>
-              {version.signedArtifactSha256 ? <><p className="fine-print">PDF privado registrado · SHA-256 {version.signedArtifactSha256.slice(0, 12)}…</p><ErpButton variant="ghost" onClick={() => downloadSigned.mutate(version.id)} disabled={downloadSigned.isPending}>Ver PDF firmado</ErpButton></> : (
-                <form className="inline-form" onSubmit={(event) => submitPdf(event, version.id)}><label>PDF firmado<input name="file" type="file" accept="application/pdf,.pdf" required /></label><ErpButton variant="secondary" type="submit" disabled={uploadSigned.isPending}>{uploadSigned.isPending ? 'Guardando…' : 'Guardar PDF y firmar'}</ErpButton></form>
-              )}
+              <ErpStatusBadge tone={version.status === 'SIGNED' || version.status === 'ACTIVE' ? 'success' : 'warning'}>{version.status === 'ACTIVE' ? 'Activo' : version.status === 'SIGNED' ? 'Firmado' : version.status === 'PENDING_SIGNATURE' ? 'Esperando firma' : version.status === 'EXPIRED' ? 'Vencido' : 'Borrador'}</ErpStatusBadge>
+              {!version.sentArtifactSha256 ? <form className="inline-form" onSubmit={(event) => submitPdf(event, version.id, 'sent')}><label>PDF terminado<input name="file" type="file" accept="application/pdf,.pdf" required /></label><ErpButton variant="secondary" type="submit" disabled={uploadContractPdf.isPending}>Guardar PDF</ErpButton></form> : null}
+              {version.sentArtifactSha256 ? <div className="inline-form"><span className="fine-print">PDF enviado · SHA-256 {version.sentArtifactSha256.slice(0, 12)}…</span><ErpButton variant="ghost" onClick={() => downloadPdf.mutate({ versionId: version.id, kind: 'sent' })}>Ver enviado</ErpButton></div> : null}
+              {version.status === 'DRAFT' && version.sentArtifactSha256 ? <form className="vertical-form" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); sendEmail.mutate({ versionId: version.id, subject: String(data.get('subject')), message: String(data.get('message')) }) }}><label>Asunto<input name="subject" defaultValue={`Contrato ${currentContract.contractNumber} para revisión`} required /></label><label>Mensaje<textarea name="message" defaultValue="Adjuntamos el contrato para su revisión. Por favor responda en este mismo hilo con el PDF firmado." required /></label><ErpButton variant="primary" type="submit" disabled={sendEmail.isPending}>Enviar por Gmail</ErpButton></form> : null}
+              {version.gmailThreadId && !version.firmaecConfirmedAt ? <div className="inline-form"><ErpButton variant="secondary" onClick={() => syncEmail.mutate(version.id)} disabled={syncEmail.isPending}>Revisar respuesta en Gmail</ErpButton>{syncResult?.versionId === version.id ? <span role="status">{syncResult.result.signedPdfReceived ? 'PDF firmado recibido' : syncResult.result.replyDetected ? 'Hay respuesta, aún sin PDF nuevo' : 'Sin respuesta nueva'}</span> : null}</div> : null}
+              {!version.signedArtifactSha256 && version.status === 'PENDING_SIGNATURE' ? <form className="inline-form" onSubmit={(event) => submitPdf(event, version.id, 'signed')}><label>O cargar PDF recibido<input name="file" type="file" accept="application/pdf,.pdf" required /></label><ErpButton variant="secondary" type="submit" disabled={uploadContractPdf.isPending}>Guardar firmado</ErpButton></form> : null}
+              {version.signedArtifactSha256 ? <><p className="fine-print">PDF firmado · SHA-256 {version.signedArtifactSha256.slice(0, 12)}… · {version.signaturePrecheckStatus === 'SIGNATURE_FOUND' ? 'firma técnica encontrada' : 'la revisión técnica no encontró firma'}</p><div className="inline-form"><ErpButton variant="ghost" onClick={() => downloadPdf.mutate({ versionId: version.id, kind: 'signed' })}>Ver firmado</ErpButton>{!version.firmaecConfirmedAt ? <ErpButton variant="secondary" onClick={() => versionAction.mutate({ versionId: version.id, action: 'confirm-firmaec' })}>Ya validé en FirmaEC</ErpButton> : null}{version.status === 'SIGNED' ? <ErpButton variant="primary" onClick={() => versionAction.mutate({ versionId: version.id, action: 'activate' })}>Activar contrato</ErpButton> : null}</div></> : null}
             </article>
           ))}
           {versionsQuery.error ? <p className="form-error" role="alert">{versionsQuery.error.message}</p> : null}
-          {downloadSigned.error ? <p className="form-error" role="alert">{downloadSigned.error.message}</p> : null}
+          {downloadPdf.error ? <p className="form-error" role="alert">{downloadPdf.error.message}</p> : null}
         </ErpPanel>
-        <ErpFormPanel eyebrow="Nueva versión" title="Términos comerciales" submitLabel="Agregar versión" pending={createVersion.isPending} error={createVersion.error?.message} onSubmit={submitVersion} onCancel={() => setSelected(null)}>
+        <ErpFormPanel eyebrow="Nueva versión" title="Vigencia y cobro" submitLabel="Agregar versión" pending={createVersion.isPending} error={createVersion.error?.message} onSubmit={submitVersion} onCancel={() => setSelected(null)}>
           <label>Vigente desde<input name="validFrom" type="date" defaultValue={todayInFiscalTimezone()} required /></label>
           <label>Vigente hasta (opcional)<input name="validTo" type="date" /></label>
           <div className="field-row"><label>Pago en días<input name="paymentTermsDays" type="number" min="0" max="365" defaultValue="30" required /></label><label>Aviso de renovación (días)<input name="renewalNoticeDays" type="number" min="0" max="365" /></label></div>
-          <label>Valor mensual USD<input name="amount" type="number" min="0" step="0.01" required /></label>
+          {billingNeedsConfig ? <><label>Establecimiento<select name="establishmentId" required><option value="">Selecciona</option>{establishments.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label><label>Punto de emisión<select name="emissionPointId" required><option value="">Selecciona</option>{emissionPoints.map((item) => <option key={item.id} value={item.id}>{item.code}</option>)}</select></label><label>Servicio del catálogo<select name="productId" required><option value="">Selecciona</option>{products.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Texto de la factura<input name="description" defaultValue={currentContract.title} required /></label></> : null}
+          {currentContract.serviceType === 'FIXED_MONTHLY' ? <label>Valor mensual USD<input name="amount" type="number" min="0" step="0.01" required /></label> : null}
+          {currentContract.serviceType === 'MILESTONE' ? <><label>Hitos separados por coma<input name="milestones" placeholder="40%, 20%, 40%" required /></label><label>Valor total para porcentajes<input name="baseAmount" type="number" min="0" step="0.01" required /></label></> : null}
+          {currentContract.serviceType === 'AWS_MONTHLY' ? <p className="fine-print">El valor se tomará del corte mensual de StreamOne revisado.</p> : null}
           <p className="fine-print">Esta versión es comercial. No crea ni emite una factura SRI.</p>
         </ErpFormPanel>
       </section>
-      {signedPdfPreview ? <PdfPreviewModal title="Contrato firmado" artifact={signedPdfPreview} onClose={() => setSignedPdfPreview(null)} /> : null}
+      {currentContract.serviceType === 'AWS_MONTHLY' ? <ErpPanel title="Cortes AWS" count={awsCutsQuery.data?.length ?? 0}><form className="inline-form" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); createAwsCut.mutate({ partyId: currentContract.partyId, periodStart: data.get('periodStart'), periodEnd: data.get('periodEnd'), source: 'XLSX_UPLOAD', totalCost: data.get('totalCost'), currency: 'USD', reconciliationSummary: { source: 'StreamOne', totalEnteredManually: true } }) }}><label>Desde<input name="periodStart" type="date" required /></label><label>Hasta<input name="periodEnd" type="date" required /></label><label>Total conciliado<input name="totalCost" type="number" min="0" step="0.01" required /></label><ErpButton variant="secondary" type="submit">Crear corte</ErpButton></form>{(awsCutsQuery.data ?? []).map((cut) => <article className="contract-version" key={cut.id}><strong>{cut.periodStart} a {cut.periodEnd} · ${cut.totalCost}</strong><span>{cut.status}</span>{!cut.evidenceSha256 ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const file = new FormData(event.currentTarget).get('file'); if (file instanceof File) uploadAwsEvidence.mutate({ cutId: cut.id, file }) }}><label>Reporte privado<input name="file" type="file" accept=".csv,.xls,.xlsx,.pdf" required /></label><ErpButton variant="secondary" type="submit">Guardar reporte</ErpButton></form> : null}{cut.status === 'RECONCILED' ? <ErpButton variant="primary" onClick={() => confirmAwsCut.mutate(cut.id)}>Confirmar total revisado</ErpButton> : null}</article>)}</ErpPanel> : null}
+      {currentContract.status === 'ACTIVE' && activeVersion && billingNeedsConfig ? <ErpFormPanel eyebrow="Facturación" title="Preparar cobro" submitLabel="Preparar para revisar" pending={prepareBilling.isPending} error={prepareBilling.error?.message} onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); prepareBilling.mutate({ periodStart: data.get('periodStart'), periodEnd: data.get('periodEnd'), pricingRuleIndex: Number(data.get('pricingRuleIndex') || 0), awsConsumptionCutId: data.get('awsConsumptionCutId') || null, manualTotal: data.get('manualTotal') || null }) }} onCancel={() => undefined}><label>Período desde<input name="periodStart" type="date" required /></label><label>Período hasta<input name="periodEnd" type="date" required /></label>{currentContract.serviceType === 'MILESTONE' ? <label>Hito<select name="pricingRuleIndex">{activeVersion.pricingRules.map((rule, index) => <option key={index} value={index}>{String(rule.label ?? `Hito ${index + 1}`)}</option>)}</select></label> : null}{currentContract.serviceType === 'AWS_MONTHLY' ? <><label>Corte revisado<select name="awsConsumptionCutId" required><option value="">Selecciona</option>{(awsCutsQuery.data ?? []).filter((cut) => cut.status === 'REVIEWED').map((cut) => <option key={cut.id} value={cut.id}>{cut.periodStart} · ${cut.totalCost}</option>)}</select></label><label>Total escrito y conciliado<input name="manualTotal" type="number" min="0" step="0.01" required /></label></> : null}<p className="fine-print">Esto crea una tarea para revisar, no una factura.</p></ErpFormPanel> : null}
+      <ErpPanel title="Cobros preparados" count={proposalsQuery.data?.length ?? 0}>{(proposalsQuery.data ?? []).map((proposal) => <article className="contract-version" key={proposal.id}><div><strong>{proposal.periodStart ?? proposal.issueDate} · ${proposal.totalAmount}</strong><p>{proposal.billingType} · {proposal.collectionEnabled ? 'Cobranza permitida' : 'Sin cobranza'}</p></div><ErpStatusBadge tone={proposal.status === 'CONVERTED' ? 'success' : 'warning'}>{proposal.status === 'CONVERTED' ? 'Borrador creado' : 'Por revisar'}</ErpStatusBadge>{proposal.reportRequired && !proposal.reportSha256 ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const file = new FormData(event.currentTarget).get('file'); if (file instanceof File) uploadReport.mutate({ proposalId: proposal.id, file }) }}><label>Informe mensual PDF<input name="file" type="file" accept="application/pdf,.pdf" required /></label><ErpButton variant="secondary" type="submit">Guardar informe</ErpButton></form> : null}{proposal.reportSha256 && !proposal.reportApprovedAt ? <ErpButton variant="secondary" onClick={() => proposalAction.mutate({ proposalId: proposal.id, action: 'report/approve' })}>Aprobar informe</ErpButton> : null}{proposal.status === 'READY_FOR_REVIEW' ? <ErpButton variant="primary" onClick={() => proposalAction.mutate({ proposalId: proposal.id, action: 'create-invoice-draft' })}>Crear borrador</ErpButton> : null}</article>)}{!proposalsQuery.isPending && (proposalsQuery.data ?? []).length === 0 ? <ErpEmptyState title="No hay cobros preparados" description="Cuando el contrato esté activo, prepara el período que vas a facturar." /> : null}</ErpPanel>
+      {error ? <p className="form-error" role="alert">{error.message}</p> : null}
+      {pdfPreview ? <PdfPreviewModal title="Documento del contrato" artifact={pdfPreview} onClose={() => setPdfPreview(null)} /> : null}
     </>
   )
 
   return (
     <>
-      <ErpPageHeader eyebrow="Comercial" title="Contratos" subtitle="Contratos y versiones comerciales por cliente. Los PDF firmados se guardan de forma privada." actions={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} />
+      <ErpPageHeader eyebrow="Comercial" title="Contratos" subtitle="PDF, firma, vigencia y cobros en un solo lugar. Las cláusulas se preparan fuera de IAERP." actions={<ErpButton variant="primary" onClick={() => { setNewPartyId(partyId); setCreating(true) }}>Nuevo contrato</ErpButton>} />
       <ErpToolbar ariaLabel="Filtros de contratos"><label>Cliente<select value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Todos los clientes</option>{customers.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label></ErpToolbar>
       <ErpPanel title="Listado comercial" count={contractsQuery.data?.length ?? 0}>
-        <div className="table-wrap" tabIndex={0} aria-label="Listado de contratos"><table className="erp-responsive-table"><thead><tr><th>Contrato</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{(contractsQuery.data ?? []).map((contract) => <tr key={contract.id}><td><strong>{contract.contractNumber}</strong><small>{contract.title}</small></td><td>{parties.find((party) => party.id === contract.partyId)?.name ?? 'Cliente'}</td><td><ErpStatusBadge tone={contract.status === 'SIGNED' || contract.status === 'ACTIVE' ? 'success' : 'warning'}>{contract.status === 'SIGNED' ? 'Firmado' : 'Borrador'}</ErpStatusBadge></td><td><ErpActionCell><ErpButton variant="ghost" onClick={() => setSelected(contract)}>Abrir</ErpButton></ErpActionCell></td></tr>)}</tbody></table>{!contractsQuery.isPending && (contractsQuery.data ?? []).length === 0 ? <ErpEmptyState title="No hay contratos" description="Crea un contrato para un cliente y agrega su primera versión." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} /> : null}</div>
+        <div className="table-wrap" tabIndex={0} aria-label="Listado de contratos"><table className="erp-responsive-table"><thead><tr><th>Contrato</th><th>Cliente</th><th>Tipo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{(contractsQuery.data ?? []).map((contract) => <tr key={contract.id}><td><strong>{contract.contractNumber}</strong><small>{contract.title}</small></td><td>{parties.find((party) => party.id === contract.partyId)?.name ?? 'Cliente'}</td><td>{contract.serviceType === 'AWS_MONTHLY' ? 'AWS' : contract.serviceType === 'FIXED_MONTHLY' ? 'Mensual fijo' : contract.serviceType === 'MILESTONE' ? 'Hitos' : 'Accesorio'}</td><td><ErpStatusBadge tone={contract.status === 'SIGNED' || contract.status === 'ACTIVE' ? 'success' : 'warning'}>{contract.status === 'ACTIVE' ? 'Activo' : contract.status === 'SIGNED' ? 'Firmado' : contract.status === 'PENDING_SIGNATURE' ? 'Esperando firma' : 'Borrador'}</ErpStatusBadge></td><td><ErpActionCell><ErpButton variant="ghost" onClick={() => setSelected(contract)}>Abrir</ErpButton></ErpActionCell></td></tr>)}</tbody></table>{!contractsQuery.isPending && (contractsQuery.data ?? []).length === 0 ? <ErpEmptyState title="No hay contratos" description="Crea un contrato para un cliente y agrega su primera versión." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} /> : null}</div>
         {contractsQuery.error ? <p className="form-error" role="alert">{contractsQuery.error.message}</p> : null}
       </ErpPanel>
     </>
@@ -1395,6 +1535,19 @@ function InvoiceDetail({
     },
   })
 
+  const updateCollection = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiRequest<SalesDocument>(token, `/invoices/${invoiceId}/collection-policy`, {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('web-invoice-collection') },
+        body: JSON.stringify({ enabled }),
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['invoices', invoiceId], updated)
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    },
+  })
+
   const duplicateInvoice = useMutation({
     mutationFn: () =>
       apiRequest<SalesDocument>(token, `/invoices/${invoiceId}/duplicate`, {
@@ -1553,6 +1706,22 @@ function InvoiceDetail({
         )}
       </section>
 
+      {invoice.status === 'DRAFT' ? (
+        <section aria-labelledby="invoice-collection-title">
+          <p className="section-number" id="invoice-collection-title">Cobranza</p>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={invoice.collectionEnabled}
+              disabled={updateCollection.isPending}
+              onChange={(event) => updateCollection.mutate(event.target.checked)}
+            />
+            Permitir mensajes de cobranza para esta factura
+          </label>
+          <p className="fine-print">Los servicios puntuales empiezan apagados. También se respeta la política general y la decisión del cliente.</p>
+        </section>
+      ) : null}
+
       {issueInvoice.error ? (
         <p className="form-error" role="alert">{issueInvoice.error.message}</p>
       ) : null}
@@ -1564,6 +1733,9 @@ function InvoiceDetail({
       ) : null}
       {emailInvoice.error ? (
         <p className="form-error" role="alert">{emailInvoice.error.message}</p>
+      ) : null}
+      {updateCollection.error ? (
+        <p className="form-error" role="alert">{updateCollection.error.message}</p>
       ) : null}
       {sentEmail ? (
         <p className="form-success" role="status">
@@ -3563,7 +3735,7 @@ function Workspace() {
         ) : null}
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
-        {section === 'contracts' ? <ContractsPage key={contractPartyId ?? 'all-contracts'} parties={parties} token={token} initialPartyId={contractPartyId} /> : null}
+        {section === 'contracts' ? <ContractsPage key={contractPartyId ?? 'all-contracts'} parties={parties} products={products} taxes={taxesQuery.data ?? []} establishments={establishmentsQuery.data ?? []} emissionPoints={emissionPointsQuery.data ?? []} token={token} initialPartyId={contractPartyId} /> : null}
         {section === 'crm' ? (
           <ErrorBoundary label="el CRM">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando CRM…" />}>

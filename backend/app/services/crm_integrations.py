@@ -7,6 +7,7 @@ import hmac
 import json
 import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from email.utils import parseaddr
@@ -47,6 +48,21 @@ GOOGLE_SCOPES = (
     "https://www.googleapis.com/auth/gmail.readonly "
     "https://www.googleapis.com/auth/gmail.send"
 )
+
+
+@dataclass(frozen=True)
+class GoogleSentMessage:
+    message_id: str
+    thread_id: str
+
+
+@dataclass(frozen=True)
+class GoogleThreadPdf:
+    message_id: str
+    sender: str
+    snippet: str
+    file_name: str
+    data: bytes
 
 
 def _evolution_configured() -> bool:
@@ -332,9 +348,7 @@ async def update_whatsapp_routing(
     await session.flush()
 
 
-async def _routing_for_tenant(
-    session: AsyncSession, tenant_id: uuid.UUID
-) -> WhatsAppRoutingPolicy:
+async def _routing_for_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> WhatsAppRoutingPolicy:
     routing = await session.get(WhatsAppRoutingPolicy, tenant_id)
     return routing or WhatsAppRoutingPolicy(
         tenant_id=tenant_id,
@@ -449,6 +463,28 @@ async def send_google_email(
     html_message: str | None = None,
     attachments: list[tuple[str, str, bytes]] | None = None,
 ) -> str:
+    sent = await send_google_email_with_thread(
+        session,
+        context,
+        recipient=recipient,
+        subject=subject,
+        message=message,
+        html_message=html_message,
+        attachments=attachments,
+    )
+    return sent.message_id
+
+
+async def send_google_email_with_thread(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    recipient: str,
+    subject: str,
+    message: str,
+    html_message: str | None = None,
+    attachments: list[tuple[str, str, bytes]] | None = None,
+) -> GoogleSentMessage:
     entity, token = await _google_access_token(session, context)
     email = EmailMessage()
     email["To"] = recipient
@@ -469,7 +505,101 @@ async def send_google_email(
         )
     if response.is_error:
         raise HTTPException(status_code=502, detail="Google could not send the email")
-    return str(response.json()["id"])
+    payload = response.json()
+    return GoogleSentMessage(
+        message_id=str(payload["id"]),
+        thread_id=str(payload["threadId"]),
+    )
+
+
+def _gmail_pdf_parts(payload: dict[str, object]) -> list[dict[str, object]]:
+    found: list[dict[str, object]] = []
+    stack = [payload]
+    while stack:
+        part = stack.pop()
+        mime_type = str(part.get("mimeType") or "").lower()
+        file_name = str(part.get("filename") or "")
+        if mime_type == "application/pdf" or file_name.lower().endswith(".pdf"):
+            found.append(part)
+        children = part.get("parts")
+        if isinstance(children, list):
+            stack.extend(child for child in children if isinstance(child, dict))
+    return found
+
+
+async def google_thread_pdfs(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    thread_id: str,
+    max_bytes: int,
+) -> tuple[int, list[tuple[str, str]], list[GoogleThreadPdf]]:
+    """Lee solo el hilo conocido de un contrato y devuelve sus PDF adjuntos."""
+    _, token = await _google_access_token(session, context)
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(
+            f"https://gmail.googleapis.com/gmail/v1/users/me/threads/{thread_id}",
+            headers=headers,
+            params={"format": "full"},
+        )
+        if response.is_error:
+            raise HTTPException(status_code=502, detail="Google could not read the contract thread")
+        thread = response.json()
+        if str(thread.get("id") or "") != thread_id:
+            raise HTTPException(status_code=502, detail="Google returned an unexpected thread")
+        messages = thread.get("messages", [])
+        if not isinstance(messages, list):
+            return 0, [], []
+        pdfs: list[GoogleThreadPdf] = []
+        message_senders: list[tuple[str, str]] = []
+        for raw_message in messages:
+            if not isinstance(raw_message, dict):
+                continue
+            message_id = str(raw_message.get("id") or "")
+            payload = raw_message.get("payload")
+            if not message_id or not isinstance(payload, dict):
+                continue
+            metadata = {
+                str(item.get("name", "")).lower(): str(item.get("value", ""))
+                for item in payload.get("headers", [])
+                if isinstance(item, dict)
+            }
+            sender = parseaddr(metadata.get("from", ""))[1].strip().lower()
+            message_senders.append((message_id, sender))
+            for part in _gmail_pdf_parts(payload):
+                body = part.get("body")
+                if not isinstance(body, dict):
+                    continue
+                encoded = body.get("data")
+                attachment_id = body.get("attachmentId")
+                if not encoded and attachment_id:
+                    attachment = await client.get(
+                        "https://gmail.googleapis.com/gmail/v1/users/me/messages/"
+                        f"{message_id}/attachments/{attachment_id}",
+                        headers=headers,
+                    )
+                    if attachment.is_error:
+                        continue
+                    encoded = attachment.json().get("data")
+                if not isinstance(encoded, str):
+                    continue
+                try:
+                    data = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+                except ValueError:
+                    continue
+                if len(data) > max_bytes:
+                    continue
+                pdfs.append(
+                    GoogleThreadPdf(
+                        message_id=message_id,
+                        sender=sender,
+                        snippet=str(raw_message.get("snippet") or "")[:500],
+                        file_name=str(part.get("filename") or "contrato-firmado.pdf"),
+                        data=data,
+                    )
+                )
+        return len(messages), message_senders, pdfs
 
 
 async def sync_google_inbox(
@@ -828,7 +958,8 @@ async def process_evolution_whatsapp_webhook(
     if existing is not None:
         return 0
     sender = "".join(
-        character for character in str(key.get("remoteJid") or "").split("@", 1)[0]
+        character
+        for character in str(key.get("remoteJid") or "").split("@", 1)[0]
         if character.isdigit()
     )
     if not sender:

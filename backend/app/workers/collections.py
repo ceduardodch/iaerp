@@ -34,6 +34,8 @@ async def schedule_receivable_reminders(
     receivable: Receivable,
     installments: list[ReceivableInstallment],
 ) -> int:
+    if not receivable.collection_enabled:
+        return 0
     policy = await session.get(CollectionPolicy, receivable.tenant_id)
     if policy is None or not policy.enabled:
         return 0
@@ -144,6 +146,31 @@ async def handle_collection_reminder_due(
     if reminder is None or reminder.status == "SENT":
         return
 
+    policy = await session.get(CollectionPolicy, reminder.tenant_id)
+    receivable = await session.scalar(
+        select(Receivable).where(
+            Receivable.id == reminder.receivable_id,
+            Receivable.tenant_id == reminder.tenant_id,
+        )
+    )
+    party = await session.scalar(
+        select(Party).where(
+            Party.tenant_id == reminder.tenant_id,
+            Party.id == reminder.party_id,
+        )
+    )
+    if (
+        policy is None
+        or not policy.enabled
+        or receivable is None
+        or not receivable.collection_enabled
+        or party is None
+        or party.consent_opt_out
+    ):
+        reminder.status = "SKIPPED"
+        reminder.error_message = "Collection messages are disabled"
+        return
+
     integration = await crm_integrations.google_integration_for_tenant(session, reminder.tenant_id)
     context = AuthContext(
         actor_id=str(integration.user_id) if integration else str(uuid.UUID(int=0)),
@@ -157,18 +184,12 @@ async def handle_collection_reminder_due(
         if reminder.channel == "EMAIL":
             if integration is None:
                 raise RuntimeError("Google Workspace is not connected")
-            policy = await session.get(CollectionPolicy, reminder.tenant_id)
-            party = await session.scalar(
-                select(Party).where(
-                    Party.tenant_id == reminder.tenant_id, Party.id == reminder.party_id
-                )
-            )
             installment = (
                 await session.get(ReceivableInstallment, reminder.installment_id)
                 if reminder.installment_id
                 else None
             )
-            if policy is None or party is None or installment is None:
+            if installment is None:
                 raise RuntimeError("Collection reminder context is incomplete")
             open_amount = await compute_installment_balance(
                 session, tenant_id=reminder.tenant_id, installment=installment

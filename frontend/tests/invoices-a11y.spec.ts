@@ -118,8 +118,35 @@ const commercialContract = {
   partyId: customer.id,
   contractNumber: 'CT-2026-001',
   title: 'Servicios administrados AWS',
+  serviceType: 'AWS_MONTHLY',
+  sourceLeadId: null,
+  parentContractId: null,
+  reportRequired: true,
+  collectionEnabled: true,
   status: 'DRAFT',
   currentVersionId: null,
+}
+
+const contractVersion = {
+  id: '71717171-7171-4717-8717-717171717171',
+  contractId: commercialContract.id,
+  versionNumber: 1,
+  status: 'DRAFT',
+  validFrom: '2026-08-01',
+  validTo: '2027-07-31',
+  paymentTermsDays: 30,
+  renewalNoticeDays: null,
+  pricingRules: [],
+  amendsVersionId: null,
+  signedAt: null,
+  sentAt: null,
+  sentArtifactSha256: null,
+  gmailThreadId: null,
+  replyDetectedAt: null,
+  signedArtifactSha256: null,
+  signaturePrecheckStatus: null,
+  signaturePrecheckDetails: null,
+  firmaecConfirmedAt: null,
 }
 
 async function mockApi(page: Page) {
@@ -128,8 +155,15 @@ async function mockApi(page: Page) {
   )
   await page.route('**/api/v1/context', (route) => route.fulfill({ json: context }))
   await page.route('**/api/v1/parties', (route) => route.fulfill({ json: [customer] }))
+  await page.route('**/api/v1/crm/leads**', (route) => route.fulfill({ json: [] }))
+  await page.route('**/api/v1/commercial/billing-proposals**', (route) =>
+    route.fulfill({ json: [] }),
+  )
+  await page.route('**/api/v1/commercial/aws-consumption-cuts**', (route) =>
+    route.fulfill({ json: [] }),
+  )
   await page.route('**/api/v1/commercial/contracts**', (route) => {
-    if (route.request().url().endsWith('/versions')) return route.fulfill({ json: [] })
+    if (route.request().url().endsWith('/versions')) return route.fulfill({ json: [contractVersion] })
     return route.fulfill({ json: [commercialContract] })
   })
   await page.route('**/api/v1/products', (route) => route.fulfill({ json: [product] }))
@@ -411,6 +445,8 @@ test('contracts are reachable from navigation and customer details', async ({ pa
   await expect(page.getByText('CT-2026-001', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Abrir' }).click()
   await expect(page.getByRole('heading', { name: 'Servicios administrados AWS' })).toBeVisible()
+  await expect(page.getByLabel('PDF terminado')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Cortes AWS' })).toBeVisible()
   await expectNoA11yViolations(page)
 })
 

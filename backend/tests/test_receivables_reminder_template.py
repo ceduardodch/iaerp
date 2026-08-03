@@ -81,9 +81,13 @@ async def _seed_receivable_with_policy(*, payment_instructions: str = BANK_BLOCK
             installment_amounts=[Decimal("359.24")],
             due_date=date(2026, 7, 1),
         )
+        # Estos casos prueban el contenido del mensaje, así que activan de
+        # forma explícita la nueva decisión por factura.
+        receivable.collection_enabled = True
         session.add(
             CollectionPolicy(
                 tenant_id=TENANT_A,
+                enabled=True,
                 email_subject="Saldo pendiente - {{empresa}}",
                 payment_instructions=payment_instructions,
             )

@@ -41,7 +41,7 @@ def test_collection_email_renders_tenant_template_and_payment_table() -> None:
     assert "Días de atraso" in html
 
 
-async def test_due_reminder_is_queued_once_and_failure_is_visible() -> None:
+async def test_due_reminder_is_queued_once_and_disabled_policy_is_visible() -> None:
     async with SessionFactory() as session, session.begin():
         party = Party(
             tenant_id=TENANT_A,
@@ -95,6 +95,6 @@ async def test_due_reminder_is_queued_once_and_failure_is_visible() -> None:
     async with SessionFactory() as session:
         reminder = await session.get(CollectionReminder, reminder_id)
         assert reminder is not None
-        assert reminder.status == "FAILED"
-        assert reminder.error_message == "Google Workspace is not connected"
+        assert reminder.status == "SKIPPED"
+        assert reminder.error_message == "Collection messages are disabled"
         assert message.event_type == COLLECTION_REMINDER_DUE_EVENT

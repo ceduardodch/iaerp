@@ -45,7 +45,7 @@ from starlette.routing import Mount
 from app.db.session import SessionFactory
 from app.main import app
 from app.mcp.server import mcp
-from app.models.receivables import CollectionReminder, Movement, Receivable
+from app.models.receivables import CollectionPolicy, CollectionReminder, Movement, Receivable
 from app.workers.receivables import handle_invoice_authorized
 from tests.test_billing_api import TENANT_A, TENANT_B, _setup_billing_masters, auth, token_for
 from tests.test_receivables_flow import _insert_authorized_invoice, _message_for
@@ -392,6 +392,12 @@ async def test_mcp_send_reminder_blocked_then_allowed_after_enabling_writes(clie
         },
     )
     assert party_update.status_code == 200, party_update.text
+
+    async with SessionFactory() as db_session, db_session.begin():
+        receivable = await db_session.get(Receivable, uuid.UUID(receivable_id))
+        assert receivable is not None
+        receivable.collection_enabled = True
+        db_session.add(CollectionPolicy(tenant_id=TENANT_A, enabled=True))
 
     async with mcp_lifespan():
         async with mcp_session(write_token) as session:
