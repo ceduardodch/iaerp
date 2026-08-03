@@ -13,7 +13,12 @@ from datetime import date
 from decimal import Decimal
 
 from app.models.tax import FiscalDocument, FiscalDocumentTax, FiscalRetention, TaxPeriod
-from app.services.tax.ats import AtsInput, AtsPurchase, AtsSale
+from app.services.tax.ats import (
+    PAYMENT_METHOD_THRESHOLD,
+    AtsInput,
+    AtsPurchase,
+    AtsSale,
+)
 
 _ADD = {"FACTURA", "LIQUIDACION", "NOTA_DEBITO"}
 _SUBTRACT = {"NOTA_CREDITO"}
@@ -190,7 +195,13 @@ def build_ats_input(
             sales_by_establishment[document.establishment_code] += sign * document.subtotal
 
     for purchase in purchases:
-        if purchase.total > Decimal("500.00"):
+        # Faltante SOLO si supera el umbral Y ademas no trae forma de pago. La
+        # condicion no miraba ``payment_methods``, asi que marcaba como sin
+        # respaldo cualquier compra sobre el umbral aunque su XML si declarara
+        # la forma de pago, y bloqueaba el ATS de cualquier empresa con compras
+        # normales. El umbral sale de la constante compartida en vez de un
+        # literal, para que no se desincronice del punto donde se serializa.
+        if purchase.total > PAYMENT_METHOD_THRESHOLD and not purchase.payment_methods:
             missing.append(
                 f"Compra {purchase.establishment}-{purchase.emission_point}-{purchase.sequential} "
                 "supera el umbral ATS y no tiene forma de pago respaldada en el XML."
