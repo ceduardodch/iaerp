@@ -604,6 +604,16 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .invoice-totals dt, .invoice-totals dd { color: var(--ink); font-size: .75rem; }
 .invoice-grand-total { margin-top: .35rem; padding-top: 1rem !important; border-top: 2px solid var(--forest) !important; }
 .invoice-grand-total dt, .invoice-grand-total dd { font-size: 1.15rem; font-weight: 800; }
+.invoice-delivery-panel { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; margin-top: 1.5rem; padding: 1.25rem; border: 1px solid var(--line); border-left: 4px solid var(--forest); background: #f4f8f5; }
+.invoice-delivery-panel h3, .invoice-delivery-panel p { margin: .25rem 0 0; }
+.invoice-delivery-panel > div > p:last-child { max-width: 48rem; color: var(--muted); font-size: .82rem; }
+.invoice-email-preview { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: .45rem; background: #f7f6f1; }
+.invoice-email-preview dl { display: grid; gap: .55rem; margin: 0; }
+.invoice-email-preview dl div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: .75rem; }
+.invoice-email-preview dt { color: var(--muted); font-size: .72rem; }
+.invoice-email-preview dd { margin: 0; font-size: .8rem; font-weight: 650; }
+.invoice-email-message { padding-top: .8rem; border-top: 1px solid var(--line); font-size: .82rem; white-space: pre-wrap; }
+@media (max-width: 720px) { .invoice-delivery-panel { align-items: stretch; flex-direction: column; } .invoice-email-preview dl div { grid-template-columns: 1fr; gap: .2rem; } }
 .fiscal-settings-panel { min-width: 0; }
 .fiscal-panel-body { display: grid; gap: 1rem; padding: 1.5rem; }
 .evolution-qr { display: grid; gap: .75rem; justify-items: start; padding: 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface-subtle); }

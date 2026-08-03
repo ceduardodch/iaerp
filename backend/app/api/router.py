@@ -25,6 +25,7 @@ from app.schemas.billing import (
     CreditNoteInput,
     DocumentArtifactRead,
     InvoiceEmailInput,
+    InvoiceEmailPreviewRead,
     InvoiceEmailRead,
     InvoiceInput,
     InvoicePreviewInput,
@@ -63,6 +64,8 @@ from app.schemas.platform import (
     DevTokenRequest,
     FiscalSettingsRead,
     FiscalSettingsUpdate,
+    InvoiceEmailTemplateRead,
+    InvoiceEmailTemplateUpdate,
     MembershipRead,
     OperationRead,
     OrganizationProfileRead,
@@ -366,6 +369,43 @@ async def put_fiscal_settings(
         idempotency_key=idempotency_key,
         request_payload=data.model_dump(mode="json"),
         action="organization.fiscal_settings.updated",
+        entity_type="tenant_fiscal_settings",
+        callback=update,
+    )
+
+
+@router.get(
+    "/organization/invoice-email-template",
+    response_model=InvoiceEmailTemplateRead,
+)
+async def get_invoice_email_template(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:read"))],
+) -> InvoiceEmailTemplateRead:
+    return await fiscal_settings.read_invoice_email_template(session, context)
+
+
+@router.put(
+    "/organization/invoice-email-template",
+    response_model=InvoiceEmailTemplateRead,
+)
+async def put_invoice_email_template(
+    data: InvoiceEmailTemplateUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        response = await fiscal_settings.update_invoice_email_template(session, context, data)
+        return str(context.tenant_id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="organization.invoice_email_template.update",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="organization.invoice_email_template.updated",
         entity_type="tenant_fiscal_settings",
         callback=update,
     )
@@ -1112,6 +1152,18 @@ async def post_invoice_email(
         entity_type="sales_document",
         callback=send,
     )
+
+
+@router.get(
+    "/invoices/{invoice_id}/email-preview",
+    response_model=InvoiceEmailPreviewRead,
+)
+async def get_invoice_email_preview(
+    invoice_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+) -> InvoiceEmailPreviewRead:
+    return await billing.preview_invoice_email(session, context, invoice_id)
 
 
 @router.post("/invoices/{invoice_id}/issue", response_model=OperationRead, status_code=202)

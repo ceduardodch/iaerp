@@ -264,6 +264,13 @@ y deja auditoría. El período tributario sigue saliendo de la fecha real del XM
 y la conciliación bancaria usa el mes que la persona elige, aunque el TXT tenga
 movimientos de otros meses.
 
+**Lectura ordenada del periodo (2026-08-02).** La pantalla ya no mezcla todos
+los comprobantes en una sola lista. Dentro del mes elegido los agrupa en ventas
+emitidas, compras recibidas, retenciones recibidas y otros documentos. Cada
+grupo muestra cantidad y total, se puede plegar y mantiene visible el ID IAERP,
+la clave SRI, la forma de pago respaldada y la historia documental. La
+retención de IVA y la retención de renta siguen separadas en el detalle.
+
 Notas utiles para quien retome:
 - `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno
   (`index.css`): usa clases propias (`.tax-year-label`, `.tax-subhead`) en vez de

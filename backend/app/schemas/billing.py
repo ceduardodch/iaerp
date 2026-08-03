@@ -196,6 +196,15 @@ class InvoiceEmailInput(APIModel):
     recipient: EmailStr
 
 
+class InvoiceEmailPreviewRead(APIModel):
+    recipient: EmailStr | None
+    subject: str
+    message: str
+    attachment_names: list[str]
+    due_date: date
+    payment_terms_days: int
+
+
 class InvoiceEmailRead(APIModel):
     message_id: str
     recipient: EmailStr

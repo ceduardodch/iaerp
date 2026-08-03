@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
@@ -32,11 +33,13 @@ from app.models.billing import (
     SRITransmission,
 )
 from app.models.masters import EmissionPoint, Establishment, Party, Product, TaxCategory
+from app.models.platform import Tenant
 from app.models.receivables import Movement, Receivable
 from app.schemas.billing import (
     ArtifactDownloadRead,
     CreditNoteInput,
     DocumentArtifactRead,
+    InvoiceEmailPreviewRead,
     InvoiceEmailRead,
     InvoiceInput,
     InvoicePreviewInput,
@@ -102,6 +105,17 @@ _CREDIT_NOTE_STATUSES_RESERVING_BALANCE = frozenset(
 # Evento outbox que dispara el worker de transmision SRI (workers/tasks.py
 # rutea por event_type; workers/sri_transmission.py es el handler).
 INVOICE_SIGNED_EVENT = "invoice.signed"
+
+
+@dataclass(frozen=True)
+class _InvoiceEmailDelivery:
+    recipient: str | None
+    subject: str
+    message: str
+    attachment_names: list[str]
+    artifacts: dict[str, DocumentArtifact]
+    due_date: date
+    payment_terms_days: int
 
 
 def _validate_sri_environment_alignment(
@@ -1449,6 +1463,51 @@ async def send_invoice_email(
     recipient: str,
 ) -> InvoiceEmailRead:
     """Envía una factura autorizada con su XML y RIDE por acción humana."""
+    delivery = await _prepare_invoice_email(session, context, document_id)
+    xml_data, ride_data = await asyncio.gather(
+        storage.download_artifact(object_key=delivery.artifacts["xml-signed"].object_key),
+        storage.download_artifact(object_key=delivery.artifacts["ride-pdf"].object_key),
+    )
+    message_id = await crm_integrations.send_google_email(
+        session,
+        context,
+        recipient=recipient,
+        subject=delivery.subject,
+        message=delivery.message,
+        attachments=[
+            (delivery.attachment_names[0], "application/xml", xml_data),
+            (delivery.attachment_names[1], "application/pdf", ride_data),
+        ],
+    )
+    return InvoiceEmailRead(
+        message_id=message_id,
+        recipient=recipient,
+        attachment_names=delivery.attachment_names,
+    )
+
+
+async def preview_invoice_email(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+) -> InvoiceEmailPreviewRead:
+    """Muestra exactamente el correo fiscal antes de la confirmación humana."""
+    delivery = await _prepare_invoice_email(session, context, document_id)
+    return InvoiceEmailPreviewRead(
+        recipient=delivery.recipient,
+        subject=delivery.subject,
+        message=delivery.message,
+        attachment_names=delivery.attachment_names,
+        due_date=delivery.due_date,
+        payment_terms_days=delivery.payment_terms_days,
+    )
+
+
+async def _prepare_invoice_email(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+) -> _InvoiceEmailDelivery:
     document = await get_sales_document(session, context, document_id)
     if document.document_type != "INVOICE" or document.status != "AUTHORIZED":
         raise HTTPException(status_code=422, detail="Only authorized invoices can be emailed")
@@ -1477,26 +1536,43 @@ async def send_invoice_email(
         raise HTTPException(status_code=422, detail="Invoice numbering data is incomplete")
     invoice_number = f"{establishment.code}-{emission_point.code}-{document.sequential}"
     attachment_names = [f"FACTURA-{invoice_number}.xml", f"FACTURA-{invoice_number}.pdf"]
-    xml_data, ride_data = await asyncio.gather(
-        storage.download_artifact(object_key=latest["xml-signed"].object_key),
-        storage.download_artifact(object_key=latest["ride-pdf"].object_key),
+    party = await session.get(Party, document.party_id)
+    tenant = await session.get(Tenant, context.tenant_id)
+    template = await fiscal_settings.get_or_create(session, context.tenant_id)
+    if party is None or tenant is None:
+        raise HTTPException(status_code=422, detail="Invoice customer or company is incomplete")
+    due_dates = list(
+        await session.scalars(
+            select(SalesDocumentInstallment.due_date).where(
+                SalesDocumentInstallment.tenant_id == context.tenant_id,
+                SalesDocumentInstallment.sales_document_id == document_id,
+            )
+        )
     )
-    message_id = await crm_integrations.send_google_email(
-        session,
-        context,
-        recipient=recipient,
-        subject=f"Factura {invoice_number}",
-        message=(
-            f"Adjuntamos la factura {invoice_number}, su RIDE en PDF y el XML firmado.\n\n"
-            "Este correo fue enviado tras confirmación en IAERP."
-        ),
-        attachments=[
-            (attachment_names[0], "application/xml", xml_data),
-            (attachment_names[1], "application/pdf", ride_data),
-        ],
-    )
-    return InvoiceEmailRead(
-        message_id=message_id,
-        recipient=recipient,
+    due_date = max(due_dates, default=document.issue_date)
+    payment_terms_days = max(0, (due_date - document.issue_date).days)
+    values = {
+        "{{cliente}}": party.name,
+        "{{empresa}}": tenant.name,
+        "{{numero_factura}}": invoice_number,
+        "{{fecha_emision}}": document.issue_date.isoformat(),
+        "{{vencimiento}}": due_date.isoformat(),
+        "{{plazo}}": "Pago inmediato" if payment_terms_days == 0 else f"{payment_terms_days} días",
+        "{{plazo_dias}}": str(payment_terms_days),
+        "{{total}}": f"{document.total:.2f}",
+    }
+
+    def render(value: str) -> str:
+        for variable, replacement in values.items():
+            value = value.replace(variable, replacement)
+        return value
+
+    return _InvoiceEmailDelivery(
+        recipient=party.email,
+        subject=render(template.invoice_email_subject),
+        message=render(template.invoice_email_body),
         attachment_names=attachment_names,
+        artifacts=latest,
+        due_date=due_date,
+        payment_terms_days=payment_terms_days,
     )

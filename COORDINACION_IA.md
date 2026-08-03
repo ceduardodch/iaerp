@@ -6,7 +6,7 @@
 > "SKIPPED" mientras otra sesión lo completaba, y tests borrados/debilitados
 > para forzar el CI en verde. Este doc evita que se repita.
 
-**Última actualización:** 2026-07-23 (America/Guayaquil)
+**Última actualización:** 2026-08-02 (America/Guayaquil)
 
 > **Estado actual (2026-07-23):** plan UI/UX (Sprints 1-9) **completo**; además
 > cliente **SRI real** (`SoapSRIClient`) e integración **Gmail** listos en código.
@@ -47,6 +47,7 @@
 | Codex (este hilo, copia aislada) | 🟡 LISTA PARA INTEGRAR | Prioridad documental entre facturas del mismo cliente + tarjetas tributarias con ID visible; no tocar el worktree principal hasta que la otra sesión termine | 2026-08-02 |
 | Codex (este hilo, corrección) | ✅ COMPLETA | HTTP 500 al confirmar banco, retención SRI 1.0 y envío manual de factura con RIDE + XML; validación local verde | 2026-08-02 |
 | Codex (este hilo, históricos) | ✅ COMPLETA | Fecha documental de retenciones, reproceso seguro y conciliación de meses anteriores; validación local verde | 2026-08-02 |
+| Codex (este hilo, entrega fiscal) | ✅ COMPLETA | Correo de factura con plantilla, plazo, RIDE + XML y Tributario agrupado por documento | 2026-08-02 |
 | Otra sesión (Sonnet 4.6) | ⚠️ ¿activa? | Venía haciendo Sprints UI/UX (sidebar, forms) y muteando tests | reciente |
 
 > Si eres una IA nueva y esta tabla muestra a alguien 🟢 ACTIVA, **no toques su

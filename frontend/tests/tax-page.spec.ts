@@ -184,7 +184,9 @@ test('separa la retención de renta del IVA mensual', async ({ page }) => {
 })
 
 test('separa cada comprobante y muestra su ID IAERP', async ({ page }) => {
-  const retentionCard = page.locator('article').filter({ hasText: 'RETENCION' })
+  await expect(page.getByText('Compras recibidas', { exact: true })).toBeVisible()
+  await expect(page.getByText('Retenciones recibidas', { exact: true })).toBeVisible()
+  const retentionCard = page.locator('article').filter({ hasText: 'Retención' })
   await expect(retentionCard).toContainText('Preliminar')
 
   const invoiceCard = page.locator('article').filter({ hasText: 'PROVEEDOR DEMO' })

@@ -179,6 +179,18 @@ async function mockApi(page: Page) {
   await page.route(`**/api/v1/invoices/${duplicatedInvoice.id}`, (route) =>
     route.fulfill({ json: duplicatedInvoice }),
   )
+  await page.route(`**/api/v1/invoices/${authorizedInvoice.id}/email-preview`, (route) =>
+    route.fulfill({
+      json: {
+        recipient: customer.email,
+        subject: 'Factura 001-001-000000002 · IAERP Demo',
+        message: 'Hola Cliente Demo.\n\nFecha límite de pago: 2026-08-04\nPlazo acordado: 31 días.',
+        attachmentNames: ['FACTURA-001-001-000000002.xml', 'FACTURA-001-001-000000002.pdf'],
+        dueDate: '2026-08-04',
+        paymentTermsDays: 31,
+      },
+    }),
+  )
   await page.route('**/api/v1/invoices/*/duplicate', (route) =>
     route.fulfill({ status: 201, json: duplicatedInvoice }),
   )
@@ -326,6 +338,13 @@ test('authorized invoice detail shows SRI transmission, artifacts and credit not
   await expect(detail.getByText(authorizedInvoice.sriTransmission.authorizationNumber)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Descargar XML firmado' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Descargar RIDE PDF' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Preparar correo' })).toBeVisible()
+  await page.getByRole('button', { name: 'Preparar correo' }).click()
+  const emailDialog = page.getByRole('dialog', { name: 'Enviar factura por correo' })
+  await expect(emailDialog).toContainText('Fecha límite de pago')
+  await expect(emailDialog).toContainText('31 días')
+  await expect(emailDialog).toContainText('FACTURA-001-001-000000002.xml')
+  await page.keyboard.press('Escape')
   await expect(page.getByRole('button', { name: 'Volver al listado' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Emitir' })).toBeDisabled()
 

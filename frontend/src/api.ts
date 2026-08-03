@@ -203,6 +203,21 @@ export type InvoiceEmailResult = {
   attachmentNames: string[]
 }
 
+export type InvoiceEmailPreview = {
+  recipient?: string | null
+  subject: string
+  message: string
+  attachmentNames: string[]
+  dueDate: string
+  paymentTermsDays: number
+}
+
+export type InvoiceEmailTemplate = {
+  subject: string
+  body: string
+  availableVariables: string[]
+}
+
 export type FiscalSettings = {
   sriEnvironment: '1' | '2'
   electronicInvoicingProviderName: string

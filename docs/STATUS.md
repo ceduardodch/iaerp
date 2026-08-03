@@ -7,6 +7,18 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Entrega de factura y orden tributario local: 2026-08-02
+  `America/Guayaquil`. La factura autorizada muestra ahora un bloque claro de
+  entrega al cliente. Antes de enviar, la persona revisa destinatario, asunto,
+  mensaje, vencimiento, plazo y nombres de los adjuntos; el correo usa siempre
+  el RIDE PDF y XML firmado vigentes. La plantilla se configura por tenant en
+  `Empresa -> Envío de facturas`, separada de la plantilla de Cobranza, y sus
+  datos de pago salen del plan guardado en la factura. Tributario agrupa los
+  comprobantes del periodo en ventas emitidas, compras recibidas, retenciones
+  recibidas y otros; cada grupo muestra cantidad y total, se puede plegar y
+  conserva el ID IAERP y la historia por documento. Ruff, mypy, build, lint,
+  pruebas API de plantilla/envío y 44 recorridos Playwright pasan localmente.
+
 - Corrección histórica local: 2026-08-02 `America/Guayaquil`. Al aplicar un
   XML de retención, Cartera usa ahora `fechaEmision` del comprobante como fecha
   efectiva, no el día en que se cargó. Si la misma autorización ya existe con

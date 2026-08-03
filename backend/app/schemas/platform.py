@@ -56,6 +56,15 @@ class FiscalSettingsRead(FiscalSettingsUpdate):
     certificate_uploaded_at: datetime | None = None
 
 
+class InvoiceEmailTemplateUpdate(APIModel):
+    subject: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1, max_length=5000)
+
+
+class InvoiceEmailTemplateRead(InvoiceEmailTemplateUpdate):
+    available_variables: list[str]
+
+
 class SigningCertificateRead(FiscalSettingsRead):
     message: str
 

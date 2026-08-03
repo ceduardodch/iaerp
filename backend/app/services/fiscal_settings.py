@@ -15,12 +15,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthContext
 from app.core.config import get_settings
 from app.models.platform import TenantFiscalSettings
-from app.schemas.platform import FiscalSettingsRead, FiscalSettingsUpdate
+from app.schemas.platform import (
+    FiscalSettingsRead,
+    FiscalSettingsUpdate,
+    InvoiceEmailTemplateRead,
+    InvoiceEmailTemplateUpdate,
+)
 from app.services import storage
 
 MAX_CERTIFICATE_SIZE = 2 * 1024 * 1024
 MAX_RIDE_LOGO_SIZE = 1 * 1024 * 1024
 MAX_RIDE_LOGO_PIXELS = 12_000_000
+INVOICE_EMAIL_VARIABLES = [
+    "{{cliente}}",
+    "{{empresa}}",
+    "{{numero_factura}}",
+    "{{fecha_emision}}",
+    "{{vencimiento}}",
+    "{{plazo}}",
+    "{{plazo_dias}}",
+    "{{total}}",
+]
 
 
 def _fernet() -> Fernet:
@@ -95,6 +110,33 @@ async def update_settings(
     entity.sri_environment = data.sri_environment
     await session.flush()
     return to_read(entity)
+
+
+def invoice_email_template_read(entity: TenantFiscalSettings) -> InvoiceEmailTemplateRead:
+    return InvoiceEmailTemplateRead(
+        subject=entity.invoice_email_subject,
+        body=entity.invoice_email_body,
+        available_variables=INVOICE_EMAIL_VARIABLES,
+    )
+
+
+async def read_invoice_email_template(
+    session: AsyncSession,
+    context: AuthContext,
+) -> InvoiceEmailTemplateRead:
+    return invoice_email_template_read(await get_or_create(session, context.tenant_id))
+
+
+async def update_invoice_email_template(
+    session: AsyncSession,
+    context: AuthContext,
+    data: InvoiceEmailTemplateUpdate,
+) -> InvoiceEmailTemplateRead:
+    entity = await get_or_create(session, context.tenant_id)
+    entity.invoice_email_subject = data.subject
+    entity.invoice_email_body = data.body
+    await session.flush()
+    return invoice_email_template_read(entity)
 
 
 async def upload_ride_logo(

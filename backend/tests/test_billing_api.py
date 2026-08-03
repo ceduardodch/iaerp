@@ -215,6 +215,22 @@ async def test_authorized_invoice_email_requires_confirmation_and_attaches_ride_
 
     monkeypatch.setattr("app.services.billing.storage.download_artifact", fake_download)
     monkeypatch.setattr("app.services.billing.crm_integrations.send_google_email", fake_send)
+    preview = await client.get(
+        f"/api/v1/invoices/{document_id}/email-preview",
+        headers=auth(token),
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["dueDate"] == "2026-08-04"
+    assert preview.json()["paymentTermsDays"] == 31
+    assert preview.json()["subject"] == "Factura 001-001-000000001 · Tenant A"
+    assert "Fecha límite de pago: 2026-08-04" in preview.json()["message"]
+    assert "Plazo acordado: 31 días" in preview.json()["message"]
+    assert "Total: $115.00" in preview.json()["message"]
+    assert preview.json()["attachmentNames"] == [
+        "FACTURA-001-001-000000001.xml",
+        "FACTURA-001-001-000000001.pdf",
+    ]
+
     request_headers = auth(token, "email-invoice-send-0001")
     response = await client.post(
         f"/api/v1/invoices/{document_id}/email",
@@ -228,6 +244,8 @@ async def test_authorized_invoice_email_requires_confirmation_and_attaches_ride_
         "FACTURA-001-001-000000001.pdf",
     ]
     assert len(sent) == 1
+    assert sent[0]["subject"] == preview.json()["subject"]
+    assert sent[0]["message"] == preview.json()["message"]
     assert [item[1] for item in sent[0]["attachments"]] == [
         "application/xml",
         "application/pdf",

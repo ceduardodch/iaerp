@@ -31,6 +31,8 @@ import {
   type FiscalSettings,
   type InvoiceLineInput,
   type InvoiceEmailResult,
+  type InvoiceEmailPreview,
+  type InvoiceEmailTemplate,
   type InvoicePreview,
   type IntegrationStatus,
   type Lead,
@@ -1375,6 +1377,11 @@ function InvoiceDetail({
     queryFn: () => apiRequest<DocumentArtifact[]>(token, `/invoices/${invoiceId}/artifacts`),
     enabled: Boolean(invoiceQuery.data),
   })
+  const emailPreviewQuery = useQuery({
+    queryKey: ['invoices', invoiceId, 'email-preview'],
+    queryFn: () => apiRequest<InvoiceEmailPreview>(token, `/invoices/${invoiceId}/email-preview`),
+    enabled: emailing && invoiceQuery.data?.status === 'AUTHORIZED',
+  })
 
   const issueInvoice = useMutation({
     mutationFn: () =>
@@ -1637,11 +1644,28 @@ function InvoiceDetail({
               autoFocus
             />
           </label>
+          {emailPreviewQuery.isPending ? <p className="fine-print">Preparando vista previa…</p> : null}
+          {emailPreviewQuery.error ? (
+            <p className="form-error" role="alert">{emailPreviewQuery.error.message}</p>
+          ) : null}
+          {emailPreviewQuery.data ? (
+            <section className="invoice-email-preview" aria-label="Vista previa del correo">
+              <dl>
+                <div><dt>Asunto</dt><dd>{emailPreviewQuery.data.subject}</dd></div>
+                <div><dt>Fecha límite de pago</dt><dd>{emailPreviewQuery.data.dueDate}</dd></div>
+                <div><dt>Plazo</dt><dd>{emailPreviewQuery.data.paymentTermsDays === 0 ? 'Pago inmediato' : `${emailPreviewQuery.data.paymentTermsDays} días`}</dd></div>
+              </dl>
+              <p className="invoice-email-message">{emailPreviewQuery.data.message}</p>
+              <p className="fine-print">
+                Adjuntos: {emailPreviewQuery.data.attachmentNames.join(' · ')}
+              </p>
+            </section>
+          ) : null}
           <div className="erp-form-actions">
             <ErpButton variant="secondary" onClick={() => setEmailing(false)} disabled={emailInvoice.isPending}>Cancelar</ErpButton>
             <ErpButton
               variant="primary"
-              disabled={emailInvoice.isPending || !emailRecipient.trim()}
+              disabled={emailInvoice.isPending || emailPreviewQuery.isPending || !emailRecipient.trim()}
               onClick={() => emailInvoice.mutate()}
             >
               {emailInvoice.isPending ? 'Enviando…' : 'Confirmar envío'}
@@ -1650,23 +1674,33 @@ function InvoiceDetail({
         </ErpModal>
       ) : null}
 
+      {invoice.status === 'AUTHORIZED' ? (
+        <section className="invoice-delivery-panel" aria-labelledby="invoice-delivery-title">
+          <div>
+            <p className="section-number" id="invoice-delivery-title">Entrega al cliente</p>
+            <h3>Enviar factura autorizada</h3>
+            <p>
+              El correo incluye el plazo y la fecha límite de pago. Se adjuntan el RIDE PDF y el XML firmado.
+            </p>
+          </div>
+          <ErpButton
+            variant="primary"
+            onClick={() => {
+              setEmailRecipient(emailPreviewQuery.data?.recipient ?? customer?.email ?? '')
+              setSentEmail(null)
+              setEmailing(true)
+            }}
+          >
+            <Mail size={18} aria-hidden="true" /> Preparar correo
+          </ErpButton>
+        </section>
+      ) : null}
+
       <div className="erp-form-actions">
         <ErpButton variant="secondary" onClick={onClose}>Volver al listado</ErpButton>
         {canCreditNote ? (
           <ErpButton variant="secondary" onClick={() => onOpenCreditNote(invoice)}>
             Nota de crédito
-          </ErpButton>
-        ) : null}
-        {invoice.status === 'AUTHORIZED' ? (
-          <ErpButton
-            variant="secondary"
-            onClick={() => {
-              setEmailRecipient(customer?.email ?? '')
-              setSentEmail(null)
-              setEmailing(true)
-            }}
-          >
-            <Mail size={18} aria-hidden="true" /> Enviar factura
           </ErpButton>
         ) : null}
         <ErpButton
@@ -2787,6 +2821,50 @@ function CollectionPolicyEditor({
   )
 }
 
+function InvoiceEmailTemplateEditor({
+  template,
+  pending,
+  error,
+  onSave,
+}: {
+  template: InvoiceEmailTemplate
+  pending: boolean
+  error?: string
+  onSave: (template: Pick<InvoiceEmailTemplate, 'subject' | 'body'>) => void
+}) {
+  const [subject, setSubject] = useState(template.subject)
+  const [body, setBody] = useState(template.body)
+
+  return (
+    <form
+      className="fiscal-panel-body"
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSave({ subject: subject.trim(), body: body.trim() })
+      }}
+    >
+      <p className="fiscal-panel-copy">
+        Esta plantilla se usa al entregar una factura autorizada. No corresponde a cobranza ni envía nada por sí sola.
+      </p>
+      <label>
+        Asunto
+        <input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={500} required />
+      </label>
+      <label>
+        Mensaje
+        <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={10} maxLength={5000} required />
+      </label>
+      <p className="fine-print">
+        Datos disponibles: {template.availableVariables.join(', ')}. El plazo, vencimiento y total salen de la factura guardada.
+      </p>
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      <ErpButton variant="primary" type="submit" disabled={pending || !subject.trim() || !body.trim()}>
+        {pending ? 'Guardando…' : 'Guardar plantilla de factura'}
+      </ErpButton>
+    </form>
+  )
+}
+
 /**
  * Cuánto del cobro entró en dinero y cuánto se fue en retenciones.
  *
@@ -3069,7 +3147,7 @@ function OrganizationPage({
   token: string
 }) {
   const queryClient = useQueryClient()
-  const [settingsSection, setSettingsSection] = useState<'fiscal' | 'collections' | 'integrations'>('fiscal')
+  const [settingsSection, setSettingsSection] = useState<'fiscal' | 'invoicing' | 'collections' | 'integrations'>('fiscal')
   const fiscalQuery = useQuery({
     queryKey: ['organization', 'fiscal-settings'],
     queryFn: () => apiRequest<FiscalSettings>(token, '/organization/fiscal-settings'),
@@ -3081,6 +3159,19 @@ function OrganizationPage({
   const collectionPolicyQuery = useQuery({
     queryKey: ['receivables', 'collection-policy'],
     queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
+  })
+  const invoiceEmailTemplateQuery = useQuery({
+    queryKey: ['organization', 'invoice-email-template'],
+    queryFn: () => apiRequest<InvoiceEmailTemplate>(token, '/organization/invoice-email-template'),
+  })
+  const updateInvoiceEmailTemplate = useMutation({
+    mutationFn: (template: Pick<InvoiceEmailTemplate, 'subject' | 'body'>) =>
+      apiRequest<InvoiceEmailTemplate>(token, '/organization/invoice-email-template', {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('web-invoice-email-template') },
+        body: JSON.stringify(template),
+      }),
+    onSuccess: (template) => queryClient.setQueryData(['organization', 'invoice-email-template'], template),
   })
   const updateCollectionPolicy = useMutation({
     mutationFn: (policy: Omit<CollectionPolicy, 'updatedAt'>) => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy', {
@@ -3224,6 +3315,7 @@ function OrganizationPage({
       />
       <ErpToolbar ariaLabel="Secciones de empresa">
         <ErpButton variant={settingsSection === 'fiscal' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('fiscal')}>Datos fiscales</ErpButton>
+        <ErpButton variant={settingsSection === 'invoicing' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('invoicing')}>Envío de facturas</ErpButton>
         <ErpButton variant={settingsSection === 'collections' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('collections')}>Cobranza automática</ErpButton>
         <ErpButton variant={settingsSection === 'integrations' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('integrations')}>Canales e integraciones</ErpButton>
       </ErpToolbar>
@@ -3322,6 +3414,21 @@ function OrganizationPage({
           </div>
         </ErpPanel>
         </> : null}
+        {settingsSection === 'invoicing' ? (
+          <ErpPanel title="Correo de entrega de factura" className="fiscal-settings-panel">
+            {invoiceEmailTemplateQuery.isPending ? <p className="fiscal-panel-copy">Cargando plantilla…</p> : null}
+            {invoiceEmailTemplateQuery.error ? <p className="form-error" role="alert">{invoiceEmailTemplateQuery.error.message}</p> : null}
+            {invoiceEmailTemplateQuery.data ? (
+              <InvoiceEmailTemplateEditor
+                key={`${invoiceEmailTemplateQuery.data.subject}-${invoiceEmailTemplateQuery.data.body}`}
+                template={invoiceEmailTemplateQuery.data}
+                pending={updateInvoiceEmailTemplate.isPending}
+                error={updateInvoiceEmailTemplate.error?.message}
+                onSave={(template) => updateInvoiceEmailTemplate.mutate(template)}
+              />
+            ) : null}
+          </ErpPanel>
+        ) : null}
         {settingsSection === 'collections' ? <>
         <ErpPanel title="Automatizaciones de cobranza" className="fiscal-settings-panel">
           <p className="fiscal-panel-copy">Define aquí las plantillas, canales y reglas automáticas. La pantalla de Cartera queda reservada para gestionar saldos y cobros.</p>

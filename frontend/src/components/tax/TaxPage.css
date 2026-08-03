@@ -1,3 +1,63 @@
+.tax-document-groups {
+  display: grid;
+  gap: 1rem;
+}
+
+.tax-document-group {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+  background: #f7f6f1;
+}
+
+.tax-document-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.tax-document-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tax-document-group > summary::before {
+  content: '›';
+  color: var(--muted);
+  font-size: 1.35rem;
+  transform: rotate(0deg);
+  transition: transform 140ms ease;
+}
+
+.tax-document-group[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.tax-document-group > summary > span:first-of-type {
+  display: grid;
+  flex: 1;
+  gap: .2rem;
+}
+
+.tax-document-group > summary small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.tax-document-group-metrics {
+  color: var(--muted);
+  font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tax-document-group > .tax-document-list {
+  padding: 0 1rem 1rem;
+}
+
 .tax-document-list {
   display: grid;
   gap: 1rem;
@@ -109,6 +169,16 @@
 }
 
 @media (max-width: 44rem) {
+  .tax-document-group > summary {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .tax-document-group-metrics {
+    width: 100%;
+    padding-left: 1.5rem;
+  }
+
   .tax-document-identifiers > div {
     grid-template-columns: 1fr;
     gap: .25rem;

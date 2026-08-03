@@ -48,6 +48,14 @@ const MOVEMENT_LABELS: Record<string, string> = {
   REVERSAL: 'Reverso',
 }
 
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  FACTURA: 'Factura',
+  RETENCION: 'Retención',
+  NOTA_CREDITO: 'Nota de crédito',
+  NOTA_DEBITO: 'Nota de débito',
+  LIQUIDACION: 'Liquidación',
+}
+
 /**
  * Historia del comprobante: qué retención le hicieron, qué cobros entraron (con
  * su referencia bancaria si vinieron del extracto) y cuánto falta.
@@ -275,6 +283,47 @@ export function TaxPage({ token }: { token: string }) {
     }
     return [...grouped.entries()].sort((a, b) => b[0] - a[0])
   }, [periods])
+
+  const documentGroups = useMemo(() => {
+    const documents = documentsQuery.data ?? []
+    const definitions = [
+      {
+        key: 'sales',
+        title: 'Ventas emitidas',
+        description: 'Facturas y notas emitidas por la empresa.',
+        matches: (document: TaxFiscalDocument) => document.direction === 'EMITIDO' && document.docType !== 'RETENCION',
+      },
+      {
+        key: 'purchases',
+        title: 'Compras recibidas',
+        description: 'Facturas, liquidaciones y notas recibidas de proveedores.',
+        matches: (document: TaxFiscalDocument) => document.direction === 'RECIBIDO' && document.docType !== 'RETENCION',
+      },
+      {
+        key: 'retentions',
+        title: 'Retenciones recibidas',
+        description: 'Retención de IVA y retención de renta, siempre separadas en el detalle.',
+        matches: (document: TaxFiscalDocument) => document.direction === 'RECIBIDO' && document.docType === 'RETENCION',
+      },
+    ]
+    const assigned = new Set<string>()
+    const groups = definitions.map((definition) => {
+      const items = documents.filter((document) => definition.matches(document))
+      items.forEach((document) => assigned.add(document.id))
+      return { ...definition, items }
+    })
+    const otherItems = documents.filter((document) => !assigned.has(document.id))
+    if (otherItems.length > 0) {
+      groups.push({
+        key: 'other',
+        title: 'Otros documentos',
+        description: 'Documentos que requieren una clasificación distinta.',
+        matches: () => false,
+        items: otherItems,
+      })
+    }
+    return groups
+  }, [documentsQuery.data])
 
   return (
     <>
@@ -645,15 +694,27 @@ export function TaxPage({ token }: { token: string }) {
           </ErpPanel>
 
           <ErpPanel title="Documentos usados" count={documentsQuery.data?.length ?? 0}>
-            <div className="tax-document-list" aria-label="Documentos del periodo">
-              {(documentsQuery.data ?? []).map((document) => (
+            <div className="tax-document-groups" aria-label="Documentos del periodo agrupados por tipo">
+              {documentGroups.filter((group) => group.items.length > 0).map((group) => (
+                <details className="tax-document-group" key={group.key} open>
+                  <summary>
+                    <span>
+                      <strong>{group.title}</strong>
+                      <small>{group.description}</small>
+                    </span>
+                    <span className="tax-document-group-metrics">
+                      {group.items.length} doc. · ${group.items.reduce((total, document) => total + Number(document.total), 0).toFixed(2)}
+                    </span>
+                  </summary>
+                  <div className="tax-document-list">
+                  {group.items.map((document) => (
                 <article className="tax-document-card" key={document.id}>
                   <header className="tax-document-header">
                     <div>
                       <span className="tax-document-direction">
                         {document.direction === 'EMITIDO' ? 'Emitido' : 'Recibido'}
                       </span>
-                      <h3>{document.docType} · {document.issueDate}</h3>
+                      <h3>{DOCUMENT_TYPE_LABELS[document.docType] ?? document.docType} · {document.issueDate}</h3>
                       <p>{document.counterpartyName ?? document.counterpartyIdentification ?? 'Sin contraparte'}</p>
                     </div>
                     {document.isPreliminary ? (
@@ -721,6 +782,9 @@ export function TaxPage({ token }: { token: string }) {
                     </div>
                   ) : null}
                 </article>
+                  ))}
+                  </div>
+                </details>
               ))}
               {(documentsQuery.data ?? []).length === 0 ? (
                 <ErpEmptyState
