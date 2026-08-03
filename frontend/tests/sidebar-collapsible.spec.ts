@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const navigationLabels = ['Resumen', 'Contactos', 'Catálogos', 'Facturas', 'Empresa', 'Cartera', 'CRM']
+const navigationLabels = ['Resumen', 'Contactos', 'Catálogos', 'Facturas', 'Compras', 'Empresa', 'Cartera', 'CRM']
 
 test.describe('Navegación principal', () => {
   test.beforeEach(async ({ page }) => {

@@ -261,6 +261,101 @@ async def test_imported_sale_feeds_the_iva_summary(client, stored_objects) -> No
     assert summary["amounts"]["ivaCreditoTributario"] == "0.00"
 
 
+async def test_dashboard_compares_documented_month(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    await seed_authorized_invoice(stored_objects, await setup_masters(client, token))
+    period_id = await create_period(client, token)
+    await client.post(
+        f"/api/v1/tax/periods/{period_id}/import-issued",
+        headers=auth(token, f"tax-imp-{uuid.uuid4()}"),
+    )
+
+    response = await client.get(
+        "/api/v1/tax/dashboard",
+        headers=auth(token),
+        params={"as_of": "2025-11-30", "months": 12},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["trend"]) == 12
+    assert body["trend"][-1] == {
+        "year": 2025,
+        "month": 11,
+        "total": "359.24",
+        "invoiceCount": 1,
+        "creditNoteCount": 0,
+    }
+    current = body["currentMonth"]
+    assert current["authorizedSalesTotal"] == "359.24"
+    assert current["evidencedSalesTotal"] == "359.24"
+    assert current["purchasesTotal"] == "0.00"
+    assert current["ivaGenerated"] == "46.86"
+    assert current["ivaPayable"] == "46.86"
+    assert current["isPreliminary"] is False
+
+
+async def test_dashboard_reports_missing_tax_sales_without_inventing_iva(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    await seed_authorized_invoice(stored_objects, await setup_masters(client, token))
+
+    response = await client.get(
+        "/api/v1/tax/dashboard",
+        headers=auth(token),
+        params={"as_of": "2025-11-30"},
+    )
+
+    current = response.json()["currentMonth"]
+    assert current["authorizedSalesTotal"] == "359.24"
+    assert current["evidencedSalesTotal"] == "0.00"
+    assert current["ivaPayable"] == "0.00"
+    assert current["isPreliminary"] is True
+    assert "no tiene un periodo IVA" in current["preliminaryReasons"][0]
+
+
+async def test_dashboard_sales_trend_subtracts_authorized_credit_notes(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    masters = await setup_masters(client, token)
+    await seed_authorized_invoice(stored_objects, masters)
+    async with SessionFactory() as session:
+        session.add(
+            SalesDocument(
+                tenant_id=TENANT_A,
+                document_type="CREDIT_NOTE",
+                establishment_id=masters["establishment_id"],
+                emission_point_id=masters["emission_point_id"],
+                sequential="000000046",
+                access_key=f"{ACCESS_KEY[:-1]}0",
+                party_id=masters["party_id"],
+                issue_date=date(2025, 11, 20),
+                status="AUTHORIZED",
+                subtotal=Decimal("10.00"),
+                tax_total=Decimal("1.50"),
+                total=Decimal("11.50"),
+                fiscal_policy_version="2025.1",
+                reason="Ajuste documentado",
+            )
+        )
+        await session.commit()
+
+    response = await client.get(
+        "/api/v1/tax/dashboard",
+        headers=auth(token),
+        params={"as_of": "2025-11-30"},
+    )
+
+    point = response.json()["trend"][-1]
+    assert point["total"] == "347.74"
+    assert point["invoiceCount"] == 1
+    assert point["creditNoteCount"] == 1
+
+
 async def test_importing_twice_does_not_duplicate(client, stored_objects) -> None:
     token = await token_for(client)
     await seed_authorized_invoice(stored_objects, await setup_masters(client, token))

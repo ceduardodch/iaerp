@@ -721,6 +721,62 @@ export type TaxFiscalDocument = {
   isPreliminary: boolean
 }
 
+export type PurchaseTaxLine = {
+  sriTaxCode: string
+  taxBracket: 'GRAVADO' | 'TARIFA_CERO' | 'EXENTO' | 'NO_OBJETO'
+  rate: string
+  baseAmount: string
+  taxAmount: string
+}
+
+export type PurchaseDocument = {
+  id: string
+  docType: 'FACTURA' | 'NOTA_CREDITO' | 'NOTA_DEBITO' | 'LIQUIDACION'
+  accessKey?: string | null
+  issueDate: string
+  documentNumber?: string | null
+  supplierIdentification?: string | null
+  supplierName?: string | null
+  subtotal: string
+  taxTotal: string
+  total: string
+  paymentMethods: string[]
+  isPreliminary: boolean
+  taxes: PurchaseTaxLine[]
+}
+
+export type MonthlySalesTrend = {
+  year: number
+  month: number
+  total: string
+  invoiceCount: number
+  creditNoteCount: number
+}
+
+export type CurrentMonthTax = {
+  year: number
+  month: number
+  authorizedSalesTotal: string
+  authorizedSalesCount: number
+  evidencedSalesTotal: string
+  evidencedSalesCount: number
+  purchasesTotal: string
+  purchaseCount: number
+  ivaGenerated: string
+  ivaCredit: string
+  retainedIva: string
+  ivaPayable: string
+  ivaCreditBalance: string
+  isPreliminary: boolean
+  preliminaryReasons: string[]
+  needsAccountingReview: boolean
+}
+
+export type DashboardTax = {
+  trend: MonthlySalesTrend[]
+  currentMonth: CurrentMonthTax
+}
+
 export type TaxFormField = {
   fieldCode: string
   label: string

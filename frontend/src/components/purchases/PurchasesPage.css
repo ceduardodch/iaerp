@@ -1,0 +1,8 @@
+.purchase-table td { vertical-align: top; }
+.purchase-table td small { display: block; margin-top: .25rem; color: var(--muted); }
+.purchase-tax-breakdown { display: grid; gap: .35rem; min-width: 170px; margin: 0; padding: 0; list-style: none; }
+.purchase-tax-breakdown li { display: grid; grid-template-columns: 1fr auto; gap: .1rem .6rem; }
+.purchase-tax-breakdown li span { font-size: .78rem; }
+.purchase-tax-breakdown li strong { font-size: .78rem; }
+.purchase-tax-breakdown li small { grid-column: 1 / -1; margin: 0; }
+.purchase-id { max-width: 190px; overflow-wrap: anywhere; }

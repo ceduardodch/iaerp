@@ -4,20 +4,17 @@
 > leer esto y `docs/adrs/0012-tax-module-scope.md` antes de tocar codigo.
 > Coordinacion general: [`COORDINACION_IA.md`](../COORDINACION_IA.md).
 
-**Ultima actualizacion:** 2026-08-02
+**Ultima actualizacion:** 2026-08-02 (Dashboard mensual y Compras)
 
 ## Estado de git (leer antes de tocar)
 
-- **Rama de trabajo: `feature/tax-module`** (autorizada por el usuario porque
-  `release` estaba tomada por otra sesion y `main` es produccion).
-- Sale de `main`; PR **draft #26** abierto contra `main`. No mergear todavia.
-- ⚠️ **El CI no corre en ramas `feature`** (solo `develop`/`release`/`main`, por
-  push o PR). La validacion se hace en local y en el PR.
-- ⚠️ `main` ya venia con **CI en rojo** por `receivables-a11y.spec.ts`, ajeno a
-  este modulo.
-- Commits del modulo, en orden: `0e39cec` (E0), `335b732` (E1), `3511f7b` (E2
-  lectores), `ff975f0` (E2 persistencia + E4 generador), `1c9573e` (E3 backend),
-  `64c6bf2` (E3 pantalla).
+- **Rama local de trabajo: `develop`**, puesta al día por avance directo desde
+  `main` el 2026-08-02. La rama `release` local conserva historia antigua ya
+  sustituida y no se mezcló para evitar reabrir conflictos.
+- `main` sigue siendo producción y no recibió este corte. Falta promoción con
+  autorización del usuario.
+- El módulo tributario base y sus correcciones históricas ya están integrados
+  en `main`; este corte añade solo lecturas mensuales y la vista de Compras.
 
 ## ⚠️ Accion requerida en Keycloak de produccion
 
@@ -66,6 +63,7 @@ en el **ADR 0012** y no se cambian sin un ADR nuevo.
 | E6 | Ventas propias sin descargar del portal | ✅ Hecho | `own_documents.py` importa las facturas AUTORIZADAS que emitio IAERP leyendo su artefacto `xml-signed` (la autorizacion sale de `SRITransmission`). `POST /tax/periods/{id}/import-issued` y el boton **Importar mis ventas**. Sin autorizacion o sin XML firmado se omite explicando el motivo. |
 | E7 | Carga en bloque con previo | ✅ Hecho | `bulk.py` + `POST /tax/evidence/bulk` (hasta 50 archivos, ZIP incluido). Clasifica por contenido, ubica cada comprobante en el periodo de su fecha real de emision y muestra un **previo que no escribe nada**. Al confirmar guarda evidencia y documentos; con `applyRetentions` delega en `receivables.import_retention_xml_batch`. Un archivo ilegible no aborta el lote. |
 | E8 | Expediente del comprobante | ✅ Hecho | `dossier.py` + `GET /tax/documents/{id}/dossier` y tarjeta desplegable: cada documento muestra `ID IAERP` copiable y clave SRI por separado; factura → retencion (IVA y renta separadas) → cobro con referencia bancaria → neto esperado (`total − retenciones`) y saldo. El comprobante de retención muestra su propio desglose. Una retencion por si sola NO cuenta como cobro. |
+| E9 | Dashboard mensual + vista Compras | ✅ Hecho local | `GET /tax/dashboard` separa ventas autorizadas operativas de ventas ya respaldadas en Tributario y reutiliza el motor IVA. `GET /tax/purchases` lista solo documentos recibidos desde evidencia, con desglose por tarifa. El frontend añade evolución de 12 meses, corte compras/ventas y menú Compras agrupado por mes. |
 | F | RDEP / ADI | 🚫 Bloqueado | RDEP requiere origen de datos de nomina/IESS (fuera del alcance actual) |
 
 ## Hallazgos de las muestras reales (2026-08-02)
@@ -278,6 +276,17 @@ emitidas, compras recibidas, retenciones recibidas y otros documentos. Cada
 grupo muestra cantidad y total, se puede plegar y mantiene visible el ID IAERP,
 la clave SRI, la forma de pago respaldada y la historia documental. La
 retención de IVA y la retención de renta siguen separadas en el detalle.
+
+**Dashboard mensual y Compras (2026-08-02).** Resumen usa las facturas
+`AUTHORIZED` para la evolución neta de ventas y resta notas de crédito
+autorizadas. El corte del mes toma compras y cifras de IVA del expediente
+tributario: si una venta autorizada aún no fue importada, muestra ambos valores
+y marca el cálculo preliminar. El saldo de IVA nunca se presenta como valor
+definitivo cuando el crédito tributario requiere revisar el 564. Compras es una
+vista de solo lectura sobre documentos `RECIBIDO`; agrupa por fecha real del
+XML, resta notas de crédito y enseña base e IVA por tarifa. Lo siguiente es
+revisar el corte con los XML de julio de 2026 y autorizar su promoción; no
+declarar ni pagar desde esta pantalla.
 
 Notas utiles para quien retome:
 - `.section-number` y `.kicker` estan **ocultas globalmente** por el rediseno

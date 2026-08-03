@@ -7,6 +7,21 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Dashboard mensual y lectura de compras listos en `develop`: 2026-08-02
+  `America/Guayaquil`. Resumen muestra la evolución neta de ventas autorizadas
+  de los últimos 12 meses y compara el mes actual con compras recibidas desde
+  evidencia tributaria. El IVA a pagar se etiqueta como estimación: queda
+  preliminar si faltan ventas por importar a Tributario o si el crédito de IVA
+  requiere validar el campo 564 con respaldo contable. El menú Compras lista
+  facturas, notas y liquidaciones recibidas por mes, con proveedor, número,
+  subtotal, total y desglose de IVA tomado del XML/TXT; no permite crear cifras
+  manuales. Ruff, mypy y 71 pruebas tributarias pasan; la suite completa deja
+  375 aprobadas y 33 omitidas. Solo falla `test_health.py` porque Redis/Docker
+  local no está levantado, condición previa ya documentada. Build y lint pasan,
+  con tres avisos previos; 78 recorridos Playwright de Dashboard, Compras,
+  Tributario y accesibilidad pasan en escritorio y móvil. Falta promoción
+  autorizada; `main` no cambió.
+
 - Contratos simples integrados en `main`: 2026-08-02
   `America/Guayaquil`. Contratos enlaza cliente, oportunidad ganada y
   documentos accesorios; cada versión guarda vigencia, plazo y tipo de cobro.

@@ -93,6 +93,13 @@ export function ErpPanel({
   )
 }
 
+export function ErpMetricGrid({
+  children,
+  ariaLabel = 'Indicadores',
+}: PropsWithChildren<{ ariaLabel?: string }>) {
+  return <section className="metric-grid" aria-label={ariaLabel}>{children}</section>
+}
+
 export function ErpFormPanel({
   eyebrow,
   title,

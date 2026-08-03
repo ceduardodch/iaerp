@@ -160,6 +160,62 @@ class FiscalDocumentRead(APIModel):
     is_preliminary: bool
 
 
+class PurchaseTaxLineRead(APIModel):
+    sri_tax_code: str
+    tax_bracket: str
+    rate: str
+    base_amount: str
+    tax_amount: str
+
+
+class PurchaseDocumentRead(APIModel):
+    id: uuid.UUID
+    doc_type: str
+    access_key: str | None = None
+    issue_date: date
+    document_number: str | None = None
+    supplier_identification: str | None = None
+    supplier_name: str | None = None
+    subtotal: str
+    tax_total: str
+    total: str
+    payment_methods: list[str]
+    is_preliminary: bool
+    taxes: list[PurchaseTaxLineRead]
+
+
+class MonthlySalesTrendRead(APIModel):
+    year: int
+    month: int
+    total: str
+    invoice_count: int
+    credit_note_count: int
+
+
+class CurrentMonthTaxRead(APIModel):
+    year: int
+    month: int
+    authorized_sales_total: str
+    authorized_sales_count: int
+    evidenced_sales_total: str
+    evidenced_sales_count: int
+    purchases_total: str
+    purchase_count: int
+    iva_generated: str
+    iva_credit: str
+    retained_iva: str
+    iva_payable: str
+    iva_credit_balance: str
+    is_preliminary: bool
+    preliminary_reasons: list[str]
+    needs_accounting_review: bool
+
+
+class DashboardTaxRead(APIModel):
+    trend: list[MonthlySalesTrendRead]
+    current_month: CurrentMonthTaxRead
+
+
 class TaxFormFieldRead(APIModel):
     field_code: str
     label: str

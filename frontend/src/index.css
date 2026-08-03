@@ -822,6 +822,24 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
 .metric-card .metric-success { color: var(--emerald-700); }
 .readiness-panel { gap: 20px; padding: 20px; border: 1px solid var(--border-card); border-radius: var(--radius-lg); color: var(--text-body); background: white; box-shadow: var(--shadow-card); }
 .readiness-panel h2 { color: var(--text-heading); font-family: var(--font-sans); font-size: var(--text-base); }
+.dashboard-financial-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(320px, .7fr); gap: 16px; margin-bottom: 16px; }
+.dashboard-financial-grid .erp-panel { min-width: 0; }
+.sales-trend { display: grid; gap: .55rem; margin: 0; padding: 1rem 1.25rem 1.25rem; list-style: none; }
+.sales-trend li { display: grid; grid-template-columns: 58px minmax(80px, 1fr) 92px; align-items: center; gap: .7rem; }
+.sales-trend-label { color: var(--text-muted); font-size: var(--text-xs); text-transform: capitalize; }
+.sales-trend-track { height: 10px; overflow: hidden; border-radius: 999px; background: var(--slate-100); }
+.sales-trend-track span { display: block; height: 100%; border-radius: inherit; background: var(--emerald-700); }
+.sales-trend li strong { font-size: var(--text-xs); text-align: right; }
+.monthly-tax-card { display: grid; gap: 1rem; padding: 1rem 1.25rem 1.25rem; }
+.monthly-tax-comparison { display: grid; gap: .55rem; margin: 0; }
+.monthly-tax-comparison div { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: .45rem; border-bottom: 1px solid var(--border-card); }
+.monthly-tax-comparison dt { color: var(--text-muted); font-size: var(--text-xs); }
+.monthly-tax-comparison dd { margin: 0; color: var(--text-heading); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.monthly-tax-result { display: grid; gap: .2rem; padding: 1rem; border-radius: var(--radius-md); color: white; background: var(--emerald-800); }
+.monthly-tax-result span, .monthly-tax-result small { color: rgba(255, 255, 255, .82); }
+.monthly-tax-result strong { font-size: var(--text-xl); }
+.tax-estimate-warning { padding: .8rem 1rem; border: 1px solid var(--amber-200); border-radius: var(--radius-md); color: var(--amber-900); background: var(--amber-50); }
+.tax-estimate-warning ul { margin: .4rem 0 0; padding-left: 1.2rem; font-size: var(--text-xs); }
 .readiness-list li { padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-inset); font-size: var(--text-sm); }
 .readiness-list span { color: var(--success-text); background: transparent; }
 
@@ -989,6 +1007,15 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
   .invoice-month-accordion > summary::after { order: -1; }
   .invoice-month-summary { white-space: normal; }
   .retention-batch-heading { align-items: flex-start; flex-direction: column; gap: .2rem; }
+}
+
+@media (max-width: 900px) {
+  .dashboard-financial-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .sales-trend li { grid-template-columns: 48px minmax(60px, 1fr) 78px; gap: .45rem; }
+  .sales-trend { padding-inline: .8rem; }
 }
 
 /* Contraste AA (axe): colores del kanban por debajo de 4.5:1 en el fondo

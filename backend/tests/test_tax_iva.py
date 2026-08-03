@@ -142,6 +142,79 @@ async def test_purchases_split_by_bracket_and_credit(client, stored_objects) -> 
     assert amounts["ivaGenerado"] == "0.00"
 
 
+async def test_purchase_list_uses_received_xml_and_exposes_tax_breakdown(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+
+    response = await client.get(
+        "/api/v1/tax/purchases",
+        headers=auth(token),
+        params={"year": 2025, "month": 11},
+    )
+
+    assert response.status_code == 200, response.text
+    purchases = response.json()
+    assert len(purchases) == 1
+    assert purchases[0]["docType"] == "FACTURA"
+    assert purchases[0]["supplierName"]
+    assert purchases[0]["documentNumber"]
+    assert purchases[0]["subtotal"] == "13.13"
+    assert purchases[0]["taxTotal"] == "1.97"
+    assert purchases[0]["total"] == "15.10"
+    assert purchases[0]["isPreliminary"] is False
+    assert purchases[0]["taxes"] == [
+        {
+            "sriTaxCode": "4",
+            "taxBracket": "GRAVADO",
+            "rate": "15.00",
+            "baseAmount": "13.13",
+            "taxAmount": "1.97",
+        }
+    ]
+
+
+async def test_purchase_month_filter_requires_year(client) -> None:
+    token = await token_for(client)
+    response = await client.get(
+        "/api/v1/tax/purchases", headers=auth(token), params={"month": 11}
+    )
+    assert response.status_code == 422
+
+
+async def test_dashboard_marks_purchase_credit_as_accounting_review(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+
+    response = await client.get(
+        "/api/v1/tax/dashboard",
+        headers=auth(token),
+        params={"as_of": "2025-11-30"},
+    )
+
+    assert response.status_code == 200, response.text
+    current = response.json()["currentMonth"]
+    assert current["purchasesTotal"] == "15.10"
+    assert current["ivaCredit"] == "1.97"
+    assert current["ivaCreditBalance"] == "1.97"
+    assert current["needsAccountingReview"] is True
+    assert current["isPreliminary"] is True
+    assert any("campo 564" in reason for reason in current["preliminaryReasons"])
+
+
+async def test_purchase_and_dashboard_reads_require_tax_read_scope(client) -> None:
+    token = await token_for(client, ["tax:write"])
+
+    purchases = await client.get("/api/v1/tax/purchases", headers=auth(token))
+    dashboard = await client.get("/api/v1/tax/dashboard", headers=auth(token))
+
+    assert purchases.status_code == 403
+    assert dashboard.status_code == 403
+
+
 async def test_retention_feeds_609_and_keeps_income_tax_apart(client, stored_objects) -> None:
     token = await token_for(client)
     await upload_and_ingest(client, token, "retencion_recibida_autorizada.xml")

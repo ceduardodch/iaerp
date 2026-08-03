@@ -21,6 +21,12 @@
 > cualquier período elegido. Falta integrar cuando el worktree principal quede
 > libre de cambios de la otra sesión.
 
+> Corte 2026-08-02: Dashboard mensual y Compras listos localmente en `develop`.
+> Ventas usa solo documentos autorizados; Compras usa evidencia recibida y
+> muestra el IVA por tarifa. El IVA del mes queda marcado como estimación si
+> falta evidencia o revisión del campo 564. Validación local verde; falta
+> promoción autorizada.
+
 ---
 
 ## 🎯 Objetivo de este Documento

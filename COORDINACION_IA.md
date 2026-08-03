@@ -45,6 +45,7 @@
 | Codex (GPT-5.6, vía Claude) | ⚪ detenido | Se colgó por `approval_mode="approve"` en modo no interactivo; para usarlo hay que invocarlo con `--full-auto`/`-a never`. Alcanzó a hacer 2 mejoras menores (auth.tsx, ErpModal.tsx) que se conservaron | 2026-07-21 |
 | Codex (este hilo) | ✅ COMPLETA | Conciliación bancaria por período: evidencia subida reemplaza cobro manual sin referencia mediante reverso auditable; julio primero | 2026-08-02 |
 | Codex (este hilo, consolidación final) | ✅ COMPLETA | Contratos simples + tolerancia documental de 0.01 + remitente Gmail por alias, unidos y validados para `main` | 2026-08-02 |
+| Codex (este hilo, dashboard/compras) | ✅ COMPLETA | Evolución mensual de ventas, corte compras vs ventas/IVA preliminar y vista Compras desde XML | 2026-08-02 |
 | Codex (este hilo, corrección) | ✅ COMPLETA | HTTP 500 al confirmar banco, retención SRI 1.0 y envío manual de factura con RIDE + XML; validación local verde | 2026-08-02 |
 | Codex (este hilo, históricos) | ✅ COMPLETA | Fecha documental de retenciones, reproceso seguro y conciliación de meses anteriores; validación local verde | 2026-08-02 |
 | Codex (este hilo, entrega fiscal) | ✅ COMPLETA | Correo de factura con plantilla, plazo, RIDE + XML y Tributario agrupado por documento | 2026-08-02 |

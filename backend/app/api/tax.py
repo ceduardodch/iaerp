@@ -5,6 +5,7 @@ Etapa E1: periodos y carga de evidencia. La lectura del contenido (crear
 """
 
 import uuid
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
@@ -13,19 +14,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext, require_scopes
+from app.core.timezones import today_in_fiscal_timezone
 from app.db.session import get_session
 from app.models.platform import Tenant
 from app.models.tax import FiscalDocument, SRIValidationIssue, TaxAnnex
 from app.schemas.tax import (
     BulkItemRead,
     BulkResultRead,
+    CurrentMonthTaxRead,
+    DashboardTaxRead,
     DocumentDossierRead,
     DossierMovementRead,
     DossierRetentionRead,
     FiscalDocumentRead,
     IngestResultRead,
     IvaSummaryRead,
+    MonthlySalesTrendRead,
     OwnDocumentsResultRead,
+    PurchaseDocumentRead,
+    PurchaseTaxLineRead,
     SRIValidationIssueCreate,
     SRIValidationIssueRead,
     TaxAnnexRead,
@@ -44,6 +51,8 @@ from app.services.tax import form_fields, own_documents
 from app.services.tax import ingest as ingest_service
 from app.services.tax import iva as iva_service
 from app.services.tax import periods as periods_service
+from app.services.tax import reporting as reporting_service
+from app.services.tax.formatting import format_amount
 from app.services.unit_of_work import execute_idempotent
 
 router = APIRouter(prefix="/tax", tags=["tax"])
@@ -53,6 +62,106 @@ IdempotencyKey = Annotated[
     Header(alias="Idempotency-Key", min_length=16, max_length=128),
 ]
 Session = Annotated[AsyncSession, Depends(get_session)]
+
+
+@router.get(
+    "/dashboard",
+    response_model=DashboardTaxRead,
+    summary="Ver evolución mensual y corte documental de IVA",
+)
+async def get_tax_dashboard(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:read"))],
+    months: Annotated[int, Query(ge=6, le=24)] = 12,
+    as_of: Annotated[date | None, Query()] = None,
+) -> DashboardTaxRead:
+    """Evolución de ventas y corte documental de IVA del mes."""
+    report = await reporting_service.dashboard_tax_report(
+        session,
+        context,
+        as_of=as_of or today_in_fiscal_timezone(),
+        months=months,
+    )
+    current = report.current_month
+    return DashboardTaxRead(
+        trend=[
+            MonthlySalesTrendRead(
+                year=point.year,
+                month=point.month,
+                total=format_amount(point.total),
+                invoice_count=point.invoice_count,
+                credit_note_count=point.credit_note_count,
+            )
+            for point in report.trend
+        ],
+        current_month=CurrentMonthTaxRead(
+            year=current.year,
+            month=current.month,
+            authorized_sales_total=format_amount(current.authorized_sales_total),
+            authorized_sales_count=current.authorized_sales_count,
+            evidenced_sales_total=format_amount(current.evidenced_sales_total),
+            evidenced_sales_count=current.evidenced_sales_count,
+            purchases_total=format_amount(current.purchases_total),
+            purchase_count=current.purchase_count,
+            iva_generated=format_amount(current.iva_generated),
+            iva_credit=format_amount(current.iva_credit),
+            retained_iva=format_amount(current.retained_iva),
+            iva_payable=format_amount(current.iva_payable),
+            iva_credit_balance=format_amount(current.iva_credit_balance),
+            is_preliminary=current.is_preliminary,
+            preliminary_reasons=current.preliminary_reasons,
+            needs_accounting_review=current.needs_accounting_review,
+        ),
+    )
+
+
+@router.get(
+    "/purchases",
+    response_model=list[PurchaseDocumentRead],
+    summary="Listar compras recibidas desde evidencia tributaria",
+)
+async def get_purchases(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:read"))],
+    year: Annotated[int | None, Query(ge=2000, le=2100)] = None,
+    month: Annotated[int | None, Query(ge=1, le=12)] = None,
+) -> list[PurchaseDocumentRead]:
+    """Compras recibidas desde evidencia real, agrupables por fecha del XML."""
+    if month is not None and year is None:
+        raise HTTPException(status_code=422, detail="Year is required when filtering by month")
+    records = await reporting_service.list_purchases(
+        session,
+        context,
+        year=year,
+        month=month,
+    )
+    return [
+        PurchaseDocumentRead(
+            id=record.id,
+            doc_type=record.doc_type,
+            access_key=record.access_key,
+            issue_date=record.issue_date,
+            document_number=record.document_number,
+            supplier_identification=record.supplier_identification,
+            supplier_name=record.supplier_name,
+            subtotal=format_amount(record.subtotal),
+            tax_total=format_amount(record.tax_total),
+            total=format_amount(record.total),
+            payment_methods=record.payment_methods,
+            is_preliminary=record.is_preliminary,
+            taxes=[
+                PurchaseTaxLineRead(
+                    sri_tax_code=tax.sri_tax_code,
+                    tax_bracket=tax.tax_bracket,
+                    rate=format_amount(tax.rate),
+                    base_amount=format_amount(tax.base_amount),
+                    tax_amount=format_amount(tax.tax_amount),
+                )
+                for tax in record.taxes
+            ],
+        )
+        for record in records
+    ]
 
 
 @router.get("/periods", response_model=list[TaxPeriodRead])

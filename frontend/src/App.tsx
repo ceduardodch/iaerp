@@ -28,6 +28,7 @@ import {
   type AwsConsumptionCut,
   type DiscountInput,
   type DocumentArtifact,
+  type DashboardTax,
   type EmissionPoint,
   type EvolutionWhatsAppIntegration,
   type Establishment,
@@ -62,6 +63,7 @@ import {
   ErpButton,
   ErpEmptyState,
   ErpFormPanel,
+  ErpMetricGrid,
   ErpPageHeader,
   ErpPanel,
   ErpStatusBadge,
@@ -79,13 +81,16 @@ const LeadsPage = lazy(() =>
 const TaxPage = lazy(() =>
   import('./components/tax').then((module) => ({ default: module.TaxPage })),
 )
+const PurchasesPage = lazy(() =>
+  import('./components/purchases').then((module) => ({ default: module.PurchasesPage })),
+)
 import { InvoiceSpreadsheet } from './components/InvoiceSpreadsheet'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionLoadingSkeleton } from './components/LoadingSkeleton'
 import { useToast } from './components/Toast'
 
-type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'receivables' | 'organization' | 'contracts' | 'crm' | 'tax'
+type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'purchases' | 'receivables' | 'organization' | 'contracts' | 'crm' | 'tax'
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
   minimumFractionDigits: 2,
@@ -254,16 +259,18 @@ function Overview({
   context: TenantContext
   token: string
 }) {
-  const [invoicesQuery, receivablesQuery, leadsQuery] = useQueries({
+  const [invoicesQuery, receivablesQuery, leadsQuery, taxDashboardQuery] = useQueries({
     queries: [
       { queryKey: ['invoices', 'overview'], queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices') },
       { queryKey: ['receivables', 'overview'], queryFn: () => apiRequest<AccountItem[]>(token, '/receivables') },
       { queryKey: ['crm', 'leads', 'overview'], queryFn: () => apiRequest<Lead[]>(token, '/crm/leads') },
+      { queryKey: ['tax', 'dashboard'], queryFn: () => apiRequest<DashboardTax>(token, '/tax/dashboard'), enabled: context.scopes.includes('tax:read') },
     ],
   })
   const invoices = invoicesQuery.data ?? []
   const receivables = receivablesQuery.data ?? []
   const leads = leadsQuery.data ?? []
+  const taxDashboard = taxDashboardQuery.data
   const today = todayInFiscalTimezone().slice(0, 7)
   const outstanding = receivables.reduce((sum, item) => sum + Number(item.openAmount), 0)
   const overdue = receivables.filter((item) => item.status === 'OVERDUE').reduce((sum, item) => sum + Number(item.openAmount), 0)
@@ -271,6 +278,11 @@ function Overview({
     invoice.issueDate.startsWith(today) && invoice.type === 'INVOICE' && invoice.status === 'AUTHORIZED',
   ).length
   const openPipeline = leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).reduce((sum, lead) => sum + Number(lead.estimatedValue ?? 0), 0)
+  const trendMaximum = Math.max(...(taxDashboard?.trend.map((point) => Math.max(Number(point.total), 0)) ?? [0]), 1)
+  const currentTax = taxDashboard?.currentMonth
+  const currentTaxMonth = currentTax
+    ? new Date(currentTax.year, currentTax.month - 1, 1).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })
+    : ''
   return (
     <>
       <ErpPageHeader
@@ -279,7 +291,7 @@ function Overview({
         subtitle="El pulso de cobranza, emisión y oportunidades de tu empresa."
         meta={<span className="date-chip">RUC {context.ruc}</span>}
       />
-      <section className="metric-grid" aria-label="Indicadores operativos">
+      <ErpMetricGrid ariaLabel="Indicadores operativos">
         <article className="metric-card">
           <span className="metric-label">Por cobrar</span>
           <strong>${formatAmount(outstanding)}</strong>
@@ -300,6 +312,55 @@ function Overview({
           <strong className="metric-success">${formatAmount(openPipeline)}</strong>
           <p>{leads.filter((lead) => !['WON', 'LOST'].includes(lead.status)).length} oportunidades CRM activas.</p>
         </article>
+      </ErpMetricGrid>
+      <section className="dashboard-financial-grid" aria-label="Ventas y corte tributario">
+        <ErpPanel title="Evolución de ventas" actions={<ErpStatusBadge>Últimos 12 meses</ErpStatusBadge>}>
+          {taxDashboardQuery.isPending ? <p aria-busy="true">Cargando evolución…</p> : null}
+          {taxDashboardQuery.error ? <p className="form-error" role="alert">No se pudo cargar el corte tributario.</p> : null}
+          {taxDashboard ? (
+            <ol className="sales-trend" aria-label="Ventas autorizadas netas por mes">
+              {taxDashboard.trend.map((point) => {
+                const label = new Date(point.year, point.month - 1, 1).toLocaleDateString('es-EC', { month: 'short', year: '2-digit' })
+                const width = Math.max((Math.max(Number(point.total), 0) / trendMaximum) * 100, Number(point.total) ? 2 : 0)
+                return (
+                  <li key={`${point.year}-${point.month}`} aria-label={`${label}: ${formatAmount(point.total)} dólares`}>
+                    <span className="sales-trend-label">{label}</span>
+                    <span className="sales-trend-track" aria-hidden="true"><span style={{ width: `${width}%` }} /></span>
+                    <strong>${formatAmount(point.total)}</strong>
+                  </li>
+                )
+              })}
+            </ol>
+          ) : null}
+        </ErpPanel>
+        <ErpPanel
+          title={currentTax ? `Compras vs. ventas · ${currentTaxMonth}` : 'Compras vs. ventas'}
+          actions={currentTax ? <ErpStatusBadge tone={currentTax.isPreliminary ? 'warning' : 'success'}>{currentTax.isPreliminary ? 'Preliminar' : 'Respaldado'}</ErpStatusBadge> : undefined}
+        >
+          {currentTax ? (
+            <div className="monthly-tax-card">
+              <dl className="monthly-tax-comparison">
+                <div><dt>Ventas autorizadas</dt><dd>${formatAmount(currentTax.authorizedSalesTotal)}</dd></div>
+                {currentTax.authorizedSalesTotal !== currentTax.evidencedSalesTotal ? <div><dt>Ventas ya cargadas en Tributario</dt><dd>${formatAmount(currentTax.evidencedSalesTotal)}</dd></div> : null}
+                <div><dt>Compras desde XML</dt><dd>${formatAmount(currentTax.purchasesTotal)}</dd></div>
+                <div><dt>IVA generado</dt><dd>${formatAmount(currentTax.ivaGenerated)}</dd></div>
+                <div><dt>IVA de compras</dt><dd>− ${formatAmount(currentTax.ivaCredit)}</dd></div>
+                <div><dt>Retención de IVA</dt><dd>− ${formatAmount(currentTax.retainedIva)}</dd></div>
+              </dl>
+              <div className="monthly-tax-result">
+                <span>IVA estimado a pagar</span>
+                <strong>${formatAmount(currentTax.ivaPayable)}</strong>
+                {Number(currentTax.ivaCreditBalance) > 0 ? <small>Crédito estimado a favor: ${formatAmount(currentTax.ivaCreditBalance)}</small> : null}
+              </div>
+              {currentTax.isPreliminary ? (
+                <div className="tax-estimate-warning" role="alert">
+                  <strong>Estimación, no declaración.</strong>
+                  <ul>{currentTax.preliminaryReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+                </div>
+              ) : <p className="fine-print">Calculado con la evidencia tributaria del periodo. Declarar y pagar aún exige revisión humana.</p>}
+            </div>
+          ) : null}
+        </ErpPanel>
       </section>
       <section className="readiness-panel">
         <div>
@@ -3763,6 +3824,13 @@ function Workspace() {
             emissionPoints={emissionPointsQuery.data ?? []}
             defaultPaymentTermsDays={contextQuery.data.defaultPaymentTermsDays}
           />
+        ) : null}
+        {section === 'purchases' ? (
+          <ErrorBoundary label="Compras">
+            <Suspense fallback={<SectionLoadingSkeleton label="Cargando compras…" />}>
+              <PurchasesPage token={token} />
+            </Suspense>
+          </ErrorBoundary>
         ) : null}
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
