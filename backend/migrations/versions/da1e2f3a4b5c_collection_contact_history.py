@@ -9,8 +9,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "da1e2f3a4b5c"
-down_revision: str | None = "d9e0f1a2b3c4"
+revision: str = "da1e2f3a4b5c"  # pragma: allowlist secret
+down_revision: str | None = "d9e0f1a2b3c4"  # pragma: allowlist secret
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -63,6 +63,9 @@ def upgrade() -> None:
             ["receivables.tenant_id", "receivables.id"],
             name="fk_collection_contacts_tenant_receivable",
         ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id"], ["tenants.id"], name="fk_collection_contacts_tenant_id_tenants"
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "id", name="uq_collection_contacts_tenant_id"),
     )
@@ -71,9 +74,11 @@ def upgrade() -> None:
         "collection_contacts",
         ["tenant_id", "receivable_id", "occurred_at"],
     )
+    op.create_index("ix_collection_contacts_tenant_id", "collection_contacts", ["tenant_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_collection_contacts_tenant_id", table_name="collection_contacts")
     op.drop_index(
         "ix_collection_contacts_tenant_receivable_occurred", table_name="collection_contacts"
     )
