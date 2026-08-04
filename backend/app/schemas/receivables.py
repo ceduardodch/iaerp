@@ -266,6 +266,9 @@ class ReminderInput(APIModel):
     template_id: str | None = None
     message: str | None = None
     scheduled_at: datetime | None = None
+    # Evita que una segunda pulsación o una nueva clave duplique un envío ya
+    # realizado. Para insistir, la persona debe dejar el motivo.
+    resend_reason: str | None = Field(default=None, min_length=3, max_length=500)
 
 
 class ReminderRead(APIModel):
@@ -281,6 +284,29 @@ class ReminderRead(APIModel):
     sent_at: datetime | None
     attempts: int
     error_message: str | None
+    delivery_status: str
+    delivered_at: datetime | None
+    read_at: datetime | None
+
+
+class CollectionContactCreate(APIModel):
+    channel: Literal["CALL", "EMAIL", "WHATSAPP", "NOTE"]
+    outcome: Literal["PENDING", "CONTACTED", "PROMISE_TO_PAY", "NO_RESPONSE", "WRONG_CONTACT"]
+    note: str | None = Field(default=None, max_length=1000)
+    occurred_at: datetime | None = None
+
+
+class CollectionHistoryEntryRead(APIModel):
+    id: uuid.UUID
+    kind: Literal["REMINDER", "CONTACT"]
+    occurred_at: datetime
+    channel: str
+    outcome: str
+    note: str | None = None
+    recipient: str | None = None
+    delivery_status: str | None = None
+    delivered_at: datetime | None = None
+    read_at: datetime | None = None
 
 
 def _default_collection_channels() -> list[Literal["EMAIL", "WHATSAPP"]]:
@@ -328,6 +354,8 @@ __all__ = [
     "ReminderRead",
     "CollectionPolicyRead",
     "CollectionPolicyUpdate",
+    "CollectionContactCreate",
+    "CollectionHistoryEntryRead",
     "ReversalInput",
     "ReceivableDueDateUpdate",
     "RetentionInput",

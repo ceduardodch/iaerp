@@ -1097,6 +1097,11 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
 .reminder-template-preview dd { margin: 2px 0 0; color: var(--text-body); font-size: var(--text-sm); }
 /* El cuerpo y los datos bancarios conservan sus saltos de línea. */
 .reminder-template-body { white-space: pre-wrap; }
+.collection-history-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.collection-history-list li { padding: 12px 14px; border: 1px solid var(--border-card); border-radius: var(--radius-md); background: var(--surface-inset); }
+.collection-history-list strong { display: block; color: var(--text-heading); }
+.collection-history-list span { color: var(--text-secondary); font-size: var(--text-xs); }
+.collection-history-list p { margin: 4px 0 0; }
 
 .form-warning { margin: 0; padding: 10px 12px; border: 1px solid var(--amber-200); border-radius: var(--radius-md); color: var(--warning-text); background: var(--amber-50); font-size: var(--text-xs); line-height: 1.45; }
 

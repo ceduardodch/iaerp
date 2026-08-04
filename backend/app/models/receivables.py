@@ -285,6 +285,7 @@ class CollectionReminder(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin,
         Index("ix_collection_reminders_tenant_party", "tenant_id", "party_id"),
         Index("ix_collection_reminders_tenant_status", "tenant_id", "status"),
         Index("ix_collection_reminders_created_at", "tenant_id", "created_at"),
+        Index("ix_collection_reminders_provider_message", "tenant_id", "provider_message_id"),
         UniqueConstraint(
             "tenant_id",
             "installment_id",
@@ -305,6 +306,57 @@ class CollectionReminder(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin,
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(String(1000))
+    # El proveedor puede confirmar entrega o lectura. Nunca se infiere desde
+    # un envío exitoso: UNKNOWN significa que el canal no lo reportó.
+    provider_message_id: Mapped[str | None] = mapped_column(String(200))
+    delivery_status: Mapped[str] = mapped_column(String(20), default="UNKNOWN")
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CollectionContact(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
+    """Gestión humana de cobranza, separada de los envíos automáticos.
+
+    No guarda el contenido completo de correos o chats: solo el resultado y la
+    nota breve que el operador decidió registrar.
+    """
+
+    __tablename__ = "collection_contacts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "party_id"],
+            ["parties.tenant_id", "parties.id"],
+            name="fk_collection_contacts_tenant_party",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "receivable_id"],
+            ["receivables.tenant_id", "receivables.id"],
+            name="fk_collection_contacts_tenant_receivable",
+        ),
+        UniqueConstraint("tenant_id", "id", name="uq_collection_contacts_tenant_id"),
+        CheckConstraint(
+            "channel IN ('CALL', 'EMAIL', 'WHATSAPP', 'NOTE')",
+            name="ck_collection_contacts_channel",
+        ),
+        CheckConstraint(
+            "outcome IN ('PENDING', 'CONTACTED', 'PROMISE_TO_PAY', 'NO_RESPONSE', 'WRONG_CONTACT')",
+            name="ck_collection_contacts_outcome",
+        ),
+        Index(
+            "ix_collection_contacts_tenant_receivable_occurred",
+            "tenant_id",
+            "receivable_id",
+            "occurred_at",
+        ),
+    )
+
+    party_id: Mapped[uuid.UUID]
+    receivable_id: Mapped[uuid.UUID]
+    channel: Mapped[str] = mapped_column(String(20))
+    outcome: Mapped[str] = mapped_column(String(30), default="PENDING")
+    note: Mapped[str | None] = mapped_column(String(1000))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    actor_id: Mapped[str] = mapped_column(String(100))
 
 
 class CollectionPolicy(TimestampMixin, Base):
@@ -330,6 +382,7 @@ __all__ = [
     "MOVEMENT_TYPES",
     "RECEIVABLE_STATUSES",
     "CollectionReminder",
+    "CollectionContact",
     "CollectionPolicy",
     "CustomerCredit",
     "Movement",

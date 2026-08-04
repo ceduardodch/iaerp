@@ -86,6 +86,8 @@ from app.schemas.receivables import (
     AccountItemRead,
     AgingBucketTotalRead,
     AgingSummaryRead,
+    CollectionContactCreate,
+    CollectionHistoryEntryRead,
     CollectionPolicyRead,
     CollectionPolicyUpdate,
     CollectionsBreakdownRead,
@@ -2324,6 +2326,56 @@ async def post_receivable_reminder(
         action="receivable.reminder_requested",
         entity_type="collection_reminder",
         callback=send,
+    )
+
+
+@router.get(
+    "/receivables/{receivable_id}/collection-history",
+    response_model=list[CollectionHistoryEntryRead],
+)
+async def get_receivable_collection_history(
+    receivable_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+) -> list[CollectionHistoryEntryRead]:
+    return await receivables.list_collection_history(session, context, receivable_id=receivable_id)
+
+
+@router.post(
+    "/receivables/{receivable_id}/contacts",
+    response_model=CollectionHistoryEntryRead,
+    status_code=201,
+)
+async def post_receivable_collection_contact(
+    receivable_id: uuid.UUID,
+    data: CollectionContactCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:notify"))],
+) -> dict[str, object]:
+    async def create() -> tuple[str, dict[str, object]]:
+        entity = await receivables.record_collection_contact(
+            session, context, receivable_id=receivable_id, data=data
+        )
+        response = CollectionHistoryEntryRead(
+            id=entity.id,
+            kind="CONTACT",
+            occurred_at=entity.occurred_at,
+            channel=entity.channel,
+            outcome=entity.outcome,
+            note=entity.note,
+        ).model_dump(mode="json", by_alias=True)
+        return str(entity.id), response
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.collection_contact.create",
+        idempotency_key=idempotency_key,
+        request_payload={"receivable_id": str(receivable_id), **data.model_dump(mode="json")},
+        action="receivable.collection_contact_recorded",
+        entity_type="collection_contact",
+        callback=create,
     )
 
 

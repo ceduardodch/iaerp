@@ -66,6 +66,10 @@ const updatedAfterPayment = {
 
 async function mockApi(page: Page) {
   let currentReceivables = [overdueReceivable, partialReceivable, settledReceivable]
+  let collectionHistory = [{
+    id: '82828282-8282-4828-8828-828282828282', kind: 'REMINDER' as const, occurredAt: '2026-07-05T12:00:00Z',
+    channel: 'WHATSAPP', outcome: 'SENT', note: null, recipient: '+593999999999', deliveryStatus: 'READ', deliveredAt: '2026-07-05T12:01:00Z', readAt: '2026-07-05T12:02:00Z',
+  }]
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
@@ -77,6 +81,9 @@ async function mockApi(page: Page) {
   await page.route('**/api/v1/emission-points', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/receivables**', (route) => {
     if (route.request().method() !== 'GET') return route.fallback()
+    if (route.request().url().includes('/collection-history')) {
+      return route.fulfill({ json: collectionHistory })
+    }
     return route.fulfill({
       json: currentReceivables,
     })
@@ -138,6 +145,13 @@ async function mockApi(page: Page) {
     }
     return route.fallback()
   })
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/contacts`, (route) =>
+    {
+      const contact = { id: '83838383-8383-4838-8838-838383838383', kind: 'CONTACT' as const, occurredAt: '2026-07-05T12:03:00Z', channel: 'CALL', outcome: 'CONTACTED', note: 'Cliente confirma revisión.', recipient: null, deliveryStatus: null, deliveredAt: null, readAt: null }
+      collectionHistory = [contact, ...collectionHistory]
+      return route.fulfill({ status: 201, json: contact })
+    },
+  )
 }
 
 async function expectNoA11yViolations(page: Page) {
@@ -259,6 +273,20 @@ test('send collection email view is keyboard reachable, labelled and passes axe'
 
   await expect(page.getByRole('heading', { name: 'Enviar correo de cobro' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+})
+
+test('collection history shows verified delivery and records a manual contact', async ({ page }) => {
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: `Ver historia de cobranza de ${customer.name}` }).first().click()
+
+  await expect(page.getByRole('heading', { name: 'Historia de cobranza', level: 1 })).toBeVisible()
+  await expect(page.getByText('Enviado · Leído', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Canal')).toBeVisible()
+  await expect(page.getByLabel('Resultado')).toBeVisible()
+  await page.getByRole('textbox', { name: 'Nota' }).fill('Cliente confirma revisión.')
+  await expectNoA11yViolations(page)
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect(page.getByText('Cliente confirma revisión.')).toBeVisible()
 })
 
 test('collections strip separates cash from retentions', async ({ page }) => {
