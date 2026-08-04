@@ -1,11 +1,21 @@
 # Captación de clientes AWS con Meta Ads — análisis y plan
 
-> **Estado:** análisis aprobado, implementación NO iniciada (2026-08-03).
+> **Estado:** circuito completo implementado y validado localmente, aún no
+> publicado (2026-08-04). Falta probar Meta/PostgreSQL reales, CI y despliegue.
 > Presupuesto decidido: **USD 300/mes (~$10/día)**. Mercado: **solo Ecuador**.
 > Objetivo: probar ángulos de oferta de servicios AWS y que toda la experiencia
 > —campaña, leads, costo y resultado— quede dentro de IAERP.
 
 ---
+
+> **Actualización 2026-08-04 — leer primero
+> [`PLAN_PRIMER_CLIENTE_AWS.md`](PLAN_PRIMER_CLIENTE_AWS.md).** Al conocerse el
+> punto de partida real (ya hay clientes AWS facturando, y partnership Select
+> Tier con partner manager asignado), Meta baja al **canal 5 de 5**. Delante van
+> ACE/partner manager, referidos de clientes actuales, venta cruzada a los
+> clientes de fractalsoft y las 157 empresas de tecnología — todos más rápidos y
+> los tres primeros gratis. Este documento sigue vigente para CUANDO se lance la
+> prueba de mensaje, no para conseguir el primer cliente.
 
 ## 0. Encuadre: Meta aquí es laboratorio de mensaje, NO canal de adquisición
 
@@ -67,19 +77,17 @@ inventarlo:
 | Instant Form de Meta y **webhook de leads** | `lead_form_id`, `process_lead_webhook` |
 | Atribución en el lead | `Lead.utm_source/utm_medium/utm_campaign/utm_content`, `campaign_id` |
 
-## 2. Los tres huecos
+## 2. Los tres huecos, cerrados localmente
 
-**H1 — No hay ingesta de métricas. Cero.** No existe `spend`, `impressions`,
-`clicks` ni `insights` en ningún punto del backend. El ERP puede *lanzar*
-campañas pero no sabe cuánto gastaron. **Sin esto la pregunta "cuál variante
-funcionó" no se puede responder**, y es el cimiento de todo lo demás.
+**H1 — Cerrado:** `SocialCampaignMetricDaily` guarda gasto, moneda,
+impresiones, clics y leads por fecha/anuncio. La sincronización reconsulta los
+últimos días y la pantalla calcula CTR, CPL y costo por lead calificado.
 
-**H2 — Una campaña = un solo anuncio.** `creative_object_key` y
-`external_ad_id` son singulares. Tres variantes hoy serían tres campañas con
-tres presupuestos separados, que es justo lo que no conviene (ver §3).
+**H2 — Cerrado:** `SocialCampaignVariant` permite N creativos/anuncios dentro de
+un solo adset. Cada variante tiene clave, ángulo, texto, imagen y IDs de Meta.
 
-**H3 — El ciclo no cierra.** El lead entra, pero nada conecta "este lead costó
-$4" con "este lead sirvió".
+**H3 — Cerrado:** el webhook cruza `ad_id` con la variante y el usuario registra
+calificado/descartado con evidencia. IAERP calcula el costo por lead calificado.
 
 ## 3. Por qué 3 campañas separadas NO funcionan con este presupuesto
 
@@ -184,12 +192,12 @@ tiene acceso directo a quien decide.
 
 ## 8. Plan técnico, en orden
 
-| # | Entregable | Por qué en este orden |
+| # | Entregable | Estado local |
 |---|---|---|
-| **1** | **Ingesta de métricas de Meta Insights**: gasto, impresiones, clics y leads por anuncio, con corte diario y guardados por tenant | Sin esto no se puede decidir nada. Es el cimiento (H1). |
-| **2** | **Variantes dentro de una campaña**: una campaña tiene N creativos, cada uno con su propio `external_ad_id`, todos en UN adset | Es lo que hace viable la prueba de §3 (H2). |
-| **3** | **Pantalla de decisión**: CTR, CPL y costo por lead calificado **por variante** | Donde se toma la decisión de §7. |
-| **4** | **Calificación**: campos calificadores del formulario al lead + estado calificado/descartado en el CRM | Cierra el ciclo (H3) y es donde se ahorra tiempo real. |
+| **1** | Ingesta diaria de Meta Insights por anuncio y tenant | **Hecho** |
+| **2** | N variantes dentro de una campaña y un adset | **Hecho** |
+| **3** | Pantalla de CTR, CPL y costo por lead calificado | **Hecho** |
+| **4** | Calificación humana con campos del formulario y motivo | **Hecho** |
 
 Con 1 y 2 ya se puede lanzar y aprender. 3 y 4 se construyen mientras corre la
 primera campaña.
@@ -228,4 +236,4 @@ y confirmar que el área está libre.
 
 ---
 
-**Última actualización:** 2026-08-03 (America/Guayaquil)
+**Última actualización:** 2026-08-04 (America/Guayaquil)
