@@ -2,6 +2,10 @@
 .env
 .env.*
 !.env.example
+# Carpeta para credenciales locales. Va ignorada COMPLETA y antes de que
+# exista: un secreto ahi dentro no debe depender de que alguien se acuerde
+# de agregar la regla el dia que crea el archivo.
+.secrets/
 *.pem
 *.key
 *.p12
