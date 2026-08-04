@@ -96,11 +96,11 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('dashboard muestra evolución y corte mensual documentado', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Ventas autorizadas' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Evolución de ventas emitidas' })).toBeVisible()
   // El valor de cada mes vive en la tabla equivalente del gráfico, que es como
   // lo lee un lector de pantalla: la línea solo rotula el extremo.
   await expect(
-    page.getByRole('table', { name: /Ventas autorizadas netas por mes/ }),
+    page.getByRole('table', { name: /Ventas emitidas netas por mes/ }),
   ).toContainText('2.300,00')
   await expect(page.getByRole('heading', { name: 'Ventas y compras del mes' })).toBeVisible()
   await expect(page.getByRole('heading', { name: /IVA estimado/ })).toBeVisible()
