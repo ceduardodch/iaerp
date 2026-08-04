@@ -7,6 +7,16 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Feature local pendiente de integración: 2026-08-03 `America/Guayaquil`.
+  Cartera suma una historia de cobranza por factura: envíos, entrega o lectura
+  solo cuando WhatsApp Meta lo confirma, y gestiones manuales de llamada,
+  correo, WhatsApp o nota. Un envío manual igual se bloquea para evitar
+  duplicados; un reenvío exige motivo. No modifica saldos ni crea cobros. La
+  migración agrega trazabilidad de proveedor y contactos. Ruff, mypy, 9
+  pruebas de cobranza, build, lint y el recorrido Playwright del historial
+  pasan localmente. Falta validar la migración en PostgreSQL y autorización
+  para integrar; no se hizo push, PR ni despliegue.
+
 - Facturas históricas desde RIDE PDF listas localmente en `release`:
   2026-08-03 `America/Guayaquil`. Facturas permite cargar el PDF emitido por
   Sky para conservar una venta que no llegó por XML. IAERP valida RUC, cliente,

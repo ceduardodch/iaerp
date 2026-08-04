@@ -32,6 +32,7 @@ from app.models.crm import (
     WhatsAppRoutingPolicy,
 )
 from app.models.masters import Party
+from app.models.receivables import CollectionReminder
 from app.schemas.crm import (
     EvolutionWhatsAppIntegrationRead,
     EvolutionWhatsAppIntegrationUpdate,
@@ -863,6 +864,7 @@ async def process_whatsapp_webhook(
         return 0
     phone_number_id: str | None = None
     messages: list[dict[str, object]] = []
+    delivery_updates: list[dict[str, object]] = []
     for entry in entries:
         if not isinstance(entry, dict):
             continue
@@ -874,6 +876,9 @@ async def process_whatsapp_webhook(
             if isinstance(metadata, dict):
                 phone_number_id = str(metadata.get("phone_number_id") or "")
             messages.extend(item for item in value.get("messages", []) if isinstance(item, dict))
+            delivery_updates.extend(
+                item for item in value.get("statuses", []) if isinstance(item, dict)
+            )
     if not phone_number_id:
         return 0
     integration = await session.scalar(
@@ -886,6 +891,27 @@ async def process_whatsapp_webhook(
         raw_body, signature, decrypt_secret(integration.app_secret_encrypted)
     ):
         raise HTTPException(status_code=401, detail="Invalid Meta webhook signature")
+    for status_event in delivery_updates:
+        message_id = str(status_event.get("id") or "")
+        provider_status = str(status_event.get("status") or "").upper()
+        if not message_id or provider_status not in {"SENT", "DELIVERED", "READ", "FAILED"}:
+            continue
+        reminder = await session.scalar(
+            select(CollectionReminder).where(
+                CollectionReminder.tenant_id == integration.tenant_id,
+                CollectionReminder.provider_message_id == message_id,
+            )
+        )
+        if reminder is None:
+            continue
+        reminder.delivery_status = provider_status
+        if provider_status == "DELIVERED":
+            reminder.delivered_at = datetime.now(UTC)
+        elif provider_status == "READ":
+            reminder.read_at = datetime.now(UTC)
+            reminder.delivered_at = reminder.delivered_at or reminder.read_at
+        elif provider_status == "FAILED":
+            reminder.status = "FAILED"
     created = 0
     parties = list(
         await session.scalars(

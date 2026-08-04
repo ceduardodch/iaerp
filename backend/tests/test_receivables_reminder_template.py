@@ -12,12 +12,13 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from fastapi import HTTPException
 
 from app.core.auth import AuthContext
 from app.db.session import SessionFactory
 from app.models.masters import Party
 from app.models.receivables import CollectionPolicy
-from app.schemas.receivables import ReminderInput
+from app.schemas.receivables import CollectionContactCreate, ReminderInput
 from app.services import crm_integrations, receivables
 from tests.test_billing_api import TENANT_A
 from tests.test_receivables_service import _create_authorized_invoice_stub, _create_receivable
@@ -186,3 +187,61 @@ async def test_tenant_without_bank_details_does_not_invent_an_account(sent_email
     body = sent_emails[0]["message"]
     assert "Consulte con nuestro equipo." in body
     assert "PRODUBANCO" not in body
+
+
+async def test_collection_history_keeps_sent_message_and_human_contact(sent_emails) -> None:
+    receivable_id = await _seed_receivable_with_policy()
+
+    async with SessionFactory() as session, session.begin():
+        reminder = await receivables.send_real_reminder(
+            session,
+            _context(),
+            receivable_id=receivable_id,
+            reminder=ReminderInput(channel="EMAIL"),
+        )
+        assert reminder.provider_message_id == "fake-message-id"
+        assert reminder.delivery_status == "SENT"
+        contact = await receivables.record_collection_contact(
+            session,
+            _context(),
+            receivable_id=receivable_id,
+            data=CollectionContactCreate(
+                channel="CALL", outcome="PROMISE_TO_PAY", note="Confirma pago el viernes."
+            ),
+        )
+        assert contact.actor_id == "tester@iaerp.local"
+        history = await receivables.list_collection_history(
+            session, _context(), receivable_id=receivable_id
+        )
+
+    assert {entry.kind for entry in history} == {"REMINDER", "CONTACT"}
+    assert next(entry for entry in history if entry.kind == "REMINDER").delivery_status == "SENT"
+    assert next(entry for entry in history if entry.kind == "CONTACT").outcome == "PROMISE_TO_PAY"
+
+
+async def test_same_manual_message_requires_a_reason_to_resend(sent_emails) -> None:
+    receivable_id = await _seed_receivable_with_policy()
+
+    async with SessionFactory() as session, session.begin():
+        await receivables.send_real_reminder(
+            session,
+            _context(),
+            receivable_id=receivable_id,
+            reminder=ReminderInput(channel="EMAIL"),
+        )
+        with pytest.raises(HTTPException, match="already sent") as error:
+            await receivables.send_real_reminder(
+                session,
+                _context(),
+                receivable_id=receivable_id,
+                reminder=ReminderInput(channel="EMAIL"),
+            )
+        assert error.value.status_code == 409
+        await receivables.send_real_reminder(
+            session,
+            _context(),
+            receivable_id=receivable_id,
+            reminder=ReminderInput(channel="EMAIL", resend_reason="El cliente pidió un reenvío."),
+        )
+
+    assert len(sent_emails) == 2

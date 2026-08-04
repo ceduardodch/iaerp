@@ -205,7 +205,7 @@ async def handle_collection_reminder_due(
                 due_date=installment.due_date,
                 as_of=datetime.now(FISCAL_TZ).date(),
             )
-            await crm_integrations.send_google_email(
+            reminder.provider_message_id = await crm_integrations.send_google_email(
                 session,
                 context,
                 recipient=reminder.recipient,
@@ -214,7 +214,7 @@ async def handle_collection_reminder_due(
                 html_message=html_message,
             )
         else:
-            await crm_integrations.send_whatsapp_message(
+            reminder.provider_message_id = await crm_integrations.send_whatsapp_message(
                 session,
                 context,
                 recipient=reminder.recipient,
@@ -225,9 +225,11 @@ async def handle_collection_reminder_due(
     except Exception as exc:
         detail = getattr(exc, "detail", str(exc))
         reminder.status = "FAILED"
+        reminder.delivery_status = "FAILED"
         reminder.error_message = str(detail)[:1000]
     else:
         reminder.status = "SENT"
+        reminder.delivery_status = "SENT"
         reminder.sent_at = datetime.now(UTC)
         reminder.error_message = None
 

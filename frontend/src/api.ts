@@ -427,6 +427,27 @@ export type ReminderInput = {
   templateId?: string | null
   message?: string | null
   scheduledAt?: string | null
+  resendReason?: string | null
+}
+
+export type CollectionContactInput = {
+  channel: 'CALL' | 'EMAIL' | 'WHATSAPP' | 'NOTE'
+  outcome: 'PENDING' | 'CONTACTED' | 'PROMISE_TO_PAY' | 'NO_RESPONSE' | 'WRONG_CONTACT'
+  note?: string | null
+  occurredAt?: string | null
+}
+
+export type CollectionHistoryEntry = {
+  id: string
+  kind: 'REMINDER' | 'CONTACT'
+  occurredAt: string
+  channel: string
+  outcome: string
+  note: string | null
+  recipient: string | null
+  deliveryStatus: string | null
+  deliveredAt: string | null
+  readAt: string | null
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, DollarSign, History, Mail } from 'lucide-react'
+import { CalendarClock, DollarSign, History, Mail, MessageSquare } from 'lucide-react'
 import {
   lazy,
   startTransition,
@@ -21,6 +21,8 @@ import {
   type BillingProposal,
   type AgingSummary,
   type CollectionPolicy,
+  type CollectionContactInput,
+  type CollectionHistoryEntry,
   type CollectionsHistory,
   type CollectionsBreakdown,
   type CommercialContract,
@@ -2423,6 +2425,7 @@ type ReceivablePanel =
   | { view: 'reminder'; receivable: AccountItem }
   | { view: 'due-date'; receivable: AccountItem }
   | { view: 'history'; receivable: AccountItem }
+  | { view: 'collection-history'; receivable: AccountItem }
   | { view: 'retention-batch' }
   | { view: 'bank-statement' }
 
@@ -3106,6 +3109,7 @@ function SendReminderForm({
   const [channel, setChannel] = useState<ReminderInput['channel']>('EMAIL')
   const [scheduledAt, setScheduledAt] = useState('')
   const [message, setMessage] = useState('')
+  const [resendReason, setResendReason] = useState('')
 
   // Se lee la plantilla configurada solo para mostrar qué se va a enviar; el
   // servidor la vuelve a renderizar con los valores reales del receivable.
@@ -3127,6 +3131,7 @@ function SendReminderForm({
           templateId: channel === 'EMAIL' ? policy?.emailTemplateId : policy?.whatsappTemplateId,
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
           message: message || null,
+          resendReason: resendReason || null,
         } satisfies ReminderInput),
       }),
     onSuccess: () => onSent(),
@@ -3191,8 +3196,48 @@ function SendReminderForm({
         />
       </label>
       <label>Programar para<input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
+      <label>
+        Motivo para reenviar
+        <textarea value={resendReason} onChange={(event) => setResendReason(event.target.value)} rows={2} placeholder="Solo si ya hubo un envío igual." />
+      </label>
     </ErpFormPanel>
   )
+}
+
+const collectionOutcomeLabels: Record<string, string> = {
+  PENDING: 'Pendiente', SENT: 'Enviado', PROCESSING: 'En proceso', FAILED: 'Falló', SKIPPED: 'Omitido',
+  CONTACTED: 'Contactado', PROMISE_TO_PAY: 'Prometió pagar', NO_RESPONSE: 'Sin respuesta', WRONG_CONTACT: 'Contacto incorrecto',
+}
+
+function CollectionHistoryPanel({ token, receivable, onClose }: { token: string; receivable: AccountItem; onClose: () => void }) {
+  const [channel, setChannel] = useState<CollectionContactInput['channel']>('CALL')
+  const [outcome, setOutcome] = useState<CollectionContactInput['outcome']>('CONTACTED')
+  const [note, setNote] = useState('')
+  const queryClient = useQueryClient()
+  const historyQuery = useQuery({
+    queryKey: ['receivables', receivable.id, 'collection-history'],
+    queryFn: () => apiRequest<CollectionHistoryEntry[]>(token, `/receivables/${receivable.id}/collection-history`),
+  })
+  const createContact = useMutation({
+    mutationFn: () => apiRequest<CollectionHistoryEntry>(token, `/receivables/${receivable.id}/contacts`, {
+      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-collection-contact') },
+      body: JSON.stringify({ channel, outcome, note: note || null } satisfies CollectionContactInput),
+    }),
+    onSuccess: () => { setNote(''); void queryClient.invalidateQueries({ queryKey: ['receivables', receivable.id, 'collection-history'] }) },
+  })
+  return <>
+    <ErpFormPanel eyebrow="Cobranza" title="Registrar gestión" submitLabel="Guardar" pending={createContact.isPending} error={createContact.error?.message} onSubmit={(event) => { event.preventDefault(); createContact.mutate() }} onCancel={onClose}>
+      <label>Canal<select value={channel} onChange={(event) => setChannel(event.target.value as CollectionContactInput['channel'])}><option value="CALL">Llamada</option><option value="EMAIL">Correo</option><option value="WHATSAPP">WhatsApp</option><option value="NOTE">Nota</option></select></label>
+      <label>Resultado<select value={outcome} onChange={(event) => setOutcome(event.target.value as CollectionContactInput['outcome'])}><option value="CONTACTED">Contactado</option><option value="PROMISE_TO_PAY">Prometió pagar</option><option value="NO_RESPONSE">Sin respuesta</option><option value="WRONG_CONTACT">Contacto incorrecto</option><option value="PENDING">Pendiente</option></select></label>
+      <label>Nota<textarea value={note} maxLength={1000} rows={3} onChange={(event) => setNote(event.target.value)} placeholder="Resumen breve, sin pegar el chat completo." /></label>
+    </ErpFormPanel>
+    <ErpPanel title="Historia de cobranza" count={historyQuery.data?.length ?? 0}>
+      {historyQuery.isLoading ? <p className="fine-print">Cargando…</p> : null}
+      {historyQuery.error ? <p className="form-warning" role="alert">{historyQuery.error.message}</p> : null}
+      <ol className="collection-history-list">{(historyQuery.data ?? []).map((entry) => <li key={`${entry.kind}-${entry.id}`}><strong>{entry.kind === 'REMINDER' ? 'Envío' : 'Contacto'} · {entry.channel}</strong><span>{new Date(entry.occurredAt).toLocaleString('es-EC')}</span><p>{collectionOutcomeLabels[entry.outcome] ?? entry.outcome}{entry.deliveryStatus && entry.deliveryStatus !== 'UNKNOWN' ? ` · ${entry.deliveryStatus === 'READ' ? 'Leído' : entry.deliveryStatus === 'DELIVERED' ? 'Entregado' : entry.deliveryStatus === 'SENT' ? 'Enviado al proveedor' : entry.deliveryStatus}` : ''}</p>{entry.note ? <p className="fine-print">{entry.note}</p> : null}</li>)}</ol>
+      {!historyQuery.isLoading && (historyQuery.data?.length ?? 0) === 0 ? <ErpEmptyState title="Sin gestiones" description="Registra la primera llamada, nota o envío desde Cobranza." /> : null}
+    </ErpPanel>
+  </>
 }
 
 function CollectionPolicyEditor({
@@ -3478,6 +3523,14 @@ function ReceivablesPage({
       </>
     )
   }
+  if (panel?.view === 'collection-history') {
+    return (
+      <>
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Historia de cobranza" subtitle={`Factura ${panel.receivable.invoiceSequential ?? 'sin número disponible'}`} />
+        <CollectionHistoryPanel token={token} receivable={panel.receivable} onClose={closePanel} />
+      </>
+    )
+  }
   if (panel?.view === 'retention-batch') {
     return (
       <>
@@ -3591,6 +3644,15 @@ function ReceivablesPage({
                           disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
                           <Mail size={16} aria-hidden="true" />
+                        </ErpButton>
+                        <ErpButton
+                          variant="ghost"
+                          className="erp-icon-button"
+                          aria-label={`Ver historia de cobranza de ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
+                          title="Historia de cobranza"
+                          onClick={(event) => openPanel({ view: 'collection-history', receivable }, event.currentTarget)}
+                        >
+                          <MessageSquare size={16} aria-hidden="true" />
                         </ErpButton>
                         <ErpButton
                           variant="ghost"

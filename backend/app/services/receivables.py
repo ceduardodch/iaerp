@@ -31,7 +31,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 from xml.etree.ElementTree import Element
@@ -48,6 +48,7 @@ from app.models.billing import SalesDocument, SalesDocumentInstallment
 from app.models.masters import EmissionPoint, Establishment, Party
 from app.models.platform import AuditEvent, Tenant
 from app.models.receivables import (
+    CollectionContact,
     CollectionPolicy,
     CollectionReminder,
     CustomerCredit,
@@ -61,6 +62,8 @@ from app.schemas.receivables import (
     AgingBucketTotalRead,
     AgingRead,
     AgingSummaryRead,
+    CollectionContactCreate,
+    CollectionHistoryEntryRead,
     CollectionsBreakdownRead,
     CollectionsHistoryRead,
     MonthlyCollectionRead,
@@ -482,9 +485,7 @@ async def import_retention_xml_batch(
             existing_total = sum(
                 (movement.amount for movement in duplicate_movements), Decimal("0.00")
             )
-            settlement_difference = max(
-                total - open_balance - existing_total, Decimal("0.00")
-            )
+            settlement_difference = max(total - open_balance - existing_total, Decimal("0.00"))
             if apply:
                 if duplicate_movements and not needs_date_correction:
                     raise HTTPException(
@@ -1344,9 +1345,7 @@ async def record_payment(
     open_balance = await compute_receivable_balance(session, tenant_id=tenant_id, receivable=locked)
 
     overapplication = max(total_application - open_balance, Decimal("0.00"))
-    tolerance_is_valid = (
-        Decimal("0.00") <= settlement_tolerance <= RETENTION_SETTLEMENT_TOLERANCE
-    )
+    tolerance_is_valid = Decimal("0.00") <= settlement_tolerance <= RETENTION_SETTLEMENT_TOLERANCE
     if total_application > open_balance and (
         not tolerance_is_valid
         or overapplication > settlement_tolerance
@@ -1458,9 +1457,7 @@ async def record_payment(
             entity_type="receivable",
             entity_id=str(receivable_id),
             correlation_id=correlation_id,
-            idempotency_key=_retention_tolerance_audit_key(
-                idempotency_key, settlement_reference
-            ),
+            idempotency_key=_retention_tolerance_audit_key(idempotency_key, settlement_reference),
             details={
                 "authorization_number": settlement_reference,
                 "open_balance": format_amount(open_balance),
@@ -1920,6 +1917,22 @@ async def send_real_reminder(
     if not recipient:
         raise HTTPException(status_code=422, detail=f"Party has no contact for {channel}")
     scheduled_at = reminder.scheduled_at or datetime.now(UTC)
+    existing = await session.scalar(
+        select(CollectionReminder.id).where(
+            CollectionReminder.tenant_id == context.tenant_id,
+            CollectionReminder.receivable_id == receivable.id,
+            CollectionReminder.installment_id.is_(None),
+            CollectionReminder.channel == channel,
+            CollectionReminder.template_id == (reminder.template_id or "payment_reminder"),
+            CollectionReminder.recipient == recipient,
+            CollectionReminder.status.in_(("PENDING", "PROCESSING", "SENT")),
+        )
+    )
+    if existing is not None and not reminder.resend_reason:
+        raise HTTPException(
+            status_code=409,
+            detail="A collection message was already sent. Add a resend reason to send it again.",
+        )
     record = CollectionReminder(
         tenant_id=context.tenant_id,
         party_id=party.id,
@@ -1947,7 +1960,7 @@ async def send_real_reminder(
                 party_name=party.name,
                 body_override=reminder.message,
             )
-            await crm_integrations.send_google_email(
+            record.provider_message_id = await crm_integrations.send_google_email(
                 session,
                 context,
                 recipient=recipient,
@@ -1956,7 +1969,7 @@ async def send_real_reminder(
                 html_message=html_message,
             )
         elif channel == "WHATSAPP":
-            await crm_integrations.send_whatsapp_message(
+            record.provider_message_id = await crm_integrations.send_whatsapp_message(
                 session,
                 context,
                 recipient=recipient,
@@ -1967,14 +1980,105 @@ async def send_real_reminder(
         else:
             raise HTTPException(status_code=422, detail="Unsupported reminder channel")
         record.status = "SENT"
+        record.delivery_status = "SENT"
         record.sent_at = datetime.now(UTC)
         record.attempts = 1
     except HTTPException as exc:
         record.status = "FAILED"
+        record.delivery_status = "FAILED"
         record.attempts = 1
         record.error_message = str(exc.detail)
     await session.flush()
     return record
+
+
+async def record_collection_contact(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    receivable_id: uuid.UUID,
+    data: CollectionContactCreate,
+) -> CollectionContact:
+    receivable = await session.scalar(
+        select(Receivable).where(
+            Receivable.tenant_id == context.tenant_id,
+            Receivable.id == receivable_id,
+        )
+    )
+    if receivable is None:
+        raise HTTPException(status_code=404, detail="Receivable not found")
+    contact = CollectionContact(
+        tenant_id=context.tenant_id,
+        party_id=receivable.party_id,
+        receivable_id=receivable.id,
+        channel=data.channel,
+        outcome=data.outcome,
+        note=data.note,
+        occurred_at=data.occurred_at or datetime.now(UTC),
+        actor_id=context.actor_id,
+    )
+    session.add(contact)
+    await session.flush()
+    return contact
+
+
+async def list_collection_history(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    receivable_id: uuid.UUID,
+) -> list[CollectionHistoryEntryRead]:
+    receivable = await session.scalar(
+        select(Receivable).where(
+            Receivable.tenant_id == context.tenant_id,
+            Receivable.id == receivable_id,
+        )
+    )
+    if receivable is None:
+        raise HTTPException(status_code=404, detail="Receivable not found")
+    reminders = list(
+        await session.scalars(
+            select(CollectionReminder).where(
+                CollectionReminder.tenant_id == context.tenant_id,
+                CollectionReminder.receivable_id == receivable_id,
+            )
+        )
+    )
+    contacts = list(
+        await session.scalars(
+            select(CollectionContact).where(
+                CollectionContact.tenant_id == context.tenant_id,
+                CollectionContact.receivable_id == receivable_id,
+            )
+        )
+    )
+    entries = [
+        CollectionHistoryEntryRead(
+            id=item.id,
+            kind="REMINDER",
+            occurred_at=item.sent_at or item.scheduled_at or item.created_at,
+            channel=item.channel,
+            outcome=item.status,
+            note=item.error_message,
+            recipient=item.recipient,
+            delivery_status=item.delivery_status,
+            delivered_at=item.delivered_at,
+            read_at=item.read_at,
+        )
+        for item in reminders
+    ]
+    entries.extend(
+        CollectionHistoryEntryRead(
+            id=item.id,
+            kind="CONTACT",
+            occurred_at=item.occurred_at,
+            channel=item.channel,
+            outcome=item.outcome,
+            note=item.note,
+        )
+        for item in contacts
+    )
+    return sorted(entries, key=lambda item: item.occurred_at, reverse=True)
 
 
 # --- Exportaciones públicas ---------------------------------------------------
@@ -2004,4 +2108,6 @@ __all__ = [
     # Recordatorios
     "send_reminder",
     "send_real_reminder",
+    "record_collection_contact",
+    "list_collection_history",
 ]
