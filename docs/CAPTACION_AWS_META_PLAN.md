@@ -7,6 +7,51 @@
 
 ---
 
+## 0. Encuadre: Meta aquí es laboratorio de mensaje, NO canal de adquisición
+
+**Corrección al análisis inicial.** La primera versión de este documento trataba
+Meta como canal de captación de leads. Está mal para esta línea de negocio, y la
+evidencia está en el propio repo.
+
+[`01-tam-sam-som.md`](01-tam-sam-som.md) dimensiona el **ERP**: USD 19-79/mes,
+~1,2 millones de empresas, SOM de 500-2.000 RUCs. Eso es un negocio de
+**volumen**, y ahí Meta encaja perfecto.
+
+**Los servicios AWS son el negocio opuesto:** ticket alto, ciclo largo, comprador
+técnico específico, y en Ecuador el universo de empresas con cargas serias en AWS
+son **cientos, no millones**. Cuando el universo son cientos de empresas eso no
+es una audiencia publicitaria, **es una lista**. Meta está construido para
+optimizar volumen de conversiones baratas entre millones de personas; pedirle que
+encuentre a 300 responsables técnicos concretos es pedirle lo que no hace.
+
+| | ERP SaaS | Servicios AWS |
+|---|---|---|
+| Ticket | ~USD 29/mes | miles al mes, contrato largo |
+| Universo | ~1,2M empresas | cientos |
+| Se puede pagar por conversación calificada | centavos | decenas o cientos de USD |
+| Lo que hace falta | volumen barato | **llegar a personas concretas** |
+
+**Por eso los USD 300 se gastan en probar el MENSAJE, no en conseguir clientes.**
+La pregunta que responden no es "¿cuántos leads entran?" sino "¿qué le duele a
+este mercado: el riesgo, el costo o el cumplimiento?". Meta da miles de
+impresiones baratas para leer esa señal en una semana; LinkedIn con el mismo
+dinero daría ~50 clics, insuficiente para comparar tres variantes.
+
+El ángulo ganador se usa después donde sí está el comprador (§6.1). Los leads que
+caigan del anuncio son un bono, no la métrica.
+
+### El imán importa más que el anuncio
+
+Con ticket alto, "contáctanos para servicios AWS" no lo llena nadie. Funciona
+ofrecer algo con **valor real que se auto-califica**:
+
+> "Revisamos gratis la seguridad de tu cuenta AWS y te entregamos el informe."
+
+Quien llena eso **tiene una cuenta AWS**: se calificó solo. Y se entra a la
+conversación con un informe en la mano, que es la mejor puerta a una venta de
+ticket alto. Encaja con el ejemplo del agente de seguridad: el producto *es* el
+imán.
+
 ## 1. Qué ya existe (verificado en código)
 
 El circuito **anuncio → formulario → CRM ya está construido**. No hay que
@@ -94,6 +139,21 @@ Si una gana claro, aprendiste algo real del mercado ecuatoriano, no de un botón
   basura.** Por eso el paso de calificación en el CRM vale más que afinar el
   anuncio.
 
+### 6.1 Lo que de verdad cierra ticket alto en Ecuador
+
+Ninguno es publicidad. Por orden de rendimiento esperado:
+
+1. **Co-selling con AWS.** Si B2B SAS es partner, los partner managers refieren
+   negocios. Es la fuente principal para servicios AWS y no cuesta más que la
+   relación.
+2. **Lista de cuentas nombradas.** Armar las ~N empresas objetivo del país,
+   identificar al responsable técnico e ir directo. Aburrido y efectivo.
+3. **Comunidad.** AWS User Group Ecuador, meetups de Quito y Guayaquil: ahí está
+   el comprador, literalmente.
+4. **Referidos de clientes actuales.**
+
+Meta no compite con estos: los alimenta con un mensaje ya validado.
+
 ### Pendiente del operador (no se puede resolver desde el código)
 
 1. **Verificar el producto.** Confirmar nombre real, disponibilidad en Ecuador y
@@ -111,7 +171,8 @@ Fijadas ANTES de gastar, para no racionalizar el resultado después.
 |---|---|---|
 | Semana 1 | CTR por creativo | Pausar el peor **solo si** cada uno pasó ≥5.000 impresiones y la diferencia es grande. Antes de eso, no tocar nada. |
 | Semanas 2-4 | CPL por creativo | La ganadora se queda con el presupuesto. |
-| Al gastar los $300 | Leads calificados totales | Si hay **menos de 10 calificados**, el problema es el **ángulo o el producto**, no el creativo. Cambiar la oferta, no el anuncio. |
+| Al gastar los $300 | Ángulo ganador identificado | **Este es el entregable.** El ángulo con mejor CTR pasa a usarse en cuenta nombrada, LinkedIn y conversaciones (§6.1). |
+| Al gastar los $300 | Leads calificados totales | Bono, no métrica de éxito (§0). Si hay **cero** calificados aun con CTR alto, el problema es el **imán**: la oferta no da razón para dejar el dato. |
 
 **Definición de lead calificado** (para que sea medible y no opinable): trabaja
 en una empresa, la empresa ya usa o planea usar AWS, y la persona decide o
@@ -132,6 +193,17 @@ tiene acceso directo a quien decide.
 
 Con 1 y 2 ya se puede lanzar y aprender. 3 y 4 se construyen mientras corre la
 primera campaña.
+
+### Lo que probablemente vale MÁS que este módulo
+
+Dado el encuadre de §0, para ticket alto la palanca no son los anuncios sino el
+trabajo de **cuenta nombrada**. El CRM ya tiene pipeline, actividades y
+contactos; lo que le falta es la lista objetivo: qué empresas del país son
+candidatas, quién es el responsable técnico en cada una, quién la trabaja, qué se
+dijo y cuándo toca volver.
+
+Está a menos distancia que el módulo de Insights y ataca el canal que sí cierra
+(§6.1). **Evaluar antes de comprometer el orden de arriba.**
 
 ### Notas de implementación
 
