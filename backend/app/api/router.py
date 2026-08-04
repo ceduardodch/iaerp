@@ -104,6 +104,7 @@ from app.services import (
     bank_reconciliation,
     billing,
     fiscal_settings,
+    historical_invoice_pdf,
     legal_commercial,
     masters,
     receivables,
@@ -1442,6 +1443,37 @@ async def post_invoice(
         idempotency_key=idempotency_key,
         request_payload=data.model_dump(mode="json"),
         action="invoice.draft_created",
+        entity_type="sales_document",
+        callback=create,
+    )
+
+
+@router.post("/invoices/historical-pdf", response_model=SalesDocumentRead, status_code=201)
+async def post_historical_invoice_pdf(
+    idempotency_key: IdempotencyKey,
+    file: Annotated[UploadFile, File()],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:write"))],
+) -> dict[str, object]:
+    """Carga un RIDE historico solo para Facturas y reportes operativos."""
+
+    pdf_data = await file.read(historical_invoice_pdf.MAX_HISTORICAL_PDF_BYTES + 1)
+    pdf_sha256 = hashlib.sha256(pdf_data).hexdigest()
+
+    async def create() -> tuple[str, dict[str, object]]:
+        entity = await historical_invoice_pdf.create_historical_invoice_from_pdf(
+            session, context, pdf_data=pdf_data
+        )
+        response = await billing.to_sales_document_read(session, context, entity)
+        return str(entity.id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="invoices.historical_pdf.create",
+        idempotency_key=idempotency_key,
+        request_payload={"filename": file.filename, "sha256": pdf_sha256},
+        action="invoice.historical_pdf_created",
         entity_type="sales_document",
         callback=create,
     )

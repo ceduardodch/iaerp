@@ -54,6 +54,11 @@ Estados de factura:
 
 Estados alternos:
 
+- `HISTORICAL_ISSUED`: venta histórica respaldada solo por un RIDE PDF
+  verificable. Es visible en Facturas y en la evolución de ventas, pero no se
+  transmite al SRI, no entra al ATS ni al cálculo mensual de IVA, no genera
+  cartera y no habilita correo fiscal ni nota de crédito. El PDF original se
+  conserva y la falta de XML queda visible.
 - `REJECTED`: rechazo definitivo con mensajes.
 - `PENDING_AUTHORIZATION`: recibido, aun sin autorizacion.
 - `FAILED`: error tecnico recuperable.

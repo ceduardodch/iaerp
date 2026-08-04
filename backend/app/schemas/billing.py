@@ -16,6 +16,7 @@ DocumentStatus = Literal[
     "RECEIVED",
     "PENDING_AUTHORIZATION",
     "AUTHORIZED",
+    "HISTORICAL_ISSUED",
     "NOT_AUTHORIZED",
     "REJECTED",
     "FAILED",

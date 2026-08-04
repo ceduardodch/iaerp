@@ -7,6 +7,19 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Facturas históricas desde RIDE PDF listas localmente en `release`:
+  2026-08-03 `America/Guayaquil`. Facturas permite cargar el PDF emitido por
+  Sky para conservar una venta que no llegó por XML. IAERP valida RUC, cliente,
+  número, clave de acceso, autorización, fechas, detalle y totales antes de
+  crear el estado `HISTORICAL_ISSUED`; guarda el PDF original y muestra
+  `XML faltante`. El documento suma en la evolución mensual de ventas, pero no
+  entra a Cartera, ATS ni al cálculo tributario del mes, y no permite emitir,
+  retransmitir, duplicar, enviar por correo ni crear nota de crédito. El flujo
+  sirve para futuras facturas de la Universidad con el mismo formato, leyendo
+  cada PDF por separado. Ruff, mypy, 79 pruebas tributarias/backend, build,
+  lint y 46 recorridos Playwright de Facturas y Tributario pasan. Falta push y
+  promoción autorizada.
+
 - Dashboard mensual y lectura de compras listos en `develop`: 2026-08-02
   `America/Guayaquil`. Resumen muestra la evolución neta de ventas autorizadas
   de los últimos 12 meses y compara el mes actual con compras recibidas desde

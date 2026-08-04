@@ -27,6 +27,12 @@
 > falta evidencia o revisión del campo 564. Validación local verde; falta
 > promoción autorizada.
 
+> Corte 2026-08-03: carga histórica desde RIDE PDF lista localmente en
+> `release`. Conserva la venta y el PDF en Facturas y reportes con el estado
+> `HISTORICAL_ISSUED`, marca `XML faltante` y la excluye de Cartera, ATS, IVA,
+> transmisión SRI, correo fiscal y nota de crédito. Cada PDF de la Universidad
+> se lee y valida por separado. Falta push y promoción autorizada.
+
 ---
 
 ## 🎯 Objetivo de este Documento

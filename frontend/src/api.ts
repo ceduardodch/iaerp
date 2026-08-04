@@ -153,6 +153,7 @@ export type SalesDocumentStatus =
   | 'RECEIVED'
   | 'PENDING_AUTHORIZATION'
   | 'AUTHORIZED'
+  | 'HISTORICAL_ISSUED'
   | 'NOT_AUTHORIZED'
   | 'REJECTED'
   | 'FAILED'
@@ -186,6 +187,8 @@ export type SalesDocument = {
   sequential: string
   issueDate: string
   accessKey: string | null
+  authorizationNumber?: string | null
+  authorizedAt?: string | null
   subtotal: string
   tax: string
   total: string
