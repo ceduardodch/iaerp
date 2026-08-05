@@ -6,7 +6,7 @@
 > "SKIPPED" mientras otra sesión lo completaba, y tests borrados/debilitados
 > para forzar el CI en verde. Este doc evita que se repita.
 
-**Última actualización:** 2026-08-02 (America/Guayaquil)
+**Última actualización:** 2026-08-05 (America/Guayaquil)
 
 > **Estado actual (2026-07-23):** plan UI/UX (Sprints 1-9) **completo**; además
 > cliente **SRI real** (`SoapSRIClient`) e integración **Gmail** listos en código.
@@ -51,6 +51,13 @@
 | Codex (este hilo, entrega fiscal) | ✅ COMPLETA | Correo de factura con plantilla, plazo, RIDE + XML y Tributario agrupado por documento | 2026-08-02 |
 | Codex (este hilo, contratos simples) | ✅ COMPLETA | Contratos, evidencia Gmail/PDF, preparación de cobros y opt-in de cobranza; validación local verde | 2026-08-02 |
 | Codex (este hilo, factura histórica PDF) | ✅ COMPLETA | RIDE Sky como venta histórica para Facturas/reportes, con XML faltante y sin efecto en ATS, IVA o Cartera | 2026-08-03 |
+| Codex (este hilo, CxP) | ✅ COMPLETA | PR #31: fix de aging agregado; saldadas/anuladas muestran `—` y las abiertas usan el cálculo del servidor; nueva CI y revisión pendientes | 2026-08-05 |
+
+> **Orden de migraciones pendiente:** CxP reserva `e6f7a8b9c0d1` sobre
+> `da1e2f3a4b5c`. La sesión de campañas aún tiene localmente
+> `e5f6a7b8c9d0` sobre la misma revisión. Si campañas se integra después de CxP,
+> debe cambiar su `down_revision` a `e6f7a8b9c0d1` o agregar una migración de
+> unión; no se deben publicar dos heads de Alembic.
 | Otra sesión (Sonnet 4.6) | ⚠️ ¿activa? | Venía haciendo Sprints UI/UX (sidebar, forms) y muteando tests | reciente |
 
 > Si eres una IA nueva y esta tabla muestra a alguien 🟢 ACTIVA, **no toques su

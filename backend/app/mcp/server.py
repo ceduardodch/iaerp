@@ -21,9 +21,16 @@ from app.db.session import SessionFactory
 from app.models.platform import AutomationSettings, OperationRecord
 from app.schemas.billing import CreditNoteInput, InvoiceInput
 from app.schemas.masters import PartyCreate, PartyRead, ProductCreate, ProductRead
+from app.schemas.payables import (
+    PayableCreate,
+    PayablePaymentCreate,
+    PayableRead,
+    PaymentScheduleCreate,
+    PaymentScheduleRead,
+)
 from app.schemas.platform import OperationRead, TenantContextRead
 from app.schemas.receivables import AccountItemRead, AgingRead, PaymentInput, ReminderInput
-from app.services import billing, masters, receivables
+from app.services import billing, masters, payables, receivables
 from app.services.unit_of_work import append_audit, execute_idempotent
 
 settings = get_settings()
@@ -41,6 +48,9 @@ MCP_SCOPES = [
     "receivables:read",
     "receivables:write",
     "receivables:notify",
+    "payables:read",
+    "payables:write",
+    "payables:extract",
 ]
 TOOL_REQUIRED_SCOPES = {
     "context.get": "context:read",
@@ -55,6 +65,11 @@ TOOL_REQUIRED_SCOPES = {
     "receivables.list": "receivables:read",
     "receivables.record_payment": "receivables:write",
     "receivables.send_reminder": "receivables:notify",
+    "payables.list": "payables:read",
+    "payables.create": "payables:write",
+    "payables.create_from_document": "payables:extract",
+    "payables.schedule_payment": "payables:write",
+    "payables.record_payment": "payables:write",
 }
 
 
@@ -693,6 +708,159 @@ async def receivables_send_reminder(
             action="reminder.sent",
             entity_type="collection_reminder",
             callback=send,
+        )
+    except HTTPException as exc:
+        raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="payables.list")
+async def payables_list(
+    status: Literal["OPEN", "PARTIAL", "SETTLED", "VOIDED"] | None = None,
+    dueBefore: date | None = None,
+) -> list[dict[str, object]]:
+    """Listar obligaciones operativas del tenant activo."""
+    session, context = await _tool_context("payables:read")
+    try:
+        items = await payables.list_payables(
+            session,
+            tenant_id=context.tenant_id,
+            status=status,
+            due_before=dueBefore,
+        )
+        return [item.model_dump(mode="json", by_alias=True) for item in items]
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="payables.create")
+async def payables_create(
+    payable: PayableCreate,
+    idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
+) -> dict[str, object]:
+    """Crear una compra o CxP sin mover dinero fuera de IAERP."""
+    session, context = await _tool_context("payables:write")
+    try:
+        await _require_automation_writes(session, context)
+
+        async def create() -> tuple[str, dict[str, object]]:
+            item = await payables.create_payable(session, context, payable)
+            return str(item.id), item.model_dump(mode="json", by_alias=True)
+
+        return await execute_idempotent(
+            session,
+            context=context,
+            operation="payables.create",
+            idempotency_key=idempotencyKey,
+            request_payload=payable.model_dump(mode="json"),
+            action="payable.created",
+            entity_type="payable",
+            callback=create,
+        )
+    except HTTPException as exc:
+        raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="payables.create_from_document")
+async def payables_create_from_document(
+    documentId: uuid.UUID,
+    idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
+) -> dict[str, object]:
+    """Crear o enlazar una CxP desde evidencia fiscal ya guardada."""
+    session, context = await _tool_context("payables:extract")
+    try:
+        await _require_automation_writes(session, context)
+
+        async def create() -> tuple[str, dict[str, object]]:
+            item = await payables.create_from_fiscal_document(
+                session, context, document_id=documentId
+            )
+            return str(item.id), item.model_dump(mode="json", by_alias=True)
+
+        return await execute_idempotent(
+            session,
+            context=context,
+            operation="payables.create_from_document",
+            idempotency_key=idempotencyKey,
+            request_payload={"document_id": str(documentId)},
+            action="payable.document_linked",
+            entity_type="payable",
+            callback=create,
+        )
+    except HTTPException as exc:
+        raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="payables.schedule_payment")
+async def payables_schedule_payment(
+    payableId: uuid.UUID,
+    schedule: PaymentScheduleCreate,
+    idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
+) -> dict[str, object]:
+    """Programar un pago a proveedor sin iniciar una transferencia."""
+    session, context = await _tool_context("payables:write")
+    try:
+        await _require_automation_writes(session, context)
+
+        async def create() -> tuple[str, dict[str, object]]:
+            item = await payables.schedule_payment(
+                session, context, payable_id=payableId, data=schedule
+            )
+            response = PaymentScheduleRead.model_validate(item).model_dump(
+                mode="json", by_alias=True
+            )
+            return str(item.id), response
+
+        return await execute_idempotent(
+            session,
+            context=context,
+            operation="payables.schedule_payment",
+            idempotency_key=idempotencyKey,
+            request_payload={"payable_id": str(payableId), **schedule.model_dump(mode="json")},
+            action="supplier_payment.scheduled",
+            entity_type="supplier_payment_schedule",
+            callback=create,
+        )
+    except HTTPException as exc:
+        raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="payables.record_payment")
+async def payables_record_payment(
+    payableId: uuid.UUID,
+    payment: PayablePaymentCreate,
+    idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
+) -> dict[str, object]:
+    """Registrar un pago ya realizado, sin iniciar la transferencia."""
+    session, context = await _tool_context("payables:write")
+    try:
+        await _require_automation_writes(session, context)
+
+        async def record() -> tuple[str, dict[str, object]]:
+            item = await payables.record_payment(
+                session, context, payable_id=payableId, data=payment
+            )
+            response = PayableRead.model_validate(item).model_dump(
+                mode="json", by_alias=True
+            )
+            return str(item.id), response
+
+        return await execute_idempotent(
+            session,
+            context=context,
+            operation="payables.record_payment",
+            idempotency_key=idempotencyKey,
+            request_payload={"payable_id": str(payableId), **payment.model_dump(mode="json")},
+            action="supplier_payment.recorded",
+            entity_type="payable",
+            callback=record,
         )
     except HTTPException as exc:
         raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc

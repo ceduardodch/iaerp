@@ -948,6 +948,58 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           description: Archivo inválido o confirmación sin idempotencia
+  /finance/bank-statements:
+    post:
+      operationId: importFinanceBankStatement
+      summary: Conciliar un mismo extracto con CxC y CxP
+      description: >-
+        Conserva créditos y débitos. La vista previa propone cruces y reglas;
+        solo apply=true registra cobros, pagos o evidencia bancaria. Los débitos
+        sin respaldo nunca crean por sí solos un gasto fiscal definitivo.
+      security:
+        - oauth2: ["receivables:write", "payables:write"]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Obligatoria al confirmar apply=true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, period, apply]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                period:
+                  type: string
+                  pattern: '^\d{4}-\d{2}$'
+                apply:
+                  type: boolean
+                  default: false
+                debitAllocations:
+                  type: [string, "null"]
+                  description: JSON con repartos manuales por transacción, CxP y monto.
+      responses:
+        "200":
+          description: Vista previa o resultado confirmado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankStatementImport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Archivo, reparto o idempotencia inválidos
   /receivables/{receivableId}:
     get:
       operationId: getReceivable
@@ -1099,6 +1151,11 @@ paths:
       security:
         - oauth2: ["payables:read"]
       parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [OPEN, PARTIAL, SETTLED, VOIDED]
         - name: dueBefore
           in: query
           schema:
@@ -1112,7 +1169,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/AccountItem"
+                  $ref: "#/components/schemas/Payable"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1136,7 +1193,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AccountItem"
+                $ref: "#/components/schemas/Payable"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1192,12 +1249,12 @@ paths:
                   type: string
                   format: uuid
       responses:
-        "202":
-          description: Extraccion encolada
+        "201":
+          description: Obligacion creada o enlazada
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Operation"
+                $ref: "#/components/schemas/Payable"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1223,7 +1280,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Operation"
+                $ref: "#/components/schemas/PaymentSchedule"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1242,18 +1299,137 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PaymentInput"
+              $ref: "#/components/schemas/SupplierPaymentInput"
       responses:
         "201":
           description: Pago registrado
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AccountItem"
+                $ref: "#/components/schemas/Payable"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /payables/{payableId}:
+    get:
+      operationId: getPayable
+      summary: Consultar una cuenta por pagar
+      security:
+        - oauth2: ["payables:read"]
+      parameters:
+        - $ref: "#/components/parameters/PayableId"
+      responses:
+        "200":
+          description: Cuenta por pagar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payable"
+        "404":
+          description: Cuenta por pagar no encontrada
+  /payables/{payableId}/movements:
+    get:
+      operationId: listPayableMovements
+      summary: Consultar pagos, ajustes y reversos
+      security:
+        - oauth2: ["payables:read"]
+      parameters:
+        - $ref: "#/components/parameters/PayableId"
+      responses:
+        "200":
+          description: Historial de la cuenta por pagar
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PayableMovement"
+  /payables/{payableId}/adjustments:
+    post:
+      operationId: recordPayableAdjustment
+      summary: Registrar retencion o nota de credito
+      security:
+        - oauth2: ["payables:write"]
+      parameters:
+        - $ref: "#/components/parameters/PayableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PayableAdjustmentInput"
+      responses:
+        "201":
+          description: Ajuste registrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payable"
+  /payables/{payableId}/movements/{movementId}/reversal:
+    post:
+      operationId: reversePayableMovement
+      summary: Revertir un movimiento sin borrar su historia
+      security:
+        - oauth2: ["payables:write"]
+      parameters:
+        - $ref: "#/components/parameters/PayableId"
+        - name: movementId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PayableReversalInput"
+      responses:
+        "201":
+          description: Reverso registrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payable"
+  /expense-rules:
+    get:
+      operationId: listExpenseRecognitionRules
+      summary: Consultar reglas de reconocimiento de debitos
+      security:
+        - oauth2: ["payables:read"]
+      responses:
+        "200":
+          description: Reglas del tenant
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExpenseRecognitionRule"
+    post:
+      operationId: createExpenseRecognitionRule
+      summary: Crear una regla que siempre requiere confirmacion
+      security:
+        - oauth2: ["payables:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpenseRecognitionRuleInput"
+      responses:
+        "201":
+          description: Regla creada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpenseRecognitionRule"
 components:
   securitySchemes:
     oauth2:
@@ -2002,14 +2178,24 @@ components:
         - period
         - fileName
         - sourceSha256
+        - accountMasked
         - totalRows
         - creditRows
+        - debitRows
         - outsidePeriodCreditCount
+        - outsidePeriodDebitCount
         - matchedCount
         - unmatchedCreditCount
         - ignoredDebitCount
+        - payableMatchedCount
+        - unmatchedDebitCount
+        - ruleSuggestionCount
         - alreadyImportedCount
+        - manualCorrectionCount
         - matches
+        - manualCorrections
+        - debitMatches
+        - debitSuggestions
       properties:
         period:
           type: string
@@ -2020,13 +2206,21 @@ components:
           type: string
           minLength: 64
           maxLength: 64
+        accountMasked:
+          type: string
         totalRows:
           type: integer
           minimum: 0
         creditRows:
           type: integer
           minimum: 0
+        debitRows:
+          type: integer
+          minimum: 0
         outsidePeriodCreditCount:
+          type: integer
+          minimum: 0
+        outsidePeriodDebitCount:
           type: integer
           minimum: 0
         matchedCount:
@@ -2038,13 +2232,108 @@ components:
         ignoredDebitCount:
           type: integer
           minimum: 0
+        payableMatchedCount:
+          type: integer
+          minimum: 0
+        unmatchedDebitCount:
+          type: integer
+          minimum: 0
+        ruleSuggestionCount:
+          type: integer
+          minimum: 0
         alreadyImportedCount:
+          type: integer
+          minimum: 0
+        manualCorrectionCount:
           type: integer
           minimum: 0
         matches:
           type: array
           items:
             $ref: "#/components/schemas/BankStatementMatch"
+        manualCorrections:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        debitMatches:
+          type: array
+          items:
+            $ref: "#/components/schemas/BankStatementDebitMatch"
+        debitSuggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/BankStatementDebitSuggestion"
+    BankStatementDebitMatch:
+      type: object
+      additionalProperties: false
+      required: [transactionId, paymentDate, reference, description, amount, payableId, payableTotal, allocatedAmount, linksExistingPayment, status, detail]
+      properties:
+        transactionId:
+          type: string
+          minLength: 64
+          maxLength: 64
+        paymentDate:
+          type: string
+          format: date
+        reference:
+          type: string
+        description:
+          type: string
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        payableId:
+          type: string
+          format: uuid
+        supplierName:
+          type: [string, "null"]
+        documentNumber:
+          type: [string, "null"]
+        payableTotal:
+          $ref: "#/components/schemas/PositiveDecimal"
+        allocatedAmount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        linksExistingPayment:
+          type: boolean
+        status:
+          type: string
+          enum: [MATCHED, REGISTERED, EVIDENCE_LINKED]
+        detail:
+          type: string
+    BankStatementDebitSuggestion:
+      type: object
+      additionalProperties: false
+      required: [transactionId, paymentDate, reference, description, amount, classification, detail]
+      properties:
+        transactionId:
+          type: string
+          minLength: 64
+          maxLength: 64
+        paymentDate:
+          type: string
+          format: date
+        reference:
+          type: string
+        description:
+          type: string
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        classification:
+          type: string
+          enum: [UNCLASSIFIED, EXPENSE_CANDIDATE, BANK_FEE, BANK_TAX, INTERNAL_TRANSFER, CARD_SETTLEMENT]
+        ruleId:
+          type: [string, "null"]
+          format: uuid
+        ruleName:
+          type: [string, "null"]
+        suggestedCategory:
+          type: [string, "null"]
+        suggestedSupplierName:
+          type: [string, "null"]
+        suggestedTaxClassification:
+          type: [string, "null"]
+        detail:
+          type: string
     PaymentInput:
       type: object
       additionalProperties: false
@@ -2305,36 +2594,231 @@ components:
     PayableInput:
       type: object
       additionalProperties: false
-      required: [supplierId, documentType, establishment, emissionPoint, sequential, issueDate, installments, total]
+      required: [description, issueDate, total]
       properties:
         supplierId:
-          type: string
+          type: [string, "null"]
           format: uuid
+        supplierName:
+          type: [string, "null"]
+          maxLength: 300
+        description:
+          type: string
+          minLength: 2
+          maxLength: 500
+        category:
+          type: string
+          default: Sin clasificar
         documentType:
           type: string
           enum: [INVOICE, LIQUIDATION, DEBIT_NOTE, OTHER]
-        establishment:
-          type: string
-          pattern: "^[0-9]{3}$"
-        emissionPoint:
-          type: string
-          pattern: "^[0-9]{3}$"
-        sequential:
-          type: string
-          pattern: "^[0-9]{9}$"
-        accessKey:
+          default: OTHER
+        documentNumber:
           type: [string, "null"]
-          pattern: "^[0-9]{49}$"
+          maxLength: 80
         issueDate:
           type: string
           format: date
+        dueDate:
+          type: [string, "null"]
+          format: date
         installments:
           type: array
-          minItems: 1
           items:
             $ref: "#/components/schemas/InstallmentInput"
         total:
           $ref: "#/components/schemas/PositiveDecimal"
+        taxClassification:
+          type: string
+          enum: [DEDUCTIBLE_PENDING_REVIEW, DEDUCTIBLE_CONFIRMED, NON_DEDUCTIBLE]
+          default: DEDUCTIBLE_PENDING_REVIEW
+        evidenceStatus:
+          type: string
+          enum: [NONE, ATTACHED, PRELIMINARY, FISCAL_XML]
+          default: NONE
+        supportReference:
+          type: [string, "null"]
+        paymentTiming:
+          type: string
+          enum: [PAID_NOW, PAY_LATER]
+          default: PAY_LATER
+        paymentDate:
+          type: [string, "null"]
+          format: date
+        paymentMethod:
+          type: [string, "null"]
+          enum: [TRANSFER, CHECK, CASH, CARD, OTHER, null]
+        paymentReference:
+          type: [string, "null"]
+    SupplierPaymentInput:
+      type: object
+      additionalProperties: false
+      required: [amount, paymentDate]
+      properties:
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        paymentDate:
+          type: string
+          format: date
+        method:
+          type: [string, "null"]
+          enum: [TRANSFER, CHECK, CASH, CARD, OTHER, null]
+        reference:
+          type: [string, "null"]
+          maxLength: 300
+    PayableAdjustmentInput:
+      type: object
+      additionalProperties: false
+      required: [movementType, amount, effectiveDate, reference]
+      properties:
+        movementType:
+          type: string
+          enum: [RETENTION, CREDIT_NOTE]
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        effectiveDate:
+          type: string
+          format: date
+        reference:
+          type: string
+          minLength: 3
+    PayableReversalInput:
+      type: object
+      additionalProperties: false
+      required: [reason, effectiveDate]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+        effectiveDate:
+          type: string
+          format: date
+    Payable:
+      type: object
+      additionalProperties: false
+      required: [id, description, category, documentType, issueDate, dueDate, total, openAmount, currency, status, taxClassification, evidenceStatus]
+      properties:
+        id:
+          type: string
+          format: uuid
+        supplierId:
+          type: [string, "null"]
+          format: uuid
+        supplierName:
+          type: [string, "null"]
+        fiscalDocumentId:
+          type: [string, "null"]
+          format: uuid
+        description:
+          type: string
+        category:
+          type: string
+        documentType:
+          type: string
+        documentNumber:
+          type: [string, "null"]
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        total:
+          $ref: "#/components/schemas/PositiveDecimal"
+        openAmount:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        currency:
+          type: string
+          enum: [USD]
+        status:
+          type: string
+          enum: [OPEN, PARTIAL, SETTLED, VOIDED]
+        taxClassification:
+          type: string
+          enum: [DEDUCTIBLE_PENDING_REVIEW, DEDUCTIBLE_CONFIRMED, NON_DEDUCTIBLE]
+        evidenceStatus:
+          type: string
+          enum: [NONE, ATTACHED, PRELIMINARY, FISCAL_XML]
+        supportReference:
+          type: [string, "null"]
+    PayableMovement:
+      type: object
+      additionalProperties: false
+      required: [id, payableId, installmentId, movementType, amount, effectiveDate, actorId, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        payableId:
+          type: string
+          format: uuid
+        installmentId:
+          type: string
+          format: uuid
+        movementType:
+          type: string
+          enum: [PAYMENT, RETENTION, CREDIT_NOTE, REVERSAL]
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        effectiveDate:
+          type: string
+          format: date
+        method:
+          type: [string, "null"]
+          enum: [TRANSFER, CHECK, CASH, CARD, OTHER, null]
+        supportReference:
+          type: [string, "null"]
+        reversedMovementId:
+          type: [string, "null"]
+          format: uuid
+        actorId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ExpenseRecognitionRuleInput:
+      type: object
+      additionalProperties: false
+      required: [name, descriptionPattern, category]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        descriptionPattern:
+          type: string
+          minLength: 2
+        accountLast4:
+          type: [string, "null"]
+          pattern: '^\d{4}$'
+        amountMin:
+          oneOf:
+            - $ref: "#/components/schemas/NonNegativeDecimal"
+            - type: "null"
+        amountMax:
+          oneOf:
+            - $ref: "#/components/schemas/NonNegativeDecimal"
+            - type: "null"
+        category:
+          type: string
+          minLength: 2
+        supplierName:
+          type: [string, "null"]
+        taxClassification:
+          type: string
+          enum: [DEDUCTIBLE_PENDING_REVIEW, DEDUCTIBLE_CONFIRMED, NON_DEDUCTIBLE]
+          default: DEDUCTIBLE_PENDING_REVIEW
+        active:
+          type: boolean
+          default: true
+    ExpenseRecognitionRule:
+      allOf:
+        - $ref: "#/components/schemas/ExpenseRecognitionRuleInput"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
     PaymentScheduleInput:
       type: object
       additionalProperties: false
@@ -2348,6 +2832,27 @@ components:
         priority:
           type: string
           enum: [LOW, NORMAL, HIGH, CRITICAL]
+    PaymentSchedule:
+      type: object
+      additionalProperties: false
+      required: [id, payableId, scheduledDate, amount, priority, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        payableId:
+          type: string
+          format: uuid
+        scheduledDate:
+          type: string
+          format: date
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        priority:
+          type: string
+          enum: [LOW, NORMAL, HIGH, CRITICAL]
+        status:
+          type: string
     Operation:
       type: object
       additionalProperties: false

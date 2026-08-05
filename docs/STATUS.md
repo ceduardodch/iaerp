@@ -7,6 +7,26 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- CxP operativa y conciliación bancaria compartida listas en un worktree
+  aislado de `origin/main`: 2026-08-05 `America/Guayaquil`. Compras permite
+  registrar `Pagado ahora` o `Pagar después`, proveedor y factura opcionales,
+  abonos, historial, ajustes, reversos y reglas para gastos frecuentes. El mismo
+  TXT conserva créditos para CxC y débitos para CxP; soporta cruces exactos,
+  pagos parciales, reparto manual, evidencia para pagos ya registrados y
+  bloqueo de duplicados. Las reglas solo preparan el gasto y el banco no crea
+  IVA crédito ni ATS. REST y las cinco herramientas `payables.*` usan los
+  mismos servicios. Contratos YAML, Ruff, mypy dirigido, 395 pruebas backend y
+  18 recorridos Playwright pasan localmente; 33 pruebas opcionales se omiten.
+  La única falla de la suite completa es `test_health.py`: el Redis local no
+  está disponible. La cadena completa de migraciones y 13 pruebas dirigidas de
+  CxP, banco y MCP pasan contra un PostgreSQL 16 temporal; el contenedor de
+  prueba se eliminó al terminar. El commit `39631d2` está en `release` y la PR
+  `#31` quedó lista para revisión con CI verde. Además, Cartera ya toma el aging
+  calculado por el servidor y muestra `—` para cuentas saldadas o anuladas, aun
+  si conservan una fecha de vencimiento antigua; lint, build y 24 recorridos
+  Playwright pasan localmente. La corrección queda incluida en la PR `#31`; su
+  nueva CI queda pendiente. No se hizo merge ni despliegue.
+
 - Feature local pendiente de integración: 2026-08-03 `America/Guayaquil`.
   Cartera suma una historia de cobranza por factura: envíos, entrega o lectura
   solo cuando WhatsApp Meta lo confirma, y gestiones manuales de llamada,

@@ -174,6 +174,9 @@ async def upsert_parsed_document(
         )
 
     await session.flush()
+    from app.services import payables
+
+    await payables.sync_fiscal_document(session, context, document=document)
     return document, created
 
 
@@ -237,6 +240,9 @@ async def _upsert_txt_row(
     if created:
         session.add(document)
     await session.flush()
+    from app.services import payables
+
+    await payables.sync_fiscal_document(session, context, document=document)
     return created, False
 
 

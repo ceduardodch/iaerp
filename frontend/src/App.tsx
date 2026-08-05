@@ -16,6 +16,7 @@ import {
   idempotencyKey,
   type AccountItem,
   type AccountItemStatus,
+  type AgingBucket,
   type ArtifactDownload,
   type BankStatementImport,
   type BillingProposal,
@@ -2388,10 +2389,8 @@ function ReceivableStatusBadge({ status }: { status: AccountItemStatus }) {
   return <ErpStatusBadge tone={receivableStatusTone[status]}>{receivableStatusLabels[status]}</ErpStatusBadge>
 }
 
-type AgingBucket = 'AL_DIA' | '1-15' | '16-30' | '31-60' | '61-90' | '90+'
-
 const agingLabels: Record<AgingBucket, string> = {
-  AL_DIA: 'Al día',
+  CURRENT: 'Al día',
   '1-15': '1 a 15 días',
   '16-30': '16 a 30 días',
   '31-60': '31 a 60 días',
@@ -2399,23 +2398,20 @@ const agingLabels: Record<AgingBucket, string> = {
   '90+': 'Más de 90 días',
 }
 
-function agingBucket(dueDate: string | null | undefined): AgingBucket | null {
-  if (!dueDate) return null
-  const daysOverdue = Math.floor((Date.now() - new Date(`${dueDate}T00:00:00`).getTime()) / 86_400_000)
-  if (daysOverdue <= 0) return 'AL_DIA'
-  if (daysOverdue <= 15) return '1-15'
-  if (daysOverdue <= 30) return '16-30'
-  if (daysOverdue <= 60) return '31-60'
-  if (daysOverdue <= 90) return '61-90'
-  return '90+'
-}
-
-function AgingChip({ dueDate }: { dueDate: string | null | undefined }) {
-  const bucket = agingBucket(dueDate)
-  if (!bucket) return <span className="fine-print">Sin vencimiento</span>
+function AgingChip({
+  aging,
+  status,
+}: {
+  aging: AccountItem['aging']
+  status: AccountItemStatus
+}) {
+  if (status === 'SETTLED' || status === 'VOIDED') {
+    return <span className="fine-print">—</span>
+  }
+  if (!aging) return <span className="fine-print">Sin vencimiento</span>
   return (
-    <ErpStatusBadge tone={bucket === 'AL_DIA' ? 'success' : bucket === '90+' || bucket === '61-90' ? 'danger' : 'warning'}>
-      {agingLabels[bucket]}
+    <ErpStatusBadge tone={aging.bucket === 'CURRENT' ? 'success' : aging.bucket === '90+' || aging.bucket === '61-90' ? 'danger' : 'warning'}>
+      {agingLabels[aging.bucket]}
     </ErpStatusBadge>
   )
 }
@@ -2580,7 +2576,7 @@ function BankStatementImportForm({
   }
 
   const previewStatement = useMutation({
-    mutationFn: () => apiRequest<BankStatementImport>(token, '/receivables/bank-statement', {
+    mutationFn: () => apiRequest<BankStatementImport>(token, '/finance/bank-statements', {
       method: 'POST',
       body: statementFormData(false),
     }),
@@ -2590,7 +2586,7 @@ function BankStatementImportForm({
     },
   })
   const registerMatches = useMutation({
-    mutationFn: () => apiRequest<BankStatementImport>(token, '/receivables/bank-statement', {
+    mutationFn: () => apiRequest<BankStatementImport>(token, '/finance/bank-statements', {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey('web-bank-statement') },
       body: statementFormData(true),
@@ -2604,7 +2600,7 @@ function BankStatementImportForm({
 
   return (
     <ErpFormPanel
-      eyebrow="Cobranzas"
+      eyebrow="Bancos"
       title="Conciliar estado bancario"
       submitLabel="Revisar movimientos"
       pendingLabel="Revisando…"
@@ -2613,7 +2609,7 @@ function BankStatementImportForm({
       onSubmit={(event) => { event.preventDefault(); previewStatement.mutate() }}
       onCancel={onCancel}
     >
-      <p className="fine-print">El TXT se procesa en memoria. Ignoramos débitos y solo proponemos abonos que saldan una única factura autorizada, con sus retenciones ya descontadas. Si existe un cobro manual sin referencia, el banco lo reemplaza mediante un reverso auditable. Nada se registra hasta que confirmes.</p>
+      <p className="fine-print">El mismo TXT cruza abonos con Cartera y débitos con Cuentas por pagar. Los cruces dudosos quedan para revisión y las reglas solo proponen gastos: nada se registra hasta que confirmes.</p>
       <label>
         Período a conciliar
         <input
@@ -2645,9 +2641,9 @@ function BankStatementImportForm({
         <section className="retention-batch-results" aria-live="polite">
           <div className="retention-batch-heading">
             <h3>Resultado de la conciliación</h3>
-            <span>{preview.matchedCount} coincidencia{preview.matchedCount === 1 ? '' : 's'} · {preview.manualCorrectionCount} {preview.manualCorrectionCount === 1 ? 'corrección' : 'correcciones'} · {preview.unmatchedCreditCount} abono{preview.unmatchedCreditCount === 1 ? '' : 's'} sin aplicar</span>
+            <span>{preview.matchedCount} cobro{preview.matchedCount === 1 ? '' : 's'} · {preview.payableMatchedCount ?? 0} pago{preview.payableMatchedCount === 1 ? '' : 's'} · {preview.ruleSuggestionCount ?? 0} gasto{preview.ruleSuggestionCount === 1 ? '' : 's'} sugerido{preview.ruleSuggestionCount === 1 ? '' : 's'}</span>
           </div>
-          <p className="fine-print">Período {preview.period}. Se leyeron {preview.totalRows} movimientos: {preview.creditRows} abonos del período, {preview.outsidePeriodCreditCount} de otros meses, {preview.ignoredDebitCount} débitos ignorados y {preview.alreadyImportedCount} abono{preview.alreadyImportedCount === 1 ? '' : 's'} ya registrado{preview.alreadyImportedCount === 1 ? '' : 's'}.</p>
+          <p className="fine-print">Cuenta {preview.accountMasked ?? 'enmascarada'} · período {preview.period}. Se leyeron {preview.totalRows} movimientos: {preview.creditRows} abonos y {preview.debitRows ?? preview.ignoredDebitCount} débitos del período. Quedaron {preview.unmatchedCreditCount} abonos y {preview.unmatchedDebitCount ?? preview.ignoredDebitCount} débitos sin cruce.</p>
           {preview.matches.length > 0 ? (
             <div className="table-wrap" tabIndex={0} aria-label="Coincidencias del estado bancario">
               <table className="erp-responsive-table">
@@ -2687,14 +2683,51 @@ function BankStatementImportForm({
               </table>
             </div>
           ) : null}
-          {preview.matches.length === 0 && preview.manualCorrections.length === 0 ? (
-            <ErpEmptyState title="Sin coincidencias exactas" description="Los abonos dudosos o sin una factura única no modificaron Cartera." />
+          {(preview.debitMatches ?? []).length > 0 ? (
+            <div className="table-wrap" tabIndex={0} aria-label="Pagos encontrados en el estado bancario">
+              <table className="erp-responsive-table">
+                <thead><tr><th>Fecha</th><th>Débito</th><th>Proveedor</th><th>Documento</th><th>Aplicación</th><th>Resultado</th></tr></thead>
+                <tbody>
+                  {(preview.debitMatches ?? []).map((match) => (
+                    <tr key={`${match.transactionId}-${match.payableId}`}>
+                      <td>{match.paymentDate}</td>
+                      <td>${formatAmount(match.allocatedAmount)}</td>
+                      <td>{match.supplierName ?? 'Sin proveedor'}</td>
+                      <td>{match.documentNumber ?? 'Gasto directo'}</td>
+                      <td>{match.linksExistingPayment ? 'Enlazar evidencia' : 'Registrar pago'}</td>
+                      <td><ErpStatusBadge tone="success">{match.detail}</ErpStatusBadge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {(preview.debitSuggestions ?? []).length > 0 ? (
+            <div className="table-wrap" tabIndex={0} aria-label="Débitos pendientes de revisión">
+              <table className="erp-responsive-table">
+                <thead><tr><th>Fecha</th><th>Descripción</th><th>Valor</th><th>Regla</th><th>Resultado</th></tr></thead>
+                <tbody>
+                  {(preview.debitSuggestions ?? []).map((suggestion) => (
+                    <tr key={suggestion.transactionId}>
+                      <td>{suggestion.paymentDate}</td>
+                      <td>{suggestion.description}</td>
+                      <td>${formatAmount(suggestion.amount)}</td>
+                      <td>{suggestion.ruleName ?? 'Sin regla'}</td>
+                      <td><ErpStatusBadge tone="warning">{suggestion.detail}</ErpStatusBadge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {preview.matches.length === 0 && preview.manualCorrections.length === 0 && (preview.debitMatches ?? []).length === 0 && (preview.debitSuggestions ?? []).length === 0 ? (
+            <ErpEmptyState title="Sin coincidencias exactas" description="Los movimientos dudosos no modificaron CxC ni CxP." />
           ) : null}
           {registerMatches.error ? <p className="form-error" role="alert">{registerMatches.error.message}</p> : null}
           {registered ? <p className="fine-print">La conciliación terminó. Solo los cobros indicados como registrados modificaron Cartera.</p> : null}
           {!registered ? (
-            <ErpButton variant="primary" disabled={(preview.matchedCount + preview.manualCorrectionCount) === 0 || registerMatches.isPending} onClick={() => registerMatches.mutate()}>
-              {registerMatches.isPending ? 'Registrando…' : `Confirmar ${preview.matchedCount + preview.manualCorrectionCount} cambio${(preview.matchedCount + preview.manualCorrectionCount) === 1 ? '' : 's'}`}
+            <ErpButton variant="primary" disabled={(preview.matchedCount + preview.manualCorrectionCount + (preview.payableMatchedCount ?? 0)) === 0 || registerMatches.isPending} onClick={() => registerMatches.mutate()}>
+              {registerMatches.isPending ? 'Registrando…' : `Confirmar ${preview.matchedCount + preview.manualCorrectionCount + (preview.payableMatchedCount ?? 0)} cambio${(preview.matchedCount + preview.manualCorrectionCount + (preview.payableMatchedCount ?? 0)) === 1 ? '' : 's'}`}
             </ErpButton>
           ) : null}
         </section>
@@ -3546,10 +3579,13 @@ function ReceivablesPage({
   if (panel?.view === 'bank-statement') {
     return (
       <>
-        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Conciliar banco" subtitle="Registra únicamente abonos que cuadran de forma única con una factura autorizada." />
+        <ErpPageHeader eyebrow="Cuentas por cobrar y pagar" title="Conciliar banco" subtitle="Una carga cruza abonos con CxC y débitos con CxP; los gastos sugeridos siempre requieren confirmación." />
         <BankStatementImportForm
           token={token}
-          onRegistered={() => void queryClient.invalidateQueries({ queryKey: ['receivables'] })}
+          onRegistered={() => {
+            void queryClient.invalidateQueries({ queryKey: ['receivables'] })
+            void queryClient.invalidateQueries({ queryKey: ['payables'] })
+          }}
           onCancel={closePanel}
         />
       </>
@@ -3610,7 +3646,7 @@ function ReceivablesPage({
                     <td>${formatAmount(receivable.originalAmount)}</td>
                     <td>${formatAmount(receivable.openAmount)}</td>
                     <td><ReceivableStatusBadge status={receivable.status} /></td>
-                    <td><AgingChip dueDate={receivable.dueDate} /></td>
+                    <td><AgingChip aging={receivable.aging} status={receivable.status} /></td>
                     <td>
                       {/* Iconos y no texto: cuatro acciones escritas empujaban la
                           tabla a lo ancho y tapaban el saldo. El nombre completo

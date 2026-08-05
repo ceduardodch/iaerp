@@ -36,6 +36,7 @@ const overdueReceivable = {
   currency: 'USD',
   // Fecha fija muy en el pasado: el bucket "90+" no debe depender del reloj real de CI.
   dueDate: '2020-01-01',
+  aging: { bucket: '90+' as const, daysOverdue: 2400 },
 }
 
 const partialReceivable = {
@@ -46,6 +47,7 @@ const partialReceivable = {
   openAmount: '120.00',
   currency: 'USD',
   dueDate: '2026-08-15',
+  aging: { bucket: 'CURRENT' as const, daysOverdue: 0 },
 }
 
 const settledReceivable = {
@@ -55,7 +57,9 @@ const settledReceivable = {
   originalAmount: '80.00',
   openAmount: '0.00',
   currency: 'USD',
-  dueDate: '2026-06-01',
+  // La fecha histórica se conserva, pero una cuenta sin saldo no tiene aging pendiente.
+  dueDate: '2020-01-01',
+  aging: null,
 }
 
 const updatedAfterPayment = {
@@ -203,6 +207,8 @@ test('settled receivable is available only when explicitly requested', async ({ 
   const settledRow = page.getByRole('row', {
     name: /\$80,00/,
   })
+  await expect(settledRow.getByRole('cell').nth(5)).toHaveText('—')
+  await expect(settledRow).not.toContainText('Más de 90 días')
   await expect(settledRow.getByRole('button', { name: /Registrar cobro/ })).toBeDisabled()
   await expect(settledRow.getByRole('button', { name: /correo de cobro/i })).toBeDisabled()
 })
@@ -311,7 +317,7 @@ test('bank statement preview registers only the confirmed exact invoice match', 
   page,
 }) => {
   let requestCount = 0
-  await page.route('**/api/v1/receivables/bank-statement', (route) => {
+  await page.route('**/api/v1/finance/bank-statements', (route) => {
     requestCount += 1
     const registered = requestCount > 1
     return route.fulfill({
@@ -319,12 +325,18 @@ test('bank statement preview registers only the confirmed exact invoice match', 
         period: '2026-07',
         fileName: 'estado.txt',
         sourceSha256: 'a'.repeat(64),
+        accountMasked: '****8731',
         totalRows: 3,
         creditRows: 2,
+        debitRows: 1,
         outsidePeriodCreditCount: 0,
+        outsidePeriodDebitCount: 0,
         matchedCount: 1,
         unmatchedCreditCount: 1,
         ignoredDebitCount: 1,
+        payableMatchedCount: 0,
+        unmatchedDebitCount: 1,
+        ruleSuggestionCount: 0,
         alreadyImportedCount: 0,
         manualCorrectionCount: 0,
         matches: [{
@@ -342,6 +354,8 @@ test('bank statement preview registers only the confirmed exact invoice match', 
           detail: registered ? 'Cobro registrado' : 'Lista para registrar',
         }],
         manualCorrections: [],
+        debitMatches: [],
+        debitSuggestions: [],
       },
     })
   })
@@ -355,7 +369,7 @@ test('bank statement preview registers only the confirmed exact invoice match', 
   })
   await page.getByRole('button', { name: 'Revisar movimientos' }).click()
   await expect(page.getByRole('cell', { name: '000000961' })).toBeVisible()
-  await expect(page.getByText('1 coincidencia · 0 correcciones · 1 abono sin aplicar')).toBeVisible()
+  await expect(page.getByText('1 cobro · 0 pagos · 0 gastos sugeridos')).toBeVisible()
   await expectNoA11yViolations(page)
 
   await page.getByRole('button', { name: 'Confirmar 1 cambio' }).click()

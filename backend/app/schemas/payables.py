@@ -1,0 +1,160 @@
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Literal
+
+from pydantic import Field, model_validator
+
+from app.schemas.base import APIModel
+from app.schemas.receivables import PaymentMethod
+
+PayableStatus = Literal["OPEN", "PARTIAL", "SETTLED", "VOIDED"]
+TaxClassification = Literal[
+    "DEDUCTIBLE_PENDING_REVIEW",
+    "DEDUCTIBLE_CONFIRMED",
+    "NON_DEDUCTIBLE",
+]
+EvidenceStatus = Literal["NONE", "ATTACHED", "PRELIMINARY", "FISCAL_XML"]
+
+
+class PayableInstallmentInput(APIModel):
+    due_date: date
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+
+
+class PayableCreate(APIModel):
+    supplier_id: uuid.UUID | None = None
+    supplier_name: str | None = Field(default=None, max_length=300)
+    description: str = Field(min_length=2, max_length=500)
+    category: str = Field(default="Sin clasificar", min_length=2, max_length=120)
+    document_type: Literal["INVOICE", "LIQUIDATION", "DEBIT_NOTE", "OTHER"] = "OTHER"
+    document_number: str | None = Field(default=None, max_length=80)
+    issue_date: date
+    due_date: date | None = None
+    installments: list[PayableInstallmentInput] = Field(default_factory=list)
+    total: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    tax_classification: TaxClassification = "DEDUCTIBLE_PENDING_REVIEW"
+    evidence_status: EvidenceStatus = "NONE"
+    support_reference: str | None = Field(default=None, max_length=300)
+    payment_timing: Literal["PAID_NOW", "PAY_LATER"] = "PAY_LATER"
+    payment_date: date | None = None
+    payment_method: PaymentMethod | None = None
+    payment_reference: str | None = Field(default=None, max_length=300)
+
+    @model_validator(mode="after")
+    def validate_plan(self) -> PayableCreate:
+        if self.installments:
+            installment_total = sum(
+                (item.amount for item in self.installments), Decimal("0.00")
+            )
+            if installment_total != self.total:
+                raise ValueError("Installments must add up to the payable total")
+        if self.payment_timing == "PAID_NOW" and self.installments:
+            raise ValueError("Paid-now expenses cannot define future installments")
+        return self
+
+
+class PayableFromDocumentCreate(APIModel):
+    document_id: uuid.UUID
+
+
+class PayablePaymentCreate(APIModel):
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    payment_date: date
+    method: PaymentMethod | None = None
+    reference: str | None = Field(default=None, max_length=300)
+
+
+class PayableAdjustmentCreate(APIModel):
+    movement_type: Literal["RETENTION", "CREDIT_NOTE"]
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    effective_date: date
+    reference: str = Field(min_length=3, max_length=300)
+
+
+class PayableReversalCreate(APIModel):
+    reason: str = Field(min_length=3, max_length=300)
+    effective_date: date
+
+
+class PaymentScheduleCreate(APIModel):
+    scheduled_date: date
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    priority: Literal["LOW", "NORMAL", "HIGH", "CRITICAL"] = "NORMAL"
+
+
+class PayableRead(APIModel):
+    id: uuid.UUID
+    supplier_id: uuid.UUID | None
+    supplier_name: str | None
+    fiscal_document_id: uuid.UUID | None
+    description: str
+    category: str
+    document_type: str
+    document_number: str | None
+    issue_date: date
+    due_date: date
+    total: Decimal
+    open_amount: Decimal
+    currency: Literal["USD"] = "USD"
+    status: PayableStatus
+    tax_classification: TaxClassification
+    evidence_status: EvidenceStatus
+    support_reference: str | None
+
+
+class PayableMovementRead(APIModel):
+    id: uuid.UUID
+    payable_id: uuid.UUID
+    installment_id: uuid.UUID
+    movement_type: Literal["PAYMENT", "RETENTION", "CREDIT_NOTE", "REVERSAL"]
+    amount: Decimal
+    effective_date: date
+    method: PaymentMethod | None
+    support_reference: str | None
+    reversed_movement_id: uuid.UUID | None
+    actor_id: str
+    created_at: datetime
+
+
+class PaymentScheduleRead(APIModel):
+    id: uuid.UUID
+    payable_id: uuid.UUID
+    scheduled_date: date
+    amount: Decimal
+    priority: Literal["LOW", "NORMAL", "HIGH", "CRITICAL"]
+    status: str
+
+
+class ExpenseRuleCreate(APIModel):
+    name: str = Field(min_length=2, max_length=120)
+    description_pattern: str = Field(min_length=2, max_length=200)
+    account_last4: str | None = Field(default=None, pattern=r"^\d{4}$")
+    amount_min: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=2)
+    amount_max: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=2)
+    category: str = Field(min_length=2, max_length=120)
+    supplier_name: str | None = Field(default=None, max_length=300)
+    tax_classification: TaxClassification = "DEDUCTIBLE_PENDING_REVIEW"
+    active: bool = True
+
+    @model_validator(mode="after")
+    def validate_amount_range(self) -> ExpenseRuleCreate:
+        if (
+            self.amount_min is not None
+            and self.amount_max is not None
+            and self.amount_min > self.amount_max
+        ):
+            raise ValueError("amountMin cannot be greater than amountMax")
+        return self
+
+
+class ExpenseRuleRead(ExpenseRuleCreate):
+    id: uuid.UUID
+
+
+class BankDebitAllocationInput(APIModel):
+    transaction_id: str = Field(min_length=64, max_length=64)
+    payable_id: uuid.UUID
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)

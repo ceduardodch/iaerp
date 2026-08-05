@@ -204,13 +204,16 @@ tools:
       type: object
       additionalProperties: false
       properties:
+        status:
+          type: string
+          enum: [OPEN, PARTIAL, SETTLED, VOIDED]
         dueBefore:
           type: string
           format: date
     outputSchema:
       type: array
       items:
-        $ref: openapi.yaml#/components/schemas/AccountItem
+        $ref: openapi.yaml#/components/schemas/Payable
   - name: payables.create
     effect: write
     scope: payables:write
@@ -225,7 +228,7 @@ tools:
         idempotencyKey:
           $ref: "#/$defs/idempotencyKey"
     outputSchema:
-      $ref: openapi.yaml#/components/schemas/AccountItem
+      $ref: openapi.yaml#/components/schemas/Payable
   - name: payables.create_from_document
     effect: write
     scope: payables:extract
@@ -241,7 +244,7 @@ tools:
         idempotencyKey:
           $ref: "#/$defs/idempotencyKey"
     outputSchema:
-      $ref: openapi.yaml#/components/schemas/Operation
+      $ref: openapi.yaml#/components/schemas/Payable
   - name: payables.schedule_payment
     effect: write
     scope: payables:write
@@ -273,11 +276,11 @@ tools:
           type: string
           format: uuid
         payment:
-          $ref: openapi.yaml#/components/schemas/PaymentInput
+          $ref: openapi.yaml#/components/schemas/SupplierPaymentInput
         idempotencyKey:
           $ref: "#/$defs/idempotencyKey"
     outputSchema:
-      $ref: openapi.yaml#/components/schemas/AccountItem
+      $ref: openapi.yaml#/components/schemas/Payable
   - name: finance.operational_summary
     effect: read
     scope: finance:read

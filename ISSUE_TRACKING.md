@@ -33,6 +33,13 @@
 > transmisión SRI, correo fiscal y nota de crédito. Cada PDF de la Universidad
 > se lee y valida por separado. Falta push y promoción autorizada.
 
+> Corte 2026-08-05: CxP operativa lista en un worktree aislado de `main`.
+> Compras registra pagos directos u obligaciones, abonos e historial. Un mismo
+> TXT cruza créditos con CxC y débitos con CxP, admite reparto manual y deja los
+> gastos sin cruce para confirmación. Sin XML no crea IVA crédito ni ATS. Falta
+> La migración y 13 pruebas dirigidas pasan en PostgreSQL 16. Falta resolver el
+> orden con la migración de campañas e integrar con autorización por `release`.
+
 ---
 
 ## 🎯 Objetivo de este Documento

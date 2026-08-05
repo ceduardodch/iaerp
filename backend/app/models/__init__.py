@@ -23,6 +23,16 @@ from app.models.legal_commercial import (
     ContractVersion,
 )
 from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag, TaxCategory
+from app.models.payables import (
+    BankStatementImport,
+    BankTransaction,
+    BankTransactionAllocation,
+    ExpenseRecognitionRule,
+    Payable,
+    PayableInstallment,
+    PayableMovement,
+    SupplierPaymentSchedule,
+)
 from app.models.platform import (
     AuditEvent,
     AutomationSettings,
@@ -58,6 +68,9 @@ from app.models.tax import (
 
 __all__ = [
     "AuditEvent",
+    "BankStatementImport",
+    "BankTransaction",
+    "BankTransactionAllocation",
     "AwsConsumptionCut",
     "BillingProposal",
     "CommercialContract",
@@ -66,6 +79,7 @@ __all__ = [
     "DocumentArtifact",
     "DocumentRelation",
     "EmissionPoint",
+    "ExpenseRecognitionRule",
     "Establishment",
     "GmailIntegration",
     "EvolutionWhatsAppIntegration",
@@ -82,6 +96,9 @@ __all__ = [
     "OperationRecord",
     "OutboxEvent",
     "Party",
+    "Payable",
+    "PayableInstallment",
+    "PayableMovement",
     "Product",
     "Receivable",
     "ReceivableInstallment",
@@ -107,4 +124,5 @@ __all__ = [
     "TaxReturnDraft",
     "TaxTask",
     "TenantTaxProfile",
+    "SupplierPaymentSchedule",
 ]
