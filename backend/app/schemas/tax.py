@@ -145,6 +145,24 @@ class OwnDocumentsResultRead(APIModel):
     notes: list[str]
 
 
+class HistoricalTaxCandidateRead(APIModel):
+    id: uuid.UUID
+    document_number: str
+    access_key: str
+    issue_date: date
+    customer_name: str
+    subtotal: Decimal
+    tax_total: Decimal
+    total: Decimal
+    approved: bool
+    xml_original_missing: bool = True
+
+
+class HistoricalTaxExceptionApprove(APIModel):
+    confirmed: bool
+    evidence_reference: str = Field(min_length=8, max_length=500)
+
+
 class FiscalDocumentRead(APIModel):
     id: uuid.UUID
     direction: str

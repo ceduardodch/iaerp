@@ -162,6 +162,27 @@
   padding: 0 1rem 1rem;
 }
 
+.tax-exception-approval {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.tax-exception-approval label {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.tax-exception-approval input {
+  min-height: 2.75rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+  background: var(--paper);
+  color: var(--ink);
+}
+
 .tax-document-dossier {
   padding: 1rem;
   border-top: 1px solid var(--line);

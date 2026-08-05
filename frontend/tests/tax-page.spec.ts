@@ -6,6 +6,7 @@ import { mockDashboardEndpoints } from './dashboard-mocks'
 // preliminares. La API va mockeada: la pantalla no calcula nada por su cuenta.
 
 const PERIOD_ID = '33333333-3333-4333-8333-333333333333'
+const HISTORICAL_ID = '88888888-8888-4888-8888-888888888888'
 
 const summary = {
   periodId: PERIOD_ID,
@@ -60,6 +61,7 @@ const summary = {
 }
 
 async function mockApi(page: Page) {
+  let historicalApproved = false
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
@@ -115,6 +117,43 @@ async function mockApi(page: Page) {
       },
     ],
   }))
+  await page.route(
+    `**/api/v1/tax/periods/${PERIOD_ID}/historical-tax-candidates`,
+    (route) => route.fulfill({
+      json: [{
+        id: HISTORICAL_ID,
+        documentNumber: '706768646',
+        accessKey: '1105202601179311319200120010017067686461391703815',
+        issueDate: '2026-05-11',
+        customerName: 'UNIVERSIDAD DEMO',
+        subtotal: '1836.00',
+        taxTotal: '275.40',
+        total: '2111.40',
+        approved: historicalApproved,
+        xmlOriginalMissing: true,
+      }],
+    }),
+  )
+  await page.route(
+    `**/api/v1/tax/periods/${PERIOD_ID}/historical-tax-candidates/${HISTORICAL_ID}/approve`,
+    async (route) => {
+      historicalApproved = true
+      await route.fulfill({
+        json: {
+          id: '99999999-9999-4999-8999-999999999999',
+          direction: 'EMITIDO',
+          docType: 'FACTURA',
+          issueDate: '2026-05-11',
+          counterpartyName: 'UNIVERSIDAD DEMO',
+          subtotal: '1836.00',
+          taxTotal: '275.40',
+          total: '2111.40',
+          paymentMethods: ['20'],
+          isPreliminary: false,
+        },
+      })
+    },
+  )
   await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/ats`, (route) => route.fulfill({
     json: {
       id: '77777777-7777-4777-8777-777777777777',
@@ -207,6 +246,22 @@ test('genera el ATS y ofrece su descarga privada', async ({ page }) => {
     'href',
     'https://private.example/AT112025.zip',
   )
+})
+
+test('aprueba un RIDE histórico solo para IVA y ATS con respaldo bancario', async ({ page }) => {
+  const panel = page
+    .getByRole('heading', { name: 'Excepciones ATS · XML original faltante' })
+    .locator('xpath=ancestor::section[1]')
+  await expect(panel).toContainText('706768646')
+  await expect(panel).toContainText('1836.00')
+  const approve = page.getByRole('button', { name: 'Aprobar excepción IVA/ATS' })
+  await expect(approve).toBeDisabled()
+  await page.getByLabel('Respaldo de transferencia bancaria').fill(
+    'Estado bancario mayo 2026, transferencia neta respaldada',
+  )
+  page.once('dialog', (dialog) => dialog.accept())
+  await approve.click()
+  await expect(page.getByText('Aprobada para ATS')).toBeVisible()
 })
 
 test('exige confirmación antes de dejar el periodo listo para declarar', async ({ page }) => {

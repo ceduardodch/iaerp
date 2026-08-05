@@ -27,6 +27,8 @@ from app.schemas.tax import (
     DossierMovementRead,
     DossierRetentionRead,
     FiscalDocumentRead,
+    HistoricalTaxCandidateRead,
+    HistoricalTaxExceptionApprove,
     IngestResultRead,
     IvaSummaryRead,
     MonthlySalesTrendRead,
@@ -47,7 +49,7 @@ from app.services.tax import annexes as annexes_service
 from app.services.tax import bulk as bulk_service
 from app.services.tax import dossier as dossier_service
 from app.services.tax import evidence as evidence_service
-from app.services.tax import form_fields, own_documents
+from app.services.tax import form_fields, historical_exception, own_documents
 from app.services.tax import ingest as ingest_service
 from app.services.tax import iva as iva_service
 from app.services.tax import periods as periods_service
@@ -509,6 +511,68 @@ async def post_period_import_issued(
         action="tax.period.issued_imported",
         entity_type="tax_period",
         callback=run,
+    )
+
+
+@router.get(
+    "/periods/{period_id}/historical-tax-candidates",
+    response_model=list[HistoricalTaxCandidateRead],
+)
+async def get_historical_tax_candidates(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:read"))],
+    period_id: uuid.UUID,
+) -> list[HistoricalTaxCandidateRead]:
+    """RIDE autorizados que pueden aprobarse como excepción IVA/ATS."""
+    period = await periods_service.get_period(session, context, period_id=period_id)
+    candidates = await historical_exception.list_candidates(
+        session, context, period=period
+    )
+    return [HistoricalTaxCandidateRead.model_validate(candidate) for candidate in candidates]
+
+
+@router.post(
+    "/periods/{period_id}/historical-tax-candidates/{sales_document_id}/approve",
+    response_model=FiscalDocumentRead,
+)
+async def post_historical_tax_candidate_approve(
+    payload: HistoricalTaxExceptionApprove,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+    period_id: uuid.UUID,
+    sales_document_id: uuid.UUID,
+) -> dict[str, object]:
+    """Aprueba una excepción ATS; no crea un XML SRI ni toca Cartera."""
+
+    async def approve() -> tuple[str, dict[str, object]]:
+        period = await periods_service.get_period(session, context, period_id=period_id)
+        fiscal = await historical_exception.approve_candidate(
+            session,
+            context,
+            period=period,
+            sales_document_id=sales_document_id,
+            confirmed=payload.confirmed,
+            evidence_reference=payload.evidence_reference,
+        )
+        await periods_service.refresh_period_statuses(session, context)
+        response = FiscalDocumentRead.model_validate(fiscal)
+        return str(fiscal.id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax.historical_exception.approve",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "periodId": str(period_id),
+            "salesDocumentId": str(sales_document_id),
+            "confirmed": payload.confirmed,
+            "evidenceReference": payload.evidence_reference,
+        },
+        action="tax.historical_exception.approved",
+        entity_type="fiscal_document",
+        callback=approve,
     )
 
 

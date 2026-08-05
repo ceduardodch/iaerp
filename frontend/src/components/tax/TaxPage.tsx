@@ -56,6 +56,19 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   LIQUIDACION: 'Liquidación',
 }
 
+type HistoricalTaxCandidate = {
+  id: string
+  documentNumber: string
+  accessKey: string
+  issueDate: string
+  customerName: string
+  subtotal: string
+  taxTotal: string
+  total: string
+  approved: boolean
+  xmlOriginalMissing: boolean
+}
+
 /**
  * Historia del comprobante: qué retención le hicieron, qué cobros entraron (con
  * su referencia bancaria si vinieron del extracto) y cuánto falta.
@@ -140,6 +153,7 @@ export function TaxPage({ token }: { token: string }) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [applyRetentions, setApplyRetentions] = useState(false)
   const [openDossierId, setOpenDossierId] = useState<string | null>(null)
+  const [exceptionEvidence, setExceptionEvidence] = useState<Record<string, string>>({})
 
   const periodsQuery = useQuery({
     queryKey: ['tax', 'periods'],
@@ -163,6 +177,15 @@ export function TaxPage({ token }: { token: string }) {
     queryKey: ['tax', 'documents', activePeriodId],
     queryFn: () =>
       apiRequest<TaxFiscalDocument[]>(token, `/tax/periods/${activePeriodId}/documents`),
+    enabled: Boolean(activePeriodId),
+  })
+
+  const historicalCandidatesQuery = useQuery({
+    queryKey: ['tax', 'historical-tax-candidates', activePeriodId],
+    queryFn: () => apiRequest<HistoricalTaxCandidate[]>(
+      token,
+      `/tax/periods/${activePeriodId}/historical-tax-candidates`,
+    ),
     enabled: Boolean(activePeriodId),
   })
 
@@ -214,6 +237,33 @@ export function TaxPage({ token }: { token: string }) {
       setGeneratedAnnex(annex)
     },
   })
+
+  const approveHistoricalException = useMutation({
+    mutationFn: ({ candidateId, evidenceReference }: { candidateId: string; evidenceReference: string }) =>
+      apiRequest<TaxFiscalDocument>(
+        token,
+        `/tax/periods/${activePeriodId}/historical-tax-candidates/${candidateId}/approve`,
+        {
+          method: 'POST',
+          headers: { 'Idempotency-Key': idempotencyKey('tax-historical-exception') },
+          body: JSON.stringify({ confirmed: true, evidenceReference }),
+        },
+      ),
+    onSuccess: () => {
+      setGeneratedAnnex(null)
+      void queryClient.invalidateQueries({ queryKey: ['tax'] })
+    },
+  })
+
+  function confirmHistoricalException(candidate: HistoricalTaxCandidate) {
+    const evidenceReference = exceptionEvidence[candidate.id]?.trim() ?? ''
+    if (evidenceReference.length < 8) return
+    const confirmed = window.confirm(
+      `¿Aprobar la factura ${candidate.documentNumber} solo para IVA y ATS?\n\n` +
+      'El XML original seguirá marcado como faltante. No se enviará la factura al SRI ni se tocará Cartera.',
+    )
+    if (confirmed) approveHistoricalException.mutate({ candidateId: candidate.id, evidenceReference })
+  }
 
   // Trae las ventas desde las facturas que IAERP ya emitió y autorizó, para no
   // tener que descargarlas del portal y volverlas a subir.
@@ -531,6 +581,62 @@ export function TaxPage({ token }: { token: string }) {
                 ))}
               </ul>
             </div>
+          ) : null}
+
+          {(historicalCandidatesQuery.data ?? []).length > 0 ? (
+            <ErpPanel title="Excepciones ATS · XML original faltante">
+              <p className="fine-print">
+                Solo para facturas reales autorizadas con RIDE verificado. La aprobación no crea un XML SRI,
+                no reenvía la factura y no afecta Cartera.
+              </p>
+              <div className="tax-document-list">
+                {historicalCandidatesQuery.data?.map((candidate) => (
+                  <article className="tax-document-card" key={candidate.id}>
+                    <header className="tax-document-header">
+                      <div>
+                        <span className="tax-document-direction">Emitido</span>
+                        <h3>Factura · {candidate.issueDate}</h3>
+                        <p>{candidate.customerName} · {candidate.documentNumber}</p>
+                      </div>
+                      <ErpStatusBadge tone={candidate.approved ? 'success' : 'warning'}>
+                        {candidate.approved ? 'Aprobada para ATS' : 'XML original faltante'}
+                      </ErpStatusBadge>
+                    </header>
+                    <dl className="tax-document-amounts">
+                      <div><dt>Base</dt><dd>${candidate.subtotal}</dd></div>
+                      <div><dt>IVA</dt><dd>${candidate.taxTotal}</dd></div>
+                      <div className="tax-document-total"><dt>Total</dt><dd>${candidate.total}</dd></div>
+                    </dl>
+                    {!candidate.approved ? (
+                      <div className="tax-exception-approval">
+                        <label htmlFor={`exception-${candidate.id}`}>
+                          Respaldo de transferencia bancaria
+                        </label>
+                        <input
+                          id={`exception-${candidate.id}`}
+                          value={exceptionEvidence[candidate.id] ?? ''}
+                          placeholder="Ej.: estado bancario, fecha, referencia y valor neto"
+                          onChange={(event) => setExceptionEvidence((current) => ({
+                            ...current,
+                            [candidate.id]: event.target.value,
+                          }))}
+                        />
+                        <ErpButton
+                          variant="primary"
+                          disabled={approveHistoricalException.isPending || (exceptionEvidence[candidate.id]?.trim().length ?? 0) < 8}
+                          onClick={() => confirmHistoricalException(candidate)}
+                        >
+                          Aprobar excepción IVA/ATS
+                        </ErpButton>
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+              {approveHistoricalException.error ? (
+                <p className="form-error" role="alert">{approveHistoricalException.error.message}</p>
+              ) : null}
+            </ErpPanel>
           ) : null}
 
           <ErpPanel
