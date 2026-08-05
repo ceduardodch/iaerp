@@ -14,9 +14,10 @@ porque el ADR 0012 prohíbe rellenar una forma de pago inventada.
 import uuid
 from datetime import date
 from decimal import Decimal
+from xml.etree.ElementTree import fromstring
 
-from app.models.tax import FiscalDocument, FiscalDocumentTax, TaxPeriod
-from app.services.tax.ats import PAYMENT_METHOD_THRESHOLD
+from app.models.tax import FiscalDocument, FiscalDocumentTax, FiscalRetention, TaxPeriod
+from app.services.tax.ats import PAYMENT_METHOD_THRESHOLD, build_ats_xml
 from app.services.tax.ats_builder import build_ats_input
 
 TENANT = uuid.UUID("11111111-1111-4111-8111-111111111111")
@@ -50,6 +51,40 @@ def _purchase(
         tax_total=iva,
         total=base + iva,
         payment_methods=payment_methods,
+        is_preliminary=False,
+    )
+    tax = FiscalDocumentTax(
+        tenant_id=TENANT,
+        fiscal_document_id=document.id,
+        sri_tax_code="4",
+        tax_bracket="GRAVADO",
+        rate=Decimal("15.00"),
+        base_amount=base,
+        tax_amount=iva,
+    )
+    return document, tax
+
+
+def _sale() -> tuple[FiscalDocument, FiscalDocumentTax]:
+    """Factura emitida realista para fijar los códigos y totales del ATS."""
+    base = Decimal("5769.00")
+    iva = Decimal("865.35")
+    document = FiscalDocument(
+        id=uuid.uuid4(),
+        tenant_id=TENANT,
+        direction="EMITIDO",
+        doc_type="FACTURA",
+        authorization_number="1805202601179999999900120010017067686471234567818",
+        issue_date=date(2026, 5, 18),
+        establishment_code="001",
+        emission_point_code="001",
+        sequential="706768647",
+        counterparty_identification="1790000000001",
+        counterparty_name="CLIENTE DEMO",
+        subtotal=base,
+        tax_total=iva,
+        total=base + iva,
+        payment_methods=["01"],
         is_preliminary=False,
     )
     tax = FiscalDocumentTax(
@@ -154,3 +189,55 @@ def test_one_purchase_without_evidence_does_not_hide_the_others() -> None:
     assert len(result.missing) == 1
     assert "001-010-000008608" in result.missing[0]
     assert len(result.data.purchases) == 2
+
+
+def test_sale_uses_ats_code_18_and_establishment_total_matches_header() -> None:
+    """Regresión del rechazo SRI: total de ventas no puede sumar contra cero."""
+    document, tax = _sale()
+    retention_document_id = uuid.uuid4()
+    retentions = [
+        FiscalRetention(
+            tenant_id=TENANT,
+            fiscal_document_id=retention_document_id,
+            kind="IVA",
+            sri_code="2",
+            percentage=Decimal("30.00"),
+            base_amount=Decimal("865.35"),
+            retained_amount=Decimal("259.61"),
+            supporting_document_number="001001706768647",
+        ),
+        FiscalRetention(
+            tenant_id=TENANT,
+            fiscal_document_id=retention_document_id,
+            kind="RENTA",
+            sri_code="312",
+            percentage=Decimal("2.00"),
+            base_amount=Decimal("5769.00"),
+            retained_amount=Decimal("115.38"),
+            supporting_document_number="001001706768647",
+        ),
+    ]
+    result = build_ats_input(
+        period=TaxPeriod(
+            tenant_id=TENANT,
+            year=2026,
+            month=5,
+            obligation_type="IVA",
+            status="ABIERTO",
+        ),
+        identification="1799999999001",
+        legal_name="EMPRESA DEMO",
+        documents=[document],
+        taxes=[tax],
+        retentions=retentions,
+    )
+
+    assert result.missing == []
+    root = fromstring(build_ats_xml(result.data))
+    assert root.findtext("totalVentas") == "5769.00"
+    assert root.findtext("ventas/detalleVentas/tipoComprobante") == "18"
+    assert root.findtext("ventas/detalleVentas/baseImpGrav") == "5769.00"
+    assert root.findtext("ventas/detalleVentas/montoIva") == "865.35"
+    assert root.findtext("ventas/detalleVentas/valorRetIva") == "259.61"
+    assert root.findtext("ventas/detalleVentas/valorRetRenta") == "115.38"
+    assert root.findtext("ventasEstablecimiento/ventaEst/ventasEstab") == "5769.00"

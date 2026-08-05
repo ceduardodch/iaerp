@@ -22,9 +22,18 @@ from app.services.tax.ats import (
 
 _ADD = {"FACTURA", "LIQUIDACION", "NOTA_DEBITO"}
 _SUBTRACT = {"NOTA_CREDITO"}
-_DOC_CODES = {
+_PURCHASE_DOC_CODES = {
     "FACTURA": "01",
     "LIQUIDACION": "03",
+    "NOTA_CREDITO": "04",
+    "NOTA_DEBITO": "05",
+}
+
+# En ventas, una factura no usa el ``codDoc`` 01 del XML fuente. La tabla 4
+# del ATS exige 18 para documentos autorizados usados en ventas, excepto N/C y
+# N/D. Esos documentos conservan sus códigos propios.
+_SALE_DOC_CODES = {
+    "FACTURA": "18",
     "NOTA_CREDITO": "04",
     "NOTA_DEBITO": "05",
 }
@@ -65,6 +74,12 @@ def _series(document: FiscalDocument) -> str | None:
     )
 
 
+def _normalized_document_number(value: str | None) -> str | None:
+    """Iguala ``001001...`` y ``001-001-...`` sin inventar el número."""
+    digits = "".join(char for char in value or "" if char.isdigit())
+    return digits or None
+
+
 def build_ats_input(
     *,
     period: TaxPeriod,
@@ -90,8 +105,9 @@ def build_ats_input(
     sales_by_establishment: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     retained_by_support: dict[str, list[FiscalRetention]] = defaultdict(list)
     for retention in retentions:
-        if retention.supporting_document_number:
-            retained_by_support[retention.supporting_document_number].append(retention)
+        supporting_number = _normalized_document_number(retention.supporting_document_number)
+        if supporting_number:
+            retained_by_support[supporting_number].append(retention)
 
     for document in documents:
         if document.doc_type not in _ADD | _SUBTRACT:
@@ -102,7 +118,16 @@ def build_ats_input(
                 "carga su XML autorizado."
             )
             continue
-        doc_code = _DOC_CODES[document.doc_type]
+        doc_codes = (
+            _PURCHASE_DOC_CODES if document.direction == "RECIBIDO" else _SALE_DOC_CODES
+        )
+        doc_code = doc_codes.get(document.doc_type)
+        if doc_code is None:
+            missing.append(
+                f"{document.doc_type} {document.direction.lower()} del "
+                f"{_date(document.issue_date)} no tiene tipo de comprobante ATS soportado."
+            )
+            continue
         sign = Decimal("-1") if document.doc_type in _SUBTRACT else Decimal("1")
         document_taxes = by_document.get(document.id, [])
 
@@ -186,7 +211,8 @@ def build_ats_input(
             elif tax.tax_bracket == "GRAVADO":
                 sale.base_taxed += sign * tax.base_amount
             sale.iva_amount += sign * tax.tax_amount
-        for retention in retained_by_support.get(_series(document) or "", []):
+        document_number = _normalized_document_number(_series(document))
+        for retention in retained_by_support.get(document_number or "", []):
             if retention.kind == "IVA":
                 sale.withheld_iva += retention.retained_amount
             elif retention.kind == "RENTA":
