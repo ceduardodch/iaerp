@@ -7,6 +7,17 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Corrección OIDC de CxP lista en copia aislada de `origin/main`: 2026-08-05
+  `America/Guayaquil`. Producción responde `403 Missing scopes:
+  payables:read` porque el cliente `iaerp-web` no recibió los scopes de CxP al
+  integrar la función. El realm y el configurador idempotente ahora asignan
+  `payables:read` y `payables:write`; el detector de cambios de CI incluye
+  `infra/keycloak/` en OIDC, configuración de despliegue y despliegue. El E2E
+  inicia sesión con PKCE y abre Compras sin alertas en escritorio y móvil.
+  Pasan Ruff, mypy, lint, build, validación de shell/JSON/Compose, 8 pruebas
+  OIDC de backend y 4 recorridos Playwright OIDC. Falta revisión independiente,
+  integración por `release -> PR -> main` y despliegue; producción conserva el
+  403 hasta completar esas puertas.
 - CxP operativa y conciliación bancaria compartida listas en un worktree
   aislado de `origin/main`: 2026-08-05 `America/Guayaquil`. Compras permite
   registrar `Pagado ahora` o `Pagar después`, proveedor y factura opcionales,

@@ -52,6 +52,7 @@
 | Codex (este hilo, contratos simples) | ✅ COMPLETA | Contratos, evidencia Gmail/PDF, preparación de cobros y opt-in de cobranza; validación local verde | 2026-08-02 |
 | Codex (este hilo, factura histórica PDF) | ✅ COMPLETA | RIDE Sky como venta histórica para Facturas/reportes, con XML faltante y sin efecto en ATS, IVA o Cartera | 2026-08-03 |
 | Codex (este hilo, CxP) | ✅ COMPLETA | PR #31: fix de aging agregado; saldadas/anuladas muestran `—` y las abiertas usan el cálculo del servidor; nueva CI y revisión pendientes | 2026-08-05 |
+| Codex (este hilo, scopes CxP) | 🟡 LISTA PARA REVISIÓN | Corrige `403 payables:read`: scopes OIDC web, despliegue de cambios Keycloak y E2E PKCE hasta Compras; falta revisión independiente e integración | 2026-08-05 |
 | Codex (este hilo, campañas Meta) | ✅ EN MAIN | Preparar/activar/pausar por outbox con reintentos; corte y tope por tenant; variantes, Insights, webhook firmado con cuota durable, historial, atribución y calificación; pendiente Meta real y publicación autorizada | 2026-08-04 |
 | Claude (envío CRM) | ✅ EN MAIN | El modal del kanban ya despacha el correo por `/messages` y agenda el seguimiento; cierre del recordatorio por endpoint propio | 2026-08-05 |
 
