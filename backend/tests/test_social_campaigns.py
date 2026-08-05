@@ -213,7 +213,7 @@ async def test_concurrent_campaign_activations_cannot_exceed_tenant_budget(clien
             "pageId": "page-concurrent",
             "defaultLeadFormId": "form-concurrent",
             "accessToken": "meta-access-token-for-concurrency-tests",
-            "appSecret": "app-secret-for-concurrency-tests",
+            "appSecret": "app-secret-for-concurrency-tests",  # pragma: allowlist secret
             "verifyToken": "verify-token-for-concurrency-tests",
         },
     )
@@ -303,7 +303,7 @@ async def test_meta_campaign_is_prepared_paused_and_requires_confirmed_activatio
             "instagramActorId": "ig-1",
             "defaultLeadFormId": "instant-form-1",
             "accessToken": "meta-access-token-for-tests-123",
-            "appSecret": "app-secret-for-tests",
+            "appSecret": "app-secret-for-tests",  # pragma: allowlist secret
             "verifyToken": "verify-token-for-tests",
         },
     )
@@ -455,7 +455,7 @@ async def test_meta_campaign_is_prepared_paused_and_requires_confirmed_activatio
             "instagramActorId": "ig-1",
             "defaultLeadFormId": "instant-form-1",
             "accessToken": "rotated-meta-access-token-for-tests",
-            "appSecret": "rotated-app-secret-for-tests",
+            "appSecret": "rotated-app-secret-for-tests",  # pragma: allowlist secret
             "verifyToken": "rotated-verify-token-for-tests",
         },
     )
@@ -617,7 +617,7 @@ async def test_meta_campaign_is_prepared_paused_and_requires_confirmed_activatio
             "pageId": "different-page",
             "defaultLeadFormId": "different-form",
             "accessToken": "different-meta-access-token-for-tests",
-            "appSecret": "different-app-secret-for-tests",
+            "appSecret": "different-app-secret-for-tests",  # pragma: allowlist secret
             "verifyToken": "different-verify-token-for-tests",
         },
     )
@@ -818,7 +818,7 @@ async def test_meta_webhook_creates_attributed_lead_once(client, monkeypatch):
             "pageId": "page-1",
             "defaultLeadFormId": "instant-form-1",
             "accessToken": "meta-access-token-for-tests-123",
-            "appSecret": "app-secret-for-tests",
+            "appSecret": "app-secret-for-tests",  # pragma: allowlist secret
             "verifyToken": "verify-token-for-tests",
         },
     )

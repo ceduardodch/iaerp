@@ -148,12 +148,17 @@ test('click en card abre modal de detalle sin perder filtros ni contexto', async
   await page.getByRole('button', { name: 'Ver detalles de ERP para Andes Café' }).click()
   const modal = page.getByRole('dialog', { name: 'ERP para Andes Café' })
   await expect(modal).toBeVisible()
-  await expect(modal.getByText('l1@demo.ec')).toBeVisible()
+  // El correo también aparece en el botón de envío ("Enviar a l1@demo.ec"),
+  // así que la aserción apunta a la ficha del contacto, que es lo que verifica.
+  await expect(
+    modal.getByRole('region', { name: 'Datos del contacto' }).getByText('l1@demo.ec')
+  ).toBeVisible()
   await expect(modal.getByText('Primera llamada')).toBeVisible()
   await expectNoA11yViolations(page)
 
   // Registrar actividad desde el modal
-  await modal.getByLabel('Asunto').fill('Nueva nota')
+  // `exact` distingue el asunto de la actividad del "Asunto del correo".
+  await modal.getByLabel('Asunto', { exact: true }).fill('Nueva nota')
   await modal.getByRole('button', { name: 'Registrar actividad' }).click()
   await expect(modal.getByText('Nueva nota', { exact: true })).toBeVisible()
 

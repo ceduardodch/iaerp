@@ -197,7 +197,7 @@ export function LeadDetailModal({
           {lead.party.email ? (
             <form className="message-form" onSubmit={submitMessage}>
               <label>
-                Asunto
+                Asunto del correo
                 <input name="subject" required maxLength={200} placeholder="pregunta rápida sobre su AWS" />
               </label>
               <label>
