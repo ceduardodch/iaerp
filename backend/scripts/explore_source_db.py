@@ -132,10 +132,10 @@ async def profile_table(url_string: str, table_name: str) -> None:
                 qcol = quote(name)
                 try:
                     filled = await conn.scalar(
-                        text(f"SELECT COUNT({qcol}) FROM {qualified}")  # noqa: S608
+                        text(f"SELECT COUNT({qcol}) FROM {qualified}")  # nosec B608
                     ) or 0
                     distinct = await conn.scalar(
-                        text(f"SELECT COUNT(DISTINCT {qcol}) FROM {qualified}")  # noqa: S608
+                        text(f"SELECT COUNT(DISTINCT {qcol}) FROM {qualified}")  # nosec B608
                     ) or 0
                 except Exception:
                     filled, distinct = 0, 0
@@ -149,8 +149,8 @@ async def profile_table(url_string: str, table_name: str) -> None:
                     samples = "· oculto (dato personal) ·"
                 elif 0 < distinct <= MAX_DISTINCT_TO_SHOW:
                     rows = await conn.execute(
-                        text(  # noqa: S608
-                            f"SELECT DISTINCT {qcol} FROM {qualified} "
+                        text(
+                            f"SELECT DISTINCT {qcol} FROM {qualified} "  # nosec B608
                             f"WHERE {qcol} IS NOT NULL LIMIT {MAX_DISTINCT_TO_SHOW}"
                         )
                     )
