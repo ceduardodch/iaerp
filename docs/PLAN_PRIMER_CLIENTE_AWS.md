@@ -46,20 +46,64 @@ donde el negocio funciona; debajo de cierto monto no vale la conversación.
 **El negocio B es el mejor caso y estaba fuera de la lista.** Una universidad no
 es CIIU J62, así que las 157 nunca la habrían incluido.
 
-### 1.2 Dos prioridades que salen de esto
+### 1.2 El caso de éxito YA EXISTE y es el activo más fuerte
 
-**Escribir el caso de la Universidad Andina.** Una página: tenían ataques
-constantes, se implementó WAF gestionado, se contuvieron. Con números si los
-autorizan. Es la mejor herramienta de venta disponible y sin ella cada
-conversación empieza de cero.
+`04_Marketing/CasoExito_BTOB_WAF_UASB.pdf` — 6 páginas, con arquitectura,
+testimonio nombrado y resultados medidos:
 
-**Pedir una presentación, no una referencia.** El sector educativo es el más
-referencial que existe: los responsables de TI de las universidades se conocen,
-van a los mismos foros, y todos saben que si atacaron a una, siguen ellos. Una
-presentación con nombre y correo a su par en otra universidad vale más que las
-157 empresas juntas.
+| Dato | Valor |
+|---|---|
+| Ataques bloqueados en 30 días | **110.000** |
+| Incidentes en producción | **0** |
+| Reducción de superficie con geo-blocking | 40% |
+| Vectores | 45% escáneres · 35% SQLi/XSS · 20% IPs de mala reputación |
+| Testimonio | Juan Carlos Paladines, Coordinador de Infraestructura, UASB |
 
-### 1.3 Un hilo indirecto
+**El titular para todo el segmento educación es ese número**, no "somos partner
+de AWS":
+
+> «110.000 ataques en un mes contra una universidad ecuatoriana, todos
+> bloqueados antes de llegar al servidor. **¿Sabes cuántos está recibiendo la
+> tuya?»**
+
+La última pregunta es el gancho: no la saben responder, y por eso piden la
+reunión.
+
+#### Dos cosas que corregir ANTES de publicarlo
+
+**1. Dice "Confidencial" en cada página, y publica detalle operativo del
+cliente:** el subdominio exacto, la marca del firewall on-premise, el nombre del
+coordinador, y que ese servicio recibe 110.000 ataques al mes. Para un atacante
+eso es un mapa: qué objetivo vale la pena, qué hay detrás y quién lo opera.
+
+Antes de difundirlo hace falta **autorización escrita de la UASB** para una
+versión pública, y conviene quitar el subdominio y la marca del firewall. Los
+números y la arquitectura genérica venden igual; el detalle específico no suma
+venta y sí suma riesgo al cliente. Quien vende seguridad no puede publicar así
+la infraestructura de un tercero.
+
+**2. La llamada a la acción por comentarios de LinkedIn está costando leads.**
+Es manual y sin rastro (nada llega al CRM, no hay atribución), pero sobre todo
+es contraproducente para este tema: pedirle a alguien que **comente en público**
+que necesita ayuda de ciberseguridad es pedirle que lo admita delante de su jefe
+y su competencia. En seguridad la gente mira, guarda y no comenta.
+
+Un formulario privado convierte mucho mejor. **Y no hay que construirlo
+todavía:** `/crm/leads/captures` exige `leads:write`, así que un formulario web
+no puede postear directo — habría que abrir un endpoint público, que es
+superficie de ataque nueva en el ERP de producción. Para decenas de leads, un
+formulario externo que avise por correo y se pase al CRM resuelve hoy. Si el
+volumen lo justifica, ahí sí se construye bien.
+
+### 1.3 Pedir una presentación, no una referencia
+
+El sector educativo es el más referencial que existe: los responsables de TI de
+las universidades se conocen, van a los mismos foros, y todos saben que si
+atacaron a una, siguen ellos. Una presentación con nombre y correo a su par en
+otra universidad vale más que las 157 empresas juntas — y el testimonio de
+Paladines abre esa puerta.
+
+### 1.4 Un hilo indirecto
 
 Trantotech le vende a OCP. La operación de AWS ya está, indirectamente, debajo
 de un cliente industrial grande. Vale preguntarle a Trantotech por ese mundo —

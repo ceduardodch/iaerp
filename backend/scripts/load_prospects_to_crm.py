@@ -98,11 +98,22 @@ PITCH = {
         "Pregunta de calificación: ¿cuánto pagan de AWS al mes? "
         "(referencia: Infinit $600, Trantotech $1.800)"
     ),
+    # Los números salen del caso de éxito real de la UASB, no de un folleto.
+    # El gancho es la ÚLTIMA pregunta: no la saben responder, y por eso piden
+    # la reunión.
     "educacion": (
-        "Contención de ataques con WAF gestionado, como en la Universidad "
-        "Andina.\n\n"
-        "Pedir primero una conversación sobre qué están viendo hoy en sus "
-        "sistemas públicos. NO ofrecer pentesting en el primer contacto."
+        "APERTURA:\n"
+        "«110.000 ataques en un mes contra una universidad ecuatoriana, todos "
+        "bloqueados antes de llegar al servidor. ¿Sabes cuántos está recibiendo "
+        "la tuya?»\n\n"
+        "RESPALDO: caso UASB — 110.000 ataques bloqueados en 30 días, 0 "
+        "incidentes en producción, 40% menos superficie con geo-blocking. "
+        "Testimonio de Juan Carlos Paladines, Coordinador de Infraestructura.\n\n"
+        "PEDIR: una conversación sobre qué están viendo hoy en sus sistemas "
+        "públicos. NO ofrecer pentesting en el primer contacto — eso viene "
+        "después, cuando ya hay confianza.\n\n"
+        "OJO: usar la versión PÚBLICA del caso, sin el subdominio ni la marca "
+        "del firewall del cliente, y con la autorización escrita de la UASB."
     ),
 }
 
