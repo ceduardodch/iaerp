@@ -19,6 +19,54 @@ Por eso "primer cliente" significa *el primero venido de un esfuerzo deliberado*
 no el primero de la historia. Un plan de arranque desde cero sería el plan
 equivocado.
 
+### 1.1 Los clientes actuales revelan DOS negocios, no uno
+
+Al mirar la cartera real aparece una separación que este plan mezclaba:
+
+| | **A — Brazo de AWS** | **B — Seguridad gestionada** |
+|---|---|---|
+| Clientes hoy | Trantotech (AWS $1.800/mes), Infinit (AWS $600/mes) | Universidad Andina |
+| Qué es el cliente | empresa de software que revende a clientes finales | institución con superficie pública expuesta |
+| Su dolor | no quiere operar infraestructura | **la están atacando ahora** |
+| Servicio | operación de AWS, guardias, control de costo | WAF gestionado, pentesting, code review |
+| Ingreso | recurrente, atado a su gasto en AWS | mayor por cliente, pero depende del momento |
+| Segmento | CIIU J62/J63 — **157 empresas** | educación CIIU P85 — **125 con 25+ empleados** |
+
+**El negocio A ya está validado: dos de tres clientes.** El mensaje no es una
+hipótesis de marketing, es cómo ya funciona con Trantotech e Infinit:
+
+> "Operamos el AWS de empresas de software que venden a sus clientes: ustedes
+> construyen, nosotros corremos la infraestructura con guardias y control de
+> costo. ¿Quién les opera hoy?"
+
+Y da un **filtro de calificación** que antes no existía: preguntar cuánto pagan
+de AWS al mes. Con Infinit en $600 y Trantotech en $1.800 ya se conoce el rango
+donde el negocio funciona; debajo de cierto monto no vale la conversación.
+
+**El negocio B es el mejor caso y estaba fuera de la lista.** Una universidad no
+es CIIU J62, así que las 157 nunca la habrían incluido.
+
+### 1.2 Dos prioridades que salen de esto
+
+**Escribir el caso de la Universidad Andina.** Una página: tenían ataques
+constantes, se implementó WAF gestionado, se contuvieron. Con números si los
+autorizan. Es la mejor herramienta de venta disponible y sin ella cada
+conversación empieza de cero.
+
+**Pedir una presentación, no una referencia.** El sector educativo es el más
+referencial que existe: los responsables de TI de las universidades se conocen,
+van a los mismos foros, y todos saben que si atacaron a una, siguen ellos. Una
+presentación con nombre y correo a su par en otra universidad vale más que las
+157 empresas juntas.
+
+### 1.3 Un hilo indirecto
+
+Trantotech le vende a OCP. La operación de AWS ya está, indirectamente, debajo
+de un cliente industrial grande. Vale preguntarle a Trantotech por ese mundo —
+**no para venderle a OCP directo**, que sería pasarle por encima al cliente,
+sino para ver si hay más empresas de software sirviendo a industria pesada,
+donde los tickets son otros.
+
 ## 2. El universo, medido (no estimado)
 
 Perfilado el 2026-08-04 sobre el registro societario público
@@ -34,7 +82,20 @@ Perfilado el 2026-08-04 sobre el registro societario público
 | Segmento objetivo | Empresas | Con dominio propio |
 |---|---:|---:|
 | Tecnología (CIIU J62/J63), 10+ empleados | **157** | **131** |
+| Educación (CIIU P85), 25+ empleados | **125** | — |
 | Sectores que consumen nube, 25+ empleados | 6.282 | 4.196 |
+
+**Dentro de las 157, el orden importa tanto como el filtro:**
+
+| Tamaño | Empresas | Cómo tratarlas |
+|---|---:|---|
+| 30-99 empleados | **29** | **Punto dulce.** Gasto real en AWS y nadie adentro que lo optimice: los ingenieros sacan features, no revisan facturas. Empezar aquí. |
+| 10-29 | 94 | Sienten más el costo pero tienen menos presupuesto, y muchas veces el fundador *es* el técnico. |
+| 100+ | 8 | **Verificar en AWS Partner Finder antes de contactar.** A ese tamaño ya tienen equipo de nube propio y pueden ser partners de AWS — o sea, competencia. Si lo son, tratarlos como pares para co-selling, no como prospectos. |
+
+La primera versión del cargador ordenaba por empleados descendente, así que
+ponía de primero a la empresa de 2.275 personas: el peor prospecto de los 131.
+El script ahora prioriza el punto dulce y marca a los 8 grandes.
 
 **El 77% de las empresas con 10+ empleados están en Pichincha (5.161) y Guayas
 (4.829).** El mercado son dos ciudades, no un país: eso abarata todo, incluido

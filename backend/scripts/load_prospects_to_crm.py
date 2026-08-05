@@ -40,23 +40,80 @@ from sqlalchemy import text
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine
 
-# Empresas vigentes de tecnología con equipo real y dominio propio: el segmento
-# más caliente para servicios AWS (ver docs/PLAN_PRIMER_CLIENTE_AWS.md).
+_EMP = "NULLIF(regexp_replace(COALESCE(empleados,''),'[^0-9]','','g'),'')::bigint"
+_CORREO_PROPIO = (
+    "COALESCE(correo_electronico,'') <> '' AND "
+    "lower(split_part(correo_electronico,'@',2)) NOT IN "
+    "('gmail.com','hotmail.com','yahoo.com','outlook.com',"
+    "'hotmail.es','yahoo.es','live.com','icloud.com')"
+)
+
+# Dos negocios distintos, validados con los clientes actuales:
+#
+#   isv        Empresa de software que revende a clientes finales y no quiere
+#              operar infraestructura. Es el perfil de Trantotech e Infinit.
+#              Ingreso recurrente atado a su gasto en AWS.
+#
+#   educacion  Institución con superficie pública expuesta y bajo ataque. Es el
+#              perfil de la Universidad Andina (WAF gestionado + pentesting).
+#              Ticket mayor, pero depende de que estén doliéndose ahora.
+#
+# El ORDEN importa tanto como el filtro: la primera versión ordenaba por
+# empleados descendente y ponía de primero a la empresa de 2.275 personas, que
+# es el PEOR prospecto — a ese tamaño ya tienen equipo de nube propio y hasta
+# pueden ser partners de AWS, o sea competencia. Se prioriza el punto dulce.
+SEGMENTS: dict[str, dict[str, str]] = {
+    "isv": {
+        "where": f"ciiu_codigo_n6 ~ '^(J62|J63)' AND {_EMP} >= 10 AND {_CORREO_PROPIO}",
+        # 1 = punto dulce (gasto real en AWS, sin nadie que lo optimice)
+        # 2 = chicas   3 = grandes, revisar antes si son competencia
+        "priority": f"CASE WHEN {_EMP} BETWEEN 30 AND 99 THEN 1 "
+        f"WHEN {_EMP} < 30 THEN 2 ELSE 3 END",
+    },
+    "educacion": {
+        "where": f"ciiu_codigo_n6 ~ '^P85' AND {_EMP} >= 25 AND {_CORREO_PROPIO}",
+        "priority": "1",
+    },
+}
+
 QUERY = """
 SELECT ruc, nombre_compania, correo_electronico, telefono,
        provincia, canton, ciiu_codigo_n6,
-       NULLIF(regexp_replace(COALESCE(empleados,''),'[^0-9]','','g'),'')::bigint AS empleados
+       {emp} AS empleados,
+       {priority} AS prioridad
 FROM stg.cia
-WHERE fecha_cancelacion = '0000-00-00'
-  AND ciiu_codigo_n6 ~ '^(J62|J63)'
-  AND NULLIF(regexp_replace(COALESCE(empleados,''),'[^0-9]','','g'),'')::bigint >= 10
-  AND COALESCE(correo_electronico,'') <> ''
-  AND lower(split_part(correo_electronico,'@',2)) NOT IN
-      ('gmail.com','hotmail.com','yahoo.com','outlook.com','hotmail.es','yahoo.es','live.com','icloud.com')
-ORDER BY empleados DESC NULLS LAST
+WHERE fecha_cancelacion = '0000-00-00' AND {where}
+ORDER BY prioridad, {emp} DESC NULLS LAST
 """
 
 CONTACTS_PER_DAY = 3
+
+# Guion del primer contacto por segmento. El de ISV sale textual de cómo ya
+# funciona con Trantotech e Infinit; no es una hipótesis de marketing.
+PITCH = {
+    "isv": (
+        "Operamos el AWS de empresas de software que venden a sus clientes: "
+        "ustedes construyen, nosotros corremos la infraestructura con guardias "
+        "y control de costo.\n\n"
+        "Pregunta de calificación: ¿cuánto pagan de AWS al mes? "
+        "(referencia: Infinit $600, Trantotech $1.800)"
+    ),
+    "educacion": (
+        "Contención de ataques con WAF gestionado, como en la Universidad "
+        "Andina.\n\n"
+        "Pedir primero una conversación sobre qué están viendo hoy en sus "
+        "sistemas públicos. NO ofrecer pentesting en el primer contacto."
+    ),
+}
+
+# A este tamaño ya tienen equipo de nube propio y pueden ser partners de AWS.
+# Se cargan igual, pero marcados: contactarlos como prospecto quema el nombre.
+REVISAR_COMPETENCIA = (
+    "VERIFICAR EN AWS PARTNER FINDER ANTES DE CONTACTAR. "
+    "A este tamaño puede ser partner de AWS (competencia) o tener equipo "
+    "propio. Si es partner, tratarlo como par para co-selling, no como "
+    "prospecto."
+)
 
 
 def repair(value: str | None) -> str:
@@ -93,7 +150,7 @@ def business_days(start: datetime, count: int) -> list[datetime]:
     return dates
 
 
-async def fetch_targets() -> list[dict[str, object]]:
+async def fetch_targets(segment: str) -> list[dict[str, object]]:
     url = URL.create(
         drivername="postgresql+asyncpg",
         username=os.environ["USER"],
@@ -106,7 +163,10 @@ async def fetch_targets() -> list[dict[str, object]]:
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SET statement_timeout = '120s'"))
-            rows = await conn.execute(text(QUERY))
+            spec = SEGMENTS[segment]
+            rows = await conn.execute(
+                text(QUERY.format(emp=_EMP, where=spec["where"], priority=spec["priority"]))
+            )
             return [dict(row._mapping) for row in rows]
     finally:
         await engine.dispose()
@@ -127,6 +187,13 @@ async def existing_rucs(client: httpx.AsyncClient) -> set[str]:
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--segment",
+        choices=sorted(SEGMENTS),
+        default="isv",
+        help="isv = empresas de software (perfil Trantotech/Infinit); "
+        "educacion = instituciones educativas (perfil U. Andina)",
+    )
     parser.add_argument("--apply", action="store_true", help="Escribir en el CRM")
     parser.add_argument("--limit", type=int, help="Cargar solo las primeras N")
     args = parser.parse_args()
@@ -139,25 +206,26 @@ async def main() -> None:
             "Crea una cuenta de servicio con scopes leads:read y leads:write."
         )
 
-    targets = await fetch_targets()
+    targets = await fetch_targets(args.segment)
     if args.limit:
         targets = targets[: args.limit]
 
     start = datetime.now(UTC).replace(hour=13, minute=0, second=0, microsecond=0)
     schedule = business_days(start + timedelta(days=1), len(targets))
 
-    print(f"\nEmpresas objetivo: {len(targets)}")
+    print(f"\nSegmento: {args.segment}   Empresas objetivo: {len(targets)}")
     dias = len({d.date() for d in schedule})
     print(f"A {CONTACTS_PER_DAY} por día hábil = {dias} días de trabajo\n")
 
     if not args.apply:
-        print(f"{'EMPRESA':<44}{'EMPL':>6}  {'PROVINCIA':<14}CONTACTAR")
-        print("-" * 92)
+        print(f"{'EMPRESA':<42}{'EMPL':>6}  {'PROVINCIA':<13}{'CONTACTAR':<12}NOTA")
+        print("-" * 100)
         for row, when in list(zip(targets, schedule, strict=True))[:15]:
-            name = repair(str(row["nombre_compania"]))[:42]
+            name = repair(str(row["nombre_compania"]))[:40]
+            nota = "revisar si es competencia" if row["prioridad"] == 3 else ""
             print(
-                f"{name:<44}{row['empleados'] or 0:>6}  "
-                f"{repair(str(row['provincia']))[:12]:<14}{when.date()}"
+                f"{name:<42}{row['empleados'] or 0:>6}  "
+                f"{repair(str(row['provincia']))[:11]:<13}{str(when.date()):<12}{nota}"
             )
         if len(targets) > 15:
             print(f"... y {len(targets) - 15} más")
@@ -186,7 +254,11 @@ async def main() -> None:
                         "partyIdentificationNumber": ruc,
                         "partyEmail": str(row["correo_electronico"] or "") or None,
                         "partyPhone": str(row["telefono"] or "") or None,
-                        "title": f"Revisión AWS — {name}",
+                        "title": (
+                            f"Brazo de AWS — {name}"
+                            if args.segment == "isv"
+                            else f"Seguridad gestionada — {name}"
+                        ),
                         "source": "REGISTRO_SOCIETARIO",
                         "hotness": "COLD",
                     },
@@ -201,11 +273,16 @@ async def main() -> None:
                     json={
                         "leadId": lead_id,
                         "activityType": "TASK",
-                        "subject": "Primer contacto: ofrecer revisión de costo AWS",
+                        "subject": (
+                            "REVISAR si es competencia antes de contactar"
+                            if row["prioridad"] == 3
+                            else "Primer contacto"
+                        ),
                         "description": (
                             f"{row['empleados'] or '?'} empleados · {row['provincia']} · "
                             f"CIIU {row['ciiu_codigo_n6']}\n\n"
-                            "Pedir la factura de AWS del último mes (NO acceso a la cuenta)."
+                            + (REVISAR_COMPETENCIA + "\n\n" if row["prioridad"] == 3 else "")
+                            + PITCH[args.segment]
                         ),
                         "outcome": "PENDING",
                         "reminderDate": when.isoformat(),
