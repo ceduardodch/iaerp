@@ -2,6 +2,11 @@
 .env
 .env.*
 !.env.example
+# Cualquier archivo terminado en .env, no solo el llamado exactamente asi.
+# `.env` y `.env.*` NO cubren `base_maestra-local-readonly.env`, y un
+# archivo de credenciales visible para git es cuestion de tiempo.
+*.env
+!*.env.example
 # Carpeta para credenciales locales. Va ignorada COMPLETA y antes de que
 # exista: un secreto ahi dentro no debe depender de que alguien se acuerde
 # de agregar la regla el dia que crea el archivo.
@@ -52,3 +57,4 @@ test-results/
 tmp/
 .cache/
 graphify-out/
+listas/

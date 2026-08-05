@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import os
 import sys
 from datetime import UTC, datetime, timedelta
@@ -131,17 +132,32 @@ def repair(value: str | None) -> str:
     """Repara el mojibake de la carga original.
 
     El texto se guardó como UTF-8 leído como Latin-1 (``DISEÃâO`` por
-    ``DISEÑO``). Afecta al 4,7% de los nombres. Revertirlo es volver a
-    codificar en Latin-1 y decodificar como UTF-8; si no aplica, se deja igual.
+    ``DISEÑO``). Revertirlo es volver a codificar en Latin-1 y decodificar como
+    UTF-8.
+
+    Se intenta hasta dos veces porque hay filas con doble codificación
+    (``COMPAÃ'IA``): una sola pasada las deja a medias. Y se prueba también
+    ``cp1252``, que es donde caen los bytes 0x80-0x9F que Latin-1 no puede
+    decodificar — sin eso, nombres con comillas o guiones tipográficos se
+    quedaban rotos.
     """
     if not value:
         return ""
-    if "Ã" not in value and "Â" not in value:
-        return value.strip()
-    try:
-        return value.encode("latin-1").decode("utf-8").strip()
-    except (UnicodeDecodeError, UnicodeEncodeError):
-        return value.strip()
+    text = value.strip()
+    for _ in range(2):
+        if "Ã" not in text and "Â" not in text:
+            break
+        for encoding in ("latin-1", "cp1252"):
+            try:
+                fixed = text.encode(encoding).decode("utf-8")
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                continue
+            if fixed != text:
+                text = fixed
+                break
+        else:
+            break
+    return text.strip()
 
 
 def business_days(start: datetime, count: int) -> list[datetime]:
@@ -206,6 +222,11 @@ async def main() -> None:
         "educacion = instituciones educativas (perfil U. Andina)",
     )
     parser.add_argument("--apply", action="store_true", help="Escribir en el CRM")
+    parser.add_argument(
+        "--export",
+        metavar="RUTA.csv",
+        help="Escribir la lista a un CSV para trabajarla a mano (no toca el CRM)",
+    )
     parser.add_argument("--limit", type=int, help="Cargar solo las primeras N")
     args = parser.parse_args()
 
@@ -227,6 +248,31 @@ async def main() -> None:
     print(f"\nSegmento: {args.segment}   Empresas objetivo: {len(targets)}")
     dias = len({d.date() for d in schedule})
     print(f"A {CONTACTS_PER_DAY} por día hábil = {dias} días de trabajo\n")
+
+    if args.export:
+        # El correo del registro es INSTITUCIONAL (info@, gerencia@), no el de
+        # una persona. Se exporta tal cual para poder escribir hoy, pero la
+        # respuesta esperada es menor que la de un contacto con nombre.
+        with open(args.export, "w", newline="", encoding="utf-8-sig") as handle:  # noqa: ASYNC230
+            writer = csv.writer(handle)
+            writer.writerow(
+                ["contactar", "empresa", "correo", "telefono", "empleados",
+                 "provincia", "ruc", "ciiu", "nota"]
+            )
+            for row, when in zip(targets, schedule, strict=True):
+                writer.writerow([
+                    when.date(),
+                    repair(str(row["nombre_compania"])),
+                    row["correo_electronico"],
+                    row["telefono"] or "",
+                    row["empleados"] or "",
+                    repair(str(row["provincia"])),
+                    row["ruc"],
+                    row["ciiu_codigo_n6"],
+                    "revisar si es competencia" if row["prioridad"] == 3 else "",
+                ])
+        print(f"Exportadas {len(targets)} empresas a {args.export}")
+        return
 
     if not args.apply:
         print(f"{'EMPRESA':<42}{'EMPL':>6}  {'PROVINCIA':<13}{'CONTACTAR':<12}NOTA")
