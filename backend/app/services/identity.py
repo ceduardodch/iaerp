@@ -64,6 +64,16 @@ def _client_representation(
         "optionalClientScopes": [],
         "protocolMappers": [
             {
+                "name": "iaerp-api-audience",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-audience-mapper",
+                "config": {
+                    "included.custom.audience": settings.OIDC_API_AUDIENCE,
+                    "access.token.claim": "true",
+                    "id.token.claim": "false",
+                },
+            },
+            {
                 "name": "iaerp-mcp-audience",
                 "protocol": "openid-connect",
                 "protocolMapper": "oidc-audience-mapper",

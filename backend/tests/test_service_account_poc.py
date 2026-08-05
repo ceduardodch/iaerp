@@ -249,6 +249,15 @@ async def test_revocation_rejects_still_valid_token_and_new_issuance(
     assert issued.status_code == 200, issued.text
     agent_token = issued.json()["access_token"]
 
+    # Una cuenta de servicio creada por IAERP debe servir tanto a REST como a MCP.
+    # Sin el mapper de audiencia iaerp-api, este control falla con 401 antes de
+    # llegar a comprobar la revocación.
+    rest_context = await http.get(
+        f"{API_URL}/api/v1/context",
+        headers={"Authorization": f"Bearer {agent_token}"},
+    )
+    assert rest_context.status_code == 200, rest_context.text
+
     before = await _mcp_call(agent_token, "context.get", {})
     assert before.isError is False
 

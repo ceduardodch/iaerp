@@ -34,7 +34,10 @@ import asyncio
 import csv
 import os
 import sys
+import time
+import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import httpx
 from sqlalchemy import text
@@ -88,6 +91,57 @@ ORDER BY prioridad, {emp} DESC NULLS LAST
 """
 
 CONTACTS_PER_DAY = 3
+TOKEN_ENDPOINT = "https://iaerp-auth.b2b.com.ec/realms/iaerp/protocol/openid-connect/token"
+
+
+class ServiceAccountToken:
+    """Obtiene y renueva el token de la cuenta de servicio de prospección."""
+
+    def __init__(self, client_id: str, client_secret: str) -> None:
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.access_token: str | None = None
+        self.expires_at = 0.0
+
+    async def get(self, client: httpx.AsyncClient, *, refresh: bool = False) -> str:
+        if not refresh and self.access_token and time.monotonic() < self.expires_at:
+            return self.access_token
+        response = await client.post(
+            TOKEN_ENDPOINT,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+        token = payload.get("access_token")
+        if not isinstance(token, str) or not token:
+            raise RuntimeError("El proveedor de identidad no devolvió access_token")
+        expires_in = payload.get("expires_in")
+        if not isinstance(expires_in, int) or expires_in <= 0:
+            raise RuntimeError("El proveedor de identidad no devolvió expires_in válido")
+        self.access_token = token
+        # Se renueva antes de vencer para que una carga larga no quede a mitad de petición.
+        self.expires_at = time.monotonic() + max(1, expires_in - 30)
+        return token
+
+    async def request(
+        self,
+        client: httpx.AsyncClient,
+        method: str,
+        path: str,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        async def send(*, refresh: bool) -> httpx.Response:
+            token = await self.get(client, refresh=refresh)
+            headers = dict(kwargs.get("headers", {}))
+            headers["Authorization"] = f"Bearer {token}"
+            return await client.request(method, path, **{**kwargs, "headers": headers})
+
+        response = await send(refresh=False)
+        return await send(refresh=True) if response.status_code == 401 else response
 
 # Guion del primer contacto por segmento. El de ISV sale textual de cómo ya
 # funciona con Trantotech e Infinit; no es una hipótesis de marketing.
@@ -199,9 +253,9 @@ async def fetch_targets(segment: str) -> list[dict[str, object]]:
         await engine.dispose()
 
 
-async def existing_rucs(client: httpx.AsyncClient) -> set[str]:
+async def existing_rucs(client: httpx.AsyncClient, token: ServiceAccountToken) -> set[str]:
     """RUCs que ya están en el CRM, para no duplicar en una segunda corrida."""
-    response = await client.get("/api/v1/crm/leads")
+    response = await token.request(client, "GET", "/api/v1/crm/leads")
     response.raise_for_status()
     found: set[str] = set()
     for lead in response.json():
@@ -231,10 +285,12 @@ async def main() -> None:
     args = parser.parse_args()
 
     base_url = os.environ.get("PROSPECT_CRM_URL")
-    token = os.environ.get("PROSPECT_CRM_TOKEN")
-    if args.apply and not (base_url and token):
+    client_id = os.environ.get("PROSPECT_CRM_CLIENT_ID")
+    client_secret = os.environ.get("PROSPECT_CRM_CLIENT_SECRET")
+    if args.apply and not (base_url and client_id and client_secret):
         sys.exit(
-            "Para --apply hacen falta PROSPECT_CRM_URL y PROSPECT_CRM_TOKEN en backend/.env.\n"
+            "Para --apply hacen falta PROSPECT_CRM_URL, PROSPECT_CRM_CLIENT_ID y "
+            "PROSPECT_CRM_CLIENT_SECRET en backend/.env.\n"
             "Crea una cuenta de servicio con scopes leads:read y leads:write."
         )
 
@@ -289,11 +345,10 @@ async def main() -> None:
         print("\nPREVIO — no se escribió nada. Agrega --apply para cargar.")
         return
 
-    assert base_url and token  # garantizado por la validación de arriba
-    async with httpx.AsyncClient(
-        base_url=base_url, headers={"Authorization": f"Bearer {token}"}, timeout=30
-    ) as client:
-        already = await existing_rucs(client)
+    assert base_url and client_id and client_secret  # garantizado por la validación de arriba
+    token = ServiceAccountToken(client_id, client_secret)
+    async with httpx.AsyncClient(base_url=base_url, timeout=30) as client:
+        already = await existing_rucs(client, token)
         created = skipped = failed = 0
 
         for row, when in zip(targets, schedule, strict=True):
@@ -303,8 +358,11 @@ async def main() -> None:
                 continue
             name = repair(str(row["nombre_compania"]))
             try:
-                lead = await client.post(
+                lead = await token.request(
+                    client,
+                    "POST",
                     "/api/v1/crm/leads/with-party",
+                    headers={"Idempotency-Key": f"prospect-lead-{uuid.uuid4()}"},
                     json={
                         "partyName": name,
                         "partyIdentificationType": "RUC",
@@ -325,8 +383,11 @@ async def main() -> None:
 
                 # La tarea con fecha es lo que hace que el CRM sepa qué toca hoy.
                 # Un lead sin próximo paso con fecha es un lead que se pierde.
-                await client.post(
+                activity = await token.request(
+                    client,
+                    "POST",
                     f"/api/v1/crm/leads/{lead_id}/activities",
+                    headers={"Idempotency-Key": f"prospect-activity-{uuid.uuid4()}"},
                     json={
                         "leadId": lead_id,
                         "activityType": "TASK",
@@ -345,6 +406,7 @@ async def main() -> None:
                         "reminderDate": when.isoformat(),
                     },
                 )
+                activity.raise_for_status()
                 created += 1
             except httpx.HTTPError as exc:
                 failed += 1
