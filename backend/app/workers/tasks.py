@@ -6,6 +6,19 @@ from celery.signals import worker_process_shutdown
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import engine
+from app.services.social_campaigns import (
+    CAMPAIGN_ACTIVATION_EVENT,
+    CAMPAIGN_PAUSE_EVENT,
+    CAMPAIGN_POLICY_EVENT,
+    CAMPAIGN_PREPARATION_EVENT,
+)
+from app.workers.campaigns import CONSUMER_NAME as CAMPAIGNS_CONSUMER
+from app.workers.campaigns import (
+    handle_campaign_activation,
+    handle_campaign_pause,
+    handle_campaign_policy,
+    handle_campaign_preparation,
+)
 from app.workers.celery_app import celery_app
 from app.workers.collections import (
     COLLECTION_REMINDER_DUE_EVENT,
@@ -58,6 +71,10 @@ Handler = Callable[[AsyncSession, OutboxMessage], Awaitable[None]]
 # los eventos ya emitidos por otros modulos (parties.created, etc.) que no
 # tienen un consumidor dedicado todavia.
 _HANDLERS_BY_EVENT_TYPE: dict[str, tuple[str, Handler]] = {
+    CAMPAIGN_ACTIVATION_EVENT: (CAMPAIGNS_CONSUMER, handle_campaign_activation),
+    CAMPAIGN_PAUSE_EVENT: (CAMPAIGNS_CONSUMER, handle_campaign_pause),
+    CAMPAIGN_POLICY_EVENT: (CAMPAIGNS_CONSUMER, handle_campaign_policy),
+    CAMPAIGN_PREPARATION_EVENT: (CAMPAIGNS_CONSUMER, handle_campaign_preparation),
     "invoice.signed": (SRI_TRANSMISSION_CONSUMER, handle_invoice_signed),
     "invoice.authorized": (RECEIVABLES_CONSUMER, handle_invoice_authorized),
     CREDIT_NOTE_AUTHORIZED_EVENT: (RECEIVABLES_CONSUMER, handle_credit_note_authorized),
@@ -71,7 +88,13 @@ def _resolve_consumer(event_type: str) -> tuple[str, Handler]:
     return _HANDLERS_BY_EVENT_TYPE.get(event_type, (_DEFAULT_CONSUMER_NAME, _acknowledge_event))
 
 
-@celery_app.task(name="iaerp.consume_event")  # type: ignore[untyped-decorator]
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name="iaerp.consume_event",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=8,
+)
 def consume_event(
     *,
     event_id: str,

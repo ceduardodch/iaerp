@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from urllib.parse import urlsplit
 
 from pydantic import SecretStr
@@ -7,6 +7,7 @@ from pydantic import SecretStr
 from app.core.timezones import today_in_fiscal_timezone
 from app.db.session import SessionFactory
 from app.models.masters import Party
+from app.services import crm_integrations
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
 TENANT_B = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -75,8 +76,128 @@ async def test_lead_with_new_contact_has_title_summary_owner_and_customer_conver
     async with SessionFactory() as session:
         party = await session.get(Party, uuid.UUID(lead["partyId"]))
         assert party is not None
-        assert party.roles == ["CUSTOMER"]
+    assert party.roles == ["CUSTOMER"]
 
+
+async def test_campaign_capture_keeps_attribution_consent_and_deduplicates(client):
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["leads:read", "leads:write"])
+    payload = {
+        "source": "META_LEAD_AD",
+        "sourceExternalId": "meta-form-response-001",
+        "partyName": "Prospecto de campaña",
+        "partyEmail": "campana@example.com",
+        "partyPhone": "+593999000111",
+        "title": "Demo ControlTotal",
+        "campaignId": "52530432385016",
+        "campaignName": "ControlTotal - Leads",
+        "adId": "52530473326616",
+        "utmSource": "meta",
+        "utmMedium": "paid_social",
+        "utmCampaign": "controltotal_leads",
+        "utmContent": "dolor-operativo",
+        "consentCapturedAt": datetime.now(UTC).isoformat(),
+        "consentTextVersion": "privacy-v1",
+    }
+    rejected_variant = await client.post(
+        "/api/v1/crm/leads/captures",
+        headers=auth(token, "campaign-capture-foreign-variant-0001"),
+        json={**payload, "campaignVariantId": str(uuid.uuid4())},
+    )
+    assert rejected_variant.status_code == 422
+    rejected_naive_consent = await client.post(
+        "/api/v1/crm/leads/captures",
+        headers=auth(token, "campaign-capture-naive-consent-0001"),
+        json={
+            **payload,
+            "sourceExternalId": "meta-form-response-naive-001",
+            "consentCapturedAt": "2026-08-04T12:00:00",
+        },
+    )
+    assert rejected_naive_consent.status_code == 422
+
+    created = await client.post(
+        "/api/v1/crm/leads/captures",
+        headers=auth(token, "campaign-capture-create-0001"),
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["created"] is True
+    assert body["lead"]["source"] == "META_LEAD_AD"
+    assert body["lead"]["campaignId"] == "52530432385016"
+    assert body["lead"]["consentTextVersion"] == "privacy-v1"
+    assert body["lead"]["party"]["email"] == "campana@example.com"
+
+    duplicate = await client.post(
+        "/api/v1/crm/leads/captures",
+        headers=auth(token, "campaign-capture-create-0002"),
+        json=payload,
+    )
+    assert duplicate.status_code == 201, duplicate.text
+    assert duplicate.json()["created"] is False
+    assert duplicate.json()["duplicateReason"] == "SOURCE_REFERENCE"
+    assert duplicate.json()["lead"]["id"] == body["lead"]["id"]
+
+    second_touch_payload = {
+        **payload,
+        "sourceExternalId": "meta-form-response-002",
+        "campaignId": "second-campaign",
+        "campaignName": "Segunda campaña",
+    }
+    second_touch = await client.post(
+        "/api/v1/crm/leads/captures",
+        headers=auth(token, "campaign-capture-second-touch-0001"),
+        json=second_touch_payload,
+    )
+    assert second_touch.status_code == 201, second_touch.text
+    assert second_touch.json()["created"] is False
+    assert second_touch.json()["duplicateReason"] == "CONTACT"
+    repeated_touch = await client.post(
+        "/api/v1/crm/leads/captures",
+        headers=auth(token, "campaign-capture-second-touch-0002"),
+        json=second_touch_payload,
+    )
+    assert repeated_touch.status_code == 201, repeated_touch.text
+    assert repeated_touch.json()["duplicateReason"] == "SOURCE_REFERENCE"
+    activities = await client.get(
+        f"/api/v1/crm/leads/{body['lead']['id']}/activities",
+        headers=auth(token),
+    )
+    assert activities.status_code == 200
+    assert sum(item["subject"] == "Nueva respuesta de campaña" for item in activities.json()) == 1
+    blocked_win = await client.put(
+        f"/api/v1/crm/leads/{body['lead']['id']}/status",
+        headers=auth(token, "campaign-capture-win-0001"),
+        json={"newStatus": "WON"},
+    )
+    assert blocked_win.status_code == 422
+
+
+async def test_campaign_capture_accepts_linkedin_and_tiktok_sources(client):
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["leads:read", "leads:write"])
+    for index, source in enumerate(("LINKEDIN_LEAD_GEN", "TIKTOK_LEAD_GEN"), start=1):
+        response = await client.post(
+            "/api/v1/crm/leads/captures",
+            headers=auth(token, f"campaign-multichannel-capture-{index:04d}"),
+            json={
+                "source": source,
+                "sourceExternalId": f"provider-lead-{index}",
+                "partyName": f"Prospecto multicanal {index}",
+                "partyEmail": f"multicanal-{index}@example.com",
+                "title": "Solicitud desde formulario social",
+                "campaignId": f"provider-campaign-{index}",
+                "campaignName": f"Campaña multicanal {index}",
+                "adId": f"provider-ad-{index}",
+                "utmSource": "linkedin" if source == "LINKEDIN_LEAD_GEN" else "tiktok",
+                "utmMedium": "paid_social",
+                "consentCapturedAt": datetime.now(UTC).isoformat(),
+                "consentTextVersion": f"{source.lower()}:form-v1",
+            },
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["created"] is True
+        assert response.json()["lead"]["source"] == source
+        assert response.json()["lead"]["status"] == "NEW"
 
 async def test_crm_and_integrations_require_their_declared_scopes(client):
     restricted = await token_for(client, "a@iaerp.local", TENANT_A, ["context:read"])
@@ -128,9 +249,7 @@ async def test_whatsapp_routing_can_use_meta_and_evolution_per_operational_purpo
             assert url.endswith("/instance/connect/tenant-a")
             return FakeResponse(200, {"base64": "data:image/png;base64,qr-test"})
 
-    monkeypatch.setattr(
-        crm_integrations.settings, "EVOLUTION_API_BASE_URL", "https://evo.example"
-    )
+    monkeypatch.setattr(crm_integrations.settings, "EVOLUTION_API_BASE_URL", "https://evo.example")
     monkeypatch.setattr(
         crm_integrations.settings, "EVOLUTION_API_KEY", SecretStr("evolution-platform-key")
     )
@@ -272,8 +391,121 @@ async def test_lead_activity_creation_returns_201_and_ignores_body_lead_id(clien
     assert activity.status_code == 201, activity.text
     assert activity.json()["subject"] == "Primer contacto"
 
-    timeline = await client.get(
-        f"/api/v1/crm/leads/{lead_id}/activities", headers=auth(token)
-    )
+    timeline = await client.get(f"/api/v1/crm/leads/{lead_id}/activities", headers=auth(token))
     assert timeline.status_code == 200
     assert [item["subject"] for item in timeline.json()] == ["Primer contacto"]
+
+
+async def test_lead_email_schedules_follow_up_and_can_be_closed(client, monkeypatch):
+    """Un envío sin seguimiento agendado se pierde: nadie vuelve al lead.
+
+    Cubre el hueco que dejaba el modal del kanban, que solo registraba la
+    actividad (``/activities``) en vez de despachar el correo (``/messages``).
+    """
+    sent: list[dict[str, str]] = []
+
+    async def fake_send(session, context, *, recipient, subject, message, **kwargs):
+        sent.append({"recipient": recipient, "subject": subject, "message": message})
+        return "gmail-message-id"
+
+    monkeypatch.setattr(crm_integrations, "send_google_email", fake_send)
+
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["leads:read", "leads:write", "communications:write"],
+    )
+    created = await client.post(
+        "/api/v1/crm/leads/with-party",
+        headers=auth(token, "crm-followup-lead-0001"),
+        json={
+            "partyName": "Prospecto ISV",
+            "partyIdentificationType": "RUC",
+            "partyIdentificationNumber": "1791234567001",
+            "partyEmail": "contacto@isv.example",
+            "title": "Operación AWS gestionada",
+        },
+    )
+    assert created.status_code == 201, created.text
+    lead_id = created.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/crm/leads/{lead_id}/messages",
+        headers=auth(token, "crm-followup-send-0001"),
+        json={
+            "channel": "EMAIL",
+            "subject": "pregunta rápida sobre su AWS",
+            "message": "¿Quién les lleva la operación de AWS hoy?",
+            "followUpDays": 4,
+        },
+    )
+    assert response.status_code == 201, response.text
+    activity = response.json()
+    # El correo salió de verdad, no solo se registró.
+    assert sent == [
+        {
+            "recipient": "contacto@isv.example",
+            "subject": "pregunta rápida sobre su AWS",
+            "message": "¿Quién les lleva la operación de AWS hoy?",
+        }
+    ]
+    assert activity["activityType"] == "EMAIL"
+    assert activity["reminderCompleted"] is False
+    reminder = datetime.fromisoformat(activity["reminderDate"])
+    delta_days = (reminder - datetime.now(UTC)).total_seconds() / 86400
+    assert 3.9 < delta_days < 4.1
+
+    closed = await client.put(
+        f"/api/v1/crm/leads/{lead_id}/activities/{activity['id']}/reminder",
+        headers=auth(token, "crm-followup-close-0001"),
+        json={"completed": True},
+    )
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["reminderCompleted"] is True
+
+
+async def test_lead_reminder_of_another_tenant_is_not_reachable(client, monkeypatch):
+    """El activity_id ajeno no debe distinguirse de uno inexistente."""
+    async def fake_send(session, context, *, recipient, subject, message, **kwargs):
+        return "gmail-message-id"
+
+    monkeypatch.setattr(crm_integrations, "send_google_email", fake_send)
+
+    token_a = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["leads:write", "communications:write"],
+    )
+    created = await client.post(
+        "/api/v1/crm/leads/with-party",
+        headers=auth(token_a, "crm-tenant-lead-0001"),
+        json={
+            "partyName": "Prospecto A",
+            "partyIdentificationType": "RUC",
+            "partyIdentificationNumber": "1791234567001",
+            "partyEmail": "a@isv.example",
+            "title": "Operación AWS gestionada",
+        },
+    )
+    lead_id = created.json()["id"]
+    message = await client.post(
+        f"/api/v1/crm/leads/{lead_id}/messages",
+        headers=auth(token_a, "crm-tenant-send-0001"),
+        json={
+            "channel": "EMAIL",
+            "subject": "Hola",
+            "message": "Texto",
+            "followUpDays": 2,
+        },
+    )
+    activity_id = message.json()["id"]
+
+    token_b = await token_for(client, "b@iaerp.local", TENANT_B, ["leads:write"])
+    intruso = await client.put(
+        f"/api/v1/crm/leads/{lead_id}/activities/{activity_id}/reminder",
+        headers=auth(token_b, "crm-tenant-close-0001"),
+        json={"completed": True},
+    )
+    assert intruso.status_code == 404, intruso.text

@@ -19,6 +19,8 @@ import { LeadDetailPanel } from './LeadDetailPanel'
 import { LeadDetailModal } from './LeadDetailModal'
 import { QuickAddLeadForm } from './QuickAddLeadForm'
 import { BulkActionBar } from './BulkActionBar'
+import { CampaignLeadSummary } from './CampaignLeadSummary'
+import { CampaignsPage } from './CampaignsPage'
 import { KanbanFilters } from './KanbanFilters'
 import { ShortcutsHint } from './ShortcutsHint'
 import { useKanban } from '../../hooks/useKanban'
@@ -28,7 +30,11 @@ const STAGE_LABELS: Record<LeadStatus, string> = Object.fromEntries(
   PIPELINE.map((stage) => [stage.id, stage.label])
 ) as Record<LeadStatus, string>
 
-type View = { kind: 'board' } | { kind: 'new' } | { kind: 'detail'; lead: Lead }
+type View =
+  | { kind: 'board' }
+  | { kind: 'campaigns' }
+  | { kind: 'new' }
+  | { kind: 'detail'; lead: Lead }
 
 export function LeadsPage({
   token,
@@ -141,6 +147,10 @@ export function LeadsPage({
     )
   }
 
+  if (view.kind === 'campaigns') {
+    return <CampaignsPage token={token} onBack={() => setView({ kind: 'board' })} />
+  }
+
   if (view.kind === 'new') {
     return (
       <>
@@ -185,6 +195,7 @@ export function LeadsPage({
         actions={
           <>
             <ShortcutsHint open={hintOpen} onToggle={() => setHintOpen((current) => !current)} />
+            <ErpButton onClick={() => setView({ kind: 'campaigns' })}>Campañas</ErpButton>
             <ErpButton variant="primary" onClick={() => setView({ kind: 'new' })}>Nueva oportunidad</ErpButton>
           </>
         }
@@ -204,6 +215,8 @@ export function LeadsPage({
         activeFilterCount={activeFilterCount}
         onClearAdvanced={clearAdvancedFilters}
       />
+
+      <CampaignLeadSummary leads={leadsQuery.data ?? []} />
 
       {quickAddNotice ? (
         <div className="crm-quick-add-notice" role="status">

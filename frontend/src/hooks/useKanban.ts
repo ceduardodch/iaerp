@@ -51,6 +51,7 @@ function buildOptimisticLead(
     product: null,
     owner: null,
     status,
+    qualificationStatus: 'UNREVIEWED',
     source: data.source ?? null,
     ownerUserId: null,
     score: data.score ?? 0,

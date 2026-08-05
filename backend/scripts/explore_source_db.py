@@ -33,7 +33,7 @@ import sys
 
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy import table as sa_table
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 # Columnas cuyo CONTENIDO no se muestra nunca. Se detectan por nombre porque es
@@ -52,6 +52,59 @@ SENSITIVE = re.compile(
 MAX_DISTINCT_TO_SHOW = 12
 
 
+def build_url() -> str:
+    """Arma la URL desde el entorno, aceptando dos formatos.
+
+    Si existe ``PROSPECT_SOURCE_URL`` se usa tal cual. Si no, se arma con las
+    variables sueltas (HOST, PORT, USER, PASSWORD, DATABASE), que es como las
+    entrega un archivo de credenciales típico.
+
+    Se usa ``URL.create`` en vez de concatenar texto a propósito: una
+    contraseña con ``@``, ``/`` o ``#`` rompe una URL construida a mano, y el
+    error se ve como "credenciales inválidas" en vez de como lo que es.
+    """
+    direct = os.environ.get("PROSPECT_SOURCE_URL")
+    if direct:
+        return direct
+
+    host = os.environ.get("HOST")
+    user = os.environ.get("USER_DB") or os.environ.get("USER")
+    password = os.environ.get("PASSWORD")
+    database = os.environ.get("DATABASE")
+    if not all((host, user, password, database)):
+        sys.exit(
+            "Faltan datos de conexión.\n"
+            "Carga el archivo de credenciales antes de correr el script:\n"
+            "  set -a && source ../base_maestra-local-readonly.env && set +a"
+        )
+
+    port_raw = os.environ.get("PORT") or "5432"
+    return URL.create(
+        drivername="postgresql+asyncpg",
+        username=user,
+        password=password,
+        host=host,
+        port=int(port_raw),
+        database=database,
+    ).render_as_string(hide_password=False)
+
+
+def connect_args() -> dict[str, object]:
+    """TLS según SSL_MODE. asyncpg lo recibe como parámetro de conexión."""
+    mode = (os.environ.get("SSL_MODE") or "").strip().lower()
+    if mode in {"require", "verify-ca", "verify-full", "prefer", "allow"}:
+        return {"ssl": mode}
+    if mode in {"disable", "false", "off"}:
+        return {"ssl": False}
+    return {}
+
+
+def target_schema() -> str | None:
+    """Esquema a inspeccionar. Sin él se lee el de por defecto (public)."""
+    value = (os.environ.get("SCHEMA") or "").strip()
+    return value or None
+
+
 def _redact(url_string: str) -> str:
     """Describe la conexión sin revelar credenciales."""
     url = make_url(url_string)
@@ -67,31 +120,38 @@ async def _statement_timeout(conn: AsyncConnection, url_string: str) -> None:
         await conn.execute(text("SET default_transaction_read_only = on"))
 
 
-async def _column_names(conn: AsyncConnection, table_name: str) -> list[str]:
+async def _column_names(
+    conn: AsyncConnection, table_name: str, schema: str | None
+) -> list[str]:
     columns = await conn.run_sync(
-        lambda sync: inspect(sync).get_columns(table_name)  # noqa: B023
+        lambda sync: inspect(sync).get_columns(table_name, schema=schema)  # noqa: B023
     )
     return [str(column["name"]) for column in columns]
 
 
 async def inventory(url_string: str) -> None:
-    engine = create_async_engine(url_string, pool_pre_ping=True)
+    schema = target_schema()
+    engine = create_async_engine(url_string, pool_pre_ping=True, connect_args=connect_args())
     try:
         async with engine.connect() as conn:
             await _statement_timeout(conn, url_string)
-            tables = await conn.run_sync(lambda sync: inspect(sync).get_table_names())
+            tables = await conn.run_sync(
+                lambda sync: inspect(sync).get_table_names(schema=schema)
+            )
 
-            print(f"\nConexión: {_redact(url_string)}")
+            print(f"\nConexión: {_redact(url_string)}" + (f"  esquema: {schema}" if schema else ""))
             print(f"Tablas encontradas: {len(tables)}\n")
             print(f"{'TABLA':<40} {'FILAS':>12}  COLUMNAS")
             print("-" * 72)
 
             for name in sorted(tables):
                 try:
-                    total = await conn.scalar(select(func.count()).select_from(sa_table(name)))
+                    total = await conn.scalar(
+                        select(func.count()).select_from(sa_table(name, schema=schema))
+                    )
                 except Exception:
                     total = None
-                columns = await _column_names(conn, name)
+                columns = await _column_names(conn, name, schema)
                 shown = ", ".join(columns[:6]) + ("…" if len(columns) > 6 else "")
                 print(f"{name:<40} {total if total is not None else '?':>12}  {shown}")
 
@@ -104,23 +164,26 @@ async def inventory(url_string: str) -> None:
 
 
 async def profile_table(url_string: str, table_name: str) -> None:
-    engine = create_async_engine(url_string, pool_pre_ping=True)
+    schema = target_schema()
+    engine = create_async_engine(url_string, pool_pre_ping=True, connect_args=connect_args())
     try:
         async with engine.connect() as conn:
             await _statement_timeout(conn, url_string)
-            known = await conn.run_sync(lambda sync: inspect(sync).get_table_names())
+            known = await conn.run_sync(
+                lambda sync: inspect(sync).get_table_names(schema=schema)
+            )
             if table_name not in known:
                 sys.exit(
                     f"La tabla '{table_name}' no existe en el esquema.\n"
                     "Corre el inventario primero para ver los nombres disponibles."
                 )
             columns = await conn.run_sync(
-                lambda sync: inspect(sync).get_columns(table_name)  # noqa: B023
+                lambda sync: inspect(sync).get_columns(table_name, schema=schema)  # noqa: B023
             )
 
             quote = conn.dialect.identifier_preparer.quote
-            qualified = quote(table_name)
-            source = sa_table(table_name)
+            qualified = f"{quote(schema)}.{quote(table_name)}" if schema else quote(table_name)
+            source = sa_table(table_name, schema=schema)
             total = await conn.scalar(select(func.count()).select_from(source)) or 0
             print(f"\nTabla: {table_name}   ({total} filas)")
             print("=" * 78)
@@ -175,12 +238,7 @@ def main() -> None:
     parser.add_argument("--table", help="Perfilar una tabla concreta")
     args = parser.parse_args()
 
-    url_string = os.environ.get("PROSPECT_SOURCE_URL")
-    if not url_string:
-        sys.exit(
-            "Falta PROSPECT_SOURCE_URL.\n"
-            "Ponla en backend/.env (ya ignorado por git) con un usuario de SOLO LECTURA."
-        )
+    url_string = build_url()
 
     if args.table:
         asyncio.run(profile_table(url_string, args.table))

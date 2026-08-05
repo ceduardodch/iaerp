@@ -55,7 +55,7 @@ La autorización es por **scopes** granulares. Ejemplos:
 | `invoices:read` / `invoices:write` | Facturación |
 | `receivables:*` | Cartera y cobranza |
 | `leads:read` / `leads:write` | CRM |
-| `communications:read` / `communications:write` | Integraciones de correo y WhatsApp |
+| `communications:read` / `communications:write` | Correo, WhatsApp y campañas Meta |
 
 ## 6. Cuentas de servicio y agentes IA (MCP)
 
@@ -100,6 +100,52 @@ la instancia, configura el webhook y muestra el QR; la API key de plataforma no
 se expone al navegador. El token del webhook se almacena cifrado. No uses
 Evolution para acciones fiscales ni para ejecutar automáticamente instrucciones
 recibidas por WhatsApp.
+
+## 6.3 Meta Ads y formularios de leads
+
+En **Empresa → Canales e integraciones → Meta Ads** registra Ad Account ID,
+Page ID, Instagram Actor ID opcional, el formulario instantáneo por defecto y
+las tres credenciales. IAERP cifra los secretos y muestra la URL pública del
+webhook. Registra esa URL en la app de Meta para el campo `leadgen` y usa el
+mismo Verify Token ingresado en IAERP.
+
+En **CRM → Campañas** se crea el borrador y se carga una imagen JPG o PNG. El
+usuario puede añadir varias variantes; todas comparten público, presupuesto y
+conjunto de anuncios. **Preparar todas en Meta** guarda el pedido y crea cada
+anuncio pausado en segundo plano; la pantalla muestra **Preparando** hasta que
+termine.
+
+Antes del primer uso, un dueño o administrador debe activar **Permitir gasto en
+campañas** y fijar el **tope diario del tenant**. IAERP suma campañas activas y
+en activación y bloquea cualquier alta que supere ese tope. Revisa nombre,
+público y presupuesto antes de usar **Activar campaña**: la pantalla muestra
+**Activando** y solo el worker habilita Meta. **Pausar campaña** detiene anuncios,
+conjunto y campaña mediante **Pausando**. Al apagar **Permitir gasto**, IAERP
+cancela activaciones pendientes y encola la pausa de las campañas activas.
+**Actualizar métricas** reconsulta tres días de Insights y
+muestra CTR, CPL y costo por lead calificado. Cada acción queda idempotente y
+auditada. Mantén el worker de outbox activo; sin él una campaña queda en
+**Preparando**, **Activando** o **Pausando** y no debe corregirse con llamadas
+manuales a Meta. Pausa las campañas antes de rotar credenciales o activos.
+
+En el Instant Form usa las claves `company_name`, `job_title`, `uses_aws` y
+`decision_authority` para precargar los campos de calificación. El usuario debe
+confirmar la decisión en la ficha del lead; el webhook nunca se autocalifica.
+
+No reutilices el token de WhatsApp ni pegues secretos en tickets, capturas o
+logs. La conexión real y el webhook se prueban primero en preproducción.
+
+### 6.4 LinkedIn y TikTok
+
+IAERP ya puede recibir capturas normalizadas con origen `LINKEDIN_LEAD_GEN` y
+`TIKTOK_LEAD_GEN` mediante el endpoint autenticado de conectores. No lo registres
+directamente como webhook público: LinkedIn y TikTok requieren validación,
+permisos y mapeo propios.
+
+LinkedIn necesita acceso aprobado a Lead Sync, además del OAuth orgánico. TikTok
+necesita cuenta Ads, Instant Form y Custom API con Webhooks. Hasta completar esos
+pasos, la pantalla no debe mostrarlos como conectados ni permitir gasto. Consulta
+`docs/SOCIAL_CRM_CHANNEL_MATRIX.md` para el estado probado.
 
 ## 7. Zona horaria fiscal
 

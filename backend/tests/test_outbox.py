@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from conftest import TENANT_A
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from app.core.config import get_settings
 from app.db.session import SessionFactory
 from app.models.platform import DeadLetter, InboxEvent, OutboxEvent
 from app.workers.outbox import OutboxMessage, consume_once, dispatch_outbox_once
+from app.workers.tasks import consume_event
 
 settings = get_settings()
 
@@ -110,3 +112,40 @@ async def test_outbox_moves_exhausted_event_to_dead_letter(client):
         assert dead_letter.attempts == settings.OUTBOX_MAX_ATTEMPTS
         assert "secret=[REDACTED]" in dead_letter.error
         assert "secret=redacted" not in dead_letter.error
+
+
+async def test_consumer_failure_rolls_back_inbox_and_can_retry(client):
+    await _create_outbox_event(client)
+    publisher = RecordingPublisher()
+    assert await dispatch_outbox_once(publisher) == 1
+    message = publisher.messages[0]
+    calls = 0
+
+    async def flaky_handler(_session: AsyncSession, _message: OutboxMessage) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("temporary consumer failure")
+
+    with pytest.raises(RuntimeError, match="temporary consumer failure"):
+        await consume_once(
+            consumer_name="test.retrying-consumer",
+            message=message,
+            handler=flaky_handler,
+        )
+    async with SessionFactory() as session:
+        assert await session.scalar(select(func.count()).select_from(InboxEvent)) == 0
+
+    assert await consume_once(
+        consumer_name="test.retrying-consumer",
+        message=message,
+        handler=flaky_handler,
+    )
+    assert calls == 2
+
+
+def test_celery_consumer_retries_and_redelivers_worker_losses():
+    assert consume_event.autoretry_for == (Exception,)
+    assert consume_event.max_retries == 8
+    assert consume_event.app.conf.task_acks_late is True
+    assert consume_event.app.conf.task_reject_on_worker_lost is True

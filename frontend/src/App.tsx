@@ -44,6 +44,8 @@ import {
   type InvoiceEmailTemplate,
   type InvoicePreview,
   type IntegrationStatus,
+  type MetaAdsIntegration,
+  type SocialCampaignPolicy,
   type Lead,
   type Operation,
   type OrganizationProfile,
@@ -3738,6 +3740,14 @@ function OrganizationPage({
     queryKey: ['crm', 'integrations'],
     queryFn: () => apiRequest<IntegrationStatus>(token, '/crm/integrations'),
   })
+  const metaAdsQuery = useQuery({
+    queryKey: ['crm', 'integrations', 'meta-ads'],
+    queryFn: () => apiRequest<MetaAdsIntegration>(token, '/crm/integrations/meta-ads'),
+  })
+  const campaignPolicyQuery = useQuery({
+    queryKey: ['crm', 'campaign-policy'],
+    queryFn: () => apiRequest<SocialCampaignPolicy>(token, '/crm/campaigns/policy'),
+  })
   const collectionPolicyQuery = useQuery({
     queryKey: ['receivables', 'collection-policy'],
     queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
@@ -3786,6 +3796,22 @@ function OrganizationPage({
   const saveWhatsApp = useMutation({
     mutationFn: (data: object) => apiRequest<IntegrationStatus>(token, '/crm/integrations/whatsapp', { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: (status) => queryClient.setQueryData(['crm', 'integrations'], status),
+  })
+  const saveMetaAds = useMutation({
+    mutationFn: (data: object) => apiRequest<MetaAdsIntegration>(token, '/crm/integrations/meta-ads', {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': idempotencyKey('web-meta-ads') },
+      body: JSON.stringify(data),
+    }),
+    onSuccess: (integration) => queryClient.setQueryData(['crm', 'integrations', 'meta-ads'], integration),
+  })
+  const saveCampaignPolicy = useMutation({
+    mutationFn: (data: object) => apiRequest<SocialCampaignPolicy>(token, '/crm/campaigns/policy', {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': idempotencyKey('web-campaign-policy') },
+      body: JSON.stringify(data),
+    }),
+    onSuccess: (policy) => queryClient.setQueryData(['crm', 'campaign-policy'], policy),
   })
   const [evolutionWebhookUrl, setEvolutionWebhookUrl] = useState<string | null>(null)
   const [evolutionQrCode, setEvolutionQrCode] = useState<string | null>(null)
@@ -3865,6 +3891,29 @@ function OrganizationPage({
       accessToken: data.get('accessToken'),
       appSecret: data.get('appSecret'),
       verifyToken: data.get('verifyToken'),
+    })
+  }
+
+  function submitMetaAds(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    saveMetaAds.mutate({
+      adAccountId: data.get('adAccountId'),
+      pageId: data.get('pageId'),
+      instagramActorId: data.get('instagramActorId') || null,
+      defaultLeadFormId: data.get('defaultLeadFormId'),
+      accessToken: data.get('accessToken'),
+      appSecret: data.get('appSecret'),
+      verifyToken: data.get('verifyToken'),
+    })
+  }
+
+  function submitCampaignPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    saveCampaignPolicy.mutate({
+      activationEnabled: data.get('activationEnabled') === 'on',
+      dailyBudgetLimit: data.get('dailyBudgetLimit'),
     })
   }
 
@@ -4033,6 +4082,34 @@ function OrganizationPage({
             {connectGoogle.error ? <p className="form-error">{connectGoogle.error.message}</p> : null}
             <ErpButton variant="primary" disabled={!integrationsQuery.data?.googleConfigurationAvailable || connectGoogle.isPending} onClick={() => connectGoogle.mutate()}>{integrationsQuery.data?.googleConnected ? 'Reconectar Google' : 'Conectar Google Workspace'}</ErpButton>
           </div>
+        </ErpPanel>
+        <ErpPanel title="Meta Ads · Facebook e Instagram" actions={<ErpStatusBadge tone={metaAdsQuery.data?.connected ? 'success' : 'warning'}>{metaAdsQuery.data?.connected ? 'Conectado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
+          <form className="fiscal-panel-body" onSubmit={submitMetaAds}>
+            <p className="fiscal-panel-copy">Esta conexión permite crear campañas de formularios desde el CRM y recibir cada respuesta como lead nuevo.</p>
+            {metaAdsQuery.data?.connected ? <p>Cuenta activa: <strong>{metaAdsQuery.data.adAccountId}</strong> · Página <strong>{metaAdsQuery.data.pageId}</strong></p> : null}
+            <label>Ad Account ID<input name="adAccountId" defaultValue={metaAdsQuery.data?.adAccountId ?? ''} required /></label>
+            <label>Page ID<input name="pageId" defaultValue={metaAdsQuery.data?.pageId ?? ''} required /></label>
+            <label>Instagram Actor ID<input name="instagramActorId" defaultValue={metaAdsQuery.data?.instagramActorId ?? ''} /></label>
+            <label>Formulario instantáneo por defecto<input name="defaultLeadFormId" defaultValue={metaAdsQuery.data?.defaultLeadFormId ?? ''} required /></label>
+            <label>Token permanente<input name="accessToken" type="password" autoComplete="new-password" minLength={20} required /></label>
+            <label>Meta App Secret<input name="appSecret" type="password" autoComplete="new-password" minLength={10} required /></label>
+            <label>Verify token<input name="verifyToken" type="password" autoComplete="new-password" minLength={16} required /></label>
+            {metaAdsQuery.data ? <p className="fine-print">Webhook de leads: {metaAdsQuery.data.webhookUrl}</p> : null}
+            {saveMetaAds.error ? <p className="form-error">{saveMetaAds.error.message}</p> : null}
+            <ErpButton variant="primary" type="submit" disabled={saveMetaAds.isPending}>{saveMetaAds.isPending ? 'Guardando…' : metaAdsQuery.data?.connected ? 'Actualizar conexión' : 'Guardar conexión'}</ErpButton>
+          </form>
+        </ErpPanel>
+        <ErpPanel title="Control de gasto en campañas" actions={<ErpStatusBadge tone={campaignPolicyQuery.data?.activationEnabled ? 'warning' : 'neutral'}>{campaignPolicyQuery.data?.activationEnabled ? 'Habilitado' : 'Bloqueado'}</ErpStatusBadge>} className="fiscal-settings-panel">
+          {campaignPolicyQuery.isPending ? <p className="fiscal-panel-copy">Cargando control de gasto…</p> : null}
+          {campaignPolicyQuery.error ? <p className="form-error" role="alert">{campaignPolicyQuery.error.message}</p> : null}
+          {campaignPolicyQuery.data ? <form key={`${campaignPolicyQuery.data.activationEnabled}-${campaignPolicyQuery.data.dailyBudgetLimit}`} className="fiscal-panel-body" onSubmit={submitCampaignPolicy}>
+            <p className="fiscal-panel-copy">El interruptor bloquea toda activación. El tope suma el presupuesto diario de las campañas activas del tenant.</p>
+            <label><input name="activationEnabled" type="checkbox" defaultChecked={campaignPolicyQuery.data.activationEnabled} /> Permitir que un propietario active gasto</label>
+            <label>Tope diario total<input name="dailyBudgetLimit" type="number" min="0" max="10000" step="0.01" defaultValue={campaignPolicyQuery.data.dailyBudgetLimit} required /></label>
+            <p className="fine-print">Presupuesto activo actual: {campaignPolicyQuery.data.activeDailyBudget}</p>
+            {saveCampaignPolicy.error ? <p className="form-error" role="alert">{saveCampaignPolicy.error.message}</p> : null}
+            <ErpButton variant="primary" type="submit" disabled={saveCampaignPolicy.isPending}>{saveCampaignPolicy.isPending ? 'Guardando…' : 'Guardar control de gasto'}</ErpButton>
+          </form> : null}
         </ErpPanel>
         <ErpPanel title="WhatsApp · Enrutamiento" actions={<ErpStatusBadge tone={integrationsQuery.data?.whatsappConnected || integrationsQuery.data?.whatsappEvolutionConnected ? 'success' : 'warning'}>{integrationsQuery.data?.whatsappConnected || integrationsQuery.data?.whatsappEvolutionConnected ? 'Configurado' : 'Pendiente'}</ErpStatusBadge>} className="fiscal-settings-panel">
           <form className="fiscal-panel-body" onSubmit={submitWhatsAppRouting}>

@@ -26,6 +26,45 @@ alcance y las decisiones.
   si conservan una fecha de vencimiento antigua; lint, build y 24 recorridos
   Playwright pasan localmente. La corrección queda incluida en la PR `#31`; su
   nueva CI queda pendiente. No se hizo merge ni despliegue.
+- Contrato de captación multicanal ampliado en local: 2026-08-04. El caso de uso
+  autenticado de captura acepta `META_LEAD_AD`, `LINKEDIN_LEAD_GEN` y
+  `TIKTOK_LEAD_GEN`; los tres entran a `Nuevo` con tenant, consentimiento,
+  atribución, deduplicación e historial. La interfaz permite calificarlos con el
+  mismo flujo comercial. Dos pruebas dirigidas pasan. Esto no declara conectores
+  externos completos: Meta respondió `200`; el token LinkedIn venció el
+  2026-07-14 y respondió `401`, además no tiene Lead Sync; TikTok no tiene app,
+  OAuth ni env. La evidencia y los criterios de cierre están en
+  `docs/SOCIAL_CRM_CHANNEL_MATRIX.md`.
+
+- Campañas Meta y captura de leads listas en el árbol local de `main`:
+  2026-08-04 `America/Guayaquil`. Empresa configura una conexión Meta Ads por
+  tenant con secretos cifrados; CRM crea el borrador, guarda la imagen privada y
+  prepara campaña, conjunto, creativo y anuncio siempre pausados mediante
+  intención durable y outbox (`PREPARING`). Activar gasto queda reservado en
+  `ACTIVATING`, exige dueño/administrador, confirmación, política habilitada,
+  tope diario por tenant, permiso, idempotencia y auditoría; el worker activa
+  hijos antes del padre y compensa con pausa ante error. Pausar y el corte
+  general usan intención durable `PAUSING`; apagar gasto cancela reservas y
+  encola la pausa de campañas activas. El consumidor usa entrega tardía y ocho
+  reintentos. No se pueden rotar credenciales mientras una campaña está en
+  curso. El webhook de Meta valida firma, limita cuerpo, lote y frecuencia por
+  tenant, guarda cada intento firmado en una transacción propia, obtiene el formulario y
+  crea el lead en `Nuevo` con origen, campaña, anuncio, UTM, consentimiento y
+  deduplicación. Cada respuesta conserva un historial de contacto por campaña,
+  aun cuando el lead ya exista. CRM muestra la atribución y el resumen por campaña. El prospecto
+  conserva identidad fiscal provisional y no pasa a ganado hasta completarla.
+  Ruff y mypy pasan; 13 pruebas dirigidas backend y una de concurrencia
+  PostgreSQL lista para CI, build/lint frontend y 26
+  recorridos Playwright CRM en escritorio/móvil pasan. La suite completa deja
+  395 aprobadas y 34 omitidas; solo falla salud porque Redis local no está
+  levantado, condición previa ya documentada. El DDL PostgreSQL aislado de
+  `da1e2f3a4b5c:e5f6a7b8c9d0` se genera bien. No se llamó a Meta real, no se
+  activó gasto y no se hizo push, PR ni despliegue. Faltan PostgreSQL/CI en vivo,
+  configurar la conexión/webhook real y luego autorizar la publicación. El corte
+  también incluye varias variantes bajo un solo adset, Meta Insights diarios por
+  anuncio y moneda real, tabla de CTR/CPL/costo por calificado, atribución por
+  variante y calificación humana con empresa, cargo, uso AWS, acceso al decisor,
+  motivo, actor y fecha. Las pantallas nuevas pasan axe WCAG 2.1 AA y teclado.
 
 - Feature local pendiente de integración: 2026-08-03 `America/Guayaquil`.
   Cartera suma una historia de cobranza por factura: envíos, entrega o lectura

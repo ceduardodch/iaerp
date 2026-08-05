@@ -71,11 +71,12 @@ inventarlo:
 |---|---|
 | Conexión con la API de Meta (token cifrado, cuenta publicitaria) | `MetaAdsIntegration`, `services/social_campaigns.py` |
 | Campaña con presupuesto diario, edad y países (`["EC"]` por defecto) | `SocialCampaign` (`models/crm.py`) |
-| Creación en Meta de campaña + adset + creativo + anuncio | `social_campaigns.prepare_campaign` |
-| Activar / pausar desde el ERP | `activate_campaign`, `pause_campaign` |
-| Compuerta de aprobación humana antes de gastar | `approved_at` / `approved_by` |
+| Creación pausada vía outbox de campaña + adset + creativo + anuncio | `prepare_campaign`, `apply_campaign_preparation` |
+| Activar y pausar vía outbox | `activate_campaign`, `apply_campaign_activation`, `pause_campaign`, `apply_campaign_pause` |
+| Compuerta humana, corte general y tope diario por tenant | `approved_at`, `approved_by`, `SocialCampaignPolicy` |
 | Instant Form de Meta y **webhook de leads** | `lead_form_id`, `process_lead_webhook` |
 | Atribución en el lead | `Lead.utm_source/utm_medium/utm_campaign/utm_content`, `campaign_id` |
+| Historial de respuestas sin duplicar el contacto | `LeadCampaignTouch` |
 
 ## 2. Los tres huecos, cerrados localmente
 

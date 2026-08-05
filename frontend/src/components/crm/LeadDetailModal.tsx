@@ -7,6 +7,7 @@ import {
   type Lead,
   type LeadActivity,
   type LeadActivityCreate,
+  type LeadMessageCreate,
 } from '../../api'
 import { ErpButton } from '../erp'
 import { ErpModal } from '../erp/ErpModal'
@@ -73,6 +74,49 @@ export function LeadDetailModal({
     },
   })
 
+  /**
+   * Envío real por Gmail. El endpoint `/messages` despacha el correo y deja la
+   * actividad; `/activities` solo deja la actividad. El modal antes usaba el
+   * segundo, así que desde el kanban no había forma de escribirle al lead.
+   */
+  const sendMessage = useMutation({
+    mutationFn: (data: LeadMessageCreate) =>
+      apiRequest<LeadActivity>(token, `/crm/leads/${lead.id}/messages`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('crm-message') },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['crm-lead-activities', lead.id] })
+      void queryClient.invalidateQueries({ queryKey: ['crm-activities', lead.id] })
+    },
+  })
+
+  const completeReminder = useMutation({
+    mutationFn: ({ activityId, completed }: { activityId: string; completed: boolean }) =>
+      apiRequest<LeadActivity>(token, `/crm/leads/${lead.id}/activities/${activityId}/reminder`, {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('crm-reminder') },
+        body: JSON.stringify({ completed }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['crm-lead-activities', lead.id] })
+    },
+  })
+
+  const qualifyLead = useMutation({
+    mutationFn: (data: object) => apiRequest<Lead>(token, `/crm/leads/${lead.id}/qualification`, {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': idempotencyKey('crm-lead-qualification') },
+      body: JSON.stringify(data),
+    }),
+    onSuccess: (updated) => {
+      onUpdated(updated)
+      void queryClient.invalidateQueries({ queryKey: ['crm-leads'] })
+      void queryClient.invalidateQueries({ queryKey: ['crm-lead-activities', lead.id] })
+    },
+  })
+
   function submitActivity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
@@ -84,9 +128,43 @@ export function LeadDetailModal({
         subject: String(data.get('subject')),
         description: String(data.get('description') || '') || null,
         outcome: 'PENDING',
+        reminderDate: String(data.get('reminderDate') || '') || null,
       },
       { onSuccess: () => form.reset() }
     )
+  }
+
+  function submitMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const followUpDays = Number(data.get('followUpDays') || 0)
+    sendMessage.mutate(
+      {
+        channel: 'EMAIL',
+        subject: String(data.get('subject')),
+        message: String(data.get('message')),
+        followUpDays: followUpDays > 0 ? followUpDays : null,
+      },
+      { onSuccess: () => form.reset() }
+    )
+  }
+
+  function submitQualification(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    const booleanValue = (name: string) => {
+      const value = String(data.get(name) || '')
+      return value === '' ? null : value === 'true'
+    }
+    qualifyLead.mutate({
+      status: data.get('status'),
+      companyName: data.get('companyName') || null,
+      jobTitle: data.get('jobTitle') || null,
+      usesAws: booleanValue('usesAws'),
+      decisionAuthority: booleanValue('decisionAuthority'),
+      reason: data.get('reason'),
+    })
   }
 
   return (
@@ -113,6 +191,90 @@ export function LeadDetailModal({
             </div>
           </dl>
         </section>
+
+        <section aria-label="Enviar correo" className="lead-detail-message">
+          <h3>Enviar correo</h3>
+          {lead.party.email ? (
+            <form className="message-form" onSubmit={submitMessage}>
+              <label>
+                Asunto
+                <input name="subject" required maxLength={200} placeholder="pregunta rápida sobre su AWS" />
+              </label>
+              <label>
+                Mensaje
+                <textarea name="message" rows={8} required maxLength={5000} />
+              </label>
+              <div className="field-row">
+                <label>
+                  Seguimiento
+                  <select name="followUpDays" defaultValue="4">
+                    <option value="0">Sin recordatorio</option>
+                    <option value="2">En 2 días</option>
+                    <option value="4">En 4 días</option>
+                    <option value="7">En 1 semana</option>
+                    <option value="15">En 15 días</option>
+                  </select>
+                </label>
+                <ErpButton variant="primary" type="submit" disabled={sendMessage.isPending}>
+                  {sendMessage.isPending ? 'Enviando…' : `Enviar a ${lead.party.email}`}
+                </ErpButton>
+              </div>
+              <p className="fine-print">
+                Sale por Gmail desde la cuenta conectada y queda en el historial.
+              </p>
+              {sendMessage.error ? (
+                <p className="form-error" role="alert">
+                  {sendMessage.error.message}
+                </p>
+              ) : null}
+              {sendMessage.isSuccess ? (
+                <p className="form-success" role="status">
+                  Correo enviado.
+                </p>
+              ) : null}
+            </form>
+          ) : (
+            <p className="lead-detail-empty">
+              Este contacto no tiene correo registrado. Agrégalo en el contacto para poder escribirle.
+            </p>
+          )}
+        </section>
+
+        {lead.campaignId || lead.campaignName || lead.utmCampaign ? (
+          <section aria-label="Origen de captación" className="lead-detail-contact">
+            <h3>Origen de captación</h3>
+            <dl>
+              <div><dt>Canal</dt><dd>{lead.source ?? '—'}</dd></div>
+              <div><dt>Campaña</dt><dd>{lead.campaignName ?? lead.utmCampaign ?? '—'}</dd></div>
+              <div><dt>Anuncio</dt><dd>{lead.adId ?? '—'}</dd></div>
+              <div><dt>Consentimiento</dt><dd>{lead.consentCapturedAt ? new Date(lead.consentCapturedAt).toLocaleString('es-EC') : '—'}</dd></div>
+            </dl>
+          </section>
+        ) : null}
+
+        {['META_LEAD_AD', 'LINKEDIN_LEAD_GEN', 'TIKTOK_LEAD_GEN'].includes(lead.source ?? '') ? (
+          <section aria-label="Calificación comercial" className="lead-detail-qualification">
+            <h3>Calificación comercial</h3>
+            <p className={`qualification-state qualification-${lead.qualificationStatus.toLowerCase()}`}>
+              {lead.qualificationStatus === 'QUALIFIED' ? 'Calificado' : lead.qualificationStatus === 'DISQUALIFIED' ? 'Descartado' : 'Sin revisar'}
+            </p>
+            <form onSubmit={submitQualification}>
+              <div className="field-row">
+                <label>Decisión<select name="status" defaultValue={lead.qualificationStatus === 'DISQUALIFIED' ? 'DISQUALIFIED' : 'QUALIFIED'}><option value="QUALIFIED">Calificar</option><option value="DISQUALIFIED">Descartar</option></select></label>
+                <label>Empresa<input name="companyName" defaultValue={lead.companyName ?? ''} /></label>
+                <label>Cargo<input name="jobTitle" defaultValue={lead.jobTitle ?? ''} /></label>
+              </div>
+              <div className="field-row">
+                <label>¿Usa AWS?<select name="usesAws" defaultValue={lead.usesAws === null || lead.usesAws === undefined ? '' : String(lead.usesAws)}><option value="">Sin confirmar</option><option value="true">Sí</option><option value="false">No</option></select></label>
+                <label>¿Decide o llega al decisor?<select name="decisionAuthority" defaultValue={lead.decisionAuthority === null || lead.decisionAuthority === undefined ? '' : String(lead.decisionAuthority)}><option value="">Sin confirmar</option><option value="true">Sí</option><option value="false">No</option></select></label>
+              </div>
+              <label>Motivo<textarea name="reason" rows={2} defaultValue={lead.qualificationReason ?? ''} required /></label>
+              <p className="fine-print">Para calificar se exige empresa, uso confirmado de AWS y acceso a la decisión.</p>
+              {qualifyLead.error ? <p className="form-error" role="alert">{qualifyLead.error.message}</p> : null}
+              <ErpButton variant="primary" type="submit" disabled={qualifyLead.isPending}>{qualifyLead.isPending ? 'Guardando…' : 'Guardar calificación'}</ErpButton>
+            </form>
+          </section>
+        ) : null}
 
         <section aria-label="Calificación" className="lead-detail-edit">
           <div className="field-row">
@@ -188,6 +350,10 @@ export function LeadDetailModal({
               Detalle
               <textarea name="description" rows={2} />
             </label>
+            <label>
+              Recordatorio
+              <input name="reminderDate" type="datetime-local" />
+            </label>
             <ErpButton variant="secondary" type="submit" disabled={createActivity.isPending}>
               {createActivity.isPending ? 'Guardando…' : 'Registrar actividad'}
             </ErpButton>
@@ -212,6 +378,32 @@ export function LeadDetailModal({
                   <time dateTime={activity.createdAt}>
                     {new Date(activity.createdAt).toLocaleString('es-EC')}
                   </time>
+                  {activity.reminderDate ? (
+                    <p
+                      className={
+                        activity.reminderCompleted
+                          ? 'activity-reminder done'
+                          : new Date(activity.reminderDate) <= new Date()
+                            ? 'activity-reminder overdue'
+                            : 'activity-reminder'
+                      }
+                    >
+                      {activity.reminderCompleted
+                        ? 'Seguimiento hecho'
+                        : `Seguimiento: ${new Date(activity.reminderDate).toLocaleDateString('es-EC')}`}
+                      {activity.reminderCompleted ? null : (
+                        <button
+                          type="button"
+                          disabled={completeReminder.isPending}
+                          onClick={() =>
+                            completeReminder.mutate({ activityId: activity.id, completed: true })
+                          }
+                        >
+                          Marcar hecho
+                        </button>
+                      )}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ol>

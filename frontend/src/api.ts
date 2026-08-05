@@ -626,6 +626,25 @@ export type Lead = {
   owner?: { id: string; displayName: string; email: string } | null
   status: LeadStatus
   source?: string | null
+  sourceExternalId?: string | null
+  campaignId?: string | null
+  campaignName?: string | null
+  adId?: string | null
+  utmSource?: string | null
+  utmMedium?: string | null
+  utmCampaign?: string | null
+  utmContent?: string | null
+  consentCapturedAt?: string | null
+  consentTextVersion?: string | null
+  campaignVariantId?: string | null
+  qualificationStatus: 'UNREVIEWED' | 'QUALIFIED' | 'DISQUALIFIED'
+  qualifiedAt?: string | null
+  qualifiedBy?: string | null
+  companyName?: string | null
+  jobTitle?: string | null
+  usesAws?: boolean | null
+  decisionAuthority?: boolean | null
+  qualificationReason?: string | null
   ownerUserId?: string | null
   score: number
   hotness: 'COLD' | 'WARM' | 'HOT'
@@ -705,6 +724,19 @@ export type LeadActivityCreate = {
   reminderCompleted?: boolean
 }
 
+/**
+ * Envío real por Gmail/WhatsApp. A diferencia de `LeadActivityCreate` —que
+ * solo deja constancia en el historial— esto sí despacha el mensaje.
+ * `followUpDays` agenda el recordatorio; el servidor calcula la fecha.
+ */
+export type LeadMessageCreate = {
+  channel: 'EMAIL' | 'WHATSAPP'
+  subject?: string | null
+  message: string
+  templateId?: string | null
+  followUpDays?: number | null
+}
+
 export type LeadStatusUpdate = {
   newStatus: LeadStatus
   reason?: string | null
@@ -739,6 +771,97 @@ export type EvolutionWhatsAppIntegration = {
   webhookUrl: string
   qrCode?: string | null
   qrExpiresInSeconds?: number | null
+}
+
+export type MetaAdsIntegration = {
+  connected: boolean
+  adAccountId?: string | null
+  pageId?: string | null
+  instagramActorId?: string | null
+  defaultLeadFormId?: string | null
+  accountCurrency?: string | null
+  accountTimezone?: string | null
+  webhookUrl: string
+}
+
+export type SocialCampaign = {
+  id: string
+  tenantId: string
+  provider: 'META'
+  name: string
+  status: 'DRAFT' | 'PREPARING' | 'PREPARED' | 'ACTIVATING' | 'ACTIVE' | 'PAUSING' | 'PAUSED' | 'ERROR'
+  dailyBudget: string
+  currency?: string | null
+  ageMin: number
+  ageMax: number
+  countries: string[]
+  primaryText: string
+  headline: string
+  description?: string | null
+  leadFormId?: string | null
+  creativeSha256?: string | null
+  externalCampaignId?: string | null
+  externalAdsetId?: string | null
+  externalCreativeId?: string | null
+  externalAdId?: string | null
+  approvedAt?: string | null
+  activatedAt?: string | null
+  pausedAt?: string | null
+  lastError?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type SocialCampaignPolicy = {
+  activationEnabled: boolean
+  dailyBudgetLimit: string
+  activeDailyBudget: string
+}
+
+export type SocialCampaignVariant = {
+  id: string
+  campaignId: string
+  tenantId: string
+  key: string
+  name: string
+  angle?: string | null
+  position: number
+  primaryText: string
+  headline: string
+  description?: string | null
+  creativeSha256?: string | null
+  externalCreativeId?: string | null
+  externalAdId?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type SocialCampaignVariantDecision = {
+  variant: SocialCampaignVariant
+  currency?: string | null
+  spend: string
+  impressions: number
+  clicks: number
+  leads: number
+  qualifiedLeads: number
+  ctr?: string | null
+  cpl?: string | null
+  costPerQualifiedLead?: string | null
+}
+
+export type SocialCampaignInsights = {
+  campaignId: string
+  syncedDays: Array<{
+    variantId: string
+    metricDate: string
+    externalAdId: string
+    currency: string
+    spend: string
+    impressions: number
+    clicks: number
+    leads: number
+  }>
+  variants: SocialCampaignVariantDecision[]
 }
 
 export type OrganizationProfile = {

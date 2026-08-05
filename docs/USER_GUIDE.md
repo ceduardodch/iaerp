@@ -83,6 +83,20 @@ Propuesta → Negociación).
 - **Filtros:** búsqueda, responsable, valor, temperatura y rango de fechas.
 - **Teclado:** flechas para moverte entre tarjetas; **Esc** cierra el panel de
   ayuda o limpia la selección.
+- **Campañas:** abre **Campañas**, crea un borrador, carga su imagen y usa
+  varias variantes. **Preparar todas en Meta** muestra **Preparando** y luego las
+  deja pausadas dentro de un solo conjunto. Un dueño debe habilitar el gasto y
+  fijar el tope diario de la empresa. **Activar campaña** muestra el presupuesto,
+  pide confirmación y pasa por **Activando** antes de iniciar gasto.
+  **Pausar campaña** pasa por **Pausando**. Apagar el permiso de gasto cancela
+  activaciones pendientes y detiene las activas. **Actualizar métricas** compara
+  gasto, impresiones, CTR, leads, CPL y costo por lead calificado.
+- **Leads de redes:** las respuestas de formularios Meta aparecen en **Nuevo**
+  con campaña y anuncio visibles. Atiéndelas como cualquier oportunidad y
+  registra si usa AWS, empresa, cargo, acceso al decisor y el motivo para
+  calificar o descartar. Si el mismo contacto responde otra campaña, IAERP
+  conserva ese nuevo contacto sin duplicar la oportunidad. Completa la identidad
+  fiscal antes de marcar ganado.
 
 ## 7. Accesibilidad
 

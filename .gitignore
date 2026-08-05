@@ -51,6 +51,7 @@ test-results/
 .DS_Store
 .idea/
 .vscode/
+.zcode/
 
 # Runtime
 *.log

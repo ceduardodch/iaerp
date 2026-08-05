@@ -20,4 +20,5 @@ sustituya.
 | 0010 | Enrutamiento de WhatsApp por uso | Accepted |
 | 0011 | Expediente legal-comercial y evidencia AWS | Proposed |
 | 0012 | Modulo tributario Ecuador (declaraciones y anexos SRI) | Accepted |
+| 0013 | Campanas Meta Ads y captura de leads en CRM | Accepted |
 | 0014 | CxP operativa y conciliacion bancaria compartida | Proposed |

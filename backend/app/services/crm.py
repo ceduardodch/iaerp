@@ -1,15 +1,30 @@
+import hashlib
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
-from app.models.crm import Lead, LeadActivity, LeadStatus
+from app.models.crm import (
+    Lead,
+    LeadActivity,
+    LeadCampaignTouch,
+    LeadStatus,
+    SocialCampaignVariant,
+)
 from app.models.masters import Party, Product
 from app.models.platform import User
-from app.schemas.crm import LeadActivityCreate, LeadCreate, LeadUpdate, LeadWithPartyCreate
+from app.schemas.crm import (
+    LeadActivityCreate,
+    LeadCampaignCaptureCreate,
+    LeadCreate,
+    LeadQualificationUpdate,
+    LeadUpdate,
+    LeadWithPartyCreate,
+)
 
 # Lead Service
 
@@ -149,6 +164,181 @@ async def create_lead_with_party(
     return lead
 
 
+async def capture_campaign_lead(
+    session: AsyncSession,
+    context: AuthContext,
+    data: LeadCampaignCaptureCreate,
+) -> tuple[Lead, bool, Literal["SOURCE_REFERENCE", "CONTACT"] | None]:
+    """Ingiere un lead de redes sin inventar una identidad tributaria.
+
+    La referencia externa del proveedor es la primera barrera contra
+    duplicados. Si no existe, email o teléfono permiten reutilizar el último
+    lead del mismo tenant, dejando intacta su atribución original.
+    """
+    if data.campaign_variant_id is not None:
+        variant = await session.scalar(
+            select(SocialCampaignVariant.id).where(
+                SocialCampaignVariant.tenant_id == context.tenant_id,
+                SocialCampaignVariant.id == data.campaign_variant_id,
+            )
+        )
+        if variant is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Campaign variant does not belong to tenant",
+            )
+
+    touched_lead = await session.scalar(
+        select(Lead)
+        .join(
+            LeadCampaignTouch,
+            LeadCampaignTouch.lead_id == Lead.id,
+        )
+        .where(
+            LeadCampaignTouch.tenant_id == context.tenant_id,
+            LeadCampaignTouch.source == data.source,
+            LeadCampaignTouch.source_external_id == data.source_external_id,
+            Lead.tenant_id == context.tenant_id,
+        )
+    )
+    if touched_lead is not None:
+        return touched_lead, False, "SOURCE_REFERENCE"
+
+    existing = await session.scalar(
+        select(Lead).where(
+            Lead.tenant_id == context.tenant_id,
+            Lead.source == data.source,
+            Lead.source_external_id == data.source_external_id,
+        )
+    )
+    if existing is not None:
+        session.add(_campaign_touch(context, data, existing.id))
+        await session.flush()
+        return existing, False, "SOURCE_REFERENCE"
+
+    contact_filters = []
+    if data.party_email:
+        contact_filters.append(func.lower(Party.email) == data.party_email.lower())
+    if data.party_phone:
+        contact_filters.append(Party.phone == data.party_phone)
+    if contact_filters:
+        duplicate = await session.scalar(
+            select(Lead)
+            .join(Party, Party.id == Lead.party_id)
+            .where(Lead.tenant_id == context.tenant_id, or_(*contact_filters))
+            .order_by(Lead.created_at.desc())
+            .limit(1)
+        )
+        if duplicate is not None:
+            session.add(_campaign_touch(context, data, duplicate.id))
+            campaign_label = data.campaign_name or data.campaign_id or "sin nombre"
+            session.add(
+                LeadActivity(
+                    tenant_id=context.tenant_id,
+                    lead_id=duplicate.id,
+                    actor_id=context.actor_id,
+                    activity_type="NOTE",
+                    subject="Nueva respuesta de campaña",
+                    description=f"Origen: {data.source}. Campaña: {campaign_label}.",
+                    outcome="PENDING",
+                    reminder_date=None,
+                    reminder_completed=False,
+                )
+            )
+            await session.flush()
+            return duplicate, False, "CONTACT"
+
+    placeholder = hashlib.sha256(f"{data.source}:{data.source_external_id}".encode()).hexdigest()[
+        :20
+    ]
+    party = Party(
+        tenant_id=context.tenant_id,
+        name=data.party_name,
+        identification_type="FINAL_CONSUMER",
+        identification_number=f"lead-{placeholder}",
+        roles=[],
+        email=data.party_email,
+        phone=data.party_phone,
+        address=None,
+    )
+    session.add(party)
+    await session.flush()
+
+    lead = Lead(
+        tenant_id=context.tenant_id,
+        party_id=party.id,
+        title=data.title,
+        status=LeadStatus.NEW,
+        source=data.source,
+        source_external_id=data.source_external_id,
+        campaign_id=data.campaign_id,
+        campaign_name=data.campaign_name,
+        ad_id=data.ad_id,
+        utm_source=data.utm_source,
+        utm_medium=data.utm_medium,
+        utm_campaign=data.utm_campaign,
+        utm_content=data.utm_content,
+        consent_captured_at=data.consent_captured_at,
+        consent_text_version=data.consent_text_version,
+        campaign_variant_id=data.campaign_variant_id,
+        qualification_status="UNREVIEWED",
+        qualified_at=None,
+        qualified_by=None,
+        company_name=data.company_name,
+        job_title=data.job_title,
+        uses_aws=data.uses_aws,
+        decision_authority=data.decision_authority,
+        qualification_reason=None,
+        owner_user_id=uuid.UUID(context.actor_id) if context.actor_type == "USER" else None,
+        score=0,
+        hotness="COLD",
+        estimated_value=None,
+        expected_close_date=None,
+    )
+    session.add(lead)
+    await session.flush()
+    session.add(_campaign_touch(context, data, lead.id))
+    campaign_label = data.campaign_name or data.campaign_id or "sin nombre"
+    session.add(
+        LeadActivity(
+            tenant_id=context.tenant_id,
+            lead_id=lead.id,
+            actor_id=context.actor_id,
+            activity_type="NOTE",
+            subject="Lead captado por campaña",
+            description=f"Origen: {data.source}. Campaña: {campaign_label}.",
+            outcome="PENDING",
+            reminder_date=None,
+            reminder_completed=False,
+        )
+    )
+    await session.flush()
+    await session.refresh(lead, attribute_names=["party", "product", "owner"])
+    return lead, True, None
+
+
+def _campaign_touch(
+    context: AuthContext,
+    data: LeadCampaignCaptureCreate,
+    lead_id: uuid.UUID,
+) -> LeadCampaignTouch:
+    return LeadCampaignTouch(
+        tenant_id=context.tenant_id,
+        lead_id=lead_id,
+        source=data.source,
+        source_external_id=data.source_external_id,
+        campaign_id=data.campaign_id,
+        campaign_name=data.campaign_name,
+        ad_id=data.ad_id,
+        utm_source=data.utm_source,
+        utm_medium=data.utm_medium,
+        utm_campaign=data.utm_campaign,
+        utm_content=data.utm_content,
+        consent_captured_at=data.consent_captured_at,
+        consent_text_version=data.consent_text_version,
+    )
+
+
 async def update_lead(
     session: AsyncSession,
     context: AuthContext,
@@ -198,9 +388,48 @@ async def move_lead_status(
                 Party.tenant_id == context.tenant_id,
             )
         )
+        if party and party.identification_number.startswith("lead-"):
+            raise HTTPException(
+                status_code=422,
+                detail="Complete the prospect fiscal identity before converting it to a customer",
+            )
         if party and "CUSTOMER" not in party.roles:
             party.roles = party.roles + ["CUSTOMER"]
 
+    await session.flush()
+    await session.refresh(lead, attribute_names=["updated_at", "party", "product", "owner"])
+    return lead
+
+
+async def qualify_lead(
+    session: AsyncSession,
+    context: AuthContext,
+    lead_id: uuid.UUID,
+    data: LeadQualificationUpdate,
+) -> Lead:
+    """Registra una decisión humana de calificación con evidencia mínima."""
+    lead = await get_lead(session, context, lead_id)
+    lead.qualification_status = data.status
+    lead.company_name = data.company_name
+    lead.job_title = data.job_title
+    lead.uses_aws = data.uses_aws
+    lead.decision_authority = data.decision_authority
+    lead.qualification_reason = data.reason
+    lead.qualified_at = datetime.now(UTC)
+    lead.qualified_by = context.actor_id
+    session.add(
+        LeadActivity(
+            tenant_id=context.tenant_id,
+            lead_id=lead.id,
+            actor_id=context.actor_id,
+            activity_type="NOTE",
+            subject=("Lead calificado" if data.status == "QUALIFIED" else "Lead descartado"),
+            description=data.reason,
+            outcome="POSITIVE" if data.status == "QUALIFIED" else "NEGATIVE",
+            reminder_date=None,
+            reminder_completed=False,
+        )
+    )
     await session.flush()
     await session.refresh(lead, attribute_names=["updated_at", "party", "product", "owner"])
     return lead
@@ -251,6 +480,36 @@ async def create_activity(
     )
     session.add(activity)
     await session.flush()
+    return activity
+
+
+async def set_reminder_completed(
+    session: AsyncSession,
+    context: AuthContext,
+    lead_id: uuid.UUID,
+    activity_id: uuid.UUID,
+    *,
+    completed: bool,
+) -> LeadActivity:
+    """Cierra o reabre el seguimiento de una actividad del lead."""
+    # El lead se valida primero para que un activity_id de otro tenant no se
+    # distinga de uno inexistente.
+    await get_lead(session, context, lead_id)
+    statement = select(LeadActivity).where(
+        LeadActivity.id == activity_id,
+        LeadActivity.lead_id == lead_id,
+        LeadActivity.tenant_id == context.tenant_id,
+    )
+    activity = await session.scalar(statement)
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    if activity.reminder_date is None:
+        raise HTTPException(status_code=422, detail="Activity has no reminder to close")
+    activity.reminder_completed = completed
+    await session.flush()
+    # ``updated_at`` lo calcula la base: sin refrescarlo, serializar la
+    # respuesta dispara IO perezoso fuera del contexto async.
+    await session.refresh(activity, attribute_names=["updated_at"])
     return activity
 
 

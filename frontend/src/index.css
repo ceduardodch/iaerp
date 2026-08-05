@@ -587,6 +587,48 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
 .crm-timeline-panel { margin-top: 1rem; padding: 1.5rem; }
 .crm-timeline-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
 .crm-timeline-panel h2 { margin: 0; font-size: 1.7rem; }
+.campaign-summary-panel { margin-bottom: 1rem; }
+.campaign-summary-table { width: 100%; min-width: 640px; border-collapse: collapse; }
+.campaign-summary-table th, .campaign-summary-table td { padding: .8rem 1rem; border-top: 1px solid var(--line); text-align: left; font-size: .78rem; }
+.campaign-summary-table th { color: var(--muted); font-size: .64rem; letter-spacing: .06em; text-transform: uppercase; }
+.crm-campaign-attribution { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: 0; }
+.crm-campaign-attribution div { min-width: 0; }
+.crm-campaign-attribution dt { color: var(--muted); font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; }
+.crm-campaign-attribution dd { margin: .3rem 0 0; overflow-wrap: anywhere; font-size: .8rem; }
+.campaign-spend-warning { margin: 0 0 1rem; }
+.campaign-list { display: grid; gap: 1rem; }
+.campaign-card-grid { display: grid; grid-template-columns: minmax(16rem, .8fr) minmax(18rem, 1.2fr); gap: 1.25rem; }
+.campaign-card-grid dl { display: grid; gap: .65rem; margin: 0; }
+.campaign-card-grid dl div { display: grid; gap: .15rem; }
+.campaign-card-grid dt { color: var(--muted); font-size: .64rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.campaign-card-grid dd, .campaign-card-grid p { margin: 0; }
+.campaign-actions { align-items: end; display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.campaign-actions form { align-items: end; display: flex; flex-wrap: wrap; gap: .75rem; }
+.campaign-variants { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.campaign-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
+.campaign-section-heading h3 { margin: 0; font-size: .9rem; }
+.campaign-inline-form, .campaign-variant-form { display: grid; gap: .75rem; margin: .75rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-inset); }
+.campaign-inline-form p { margin: 0; }
+.campaign-variant-list { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.campaign-variant-card { display: grid; gap: .6rem; padding: .9rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-card); }
+.campaign-variant-card > div { display: flex; justify-content: space-between; gap: .75rem; }
+.campaign-variant-card small { color: var(--muted); }
+.campaign-variant-card p { margin: 0; font-size: .78rem; }
+.campaign-variant-card > span { width: fit-content; padding: .2rem .45rem; border-radius: 999px; color: var(--text-secondary); background: var(--surface-inset); font-size: .68rem; }
+.campaign-variant-card form { display: flex; align-items: end; gap: .5rem; flex-wrap: wrap; }
+.campaign-insights-table-wrap { margin-top: 1rem; overflow-x: auto; }
+.campaign-insights-table { width: 100%; min-width: 820px; border-collapse: collapse; }
+.campaign-insights-table th, .campaign-insights-table td { padding: .7rem .8rem; border-top: 1px solid var(--line); text-align: right; font-size: .76rem; font-variant-numeric: tabular-nums; }
+.campaign-insights-table th:first-child, .campaign-insights-table td:first-child { text-align: left; }
+.campaign-insights-table th { color: var(--muted); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; }
+.campaign-insights-table small { display: block; color: var(--muted); }
+.lead-detail-qualification { display: grid; gap: .75rem; }
+.lead-detail-qualification h3 { margin: 0; }
+.lead-detail-qualification form { display: grid; gap: .75rem; }
+.qualification-state { width: fit-content; margin: 0; padding: .25rem .55rem; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+.qualification-unreviewed { color: var(--text-secondary); background: var(--surface-inset); }
+.qualification-qualified { color: var(--success-text); background: var(--emerald-50); }
+.qualification-disqualified { color: var(--danger-text); background: var(--red-50); }
 .timeline { display: grid; }
 .timeline-item { display: grid; grid-template-columns: 150px 1fr; gap: 1.3rem; padding: 1rem 0; border-top: 1px solid var(--line); }
 .timeline-item time { color: var(--muted); font-size: .65rem; }
@@ -695,6 +737,7 @@ dd { margin: 0; font-size: .75rem; text-align: right; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .split-layout, .company-grid, .company-grid-expanded { grid-template-columns: 1fr; }
   .crm-detail-grid { grid-template-columns: 1fr; }
+  .crm-campaign-attribution { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -985,6 +1028,16 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
 .activity-type { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .activity-timeline time { font-size: .75rem; color: var(--muted); }
 .lead-detail-empty { color: var(--muted); font-size: .88rem; }
+.lead-detail-message h3 { margin: 0 0 .6rem; }
+.message-form { display: grid; gap: .6rem; }
+.message-form .field-row { align-items: end; }
+.message-form .fine-print { margin: 0; }
+.form-success { margin: 0; color: var(--ok, #0e6b45); font-size: .82rem; }
+.activity-reminder { display: flex; align-items: center; gap: .5rem; margin: .25rem 0 0; font-size: .75rem; color: var(--muted); }
+.activity-reminder.overdue { color: #a2410a; font-weight: 600; }
+.activity-reminder.done { color: var(--muted); text-decoration: line-through; }
+.activity-reminder button { border: 1px solid var(--line); border-radius: 999px; background: transparent; padding: .1rem .55rem; font-size: .7rem; color: inherit; cursor: pointer; }
+.activity-reminder button:hover:not(:disabled) { background: rgba(216,239,133,.35); }
 
 /* Facturas agrupadas por periodo */
 .invoice-month-list { display: grid; gap: .75rem; }
@@ -1177,4 +1230,5 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
   .dash-hero-row, .dash-grid-2 { grid-template-columns: 1fr; }
   .dash-tiles { grid-template-columns: 1fr; }
   .dash-hero-value { font-size: 36px; }
+  .campaign-card-grid { grid-template-columns: 1fr; }
 }
