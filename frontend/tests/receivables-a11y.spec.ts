@@ -36,6 +36,7 @@ const overdueReceivable = {
   currency: 'USD',
   // Fecha fija muy en el pasado: el bucket "90+" no debe depender del reloj real de CI.
   dueDate: '2020-01-01',
+  aging: { bucket: '90+' as const, daysOverdue: 2400 },
 }
 
 const partialReceivable = {
@@ -46,6 +47,7 @@ const partialReceivable = {
   openAmount: '120.00',
   currency: 'USD',
   dueDate: '2026-08-15',
+  aging: { bucket: 'CURRENT' as const, daysOverdue: 0 },
 }
 
 const settledReceivable = {
@@ -55,7 +57,9 @@ const settledReceivable = {
   originalAmount: '80.00',
   openAmount: '0.00',
   currency: 'USD',
-  dueDate: '2026-06-01',
+  // La fecha histórica se conserva, pero una cuenta sin saldo no tiene aging pendiente.
+  dueDate: '2020-01-01',
+  aging: null,
 }
 
 const updatedAfterPayment = {
@@ -203,6 +207,8 @@ test('settled receivable is available only when explicitly requested', async ({ 
   const settledRow = page.getByRole('row', {
     name: /\$80,00/,
   })
+  await expect(settledRow.getByRole('cell').nth(5)).toHaveText('—')
+  await expect(settledRow).not.toContainText('Más de 90 días')
   await expect(settledRow.getByRole('button', { name: /Registrar cobro/ })).toBeDisabled()
   await expect(settledRow.getByRole('button', { name: /correo de cobro/i })).toBeDisabled()
 })

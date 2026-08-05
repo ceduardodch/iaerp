@@ -51,7 +51,7 @@
 | Codex (este hilo, entrega fiscal) | ✅ COMPLETA | Correo de factura con plantilla, plazo, RIDE + XML y Tributario agrupado por documento | 2026-08-02 |
 | Codex (este hilo, contratos simples) | ✅ COMPLETA | Contratos, evidencia Gmail/PDF, preparación de cobros y opt-in de cobranza; validación local verde | 2026-08-02 |
 | Codex (este hilo, factura histórica PDF) | ✅ COMPLETA | RIDE Sky como venta histórica para Facturas/reportes, con XML faltante y sin efecto en ATS, IVA o Cartera | 2026-08-03 |
-| Codex (este hilo, CxP) | ✅ COMPLETA | Worktree aislado: CxP operativa, pagos/historial, reglas y un extracto para CxC + CxP; validación local, pendiente integración autorizada | 2026-08-05 |
+| Codex (este hilo, CxP) | ✅ COMPLETA | PR #31: fix de aging agregado; saldadas/anuladas muestran `—` y las abiertas usan el cálculo del servidor; nueva CI y revisión pendientes | 2026-08-05 |
 
 > **Orden de migraciones pendiente:** CxP reserva `e6f7a8b9c0d1` sobre
 > `da1e2f3a4b5c`. La sesión de campañas aún tiene localmente

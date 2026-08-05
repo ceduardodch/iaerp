@@ -307,6 +307,7 @@ export type AccountItem = {
   openAmount: string
   currency: string
   dueDate?: string | null
+  aging?: { bucket: AgingBucket; daysOverdue: number } | null
 }
 
 export type ReceivableMovement = {

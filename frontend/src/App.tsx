@@ -16,6 +16,7 @@ import {
   idempotencyKey,
   type AccountItem,
   type AccountItemStatus,
+  type AgingBucket,
   type ArtifactDownload,
   type BankStatementImport,
   type BillingProposal,
@@ -2388,10 +2389,8 @@ function ReceivableStatusBadge({ status }: { status: AccountItemStatus }) {
   return <ErpStatusBadge tone={receivableStatusTone[status]}>{receivableStatusLabels[status]}</ErpStatusBadge>
 }
 
-type AgingBucket = 'AL_DIA' | '1-15' | '16-30' | '31-60' | '61-90' | '90+'
-
 const agingLabels: Record<AgingBucket, string> = {
-  AL_DIA: 'Al día',
+  CURRENT: 'Al día',
   '1-15': '1 a 15 días',
   '16-30': '16 a 30 días',
   '31-60': '31 a 60 días',
@@ -2399,23 +2398,20 @@ const agingLabels: Record<AgingBucket, string> = {
   '90+': 'Más de 90 días',
 }
 
-function agingBucket(dueDate: string | null | undefined): AgingBucket | null {
-  if (!dueDate) return null
-  const daysOverdue = Math.floor((Date.now() - new Date(`${dueDate}T00:00:00`).getTime()) / 86_400_000)
-  if (daysOverdue <= 0) return 'AL_DIA'
-  if (daysOverdue <= 15) return '1-15'
-  if (daysOverdue <= 30) return '16-30'
-  if (daysOverdue <= 60) return '31-60'
-  if (daysOverdue <= 90) return '61-90'
-  return '90+'
-}
-
-function AgingChip({ dueDate }: { dueDate: string | null | undefined }) {
-  const bucket = agingBucket(dueDate)
-  if (!bucket) return <span className="fine-print">Sin vencimiento</span>
+function AgingChip({
+  aging,
+  status,
+}: {
+  aging: AccountItem['aging']
+  status: AccountItemStatus
+}) {
+  if (status === 'SETTLED' || status === 'VOIDED') {
+    return <span className="fine-print">—</span>
+  }
+  if (!aging) return <span className="fine-print">Sin vencimiento</span>
   return (
-    <ErpStatusBadge tone={bucket === 'AL_DIA' ? 'success' : bucket === '90+' || bucket === '61-90' ? 'danger' : 'warning'}>
-      {agingLabels[bucket]}
+    <ErpStatusBadge tone={aging.bucket === 'CURRENT' ? 'success' : aging.bucket === '90+' || aging.bucket === '61-90' ? 'danger' : 'warning'}>
+      {agingLabels[aging.bucket]}
     </ErpStatusBadge>
   )
 }
@@ -3650,7 +3646,7 @@ function ReceivablesPage({
                     <td>${formatAmount(receivable.originalAmount)}</td>
                     <td>${formatAmount(receivable.openAmount)}</td>
                     <td><ReceivableStatusBadge status={receivable.status} /></td>
-                    <td><AgingChip dueDate={receivable.dueDate} /></td>
+                    <td><AgingChip aging={receivable.aging} status={receivable.status} /></td>
                     <td>
                       {/* Iconos y no texto: cuatro acciones escritas empujaban la
                           tabla a lo ancho y tapaban el saldo. El nombre completo
