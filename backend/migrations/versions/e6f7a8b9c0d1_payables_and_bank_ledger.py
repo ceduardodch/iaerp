@@ -247,7 +247,11 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "id", name="uq_expense_rules_tenant_id"),
         sa.UniqueConstraint("tenant_id", "name", name="uq_expense_rules_tenant_name"),
     )
-    op.create_index("ix_expense_recognition_rules_tenant_id", "expense_recognition_rules", ["tenant_id"])
+    op.create_index(
+        "ix_expense_recognition_rules_tenant_id",
+        "expense_recognition_rules",
+        ["tenant_id"],
+    )
     op.create_index(
         "ix_expense_rules_tenant_active",
         "expense_recognition_rules",
@@ -380,4 +384,3 @@ def downgrade() -> None:
     op.drop_table("payable_movements")
     op.drop_table("payable_installments")
     op.drop_table("payables")
-
