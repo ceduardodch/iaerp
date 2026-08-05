@@ -89,10 +89,10 @@ jobs:
           if changed '^backend/'; then backend=true; fi
           if changed '^(backend/(migrations/|app/models/)|compose\.ya?ml|compose\.coolify\.yaml)' || [[ "$strict" == true ]]; then migrations=true; fi
           if changed '^frontend/' || [[ "$strict" == true ]]; then frontend=true; fi
-          if changed '^(backend/app/core/|backend/app/api/auth|backend/app/services/(auth|identity)|frontend/src/(auth|oidc)|compose\.ya?ml|keycloak/)' || [[ "$strict" == true ]]; then oidc=true; fi
+          if changed '^(backend/app/core/|backend/app/api/auth|backend/app/services/(auth|identity)|frontend/src/(auth|oidc)|compose\.ya?ml|infra/keycloak/)' || [[ "$strict" == true ]]; then oidc=true; fi
           if changed '^(contracts/|backend/app/(api|mcp)/|\.github/workflows/)'; then contracts=true; fi
-          if changed '^(compose\.coolify\.yaml|compose\.ya?ml|Dockerfile|backend/Dockerfile|frontend/Dockerfile)'; then deployment_config=true; fi
-          if changed '^(backend/app/|frontend/src/|compose\.ya?ml|compose\.coolify\.yaml|backend/Dockerfile|frontend/Dockerfile)' ; then deploy=true; fi
+          if changed '^(compose\.coolify\.yaml|compose\.ya?ml|Dockerfile|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/)'; then deployment_config=true; fi
+          if changed '^(backend/app/|frontend/src/|compose\.ya?ml|compose\.coolify\.yaml|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/)' ; then deploy=true; fi
 
           set_output backend "$backend"
           set_output migrations "$migrations"

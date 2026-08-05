@@ -33,6 +33,13 @@ test('PKCE login changes tenant only through a new organization authorization', 
   await expect(
     page.getByText('Cliente Sintetico Norte', { exact: true }),
   ).toBeVisible()
+
+  await page.getByRole('button', { name: 'Compras' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Cuentas por pagar' }),
+  ).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+
   await page.getByRole('button', { name: 'Cerrar sesión' }).click()
 
   await expect(page.getByRole('heading', { name: 'Elegir empresa' })).toBeVisible()

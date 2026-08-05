@@ -40,6 +40,13 @@
 > La migración y 13 pruebas dirigidas pasan en PostgreSQL 16. Falta resolver el
 > orden con la migración de campañas e integrar con autorización por `release`.
 
+> Corte 2026-08-05: detectado en producción `403 Missing scopes:
+> payables:read`. La corrección local agrega `payables:read/write` al cliente
+> OIDC web, hace que cambios en `infra/keycloak/` activen CI y despliegue, y
+> cubre el acceso a Compras con login PKCE real. Validación local verde. Falta
+> revisión independiente e integración por `release -> PR -> main`; el error
+> seguirá en producción hasta desplegar el cambio.
+
 ---
 
 ## 🎯 Objetivo de este Documento
