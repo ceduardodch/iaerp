@@ -361,12 +361,18 @@ export type BankStatementImport = {
   period: string
   fileName: string
   sourceSha256: string
+  accountMasked: string
   totalRows: number
   creditRows: number
+  debitRows: number
   outsidePeriodCreditCount: number
+  outsidePeriodDebitCount: number
   matchedCount: number
   unmatchedCreditCount: number
   ignoredDebitCount: number
+  payableMatchedCount: number
+  unmatchedDebitCount: number
+  ruleSuggestionCount: number
   alreadyImportedCount: number
   manualCorrectionCount: number
   matches: Array<{
@@ -396,6 +402,84 @@ export type BankStatementImport = {
     status: 'CORRECTION_REQUIRED' | 'CORRECTED'
     detail: string
   }>
+  debitMatches: Array<{
+    transactionId: string
+    paymentDate: string
+    reference: string
+    description: string
+    amount: string
+    payableId: string
+    supplierName?: string | null
+    documentNumber?: string | null
+    payableTotal: string
+    allocatedAmount: string
+    linksExistingPayment: boolean
+    status: 'MATCHED' | 'REGISTERED' | 'EVIDENCE_LINKED'
+    detail: string
+  }>
+  debitSuggestions: Array<{
+    transactionId: string
+    paymentDate: string
+    reference: string
+    description: string
+    amount: string
+    classification: 'UNCLASSIFIED' | 'EXPENSE_CANDIDATE' | 'BANK_FEE' | 'BANK_TAX' | 'INTERNAL_TRANSFER' | 'CARD_SETTLEMENT'
+    ruleId?: string | null
+    ruleName?: string | null
+    suggestedCategory?: string | null
+    suggestedSupplierName?: string | null
+    suggestedTaxClassification?: string | null
+    detail: string
+  }>
+}
+
+export type PayableStatus = 'OPEN' | 'PARTIAL' | 'SETTLED' | 'VOIDED'
+
+export type Payable = {
+  id: string
+  supplierId?: string | null
+  supplierName?: string | null
+  fiscalDocumentId?: string | null
+  description: string
+  category: string
+  documentType: 'INVOICE' | 'LIQUIDATION' | 'DEBIT_NOTE' | 'OTHER'
+  documentNumber?: string | null
+  issueDate: string
+  dueDate: string
+  total: string
+  openAmount: string
+  currency: 'USD'
+  status: PayableStatus
+  taxClassification: 'DEDUCTIBLE_PENDING_REVIEW' | 'DEDUCTIBLE_CONFIRMED' | 'NON_DEDUCTIBLE'
+  evidenceStatus: 'NONE' | 'ATTACHED' | 'PRELIMINARY' | 'FISCAL_XML'
+  supportReference?: string | null
+}
+
+export type PayableMovement = {
+  id: string
+  payableId: string
+  installmentId: string
+  movementType: 'PAYMENT' | 'RETENTION' | 'CREDIT_NOTE' | 'REVERSAL'
+  amount: string
+  effectiveDate: string
+  method?: 'TRANSFER' | 'CHECK' | 'CASH' | 'CARD' | 'OTHER' | null
+  supportReference?: string | null
+  reversedMovementId?: string | null
+  actorId: string
+  createdAt: string
+}
+
+export type ExpenseRule = {
+  id: string
+  name: string
+  descriptionPattern: string
+  accountLast4?: string | null
+  amountMin?: string | null
+  amountMax?: string | null
+  category: string
+  supplierName?: string | null
+  taxClassification: Payable['taxClassification']
+  active: boolean
 }
 
 export type DiscountInput = {
