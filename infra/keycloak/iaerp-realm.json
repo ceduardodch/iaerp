@@ -376,6 +376,11 @@
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
     },
     {
+      "name": "payables:extract",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
       "name": "tax:read",
       "protocol": "openid-connect",
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
@@ -435,6 +440,7 @@
         "receivables:notify",
         "payables:read",
         "payables:write",
+        "payables:extract",
         "tax:read",
         "tax:write"
       ],

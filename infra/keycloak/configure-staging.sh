@@ -81,7 +81,7 @@ for scope in \
   communications:read communications:write \
   commercial:read commercial:write \
   receivables:read receivables:write receivables:notify \
-  payables:read payables:write; do
+  payables:read payables:write payables:extract; do
   ensure_default_scope "$scope"
 done
 

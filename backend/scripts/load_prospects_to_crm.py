@@ -253,6 +253,33 @@ async def fetch_targets(segment: str) -> list[dict[str, object]]:
         await engine.dispose()
 
 
+def targets_from_csv(path: str) -> list[dict[str, object]]:
+    """Lee una lista ya exportada con ``--export``.
+
+    Evita depender de la base de empresas en cada corrida: esa conexión es de
+    red local y macOS la bloquea de forma intermitente, lo que dejaba la rutina
+    diaria a merced de un permiso del sistema. El CSV ya viene en el orden de
+    prioridad, así que se respeta tal cual.
+    """
+    with open(path, encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    return [
+        {
+            "ruc": (row.get("ruc") or "").strip(),
+            "nombre_compania": row.get("empresa") or "",
+            "correo_electronico": row.get("correo") or "",
+            "telefono": row.get("telefono") or "",
+            "empleados": row.get("empleados") or "",
+            "provincia": row.get("provincia") or "",
+            "ciiu_codigo_n6": row.get("ciiu") or "",
+            # La nota es el único rastro de la prioridad en el CSV.
+            "prioridad": 3 if (row.get("nota") or "").strip() else 1,
+        }
+        for row in rows
+        if (row.get("ruc") or "").strip()
+    ]
+
+
 async def existing_rucs(client: httpx.AsyncClient, token: ServiceAccountToken) -> set[str]:
     """RUCs que ya están en el CRM, para no duplicar en una segunda corrida."""
     response = await token.request(client, "GET", "/api/v1/crm/leads")
@@ -282,6 +309,11 @@ async def main() -> None:
         help="Escribir la lista a un CSV para trabajarla a mano (no toca el CRM)",
     )
     parser.add_argument("--limit", type=int, help="Cargar solo las primeras N")
+    parser.add_argument(
+        "--from-csv",
+        metavar="RUTA.csv",
+        help="Leer una lista ya exportada en vez de consultar la base de empresas",
+    )
     args = parser.parse_args()
 
     base_url = os.environ.get("PROSPECT_CRM_URL")
@@ -294,7 +326,9 @@ async def main() -> None:
             "Crea una cuenta de servicio con scopes leads:read y leads:write."
         )
 
-    targets = await fetch_targets(args.segment)
+    targets = (
+        targets_from_csv(args.from_csv) if args.from_csv else await fetch_targets(args.segment)
+    )
     if args.limit:
         targets = targets[: args.limit]
 
