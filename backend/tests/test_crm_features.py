@@ -509,3 +509,51 @@ async def test_lead_reminder_of_another_tenant_is_not_reachable(client, monkeypa
         json={"completed": True},
     )
     assert intruso.status_code == 404, intruso.text
+
+
+async def test_lead_listing_pages_without_overlap_or_gaps(client):
+    """El tablero pedía una sola página y el endpoint topaba en 100.
+
+    Un pipeline mayor se veía truncado sin aviso, y el cargador de prospectos
+    no podía deduplicar por RUC más allá de los 100 leads más recientes.
+    """
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["leads:read", "leads:write"])
+    creados: list[str] = []
+    for indice in range(5):
+        response = await client.post(
+            "/api/v1/crm/leads/with-party",
+            headers=auth(token, f"crm-paging-lead-{indice:04d}"),
+            json={
+                "partyName": f"Prospecto {indice}",
+                "partyIdentificationType": "RUC",
+                # RUC distinto por lead: Party es único por identificación.
+                "partyIdentificationNumber": f"179123456{indice:04d}",
+                "title": f"Operación AWS {indice}",
+            },
+        )
+        assert response.status_code == 201, response.text
+        creados.append(response.json()["id"])
+
+    primera = await client.get("/api/v1/crm/leads?limit=2&offset=0", headers=auth(token))
+    segunda = await client.get("/api/v1/crm/leads?limit=2&offset=2", headers=auth(token))
+    tercera = await client.get("/api/v1/crm/leads?limit=2&offset=4", headers=auth(token))
+    assert primera.status_code == 200, primera.text
+    ids_paginados = [
+        lead["id"] for página in (primera, segunda, tercera) for lead in página.json()
+    ]
+    # Sin solapamiento: los leads creados en la misma transacción comparten
+    # ``created_at``, así que sin desempate por id las páginas se repetían.
+    assert len(ids_paginados) == len(set(ids_paginados))
+    assert set(creados).issubset(set(ids_paginados))
+
+    completo = await client.get("/api/v1/crm/leads", headers=auth(token))
+    assert [lead["id"] for lead in completo.json()][:5] == ids_paginados[:5]
+
+
+async def test_lead_listing_rejects_limit_over_the_maximum(client):
+    """Un ``limit`` enorme no debe poder pedir la tabla entera."""
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["leads:read"])
+    excedido = await client.get("/api/v1/crm/leads?limit=100000", headers=auth(token))
+    assert excedido.status_code == 422
+    negativo = await client.get("/api/v1/crm/leads?offset=-1", headers=auth(token))
+    assert negativo.status_code == 422

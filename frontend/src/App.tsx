@@ -13,6 +13,7 @@ import {
 
 import {
   apiRequest,
+  fetchAllLeads,
   idempotencyKey,
   type AccountItem,
   type AccountItemStatus,
@@ -46,7 +47,6 @@ import {
   type IntegrationStatus,
   type MetaAdsIntegration,
   type SocialCampaignPolicy,
-  type Lead,
   type Operation,
   type OrganizationProfile,
   type Party,
@@ -319,7 +319,7 @@ function Overview({
     queries: [
       { queryKey: ['invoices', 'overview'], queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices') },
       { queryKey: ['receivables', 'overview'], queryFn: () => apiRequest<AccountItem[]>(token, '/receivables') },
-      { queryKey: ['crm', 'leads', 'overview'], queryFn: () => apiRequest<Lead[]>(token, '/crm/leads') },
+      { queryKey: ['crm', 'leads', 'overview'], queryFn: () => fetchAllLeads(token) },
       { queryKey: ['tax', 'dashboard'], queryFn: () => apiRequest<DashboardTax>(token, '/tax/dashboard'), enabled: canReadTax },
       { queryKey: ['receivables', 'aging'], queryFn: () => apiRequest<AgingSummary>(token, '/receivables/aging') },
       { queryKey: ['receivables', 'collections', 'monthly'], queryFn: () => apiRequest<CollectionsHistory>(token, '/receivables/collections/monthly?months=12') },
@@ -728,7 +728,7 @@ function ContractsPage({
   const [syncResult, setSyncResult] = useState<{ versionId: string; result: ContractEmailSync } | null>(null)
   const wonLeadsQuery = useQuery({
     queryKey: ['crm', 'leads', 'WON'],
-    queryFn: () => apiRequest<Lead[]>(token, '/crm/leads?status=WON'),
+    queryFn: () => fetchAllLeads(token, 'status=WON'),
   })
   const contractsQuery = useQuery({
     queryKey: ['commercial', 'contracts', partyId],

@@ -928,6 +928,32 @@ export function idempotencyKey(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`
 }
 
+/** Tamaño de página; el backend acota en `LIST_LEADS_MAX_LIMIT` (200). */
+const LEADS_PAGE_SIZE = 200
+/** Techo de seguridad: un backend que devolviera páginas llenas para siempre
+ *  colgaría la pantalla. Con 3 vueltas ya se cubren 600 leads. */
+const LEADS_MAX_PAGES = 3
+
+/**
+ * Trae todos los leads recorriendo las páginas hasta agotarlas.
+ *
+ * `GET /crm/leads` devolvía como mucho 100 y quien lo consumía pedía una sola
+ * vez, así que el tablero ocultaba el pipeline a partir de ahí y el dashboard
+ * calculaba sus indicadores sobre una lista truncada, sin ningún aviso.
+ */
+export async function fetchAllLeads(token: string, query = ''): Promise<Lead[]> {
+  const leads: Lead[] = []
+  for (let page = 0; page < LEADS_MAX_PAGES; page += 1) {
+    const params = new URLSearchParams(query)
+    params.set('limit', String(LEADS_PAGE_SIZE))
+    params.set('offset', String(page * LEADS_PAGE_SIZE))
+    const batch = await apiRequest<Lead[]>(token, `/crm/leads?${params}`)
+    leads.push(...batch)
+    if (batch.length < LEADS_PAGE_SIZE) break
+  }
+  return leads
+}
+
 // Módulo tributario (ADR 0012)
 export type TaxPeriod = {
   id: string

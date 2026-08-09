@@ -13,7 +13,7 @@ import {
 } from '@dnd-kit/sortable'
 import { useShallow } from 'zustand/react/shallow'
 import type { Lead, LeadStatus, LeadWithPartyCreate } from '../api'
-import { apiRequest, idempotencyKey } from '../api'
+import { apiRequest, fetchAllLeads, idempotencyKey } from '../api'
 import {
   selectActiveFilterCount,
   selectFilteredLeads,
@@ -113,7 +113,7 @@ export function useKanban({ token }: { token: string }) {
   // Query para obtener leads del servidor
   const leadsQuery = useQuery({
     queryKey: ['crm-leads'],
-    queryFn: () => apiRequest<Lead[]>(token, '/crm/leads'),
+    queryFn: () => fetchAllLeads(token),
   })
 
   // Sincronizar leads del query con el store cuando cambian

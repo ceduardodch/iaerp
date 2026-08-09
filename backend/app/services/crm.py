@@ -29,13 +29,24 @@ from app.schemas.crm import (
 # Lead Service
 
 
+LIST_LEADS_MAX_LIMIT = 200
+
+
 async def list_leads(
     session: AsyncSession,
     context: AuthContext,
     status: str | None = None,
     owner_id: uuid.UUID | None = None,
+    *,
+    limit: int = 100,
+    offset: int = 0,
 ) -> list[Lead]:
-    """Lista todos los leads del tenant con filtros opcionales."""
+    """Lista los leads del tenant con filtros opcionales y paginación.
+
+    Antes devolvía como mucho 100 sin forma de pedir el resto, así que el
+    kanban ocultaba el pipeline a partir de ese punto y el cargador de
+    prospectos no podía deduplicar por RUC más allá de los 100 más recientes.
+    """
     statement = select(Lead).where(Lead.tenant_id == context.tenant_id)
 
     if status:
@@ -44,7 +55,14 @@ async def list_leads(
     if owner_id:
         statement = statement.where(Lead.owner_user_id == owner_id)
 
-    statement = statement.order_by(Lead.created_at.desc()).limit(100)
+    # ``created_at`` solo no basta para paginar: dos leads creados en el mismo
+    # instante —lo normal en una carga masiva— pueden ordenarse distinto entre
+    # una consulta y la siguiente, repitiendo o saltando filas. El id desempata.
+    statement = (
+        statement.order_by(Lead.created_at.desc(), Lead.id.desc())
+        .offset(offset)
+        .limit(min(limit, LIST_LEADS_MAX_LIMIT))
+    )
 
     return list((await session.scalars(statement)).all())
 

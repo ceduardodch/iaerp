@@ -648,9 +648,17 @@ async def get_leads(
     context: Annotated[AuthContext, Depends(require_scopes("leads:read"))],
     status: str | None = None,
     owner_id: uuid.UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=crm.LIST_LEADS_MAX_LIMIT)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[LeadRead]:
-    """Lista todos los leads del tenant con filtros opcionales."""
-    leads = await crm.list_leads(session, context, status=status, owner_id=owner_id)
+    """Lista los leads del tenant con filtros opcionales y paginación.
+
+    Sin ``limit`` ni ``offset`` la respuesta es la de siempre, para no romper
+    a quien ya consume el endpoint.
+    """
+    leads = await crm.list_leads(
+        session, context, status=status, owner_id=owner_id, limit=limit, offset=offset
+    )
     return [LeadRead.model_validate(lead) for lead in leads]
 
 

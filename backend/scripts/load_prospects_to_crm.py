@@ -181,6 +181,12 @@ REVISAR_COMPETENCIA = (
     "prospecto."
 )
 
+# Texto exacto que el propio export escribe en la columna ``nota``. Se compara
+# contra este literal en vez de contra "hay algo escrito": el CSV está pensado
+# para editarse a mano, y una anotación como "no contesta" no debe convertir a
+# un prospecto normal en sospechoso de competencia.
+NOTA_COMPETENCIA = "revisar si es competencia"
+
 
 def repair(value: str | None) -> str:
     """Repara el mojibake de la carga original.
@@ -212,6 +218,21 @@ def repair(value: str | None) -> str:
         else:
             break
     return text.strip()
+
+
+def assign_schedule(targets: list[dict[str, object]]) -> list[datetime]:
+    """Fecha de primer contacto de cada fila.
+
+    Si el CSV trae ``contactar`` se respeta: es el plan que la persona pudo
+    haber reordenado a mano y recalcularlo desde mañana lo descartaba en
+    silencio. Lo demás se reparte a 3 por día hábil.
+    """
+    start = datetime.now(UTC).replace(hour=13, minute=0, second=0, microsecond=0)
+    computed = business_days(start + timedelta(days=1), len(targets))
+    return [
+        planned if isinstance((planned := row.get("contactar")), datetime) else fallback
+        for row, fallback in zip(targets, computed, strict=True)
+    ]
 
 
 def business_days(start: datetime, count: int) -> list[datetime]:
@@ -253,6 +274,30 @@ async def fetch_targets(segment: str) -> list[dict[str, object]]:
         await engine.dispose()
 
 
+def _csv_prioridad(row: dict[str, str]) -> int:
+    """Prioridad de una fila del CSV.
+
+    La columna explícita manda. Los CSV exportados antes de que existiera no
+    la tienen, así que se cae al marcador exacto que escribe el export; una
+    nota escrita a mano no debe marcar competencia.
+    """
+    declared = (row.get("prioridad") or "").strip()
+    if declared.isdigit():
+        return int(declared)
+    return 3 if (row.get("nota") or "").strip().lower() == NOTA_COMPETENCIA else 1
+
+
+def _csv_contactar(row: dict[str, str]) -> datetime | None:
+    """Fecha planificada de la fila, si el CSV la trae y es legible."""
+    raw = (row.get("contactar") or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw).replace(tzinfo=UTC, hour=13, minute=0, second=0)
+    except ValueError:
+        return None
+
+
 def targets_from_csv(path: str) -> list[dict[str, object]]:
     """Lee una lista ya exportada con ``--export``.
 
@@ -272,24 +317,70 @@ def targets_from_csv(path: str) -> list[dict[str, object]]:
             "empleados": row.get("empleados") or "",
             "provincia": row.get("provincia") or "",
             "ciiu_codigo_n6": row.get("ciiu") or "",
-            # La nota es el único rastro de la prioridad en el CSV.
-            "prioridad": 3 if (row.get("nota") or "").strip() else 1,
+            "prioridad": _csv_prioridad(row),
+            "segmento": (row.get("segmento") or "").strip() or None,
+            "contactar": _csv_contactar(row),
         }
         for row in rows
         if (row.get("ruc") or "").strip()
     ]
 
 
+def segment_from_csv(targets: list[dict[str, object]], explicit: str | None) -> str:
+    """Resuelve el segmento de una lista leída de CSV.
+
+    El guion de primer contacto depende del segmento: cargar `educacion.csv`
+    sin decirlo escribía el discurso de AWS a universidades. Antes esto no
+    fallaba porque ``--segment`` caía a ``isv`` en silencio.
+    """
+    declared = {str(row["segmento"]) for row in targets if row.get("segmento")}
+    if len(declared) > 1:
+        sys.exit(f"El CSV mezcla segmentos ({', '.join(sorted(declared))}); sepáralos.")
+    if declared:
+        segmento = declared.pop()
+        if segmento not in SEGMENTS:
+            sys.exit(f"Segmento desconocido en el CSV: {segmento}")
+        if explicit and explicit != segmento:
+            sys.exit(f"El CSV dice '{segmento}' y --segment dice '{explicit}'.")
+        return segmento
+    if not explicit:
+        sys.exit(
+            "El CSV no tiene columna 'segmento'. Indica --segment "
+            f"({'/'.join(sorted(SEGMENTS))}) para saber qué guion escribir."
+        )
+    return explicit
+
+
+LEADS_PAGE_SIZE = 200
+# Techo de seguridad: si el servidor devolviera páginas llenas indefinidamente,
+# la recorrida no debe quedarse girando.
+LEADS_MAX_PAGES = 50
+
+
 async def existing_rucs(client: httpx.AsyncClient, token: ServiceAccountToken) -> set[str]:
-    """RUCs que ya están en el CRM, para no duplicar en una segunda corrida."""
-    response = await token.request(client, "GET", "/api/v1/crm/leads")
-    response.raise_for_status()
+    """RUCs que ya están en el CRM, para no duplicar en una segunda corrida.
+
+    Recorre todas las páginas. Con una sola petición el endpoint devolvía como
+    mucho 100 leads, así que pasado ese punto la deduplicación dejaba de ver
+    los leads más antiguos y la recorrida los reportaba como fallas (la unicidad
+    de ``Party`` por RUC hace que el alta responda 409).
+    """
     found: set[str] = set()
-    for lead in response.json():
-        party = lead.get("party") or {}
-        number = party.get("identificationNumber")
-        if number:
-            found.add(str(number))
+    for page in range(LEADS_MAX_PAGES):
+        response = await token.request(
+            client,
+            "GET",
+            f"/api/v1/crm/leads?limit={LEADS_PAGE_SIZE}&offset={page * LEADS_PAGE_SIZE}",
+        )
+        response.raise_for_status()
+        batch = response.json()
+        for lead in batch:
+            party = lead.get("party") or {}
+            number = party.get("identificationNumber")
+            if number:
+                found.add(str(number))
+        if len(batch) < LEADS_PAGE_SIZE:
+            break
     return found
 
 
@@ -298,9 +389,10 @@ async def main() -> None:
     parser.add_argument(
         "--segment",
         choices=sorted(SEGMENTS),
-        default="isv",
+        default=None,
         help="isv = empresas de software (perfil Trantotech/Infinit); "
-        "educacion = instituciones educativas (perfil U. Andina)",
+        "educacion = instituciones educativas (perfil U. Andina). "
+        "Con --from-csv se toma del CSV si trae la columna 'segmento'.",
     )
     parser.add_argument("--apply", action="store_true", help="Escribir en el CRM")
     parser.add_argument(
@@ -326,16 +418,19 @@ async def main() -> None:
             "Crea una cuenta de servicio con scopes leads:read y leads:write."
         )
 
-    targets = (
-        targets_from_csv(args.from_csv) if args.from_csv else await fetch_targets(args.segment)
-    )
+    if args.from_csv:
+        targets = targets_from_csv(args.from_csv)
+        segment = segment_from_csv(targets, args.segment)
+    else:
+        # El camino de base de datos conserva el valor de siempre.
+        segment = args.segment or "isv"
+        targets = await fetch_targets(segment)
     if args.limit:
         targets = targets[: args.limit]
 
-    start = datetime.now(UTC).replace(hour=13, minute=0, second=0, microsecond=0)
-    schedule = business_days(start + timedelta(days=1), len(targets))
+    schedule = assign_schedule(targets)
 
-    print(f"\nSegmento: {args.segment}   Empresas objetivo: {len(targets)}")
+    print(f"\nSegmento: {segment}   Empresas objetivo: {len(targets)}")
     dias = len({d.date() for d in schedule})
     print(f"A {CONTACTS_PER_DAY} por día hábil = {dias} días de trabajo\n")
 
@@ -345,9 +440,12 @@ async def main() -> None:
         # respuesta esperada es menor que la de un contacto con nombre.
         with open(args.export, "w", newline="", encoding="utf-8-sig") as handle:  # noqa: ASYNC230
             writer = csv.writer(handle)
+            # `segmento` y `prioridad` van explícitas: deducirlas del texto de
+            # la nota al releer el CSV escribía el guion equivocado y marcaba
+            # como competencia a cualquiera con una anotación a mano.
             writer.writerow(
                 ["contactar", "empresa", "correo", "telefono", "empleados",
-                 "provincia", "ruc", "ciiu", "nota"]
+                 "provincia", "ruc", "ciiu", "segmento", "prioridad", "nota"]
             )
             for row, when in zip(targets, schedule, strict=True):
                 writer.writerow([
@@ -359,7 +457,9 @@ async def main() -> None:
                     repair(str(row["provincia"])),
                     row["ruc"],
                     row["ciiu_codigo_n6"],
-                    "revisar si es competencia" if row["prioridad"] == 3 else "",
+                    segment,
+                    row["prioridad"],
+                    NOTA_COMPETENCIA if row["prioridad"] == 3 else "",
                 ])
         print(f"Exportadas {len(targets)} empresas a {args.export}")
         return
@@ -369,7 +469,7 @@ async def main() -> None:
         print("-" * 100)
         for row, when in list(zip(targets, schedule, strict=True))[:15]:
             name = repair(str(row["nombre_compania"]))[:40]
-            nota = "revisar si es competencia" if row["prioridad"] == 3 else ""
+            nota = NOTA_COMPETENCIA if row["prioridad"] == 3 else ""
             print(
                 f"{name:<42}{row['empleados'] or 0:>6}  "
                 f"{repair(str(row['provincia']))[:11]:<13}{str(when.date()):<12}{nota}"
@@ -383,13 +483,19 @@ async def main() -> None:
     token = ServiceAccountToken(client_id, client_secret)
     async with httpx.AsyncClient(base_url=base_url, timeout=30) as client:
         already = await existing_rucs(client, token)
-        created = skipped = failed = 0
+        # El calendario se reparte SOBRE LO QUE FALTA. Repartirlo antes y luego
+        # saltarse los ya cargados dejaba el turno perdido, así que en una
+        # segunda corrida los primeros días quedaban vacíos y se rompía el
+        # "3 por día hábil".
+        pending = [row for row in targets if str(row["ruc"]).strip() not in already]
+        skipped = len(targets) - len(pending)
+        schedule = assign_schedule(pending)
+        created = failed = 0
+        if skipped:
+            print(f"{skipped} ya estaban en el CRM; se reparten los {len(pending)} restantes.\n")
 
-        for row, when in zip(targets, schedule, strict=True):
+        for row, when in zip(pending, schedule, strict=True):
             ruc = str(row["ruc"]).strip()
-            if ruc in already:
-                skipped += 1
-                continue
             name = repair(str(row["nombre_compania"]))
             try:
                 lead = await token.request(
@@ -405,13 +511,19 @@ async def main() -> None:
                         "partyPhone": str(row["telefono"] or "") or None,
                         "title": (
                             f"Brazo de AWS — {name}"
-                            if args.segment == "isv"
+                            if segment == "isv"
                             else f"Seguridad gestionada — {name}"
                         ),
                         "source": "REGISTRO_SOCIETARIO",
                         "hotness": "COLD",
                     },
                 )
+                # ``Party`` es único por (tenant, tipo, número), así que el RUC
+                # repetido responde 409. Es la red que aguanta aunque la lista
+                # de deduplicación venga incompleta: ya existe, no es una falla.
+                if lead.status_code == 409:
+                    skipped += 1
+                    continue
                 lead.raise_for_status()
                 lead_id = lead.json()["id"]
 
@@ -434,7 +546,7 @@ async def main() -> None:
                             f"{row['empleados'] or '?'} empleados · {row['provincia']} · "
                             f"CIIU {row['ciiu_codigo_n6']}\n\n"
                             + (REVISAR_COMPETENCIA + "\n\n" if row["prioridad"] == 3 else "")
-                            + PITCH[args.segment]
+                            + PITCH[segment]
                         ),
                         "outcome": "PENDING",
                         "reminderDate": when.isoformat(),

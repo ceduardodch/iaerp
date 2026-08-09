@@ -77,7 +77,7 @@ async function mockApi(page: Page) {
     },
   }))
   for (const path of ['parties', 'products', 'tax-categories', 'establishments', 'emission-points', 'invoices', 'receivables', 'crm/leads']) {
-    await page.route(`**/api/v1/${path}`, (route) => route.fulfill({ json: [] }))
+    await page.route(`**/api/v1/${path}**`, (route) => route.fulfill({ json: [] }))
   }
   await page.route('**/api/v1/receivables/aging', (route) => route.fulfill({
     json: { asOf: '2026-08-15', buckets: aging, byParty: [] },

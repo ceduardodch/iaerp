@@ -187,7 +187,7 @@ async function mockApi(page: Page) {
     if (action === 'sync') return route.fulfill({ json: insights })
     return route.abort()
   })
-  await page.route('**/api/v1/crm/leads', (route) => route.fulfill({ json: leads }))
+  await page.route((url: URL) => url.pathname.endsWith('/api/v1/crm/leads'), (route) => route.fulfill({ json: leads }))
   await page.route('**/api/v1/crm/leads/*/activities', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/crm/leads/*/qualification', (route) => {
     const input = route.request().postDataJSON()

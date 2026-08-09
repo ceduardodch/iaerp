@@ -63,7 +63,7 @@ async function mockApi(page: Page, options?: { leads?: unknown[] }) {
   await page.route('**/api/v1/crm/integrations/status', (route) =>
     route.fulfill({ json: { googleConnected: false, googleEmail: null } })
   )
-  await page.route('**/api/v1/crm/leads', (route) => {
+  await page.route((url: URL) => url.pathname.endsWith('/api/v1/crm/leads'), (route) => {
     if (route.request().method() === 'POST') {
       return route.fulfill({ json: lead({ id: 'created-generic' }) })
     }
@@ -245,4 +245,28 @@ test('atajos de teclado: flechas navegan y Enter abre el detalle', async ({ page
 test('kanban pasa verificación de accesibilidad AA', async ({ page }) => {
   await openCrm(page)
   await expectNoA11yViolations(page)
+})
+
+test('el tablero recorre las páginas y no se queda con la primera', async ({ page }) => {
+  // El endpoint devolvía como mucho 100 leads y el tablero pedía una sola vez,
+  // así que un pipeline más grande se veía truncado sin ningún aviso.
+  const PAGE_SIZE = 200
+  const primera = Array.from({ length: PAGE_SIZE }, (_, i) =>
+    lead({ id: `p${i}`, title: `Relleno ${i}` })
+  )
+  const segunda = [lead({ id: 'ultimo', title: 'Lead de la segunda página' })]
+  const offsets: string[] = []
+
+  await page.route((url: URL) => url.pathname.endsWith('/api/v1/crm/leads'), (route) => {
+    const offset = new URL(route.request().url()).searchParams.get('offset') ?? ''
+    offsets.push(offset)
+    return route.fulfill({ json: offset === '0' ? primera : segunda })
+  })
+  await openCrm(page)
+
+  await expect(page.getByText('Lead de la segunda página')).toBeVisible()
+  // Sin paginación el segundo offset nunca se pide. No se compara la secuencia
+  // exacta porque TanStack Query puede reintentar la consulta.
+  expect(offsets[0]).toBe('0')
+  expect(offsets).toContain(String(PAGE_SIZE))
 })
