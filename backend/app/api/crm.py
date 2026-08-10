@@ -205,9 +205,10 @@ async def post_campaign_lead_capture(
     data: LeadCampaignCaptureCreate,
     idempotency_key: IdempotencyKey,
     session: Session,
-    context: Annotated[AuthContext, Depends(require_scopes("leads:write"))],
+    context: Annotated[AuthContext, Depends(require_scopes("leads:capture"))],
 ) -> dict[str, object]:
     """Registra un lead proveniente de un conector de campañas autorizado."""
+    await crm.preflight_service_account_request(context, "rest.leads.capture")
 
     async def capture() -> tuple[str, dict[str, object]]:
         lead, created, duplicate_reason = await crm.capture_campaign_lead(session, context, data)
@@ -656,6 +657,7 @@ async def get_leads(
     Sin ``limit`` ni ``offset`` la respuesta es la de siempre, para no romper
     a quien ya consume el endpoint.
     """
+    await crm.preflight_service_account_request(context, "rest.leads.list")
     leads = await crm.list_leads(
         session, context, status=status, owner_id=owner_id, limit=limit, offset=offset
     )
@@ -670,6 +672,7 @@ async def post_lead(
     context: Annotated[AuthContext, Depends(require_scopes("leads:write"))],
 ) -> dict[str, object]:
     """Crea un nuevo lead vinculando a un Party existente."""
+    await crm.preflight_service_account_request(context, "rest.leads.create")
 
     async def create() -> tuple[str, dict[str, object]]:
         entity = await crm.create_lead(session, context, data)
@@ -698,6 +701,7 @@ async def post_lead_with_party(
     context: Annotated[AuthContext, Depends(require_scopes("leads:write"))],
 ) -> dict[str, object]:
     """Crea un lead junto con su Party asociado."""
+    await crm.preflight_service_account_request(context, "rest.leads.create_with_party")
 
     async def create() -> tuple[str, dict[str, object]]:
         entity = await crm.create_lead_with_party(session, context, data)
@@ -725,6 +729,7 @@ async def get_lead(
     context: Annotated[AuthContext, Depends(require_scopes("leads:read"))],
 ) -> LeadRead:
     """Obtiene el detalle de un lead."""
+    await crm.preflight_service_account_request(context, "rest.leads.get")
     entity = await crm.get_lead(session, context, lead_id)
     return LeadRead.model_validate(entity)
 
@@ -738,6 +743,7 @@ async def put_lead(
     context: Annotated[AuthContext, Depends(require_scopes("leads:write"))],
 ) -> dict[str, object]:
     """Actualiza un lead."""
+    await crm.preflight_service_account_request(context, "rest.leads.update")
 
     async def update() -> tuple[str, dict[str, object]]:
         entity = await crm.update_lead(session, context, lead_id, data)
@@ -770,6 +776,7 @@ async def put_lead_status(
     context: Annotated[AuthContext, Depends(require_scopes("leads:write"))],
 ) -> dict[str, object]:
     """Mueve un lead a un nuevo estado del pipeline."""
+    await crm.preflight_service_account_request(context, "rest.leads.update_status")
 
     async def update_status() -> tuple[str, dict[str, object]]:
         entity = await crm.move_lead_status(session, context, lead_id, LeadStatus(data.new_status))
@@ -802,6 +809,8 @@ async def put_lead_qualification(
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("leads:write"))],
 ) -> dict[str, object]:
+    await crm.preflight_service_account_request(context, "rest.leads.qualify")
+
     async def qualify() -> tuple[str, dict[str, object]]:
         entity = await crm.qualify_lead(session, context, lead_id, data)
         return (
@@ -828,6 +837,7 @@ async def get_lead_activities(
     context: Annotated[AuthContext, Depends(require_scopes("leads:read"))],
 ) -> list[LeadActivityRead]:
     """Lista las actividades de un lead (timeline)."""
+    await crm.preflight_service_account_request(context, "rest.leads.activities")
     activities = await crm.list_activities(session, context, lead_id)
     return [LeadActivityRead.model_validate(activity) for activity in activities]
 
@@ -840,6 +850,12 @@ async def post_lead_message(
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("communications:write"))],
 ) -> dict[str, object]:
+    if context.actor_type == "SERVICE_ACCOUNT":
+        raise HTTPException(
+            status_code=403,
+            detail="Service accounts may not send lead messages",
+        )
+
     async def send() -> tuple[str, dict[str, object]]:
         lead = await crm.get_lead(session, context, lead_id)
         if data.channel == "EMAIL":
@@ -905,9 +921,11 @@ async def post_lead_activity(
     context: Annotated[AuthContext, Depends(require_scopes("leads:write"))],
 ) -> dict[str, object]:
     """Registra una nueva actividad para un lead."""
+    await crm.preflight_service_account_request(context, "rest.leads.create_activity")
+    canonical_data = data.model_copy(update={"lead_id": lead_id})
 
     async def create() -> tuple[str, dict[str, object]]:
-        entity = await crm.create_activity(session, context, lead_id, data)
+        entity = await crm.create_activity(session, context, lead_id, canonical_data)
         return (
             str(entity.id),
             LeadActivityRead.model_validate(entity).model_dump(mode="json", by_alias=True),
@@ -918,7 +936,7 @@ async def post_lead_activity(
         context=context,
         operation="leads.create_activity",
         idempotency_key=idempotency_key,
-        request_payload={"lead_id": str(lead_id), **data.model_dump(mode="json")},
+        request_payload=canonical_data.model_dump(mode="json"),
         action="lead.activity_created",
         entity_type="lead_activity",
         callback=create,
@@ -938,6 +956,7 @@ async def put_lead_activity_reminder(
     context: Annotated[AuthContext, Depends(require_scopes("leads:write"))],
 ) -> dict[str, object]:
     """Marca el seguimiento de una actividad como hecho (o lo reabre)."""
+    await crm.preflight_service_account_request(context, "rest.leads.update_reminder")
 
     async def update() -> tuple[str, dict[str, object]]:
         entity = await crm.set_reminder_completed(

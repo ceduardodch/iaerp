@@ -55,6 +55,7 @@ La autorización es por **scopes** granulares. Ejemplos:
 | `invoices:read` / `invoices:write` | Facturación |
 | `receivables:*` | Cartera y cobranza |
 | `leads:read` / `leads:write` | CRM |
+| `leads:capture` | Conectores autorizados de formularios sociales; no agentes CRM |
 | `communications:read` / `communications:write` | Correo, WhatsApp y campañas Meta |
 
 ## 6. Cuentas de servicio y agentes IA (MCP)
@@ -62,10 +63,18 @@ La autorización es por **scopes** granulares. Ejemplos:
 IAERP expone un **servidor MCP** (Model Context Protocol) para que agentes de IA
 operen con permisos limitados:
 - Autenticación con **cuentas de servicio** y scopes acotados.
-- Herramientas disponibles: facturas, cartera, contactos, productos.
+- Herramientas disponibles: facturas, cartera, contactos, productos y leads.
 - Las escrituras automatizadas están **deshabilitadas por defecto**
   (`automationWritesEnabled`); actívalas explícitamente por tenant.
 - Prompts con protección anti-inyección.
+
+Para un agente CRM crea una cuenta con `leads:read` y `leads:write`. Guarda su
+`client_id` y `client_secret` en el gestor de secretos o en un archivo local
+`0600`. No copies access tokens en scripts: vencen en pocos minutos. El cliente
+renueva el token en forma automática y el secreto se rota con fecha de
+caducidad. Revocar la cuenta corta tanto tokens nuevos como los vigentes.
+No le des `leads:capture`: ese scope queda reservado a conectores que prueban
+el origen, la campaña y el consentimiento.
 
 Ver [`05-ai-mcp.md`](05-ai-mcp.md) y
 [`06-security-threat-model.md`](06-security-threat-model.md).

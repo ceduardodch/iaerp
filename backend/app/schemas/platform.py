@@ -90,10 +90,42 @@ class MembershipRead(APIModel):
     active: bool
 
 
+SERVICE_ACCOUNT_ALLOWED_SCOPES = frozenset(
+    {
+        "context:read",
+        "parties:read",
+        "parties:write",
+        "products:read",
+        "products:write",
+        "invoices:read",
+        "invoices:write",
+        "invoices:issue",
+        "credit-notes:issue",
+        "receivables:read",
+        "receivables:write",
+        "receivables:notify",
+        "payables:read",
+        "payables:write",
+        "payables:extract",
+        "leads:read",
+        "leads:write",
+        "leads:capture",
+    }
+)
+
+
 class ServiceAccountCreate(APIModel):
     name: str = Field(min_length=3, max_length=120)
-    scopes: list[str] = Field(min_length=1)
+    scopes: list[str] = Field(min_length=1, max_length=32)
     expires_at: datetime
+
+    @field_validator("scopes")
+    @classmethod
+    def scopes_are_allowed(cls, value: list[str]) -> list[str]:
+        unsupported = set(value).difference(SERVICE_ACCOUNT_ALLOWED_SCOPES)
+        if unsupported:
+            raise ValueError(f"unsupported service account scopes: {sorted(unsupported)}")
+        return sorted(set(value))
 
 
 class ServiceAccountRead(APIModel):

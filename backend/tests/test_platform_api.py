@@ -254,6 +254,17 @@ async def test_automation_settings_and_service_account(client):
     assert body["clientSecret"]
     assert body["account"]["scopes"] == ["context:read", "parties:read"]
 
+    unsupported_scope = await client.post(
+        "/api/v1/service-accounts",
+        headers=auth(token, "service-account-unsupported-scope-0001"),
+        json={
+            "name": "Overprivileged Agent",
+            "scopes": ["service-accounts:write"],
+            "expiresAt": "2030-01-01T00:00:00Z",
+        },
+    )
+    assert unsupported_scope.status_code == 422
+
     revoke_response = await client.delete(
         f"/api/v1/service-accounts/{body['account']['id']}",
         headers=auth(token, "service-account-revoke-0001"),

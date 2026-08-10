@@ -144,6 +144,7 @@ ALL_DEV_SCOPES = {
     "payables:extract",
     "leads:read",
     "leads:write",
+    "leads:capture",
     "communications:read",
     "communications:write",
     "commercial:read",

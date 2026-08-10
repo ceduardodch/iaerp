@@ -37,6 +37,8 @@ u otro servicio.
   mínima autorizada de un cliente.
 - `commercial.contracts.list`: vigencias, renovaciones y condiciones extraídas.
 - `commercial.obligations.list`: obligaciones contractuales y alertas.
+- `leads.list`: prospectos del CRM con una respuesta mínima.
+- `leads.activities`: historial de atención de un prospecto.
 
 ### Escritura
 
@@ -51,9 +53,39 @@ u otro servicio.
 - `payables.create_from_document`
 - `payables.schedule_payment`
 - `payables.record_payment`
+- `leads.create_with_party`
+- `leads.create_activity`
 
 No existen herramientas `query_sql`, `execute_code`, acceso a filesystem o
 actualizacion generica de tablas.
+
+Las herramientas de captación crean el lead en `NEW`, con origen `MCP`, sin
+dueño, valor, puntaje ni avance comercial. Los leads de Meta, LinkedIn o TikTok
+entran por sus conectores de captación para conservar campaña, anuncio y
+consentimiento; un agente no puede atribuirse esos orígenes.
+
+## Credencial de un agente
+
+Un agente usa un `client_id` y un `client_secret` rotables. No se guarda un
+access token fijo: el cliente pide tokens cortos con `client_credentials`, los
+renueva antes de vencer y reintenta una sola vez ante `401`. El secreto se
+guarda en un archivo local con permisos `0600` o en el gestor de secretos del
+entorno, nunca en Git, argumentos, logs ni configuración MCP compartida.
+
+Para el agente de captación se usan solo `leads:read` y `leads:write`. Además,
+el tenant debe tener habilitadas las escrituras automatizadas. Apagar esa opción
+bloquea tanto MCP como REST para la cuenta de servicio, sin bloquear el trabajo
+de un usuario.
+
+`leads:capture` no forma parte del perfil del agente. Solo un conector de
+campañas autorizado puede usarlo para declarar Meta, LinkedIn o TikTok. Los
+webhooks firmados cuentan sus propios intentos y respetan el mismo apagado de
+escrituras automáticas.
+
+El catálogo se compara con el contrato versionado. Cada herramienta tiene una
+huella de nombre, descripción y esquema; si cambia sin aprobación, deja de
+publicarse. Un límite durable por tenant, agente y herramienta cuenta también
+los intentos rechazados.
 
 Los perfiles de retención de un cliente son una ayuda de cálculo para la
 conciliación, no una instrucción fiscal autónoma. Una escritura de retención

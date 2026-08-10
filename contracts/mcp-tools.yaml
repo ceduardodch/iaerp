@@ -82,6 +82,77 @@ tools:
           $ref: "#/$defs/idempotencyKey"
     outputSchema:
       $ref: openapi.yaml#/components/schemas/Product
+  - name: leads.list
+    effect: read
+    scope: leads:read
+    description: Listar leads del tenant activo con filtro de etapa y paginacion.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: [string, "null"]
+          enum: [NEW, CONTACTED, QUALIFIED, PROPOSAL, NEGOTIATION, WON, LOST, null]
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 100
+        offset:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          default: 0
+    outputSchema:
+      type: array
+      items:
+        $ref: "#/$defs/lead"
+  - name: leads.activities
+    effect: read
+    scope: leads:read
+    description: Listar hasta 50 actividades y proximos pasos de un lead.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [leadId]
+      properties:
+        leadId:
+          type: string
+          format: uuid
+    outputSchema:
+      type: array
+      items:
+        $ref: "#/$defs/leadActivity"
+  - name: leads.create_with_party
+    effect: write
+    scope: leads:write
+    description: Crear un lead en etapa Nuevo junto con su contacto.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [lead, idempotencyKey]
+      properties:
+        lead:
+          $ref: "#/$defs/leadInput"
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: "#/$defs/lead"
+  - name: leads.create_activity
+    effect: write
+    scope: leads:write
+    description: Registrar una actividad y proximo paso de un lead.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [activity, idempotencyKey]
+      properties:
+        activity:
+          $ref: "#/$defs/leadActivityInput"
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: "#/$defs/leadActivity"
   - name: invoices.get
     effect: read
     scope: invoices:read
@@ -281,25 +352,133 @@ tools:
           $ref: "#/$defs/idempotencyKey"
     outputSchema:
       $ref: openapi.yaml#/components/schemas/Payable
-  - name: finance.operational_summary
-    effect: read
-    scope: finance:read
-    description: Resumir documentos emitidos y movimientos de caja; no es un estado contable.
-    inputSchema:
-      type: object
-      additionalProperties: false
-      required: [from, to]
-      properties:
-        from:
-          type: string
-          format: date
-        to:
-          type: string
-          format: date
-    outputSchema:
-      $ref: openapi.yaml#/components/schemas/OperationalSummary
 $defs:
   idempotencyKey:
     type: string
     minLength: 16
     maxLength: 128
+  leadInput:
+    type: object
+    additionalProperties: false
+    required: [partyName, partyIdentificationType, partyIdentificationNumber, title]
+    anyOf:
+      - required: [partyEmail]
+      - required: [partyPhone]
+    properties:
+      partyName:
+        type: string
+        minLength: 1
+        maxLength: 200
+      partyIdentificationType:
+        type: string
+        enum: [RUC, CEDULA, PASSPORT, FINAL_CONSUMER]
+      partyIdentificationNumber:
+        type: string
+        minLength: 1
+        maxLength: 30
+      partyEmail:
+        type: [string, "null"]
+        maxLength: 320
+      partyPhone:
+        type: [string, "null"]
+        maxLength: 40
+      partyAddress:
+        type: [string, "null"]
+        maxLength: 500
+      title:
+        type: string
+        minLength: 1
+        maxLength: 200
+  lead:
+    type: object
+    additionalProperties: false
+    required: [id, title, status, source, score, hotness, party, createdAt]
+    properties:
+      id:
+        type: string
+        format: uuid
+      title:
+        type: string
+      status:
+        type: string
+        enum: [NEW, CONTACTED, QUALIFIED, PROPOSAL, NEGOTIATION, WON, LOST]
+      source:
+        type: [string, "null"]
+      score:
+        type: integer
+        minimum: 0
+        maximum: 100
+      hotness:
+        type: string
+        enum: [COLD, WARM, HOT]
+      party:
+        type: object
+        additionalProperties: false
+        required: [id, name, email, phone]
+        properties:
+          id:
+            type: string
+            format: uuid
+          name:
+            type: string
+          email:
+            type: [string, "null"]
+          phone:
+            type: [string, "null"]
+      createdAt:
+        type: string
+        format: date-time
+  leadActivityInput:
+    type: object
+    additionalProperties: false
+    required: [leadId, activityType, subject]
+    properties:
+      leadId:
+        type: string
+        format: uuid
+      activityType:
+        type: string
+        enum: [CALL, EMAIL, WHATSAPP, MEETING, NOTE, TASK]
+      subject:
+        type: string
+        minLength: 1
+        maxLength: 200
+      description:
+        type: [string, "null"]
+        maxLength: 4000
+      outcome:
+        type: string
+        enum: [POSITIVE, NEUTRAL, NEGATIVE, PENDING]
+        default: PENDING
+      reminderDate:
+        type: [string, "null"]
+        format: date-time
+  leadActivity:
+    type: object
+    additionalProperties: false
+    required:
+      [id, leadId, activityType, subject, description, outcome, reminderDate,
+       reminderCompleted, createdAt]
+    properties:
+      id:
+        type: string
+        format: uuid
+      leadId:
+        type: string
+        format: uuid
+      activityType:
+        type: string
+      subject:
+        type: string
+      description:
+        type: [string, "null"]
+      outcome:
+        type: string
+      reminderDate:
+        type: [string, "null"]
+        format: date-time
+      reminderCompleted:
+        type: boolean
+      createdAt:
+        type: string
+        format: date-time

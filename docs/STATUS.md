@@ -7,6 +7,21 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Acceso seguro de agentes al CRM listo en el árbol local de `main`: 2026-08-09
+  `America/Guayaquil`. MCP expone consulta, alta de leads y actividades con
+  esquemas cerrados, scopes `leads:read/write`, paridad con REST, idempotencia,
+  auditoría, apagado común y límite durable por tenant, actor y herramienta.
+  La captación fuerza estado `NEW` y origen `MCP`; un agente no puede suplantar
+  Meta, asignar dueño, valor, puntaje ni marcar un lead como ganado. El catálogo
+  exige la huella aprobada de cada herramienta y el contrato valida paridad con
+  el runtime. El cliente local usa `client_credentials`, renueva tokens cortos
+  y reintenta una vez ante `401`; no guarda Bearer fijos. Ruff, mypy, contratos,
+  45 pruebas dirigidas, tres omisiones PostgreSQL y el DDL PostgreSQL de
+  subida/bajada pasan. Los conectores sociales usan el scope separado
+  `leads:capture`; la cuenta CRM no puede falsear atribución. Falta emitir
+  la cuenta real del tenant y guardar su secreto local `0600`. La publicación
+  fue autorizada el 2026-08-09 y debe completar `release -> PR -> main`, CI,
+  despliegue y prueba pública antes de declararse operativa.
 - Corrección OIDC de CxP lista en copia aislada de `origin/main`: 2026-08-05
   `America/Guayaquil`. Producción responde `403 Missing scopes:
   payables:read` porque el cliente `iaerp-web` no recibió los scopes de CxP al

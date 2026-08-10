@@ -1,6 +1,9 @@
+import hashlib
+import json
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import jwt
 from fastapi import HTTPException
@@ -9,6 +12,7 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import ContentBlock
 from mcp.types import Tool as MCPTool
 from pydantic import Field
 from sqlalchemy.exc import IntegrityError
@@ -18,9 +22,16 @@ from app.core.auth import AuthContext, decode_access_token, resolve_auth_context
 from app.core.config import get_settings
 from app.core.timezones import today_in_fiscal_timezone
 from app.db.session import SessionFactory
+from app.mcp.tool_fingerprints import EXPECTED_TOOL_FINGERPRINTS
 from app.models.platform import AutomationSettings, OperationRecord
 from app.schemas.billing import CreditNoteInput, InvoiceInput
 from app.schemas.masters import PartyCreate, PartyRead, ProductCreate, ProductRead
+from app.schemas.mcp_crm import (
+    MCPLeadActivityCreate,
+    MCPLeadActivityRead,
+    MCPLeadRead,
+    MCPLeadWithPartyCreate,
+)
 from app.schemas.payables import (
     PayableCreate,
     PayablePaymentCreate,
@@ -30,10 +41,11 @@ from app.schemas.payables import (
 )
 from app.schemas.platform import OperationRead, TenantContextRead
 from app.schemas.receivables import AccountItemRead, AgingRead, PaymentInput, ReminderInput
-from app.services import billing, masters, payables, receivables
+from app.services import automation_rate, billing, crm, masters, payables, receivables
 from app.services.unit_of_work import append_audit, execute_idempotent
 
 settings = get_settings()
+MCP_TOOL_RATE_LIMIT_PER_MINUTE = 120
 
 MCP_SCOPES = [
     "context:read",
@@ -51,6 +63,8 @@ MCP_SCOPES = [
     "payables:read",
     "payables:write",
     "payables:extract",
+    "leads:read",
+    "leads:write",
 ]
 TOOL_REQUIRED_SCOPES = {
     "context.get": "context:read",
@@ -70,7 +84,21 @@ TOOL_REQUIRED_SCOPES = {
     "payables.create_from_document": "payables:extract",
     "payables.schedule_payment": "payables:write",
     "payables.record_payment": "payables:write",
+    "leads.list": "leads:read",
+    "leads.activities": "leads:read",
+    "leads.create_with_party": "leads:write",
+    "leads.create_activity": "leads:write",
 }
+
+
+def _tool_fingerprint(tool: MCPTool) -> str:
+    payload = {
+        "name": tool.name,
+        "description": tool.description or "",
+        "inputSchema": tool.inputSchema,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class IAERPTokenVerifier:
@@ -141,6 +169,20 @@ class IAERPTokenVerifier:
 
 
 class ScopedFastMCP(FastMCP):
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+    ) -> Sequence[ContentBlock] | dict[str, Any]:
+        registered = next(
+            (tool for tool in await super().list_tools() if tool.name == name),
+            None,
+        )
+        expected = EXPECTED_TOOL_FINGERPRINTS.get(name)
+        if registered is None or expected is None or _tool_fingerprint(registered) != expected:
+            raise ToolError("Tool unavailable: contract fingerprint mismatch")
+        return await super().call_tool(name, arguments)
+
     async def list_tools(self) -> list[MCPTool]:
         token = get_access_token()
         if token is None or token.claims is None:
@@ -153,7 +195,12 @@ class ScopedFastMCP(FastMCP):
         finally:
             await session.close()
         tools = await super().list_tools()
-        return [tool for tool in tools if TOOL_REQUIRED_SCOPES.get(tool.name) in context.scopes]
+        return [
+            tool
+            for tool in tools
+            if TOOL_REQUIRED_SCOPES.get(tool.name) in context.scopes
+            and EXPECTED_TOOL_FINGERPRINTS.get(tool.name) == _tool_fingerprint(tool)
+        ]
 
 
 def _require_scope(context: AuthContext, required: str) -> None:
@@ -161,13 +208,25 @@ def _require_scope(context: AuthContext, required: str) -> None:
         raise ToolError(f"Forbidden: missing scope {required}")
 
 
-async def _tool_context(required_scope: str) -> tuple[AsyncSession, AuthContext]:
+async def _consume_tool_rate(context: AuthContext, tool_name: str) -> None:
+    await automation_rate.consume_automation_rate(
+        context,
+        tool_name,
+        limit=MCP_TOOL_RATE_LIMIT_PER_MINUTE,
+    )
+
+
+async def _tool_context(
+    required_scope: str,
+    tool_name: str,
+) -> tuple[AsyncSession, AuthContext]:
     token = get_access_token()
     if token is None or token.claims is None:
         raise ToolError("Authentication required")
     session = SessionFactory()
     try:
         context = await resolve_auth_context(token.claims, session)
+        await _consume_tool_rate(context, tool_name)
         _require_scope(context, required_scope)
     except HTTPException as exc:
         await session.close()
@@ -213,7 +272,7 @@ mcp = ScopedFastMCP(
 @mcp.tool(name="context.get")
 async def context_get() -> dict[str, object]:
     """Obtener el tenant activo, permisos, limites y kill switch."""
-    session, context = await _tool_context("context:read")
+    session, context = await _tool_context("context:read", "context.get")
     try:
         tenant = await masters.get_active_tenant(session, context.tenant_id)
         automation = await session.get(AutomationSettings, context.tenant_id)
@@ -238,7 +297,7 @@ async def parties_search(
     role: Literal["CUSTOMER", "SUPPLIER"] | None = None,
 ) -> list[dict[str, object]]:
     """Buscar hasta 100 clientes o proveedores del tenant activo."""
-    session, context = await _tool_context("parties:read")
+    session, context = await _tool_context("parties:read", "parties.search")
     try:
         entities = await masters.search_parties(session, context, query, role)
         return [
@@ -255,7 +314,7 @@ async def parties_create(
     idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
 ) -> dict[str, object]:
     """Crear un cliente o proveedor con idempotencia y politica de automatizacion."""
-    session, context = await _tool_context("parties:write")
+    session, context = await _tool_context("parties:write", "parties.create")
     try:
         await _require_automation_writes(session, context)
 
@@ -287,7 +346,7 @@ async def products_search(
     query: Annotated[str | None, Field(default=None, max_length=200)] = None,
 ) -> list[dict[str, object]]:
     """Buscar hasta 100 productos del tenant activo."""
-    session, context = await _tool_context("products:read")
+    session, context = await _tool_context("products:read", "products.search")
     try:
         entities = await masters.search_products(session, context, query)
         return [
@@ -304,7 +363,7 @@ async def products_create(
     idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
 ) -> dict[str, object]:
     """Crear un producto con idempotencia y politica de automatizacion."""
-    session, context = await _tool_context("products:write")
+    session, context = await _tool_context("products:write", "products.create")
     try:
         await _require_automation_writes(session, context)
 
@@ -331,6 +390,128 @@ async def products_create(
         await session.close()
 
 
+@mcp.tool(name="leads.list")
+async def leads_list(
+    status: Literal[
+        "NEW",
+        "CONTACTED",
+        "QUALIFIED",
+        "PROPOSAL",
+        "NEGOTIATION",
+        "WON",
+        "LOST",
+    ]
+    | None = None,
+    limit: Annotated[int, Field(ge=1, le=crm.LIST_LEADS_MAX_LIMIT)] = 100,
+    offset: Annotated[int, Field(ge=0, le=10000)] = 0,
+) -> list[dict[str, object]]:
+    """Listar leads del tenant activo con filtro de etapa y paginacion."""
+    session, context = await _tool_context("leads:read", "leads.list")
+    try:
+        entities = await crm.list_leads(
+            session,
+            context,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+        return [
+            MCPLeadRead.model_validate(entity).model_dump(mode="json", by_alias=True)
+            for entity in entities
+        ]
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="leads.activities")
+async def leads_activities(leadId: uuid.UUID) -> list[dict[str, object]]:
+    """Listar hasta 50 actividades y proximos pasos de un lead."""
+    session, context = await _tool_context("leads:read", "leads.activities")
+    try:
+        entities = await crm.list_activities(session, context, leadId)
+        return [
+            MCPLeadActivityRead.model_validate(entity).model_dump(mode="json", by_alias=True)
+            for entity in entities
+        ]
+    except HTTPException as exc:
+        raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="leads.create_with_party")
+async def leads_create_with_party(
+    lead: MCPLeadWithPartyCreate,
+    idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
+) -> dict[str, object]:
+    """Crear un lead y su contacto con politica e idempotencia."""
+    session, context = await _tool_context("leads:write", "leads.create_with_party")
+    domain_lead = lead.to_domain()
+    try:
+        async def create() -> tuple[str, dict[str, object]]:
+            await _require_automation_writes(session, context)
+            entity = await crm.create_lead_with_party(session, context, domain_lead)
+            return (
+                str(entity.id),
+                MCPLeadRead.model_validate(entity).model_dump(mode="json", by_alias=True),
+            )
+
+        return await execute_idempotent(
+            session,
+            context=context,
+            operation="leads.create_with_party",
+            idempotency_key=idempotencyKey,
+            request_payload=domain_lead.model_dump(mode="json"),
+            action="lead.created_with_party",
+            entity_type="lead",
+            callback=create,
+        )
+    except IntegrityError as exc:
+        raise ToolError("Conflict: party business key already exists") from exc
+    except HTTPException as exc:
+        raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="leads.create_activity")
+async def leads_create_activity(
+    activity: MCPLeadActivityCreate,
+    idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
+) -> dict[str, object]:
+    """Registrar una actividad y proximo paso de un lead del tenant activo."""
+    session, context = await _tool_context("leads:write", "leads.create_activity")
+    domain_activity = activity.to_domain()
+    try:
+        async def create() -> tuple[str, dict[str, object]]:
+            await _require_automation_writes(session, context)
+            entity = await crm.create_activity(
+                session,
+                context,
+                activity.lead_id,
+                domain_activity,
+            )
+            return (
+                str(entity.id),
+                MCPLeadActivityRead.model_validate(entity).model_dump(mode="json", by_alias=True),
+            )
+
+        return await execute_idempotent(
+            session,
+            context=context,
+            operation="leads.create_activity",
+            idempotency_key=idempotencyKey,
+            request_payload=domain_activity.model_dump(mode="json"),
+            action="lead.activity_created",
+            entity_type="lead_activity",
+            callback=create,
+        )
+    except HTTPException as exc:
+        raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
+    finally:
+        await session.close()
+
+
 @mcp.tool(name="invoices.get")
 async def invoices_get(invoiceId: uuid.UUID) -> dict[str, object]:
     """Consultar una factura o nota de credito, artefactos y estado SRI.
@@ -340,7 +521,7 @@ async def invoices_get(invoiceId: uuid.UUID) -> dict[str, object]:
     mismos casos de uso que ``GET /invoices/{invoiceId}`` (REST), garantizando
     equivalencia total entre ambas superficies.
     """
-    session, context = await _tool_context("invoices:read")
+    session, context = await _tool_context("invoices:read", "invoices.get")
     try:
         entity = await billing.get_sales_document(session, context, invoiceId)
         response_model = await billing.to_sales_document_read(session, context, entity)
@@ -364,7 +545,7 @@ async def invoices_create_draft(
     -- el mismo caso de uso que ``POST /invoices`` (REST). Devuelve el
     ``SalesDocument`` directo (201 equivalente), de forma sincrona.
     """
-    session, context = await _tool_context("invoices:write")
+    session, context = await _tool_context("invoices:write", "invoices.create_draft")
     try:
         await _require_automation_writes(session, context)
 
@@ -409,7 +590,7 @@ async def invoices_issue(
     estado ``PROCESSING`` (202 equivalente): la firma XAdES-BES es sincrona,
     la transmision/autorizacion SRI las completa el worker de forma asincrona.
     """
-    session, context = await _tool_context("invoices:issue")
+    session, context = await _tool_context("invoices:issue", "invoices.issue")
     try:
         await _require_automation_writes(session, context)
 
@@ -476,7 +657,10 @@ async def credit_notes_create_and_issue(
     ``credit_note.created`` ademas de la que agrega ``execute_idempotent``.
     Devuelve un ``Operation`` en estado ``PROCESSING`` (202 equivalente).
     """
-    session, context = await _tool_context("credit-notes:issue")
+    session, context = await _tool_context(
+        "credit-notes:issue",
+        "credit_notes.create_and_issue",
+    )
     try:
         await _require_automation_writes(session, context)
 
@@ -557,7 +741,7 @@ async def receivables_list(
     de uso que ``GET /receivables`` (REST), garantizando equivalencia total entre
     ambas superficies. Incluye aging calculado cuando se filtra por vencimiento.
     """
-    session, context = await _tool_context("receivables:read")
+    session, context = await _tool_context("receivables:read", "receivables.list")
     try:
         as_of = today_in_fiscal_timezone() if dueBefore is not None else None
         entities = await receivables.list_receivables(
@@ -589,7 +773,10 @@ async def receivables_record_payment(
     oldest-first (cuota más antigua primero) y valida que el total nunca exceda
     el saldo abierto. Devuelve el ``AccountItem`` actualizado con el nuevo saldo.
     """
-    session, context = await _tool_context("receivables:write")
+    session, context = await _tool_context(
+        "receivables:write",
+        "receivables.record_payment",
+    )
     try:
         await _require_automation_writes(session, context)
 
@@ -655,7 +842,10 @@ async def receivables_send_reminder(
     ``Operation`` en estado ``PROCESSING`` (202 equivalente): el envío
     propiamente dicho lo completa el worker de forma asincrona.
     """
-    session, context = await _tool_context("receivables:notify")
+    session, context = await _tool_context(
+        "receivables:notify",
+        "receivables.send_reminder",
+    )
     try:
         await _require_automation_writes(session, context)
 
@@ -721,7 +911,7 @@ async def payables_list(
     dueBefore: date | None = None,
 ) -> list[dict[str, object]]:
     """Listar obligaciones operativas del tenant activo."""
-    session, context = await _tool_context("payables:read")
+    session, context = await _tool_context("payables:read", "payables.list")
     try:
         items = await payables.list_payables(
             session,
@@ -740,7 +930,7 @@ async def payables_create(
     idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
 ) -> dict[str, object]:
     """Crear una compra o CxP sin mover dinero fuera de IAERP."""
-    session, context = await _tool_context("payables:write")
+    session, context = await _tool_context("payables:write", "payables.create")
     try:
         await _require_automation_writes(session, context)
 
@@ -770,7 +960,10 @@ async def payables_create_from_document(
     idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
 ) -> dict[str, object]:
     """Crear o enlazar una CxP desde evidencia fiscal ya guardada."""
-    session, context = await _tool_context("payables:extract")
+    session, context = await _tool_context(
+        "payables:extract",
+        "payables.create_from_document",
+    )
     try:
         await _require_automation_writes(session, context)
 
@@ -803,7 +996,10 @@ async def payables_schedule_payment(
     idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
 ) -> dict[str, object]:
     """Programar un pago a proveedor sin iniciar una transferencia."""
-    session, context = await _tool_context("payables:write")
+    session, context = await _tool_context(
+        "payables:write",
+        "payables.schedule_payment",
+    )
     try:
         await _require_automation_writes(session, context)
 
@@ -839,7 +1035,10 @@ async def payables_record_payment(
     idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
 ) -> dict[str, object]:
     """Registrar un pago ya realizado, sin iniciar la transferencia."""
-    session, context = await _tool_context("payables:write")
+    session, context = await _tool_context(
+        "payables:write",
+        "payables.record_payment",
+    )
     try:
         await _require_automation_writes(session, context)
 

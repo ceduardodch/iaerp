@@ -61,7 +61,7 @@ reset_user_password() {
 web_client_id=$(resource_id clients clientId iaerp-web)
 test -n "$web_client_id"
 
-ensure_default_scope() {
+ensure_client_scope() {
   local scope_name=$1
   local scope_id
   scope_id=$(client_scope_id "$scope_name")
@@ -73,8 +73,18 @@ ensure_default_scope() {
     scope_id=$(client_scope_id "$scope_name")
   fi
   test -n "$scope_id"
+  echo "$scope_id"
+}
+
+ensure_default_scope() {
+  local scope_id
+  scope_id=$(ensure_client_scope "$1")
   "$KCADM" update "clients/$web_client_id/default-client-scopes/$scope_id" -r iaerp >/dev/null
 }
+
+# Los conectores de campañas lo reciben de forma explícita; el cliente web y
+# las cuentas CRM normales no deben poder atribuir capturas de redes.
+ensure_client_scope "leads:capture" >/dev/null
 
 for scope in \
   leads:read leads:write \

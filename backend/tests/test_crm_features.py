@@ -80,7 +80,12 @@ async def test_lead_with_new_contact_has_title_summary_owner_and_customer_conver
 
 
 async def test_campaign_capture_keeps_attribution_consent_and_deduplicates(client):
-    token = await token_for(client, "a@iaerp.local", TENANT_A, ["leads:read", "leads:write"])
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["leads:read", "leads:write", "leads:capture"],
+    )
     payload = {
         "source": "META_LEAD_AD",
         "sourceExternalId": "meta-form-response-001",
@@ -174,7 +179,12 @@ async def test_campaign_capture_keeps_attribution_consent_and_deduplicates(clien
 
 
 async def test_campaign_capture_accepts_linkedin_and_tiktok_sources(client):
-    token = await token_for(client, "a@iaerp.local", TENANT_A, ["leads:read", "leads:write"])
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["leads:read", "leads:write", "leads:capture"],
+    )
     for index, source in enumerate(("LINKEDIN_LEAD_GEN", "TIKTOK_LEAD_GEN"), start=1):
         response = await client.post(
             "/api/v1/crm/leads/captures",

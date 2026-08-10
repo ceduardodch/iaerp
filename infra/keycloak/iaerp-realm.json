@@ -331,6 +331,11 @@
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
     },
     {
+      "name": "leads:capture",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
       "name": "communications:read",
       "protocol": "openid-connect",
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
