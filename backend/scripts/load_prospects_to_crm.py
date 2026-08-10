@@ -34,15 +34,14 @@ import asyncio
 import csv
 import os
 import sys
-import time
-import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import httpx
 from sqlalchemy import text
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from app.integrations.oidc_client_credentials import ClientCredentialsToken
 
 _EMP = "NULLIF(regexp_replace(COALESCE(empleados,''),'[^0-9]','','g'),'')::bigint"
 _CORREO_PROPIO = (
@@ -92,56 +91,6 @@ ORDER BY prioridad, {emp} DESC NULLS LAST
 
 CONTACTS_PER_DAY = 3
 TOKEN_ENDPOINT = "https://iaerp-auth.b2b.com.ec/realms/iaerp/protocol/openid-connect/token"
-
-
-class ServiceAccountToken:
-    """Obtiene y renueva el token de la cuenta de servicio de prospección."""
-
-    def __init__(self, client_id: str, client_secret: str) -> None:
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.access_token: str | None = None
-        self.expires_at = 0.0
-
-    async def get(self, client: httpx.AsyncClient, *, refresh: bool = False) -> str:
-        if not refresh and self.access_token and time.monotonic() < self.expires_at:
-            return self.access_token
-        response = await client.post(
-            TOKEN_ENDPOINT,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": self.client_id,
-                "client_secret": self.client_secret,
-            },
-        )
-        response.raise_for_status()
-        payload = response.json()
-        token = payload.get("access_token")
-        if not isinstance(token, str) or not token:
-            raise RuntimeError("El proveedor de identidad no devolvió access_token")
-        expires_in = payload.get("expires_in")
-        if not isinstance(expires_in, int) or expires_in <= 0:
-            raise RuntimeError("El proveedor de identidad no devolvió expires_in válido")
-        self.access_token = token
-        # Se renueva antes de vencer para que una carga larga no quede a mitad de petición.
-        self.expires_at = time.monotonic() + max(1, expires_in - 30)
-        return token
-
-    async def request(
-        self,
-        client: httpx.AsyncClient,
-        method: str,
-        path: str,
-        **kwargs: Any,
-    ) -> httpx.Response:
-        async def send(*, refresh: bool) -> httpx.Response:
-            token = await self.get(client, refresh=refresh)
-            headers = dict(kwargs.get("headers", {}))
-            headers["Authorization"] = f"Bearer {token}"
-            return await client.request(method, path, **{**kwargs, "headers": headers})
-
-        response = await send(refresh=False)
-        return await send(refresh=True) if response.status_code == 401 else response
 
 # Guion del primer contacto por segmento. El de ISV sale textual de cómo ya
 # funciona con Trantotech e Infinit; no es una hipótesis de marketing.
@@ -357,7 +306,7 @@ LEADS_PAGE_SIZE = 200
 LEADS_MAX_PAGES = 50
 
 
-async def existing_rucs(client: httpx.AsyncClient, token: ServiceAccountToken) -> set[str]:
+async def existing_rucs(client: httpx.AsyncClient, token: ClientCredentialsToken) -> set[str]:
     """RUCs que ya están en el CRM, para no duplicar en una segunda corrida.
 
     Recorre todas las páginas. Con una sola petición el endpoint devolvía como
@@ -480,7 +429,8 @@ async def main() -> None:
         return
 
     assert base_url and client_id and client_secret  # garantizado por la validación de arriba
-    token = ServiceAccountToken(client_id, client_secret)
+    token_url = os.environ.get("PROSPECT_CRM_TOKEN_URL", TOKEN_ENDPOINT)
+    token = ClientCredentialsToken(token_url, client_id, client_secret)
     async with httpx.AsyncClient(base_url=base_url, timeout=30) as client:
         already = await existing_rucs(client, token)
         # El calendario se reparte SOBRE LO QUE FALTA. Repartirlo antes y luego
@@ -502,7 +452,7 @@ async def main() -> None:
                     client,
                     "POST",
                     "/api/v1/crm/leads/with-party",
-                    headers={"Idempotency-Key": f"prospect-lead-{uuid.uuid4()}"},
+                    headers={"Idempotency-Key": f"prospect-lead-{ruc}"},
                     json={
                         "partyName": name,
                         "partyIdentificationType": "RUC",
@@ -533,7 +483,9 @@ async def main() -> None:
                     client,
                     "POST",
                     f"/api/v1/crm/leads/{lead_id}/activities",
-                    headers={"Idempotency-Key": f"prospect-activity-{uuid.uuid4()}"},
+                    headers={
+                        "Idempotency-Key": f"prospect-activity-{ruc}-{when.date().isoformat()}"
+                    },
                     json={
                         "leadId": lead_id,
                         "activityType": "TASK",

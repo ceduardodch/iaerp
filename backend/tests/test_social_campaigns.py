@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionFactory, engine
 from app.models.crm import MetaAdsIntegration, SocialCampaign, SocialCampaignVariant
-from app.models.platform import Membership, OutboxEvent
+from app.models.platform import AutomationSettings, Membership, OutboxEvent
 from app.services import social_campaigns
 from app.workers.campaigns import (
     CONSUMER_NAME,
@@ -291,7 +291,13 @@ async def test_meta_campaign_is_prepared_paused_and_requires_confirmed_activatio
     monkeypatch.setattr(social_campaigns.settings, "PUBLIC_API_URL", "https://api.example/api/v1")
     token = await token_for(
         client,
-        ["communications:read", "communications:write", "leads:read", "leads:write"],
+        [
+            "communications:read",
+            "communications:write",
+            "leads:read",
+            "leads:write",
+            "leads:capture",
+        ],
     )
 
     connection = await client.put(
@@ -823,6 +829,10 @@ async def test_meta_webhook_creates_attributed_lead_once(client, monkeypatch):
         },
     )
     assert saved.status_code == 200, saved.text
+    async with SessionFactory() as session, session.begin():
+        automation = await session.get(AutomationSettings, TENANT_A)
+        assert automation is not None
+        automation.writes_enabled = True
 
     campaign = await client.post(
         "/api/v1/crm/campaigns",

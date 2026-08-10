@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / "contracts"
+MCP_SERVER = ROOT / "backend" / "app" / "mcp" / "server.py"
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -79,11 +81,45 @@ def validate_mcp(document: dict[str, Any]) -> None:
                 raise ValueError(f"Write tool {name} must require idempotencyKey.")
 
 
+def validate_mcp_runtime_parity(document: dict[str, Any]) -> None:
+    tree = ast.parse(MCP_SERVER.read_text(encoding="utf-8"))
+    runtime_tools: set[str] = set()
+    runtime_scopes: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = [target.id for target in node.targets if isinstance(target, ast.Name)]
+            if "TOOL_REQUIRED_SCOPES" in targets and isinstance(node.value, ast.Dict):
+                for key, value in zip(node.value.keys, node.value.values, strict=True):
+                    if isinstance(key, ast.Constant) and isinstance(value, ast.Constant):
+                        runtime_scopes[str(key.value)] = str(value.value)
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call):
+                continue
+            if not isinstance(decorator.func, ast.Attribute) or decorator.func.attr != "tool":
+                continue
+            for keyword in decorator.keywords:
+                if keyword.arg == "name" and isinstance(keyword.value, ast.Constant):
+                    runtime_tools.add(str(keyword.value.value))
+
+    contract_scopes = {str(tool["name"]): str(tool["scope"]) for tool in document["tools"]}
+    if runtime_tools != set(contract_scopes):
+        raise ValueError(
+            "MCP runtime/contract tools differ: "
+            f"runtime_only={sorted(runtime_tools - set(contract_scopes))}, "
+            f"contract_only={sorted(set(contract_scopes) - runtime_tools)}"
+        )
+    if runtime_scopes != contract_scopes:
+        raise ValueError("MCP runtime/contract scopes differ.")
+
+
 def main() -> None:
     paths = sorted(CONTRACTS.glob("*.yaml"))
     documents = {path.resolve(): load_yaml(path) for path in paths}
     mcp_path = (CONTRACTS / "mcp-tools.yaml").resolve()
     validate_mcp(documents[mcp_path])
+    validate_mcp_runtime_parity(documents[mcp_path])
 
     for path, document in documents.items():
         for reference in references(document):

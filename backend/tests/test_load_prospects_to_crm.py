@@ -27,7 +27,11 @@ async def test_service_account_token_renews_after_unauthorized_response() -> Non
             return httpx.Response(401)
         return httpx.Response(200, json=[])
 
-    token = prospects.ServiceAccountToken("client-id", "client-secret")
+    token = prospects.ClientCredentialsToken(
+        prospects.TOKEN_ENDPOINT,
+        "client-id",
+        "client-secret",
+    )
     async with httpx.AsyncClient(
         base_url="https://iaerp.b2b.com.ec",
         transport=httpx.MockTransport(handler),
@@ -139,7 +143,11 @@ async def test_existing_rucs_walks_every_page() -> None:
         pedidos.append(str(request.url))
         return httpx.Response(200, json=paginas.pop(0) if paginas else [])
 
-    token = prospects.ServiceAccountToken("client-id", "client-secret")
+    token = prospects.ClientCredentialsToken(
+        prospects.TOKEN_ENDPOINT,
+        "client-id",
+        "client-secret",
+    )
     async with httpx.AsyncClient(
         base_url="https://iaerp.b2b.com.ec",
         transport=httpx.MockTransport(handler),

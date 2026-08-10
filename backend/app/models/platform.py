@@ -126,6 +126,26 @@ class AutomationSettings(TimestampMixin, Base):
     )
 
 
+class AutomationRateWindow(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "automation_rate_windows"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "actor_id",
+            "tool_name",
+            name="uq_automation_rate_tenant_actor_tool",
+        ),
+        Index("ix_automation_rate_tenant_window", "tenant_id", "window_started_at"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    actor_id: Mapped[str] = mapped_column(String(200))
+    tool_name: Mapped[str] = mapped_column(String(120))
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class IdempotencyRecord(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "idempotency_records"
     __table_args__ = (

@@ -42,6 +42,7 @@ from app.models.payables import (
 )
 from app.models.platform import (
     AuditEvent,
+    AutomationRateWindow,
     AutomationSettings,
     IdempotencyRecord,
     Membership,
@@ -102,6 +103,7 @@ __all__ = [
     "LeadStatus",
     "MetaAdsIntegration",
     "Membership",
+    "AutomationRateWindow",
     "Movement",
     "OperationRecord",
     "OutboxEvent",

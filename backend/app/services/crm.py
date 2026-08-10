@@ -16,7 +16,7 @@ from app.models.crm import (
     SocialCampaignVariant,
 )
 from app.models.masters import Party, Product
-from app.models.platform import User
+from app.models.platform import AutomationSettings, User
 from app.schemas.crm import (
     LeadActivityCreate,
     LeadCampaignCaptureCreate,
@@ -25,11 +25,53 @@ from app.schemas.crm import (
     LeadUpdate,
     LeadWithPartyCreate,
 )
+from app.services import automation_rate
 
 # Lead Service
 
 
 LIST_LEADS_MAX_LIMIT = 200
+AUTOMATION_WRITE_RATE_LIMIT_PER_MINUTE = 120
+
+
+async def _require_service_account_writes(
+    session: AsyncSession,
+    context: AuthContext,
+) -> None:
+    if context.actor_type != "SERVICE_ACCOUNT":
+        return
+    automation = await session.get(AutomationSettings, context.tenant_id)
+    if automation is None or not automation.writes_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Automation writes are disabled for this tenant",
+        )
+
+
+async def preflight_service_account_request(
+    context: AuthContext,
+    operation: str,
+) -> None:
+    """Cuenta REST antes de que la UoW tome el lock idempotente del tenant."""
+    if context.actor_type != "SERVICE_ACCOUNT":
+        return
+    await automation_rate.consume_automation_rate(
+        context,
+        operation,
+        limit=AUTOMATION_WRITE_RATE_LIMIT_PER_MINUTE,
+    )
+
+
+async def _require_human_lead_management(
+    session: AsyncSession,
+    context: AuthContext,
+) -> None:
+    await _require_service_account_writes(session, context)
+    if context.actor_type == "SERVICE_ACCOUNT":
+        raise HTTPException(
+            status_code=403,
+            detail="Service accounts may only create leads and activities",
+        )
 
 
 async def list_leads(
@@ -90,6 +132,19 @@ async def create_lead(
     data: LeadCreate,
 ) -> Lead:
     """Crea un nuevo lead vinculando a un Party existente."""
+    await _require_service_account_writes(session, context)
+    if context.actor_type == "SERVICE_ACCOUNT":
+        data = data.model_copy(
+            update={
+                "status": "NEW",
+                "source": "MCP",
+                "owner_user_id": None,
+                "score": 0,
+                "hotness": "COLD",
+                "estimated_value": None,
+                "expected_close_date": None,
+            }
+        )
     # Verificar que el Party existe y pertenece al tenant
     party = await session.scalar(
         select(Party).where(
@@ -133,6 +188,19 @@ async def create_lead_with_party(
     data: LeadWithPartyCreate,
 ) -> Lead:
     """Crea un lead junto con su Party asociado."""
+    await _require_service_account_writes(session, context)
+    if context.actor_type == "SERVICE_ACCOUNT":
+        data = data.model_copy(
+            update={
+                "status": "NEW",
+                "source": "MCP",
+                "owner_user_id": None,
+                "score": 0,
+                "hotness": "COLD",
+                "estimated_value": None,
+                "expected_close_date": None,
+            }
+        )
     # Crear el Party primero
     party_data: dict[str, object] = {
         "name": data.party_name,
@@ -193,6 +261,7 @@ async def capture_campaign_lead(
     duplicados. Si no existe, email o teléfono permiten reutilizar el último
     lead del mismo tenant, dejando intacta su atribución original.
     """
+    await _require_service_account_writes(session, context)
     if data.campaign_variant_id is not None:
         variant = await session.scalar(
             select(SocialCampaignVariant.id).where(
@@ -364,6 +433,7 @@ async def update_lead(
     data: LeadUpdate,
 ) -> Lead:
     """Actualiza un lead."""
+    await _require_human_lead_management(session, context)
     lead = await get_lead(session, context, lead_id)
 
     if data.product_id is not None:
@@ -394,6 +464,7 @@ async def move_lead_status(
     new_status: LeadStatus,
 ) -> Lead:
     """Mueve un lead a un nuevo estado del pipeline."""
+    await _require_human_lead_management(session, context)
     lead = await get_lead(session, context, lead_id)
 
     lead.status = new_status
@@ -426,6 +497,7 @@ async def qualify_lead(
     data: LeadQualificationUpdate,
 ) -> Lead:
     """Registra una decisión humana de calificación con evidencia mínima."""
+    await _require_human_lead_management(session, context)
     lead = await get_lead(session, context, lead_id)
     lead.qualification_status = data.status
     lead.company_name = data.company_name
@@ -485,6 +557,15 @@ async def create_activity(
     data: LeadActivityCreate,
 ) -> LeadActivity:
     """Crea una nueva actividad para un lead."""
+    await _require_service_account_writes(session, context)
+    if context.actor_type == "SERVICE_ACCOUNT":
+        if data.reminder_date is not None and (
+            data.reminder_date.tzinfo is None or data.reminder_date.utcoffset() is None
+        ):
+            raise HTTPException(status_code=422, detail="reminder_date must include a timezone")
+        data = data.model_copy(
+            update={"lead_id": lead_id, "reminder_completed": False},
+        )
     # Verificar que el lead existe
     await get_lead(session, context, lead_id)
 
@@ -510,6 +591,7 @@ async def set_reminder_completed(
     completed: bool,
 ) -> LeadActivity:
     """Cierra o reabre el seguimiento de una actividad del lead."""
+    await _require_human_lead_management(session, context)
     # El lead se valida primero para que un activity_id de otro tenant no se
     # distinga de uno inexistente.
     await get_lead(session, context, lead_id)
