@@ -35,7 +35,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_automation_rate_tenant_id",
+        "ix_automation_rate_windows_tenant_id",
         "automation_rate_windows",
         ["tenant_id"],
     )
@@ -48,5 +48,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_automation_rate_tenant_window", table_name="automation_rate_windows")
-    op.drop_index("ix_automation_rate_tenant_id", table_name="automation_rate_windows")
+    op.drop_index("ix_automation_rate_windows_tenant_id", table_name="automation_rate_windows")
     op.drop_table("automation_rate_windows")

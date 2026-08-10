@@ -298,7 +298,7 @@ async def test_rest_service_account_cannot_bypass_automation_policy(client, monk
                 client_id=client_id,
                 name="CRM test agent",
                 scopes=["leads:write"],
-                secret_hash="not-used-in-this-test",
+                secret_hash="not-used-in-this-test",  # pragma: allowlist secret
                 active=True,
                 expires_at=datetime.now(UTC) + timedelta(days=1),
             )
@@ -491,7 +491,7 @@ async def test_rest_service_account_rate_preflight_does_not_deadlock(client) -> 
                 client_id=client_id,
                 name="CRM rate preflight test",
                 scopes=["leads:write"],
-                secret_hash="not-used-in-this-test",
+                secret_hash="not-used-in-this-test",  # pragma: allowlist secret
                 active=True,
                 expires_at=datetime.now(UTC) + timedelta(days=1),
             )
