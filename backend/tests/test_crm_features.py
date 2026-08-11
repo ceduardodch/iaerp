@@ -35,7 +35,7 @@ async def test_lead_with_new_contact_has_title_summary_owner_and_customer_conver
         client,
         "a@iaerp.local",
         TENANT_A,
-        ["leads:read", "leads:write"],
+        ["leads:read", "leads:write", "parties:read"],
     )
     response = await client.post(
         "/api/v1/crm/leads/with-party",
@@ -65,6 +65,10 @@ async def test_lead_with_new_contact_has_title_summary_owner_and_customer_conver
     listed = await client.get("/api/v1/crm/leads", headers=auth(token))
     assert listed.status_code == 200
     assert listed.json()[0]["party"]["email"] == "crm@example.com"
+
+    parties = await client.get("/api/v1/parties", headers=auth(token))
+    assert parties.status_code == 200, parties.text
+    assert parties.json()[0]["roles"] == []
 
     won = await client.put(
         f"/api/v1/crm/leads/{lead['id']}/status",

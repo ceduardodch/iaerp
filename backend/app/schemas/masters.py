@@ -100,6 +100,9 @@ class PartyCreate(PartyFields):
 
 
 class PartyRead(PartyFields):
+    # Un prospecto CRM aún no es cliente ni proveedor; por eso puede no tener
+    # roles de catálogo hasta que se lo convierta.
+    roles: list[Literal["CUSTOMER", "SUPPLIER"]] = Field(default_factory=list)
     id: uuid.UUID
 
 
