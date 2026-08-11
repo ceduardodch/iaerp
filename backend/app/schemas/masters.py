@@ -64,6 +64,42 @@ class TagRead(TagCreate):
     active: bool
 
 
+class AnalyticClassificationCreate(APIModel):
+    code: str = Field(pattern=r"^[A-Z][A-Z0-9_]{1,39}$")
+    name: str = Field(min_length=1, max_length=120)
+    max_depth: int = Field(default=1, ge=1, le=3)
+
+
+class AnalyticClassificationRead(AnalyticClassificationCreate):
+    id: uuid.UUID
+    active: bool
+
+
+class AnalyticClassificationValueCreate(APIModel):
+    parent_id: uuid.UUID | None = None
+    code: str = Field(pattern=r"^[A-Z0-9][A-Z0-9_-]{0,39}$")
+    name: str = Field(min_length=1, max_length=120)
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
+class AnalyticClassificationValueRead(AnalyticClassificationValueCreate):
+    id: uuid.UUID
+    classification_id: uuid.UUID
+    active: bool
+
+
+class AnalyticAssignmentsUpdate(APIModel):
+    value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+
+
+class AnalyticAssignmentRead(APIModel):
+    classification_id: uuid.UUID
+    classification_code: str
+    classification_name: str
+    value_id: uuid.UUID
+    path: list[dict[str, str]]
+
+
 class PartyFields(APIModel):
     name: str = Field(min_length=1, max_length=200)
     identification_type: Literal["RUC", "CEDULA", "PASSPORT", "FINAL_CONSUMER"]
@@ -87,7 +123,6 @@ class PartyFields(APIModel):
         if len(value) != len(set(value)):
             raise ValueError("roles must be unique")
         return value
-
 
 
 class PartyCreate(PartyFields):

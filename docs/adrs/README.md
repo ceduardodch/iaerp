@@ -22,3 +22,4 @@ sustituya.
 | 0012 | Modulo tributario Ecuador (declaraciones y anexos SRI) | Accepted |
 | 0013 | Campanas Meta Ads y captura de leads en CRM | Accepted |
 | 0014 | CxP operativa y conciliacion bancaria compartida | Proposed |
+| 0015 | Clasificaciones analiticas por tenant | Proposed |

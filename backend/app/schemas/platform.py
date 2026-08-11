@@ -107,6 +107,8 @@ SERVICE_ACCOUNT_ALLOWED_SCOPES = frozenset(
         "payables:read",
         "payables:write",
         "payables:extract",
+        "analytics:read",
+        "analytics:write",
         "leads:read",
         "leads:write",
         "leads:capture",

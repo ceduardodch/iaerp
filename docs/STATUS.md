@@ -7,6 +7,19 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Clasificaciones analíticas por tenant listas en un worktree aislado de
+  `origin/main`: 2026-08-11 `America/Guayaquil`. Empresa configura catálogos
+  de uno a tres niveles y valores controlados; Facturas y Compras los asignan,
+  muestran y filtran sin texto libre. Cada documento conserva una ruta de la
+  clasificación; una factura solo cambia en borrador y una CxP antes de tener
+  movimientos. No modifica XML, RIDE, SRI, ATS, IVA, asientos ni saldos. La
+  relación genérica permite que nuevos módulos reutilicen el catálogo sin
+  columnas fijas. Se añadieron scopes OIDC web y de cuentas de servicio. Pasan
+  lint/build frontend, Ruff, mypy y 28 pruebas backend dirigidas (una omitida).
+  JSON de Keycloak y script de configuración son válidos. Falta revisión
+  independiente, migración PostgreSQL en vivo, `release -> PR -> main` y
+  despliegue antes de declararlo operativo en producción.
+
 - Acceso seguro de agentes al CRM listo en el árbol local de `main`: 2026-08-09
   `America/Guayaquil`. MCP expone consulta, alta de leads y actividades con
   esquemas cerrados, scopes `leads:read/write`, paridad con REST, idempotencia,

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthContext, require_scopes
 from app.db.session import get_session
 from app.schemas.bank_reconciliation import BankStatementImportRead
+from app.schemas.masters import AnalyticAssignmentsUpdate
 from app.schemas.payables import (
     BankDebitAllocationInput,
     ExpenseRuleCreate,
@@ -49,12 +50,14 @@ async def get_payables(
     context: Annotated[AuthContext, Depends(require_scopes("payables:read"))],
     status: Annotated[str | None, Query(pattern="^(OPEN|PARTIAL|SETTLED|VOIDED)$")] = None,
     due_before: Annotated[date | None, Query(alias="dueBefore")] = None,
+    analytic_value_id: Annotated[list[uuid.UUID] | None, Query(alias="analyticValueId")] = None,
 ) -> list[PayableRead]:
     return await payables.list_payables(
         session,
         tenant_id=context.tenant_id,
         status=status,
         due_before=due_before,
+        analytic_value_ids=analytic_value_id,
     )
 
 
@@ -68,8 +71,36 @@ async def get_payable(
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("payables:read"))],
 ) -> PayableRead:
-    return await payables.get_payable(
-        session, tenant_id=context.tenant_id, payable_id=payable_id
+    return await payables.get_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+
+
+@router.put(
+    "/payables/{payable_id}/analytic-assignments",
+    response_model=PayableRead,
+    summary="Actualizar clasificaciones analíticas de una CxP",
+)
+async def put_payable_analytic_assignments(
+    payable_id: uuid.UUID,
+    data: AnalyticAssignmentsUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("payables:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        item = await payables.update_payable_analytic_assignments(
+            session, context, payable_id, value_ids=data.value_ids
+        )
+        return str(item.id), item.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="payables.analytic_assignments.update",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="payable.analytic_assignments_updated",
+        entity_type="payable",
+        callback=update,
     )
 
 
@@ -145,9 +176,7 @@ async def post_payable_payment(
     context: Annotated[AuthContext, Depends(require_scopes("payables:write"))],
 ) -> dict[str, object]:
     async def record() -> tuple[str, dict[str, object]]:
-        item = await payables.record_payment(
-            session, context, payable_id=payable_id, data=data
-        )
+        item = await payables.record_payment(session, context, payable_id=payable_id, data=data)
         return str(item.id), item.model_dump(mode="json", by_alias=True)
 
     return await execute_idempotent(
@@ -176,9 +205,7 @@ async def post_payable_adjustment(
     context: Annotated[AuthContext, Depends(require_scopes("payables:write"))],
 ) -> dict[str, object]:
     async def record() -> tuple[str, dict[str, object]]:
-        item = await payables.record_adjustment(
-            session, context, payable_id=payable_id, data=data
-        )
+        item = await payables.record_adjustment(session, context, payable_id=payable_id, data=data)
         return str(item.id), item.model_dump(mode="json", by_alias=True)
 
     return await execute_idempotent(
@@ -264,12 +291,8 @@ async def post_payment_schedule(
     context: Annotated[AuthContext, Depends(require_scopes("payables:write"))],
 ) -> dict[str, object]:
     async def schedule() -> tuple[str, dict[str, object]]:
-        item = await payables.schedule_payment(
-            session, context, payable_id=payable_id, data=data
-        )
-        response = PaymentScheduleRead.model_validate(item).model_dump(
-            mode="json", by_alias=True
-        )
+        item = await payables.schedule_payment(session, context, payable_id=payable_id, data=data)
+        response = PaymentScheduleRead.model_validate(item).model_dump(mode="json", by_alias=True)
         return str(item.id), response
 
     return await execute_idempotent(
@@ -311,9 +334,7 @@ async def post_expense_rule(
 ) -> dict[str, object]:
     async def create() -> tuple[str, dict[str, object]]:
         item = await payables.create_rule(session, context, data)
-        response = ExpenseRuleRead.model_validate(item).model_dump(
-            mode="json", by_alias=True
-        )
+        response = ExpenseRuleRead.model_validate(item).model_dump(mode="json", by_alias=True)
         return str(item.id), response
 
     return await execute_idempotent(

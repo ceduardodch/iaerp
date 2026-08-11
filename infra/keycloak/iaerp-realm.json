@@ -265,6 +265,22 @@
       }
     },
     {
+      "name": "analytics:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "analytics:write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
       "name": "automation:read",
       "protocol": "openid-connect",
       "attributes": {
@@ -423,6 +439,8 @@
         "organization:write",
         "tags:read",
         "tags:write",
+        "analytics:read",
+        "analytics:write",
         "automation:read",
         "automation:write",
         "operations:read",

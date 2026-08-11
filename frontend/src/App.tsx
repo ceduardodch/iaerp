@@ -84,6 +84,8 @@ import {
 } from './components/charts'
 import { ErpCombobox } from './components/erp/ErpCombobox'
 import { ErpModal } from './components/erp/ErpModal'
+import { AnalyticClassificationPicker } from './components/analytics/AnalyticClassificationPicker'
+import { AnalyticClassificationSettings } from './components/analytics/AnalyticClassificationSettings'
 // Code-splitting (Sprint 7): la sección CRM arrastra dependencias pesadas
 // (@dnd-kit + framer-motion) y es la menos usada en el arranque; se carga
 // bajo demanda para reducir el bundle inicial.
@@ -1361,6 +1363,7 @@ function NewInvoiceForm({
   )
   const [issueDate, setIssueDate] = useState(todayInFiscalTimezone)
   const [lines, setLines] = useState<DraftLine[]>([emptyDraftLine()])
+  const [analyticValueIds, setAnalyticValueIds] = useState<string[]>([])
   const initialCustomer = customers.find((customer) => customer.id === customerId)
   const [paymentTermsDays, setPaymentTermsDays] = useState(
     initialCustomer?.paymentTermsDays ?? defaultPaymentTermsDays ?? 0,
@@ -1430,6 +1433,7 @@ function NewInvoiceForm({
       emissionPointId: string
       issueDate: string
       lines: InvoiceLineInput[]
+      analyticValueIds: string[]
     }) => {
       const authoritativePreview = await apiRequest<InvoicePreview>(token, '/invoices/preview', {
         method: 'POST',
@@ -1448,6 +1452,7 @@ function NewInvoiceForm({
             amount: authoritativePreview.total,
           }],
           lines: payload.lines,
+          analyticValueIds: payload.analyticValueIds,
         }),
       })
     },
@@ -1476,6 +1481,7 @@ function NewInvoiceForm({
         discount: line.discount || '0.00',
         taxCode: line.taxCode,
       })),
+      analyticValueIds,
     })
   }
 
@@ -1503,6 +1509,7 @@ function NewInvoiceForm({
           required
         />
       </label>
+      <AnalyticClassificationPicker token={token} valueIds={analyticValueIds} onChange={setAnalyticValueIds} />
       <div className="field-row">
         <label>
           Establecimiento
@@ -2296,6 +2303,7 @@ function InvoicesPage({
                   <th>Estado</th>
                   <th>Cobro</th>
                   <th>Retenciones</th>
+                  <th>Clasificaciones</th>
                   <th>Total</th>
                   <th>Acciones</th>
                 </tr>
@@ -2309,6 +2317,7 @@ function InvoicesPage({
                     <td><InvoiceStatusBadge status={invoice.status} /></td>
                     <td><CollectionStatusBadge status={invoice.collectionStatus} /></td>
                     <td><ErpStatusBadge tone={Number(invoice.retentionTotal) > 0 ? 'success' : 'neutral'}>{Number(invoice.retentionTotal) > 0 ? `$${formatAmount(invoice.retentionTotal)}` : 'Sin retención'}</ErpStatusBadge></td>
+                    <td>{invoice.analyticAssignments.length ? invoice.analyticAssignments.map((item) => <small key={item.classificationId}>{item.classificationName}: {item.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td>
                     <td>${formatAmount(invoice.total)}</td>
                     <td>
                       <ErpActionCell>
@@ -3731,7 +3740,7 @@ function OrganizationPage({
   token: string
 }) {
   const queryClient = useQueryClient()
-  const [settingsSection, setSettingsSection] = useState<'fiscal' | 'invoicing' | 'collections' | 'integrations'>('fiscal')
+  const [settingsSection, setSettingsSection] = useState<'fiscal' | 'invoicing' | 'collections' | 'integrations' | 'analytics'>('fiscal')
   const fiscalQuery = useQuery({
     queryKey: ['organization', 'fiscal-settings'],
     queryFn: () => apiRequest<FiscalSettings>(token, '/organization/fiscal-settings'),
@@ -3948,6 +3957,7 @@ function OrganizationPage({
         <ErpButton variant={settingsSection === 'fiscal' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('fiscal')}>Datos fiscales</ErpButton>
         <ErpButton variant={settingsSection === 'invoicing' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('invoicing')}>Envío de facturas</ErpButton>
         <ErpButton variant={settingsSection === 'collections' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('collections')}>Cobranza automática</ErpButton>
+        <ErpButton variant={settingsSection === 'analytics' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('analytics')}>Clasificaciones</ErpButton>
         <ErpButton variant={settingsSection === 'integrations' ? 'primary' : 'secondary'} onClick={() => setSettingsSection('integrations')}>Canales e integraciones</ErpButton>
       </ErpToolbar>
       <section className="company-grid company-grid-expanded">
@@ -4045,6 +4055,7 @@ function OrganizationPage({
           </div>
         </ErpPanel>
         </> : null}
+        {settingsSection === 'analytics' ? <AnalyticClassificationSettings token={token} /> : null}
         {settingsSection === 'invoicing' ? (
           <ErpPanel title="Correo de entrega de factura" className="fiscal-settings-panel">
             {invoiceEmailTemplateQuery.isPending ? <p className="fiscal-panel-copy">Cargando plantilla…</p> : null}

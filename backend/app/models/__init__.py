@@ -1,3 +1,8 @@
+from app.models.analytics import (
+    AnalyticAssignment,
+    AnalyticClassification,
+    AnalyticClassificationValue,
+)
 from app.models.billing import (
     DocumentArtifact,
     DocumentRelation,
@@ -75,6 +80,9 @@ from app.models.tax import (
 )
 
 __all__ = [
+    "AnalyticClassification",
+    "AnalyticClassificationValue",
+    "AnalyticAssignment",
     "AuditEvent",
     "BankStatementImport",
     "BankTransaction",

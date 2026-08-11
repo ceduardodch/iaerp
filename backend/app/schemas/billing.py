@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import EmailStr, Field, field_validator
 
 from app.schemas.base import APIModel
+from app.schemas.masters import AnalyticAssignmentRead
 
 DocumentType = Literal["INVOICE", "CREDIT_NOTE"]
 ArtifactType = Literal["xml-signed", "ride-pdf"]
@@ -65,6 +66,7 @@ class InvoiceInput(APIModel):
     lines: list[InvoiceLineInput] = Field(min_length=1)
     # Los servicios puntuales nacen con cobranza apagada.
     collection_enabled: bool = False
+    analytic_value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
 
 
 class InvoicePreviewInput(APIModel):
@@ -167,6 +169,7 @@ class SalesDocumentRead(APIModel):
     commercial_snapshot: dict[str, object] | None = None
     lines: list[SalesDocumentLineRead] = Field(default_factory=list)
     installments: list[InstallmentInput] = Field(default_factory=list)
+    analytic_assignments: list[AnalyticAssignmentRead] = Field(default_factory=list)
 
     @field_validator("sequential")
     @classmethod

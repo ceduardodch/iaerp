@@ -48,6 +48,32 @@ export type TaxCategoryInput = {
   validFrom: string
 }
 
+export type AnalyticClassification = {
+  id: string
+  code: string
+  name: string
+  maxDepth: number
+  active: boolean
+}
+
+export type AnalyticClassificationValue = {
+  id: string
+  classificationId: string
+  parentId?: string | null
+  code: string
+  name: string
+  color?: string | null
+  active: boolean
+}
+
+export type AnalyticAssignment = {
+  classificationId: string
+  classificationCode: string
+  classificationName: string
+  valueId: string
+  path: Array<{ code: string; name: string }>
+}
+
 export type CommercialContract = {
   id: string
   partyId: string
@@ -206,6 +232,7 @@ export type SalesDocument = {
   retentionTotal: string
   collectionEnabled: boolean
   commercialSnapshot?: Record<string, unknown> | null
+  analyticAssignments: AnalyticAssignment[]
 }
 
 export type InvoiceLineInput = {
@@ -225,6 +252,7 @@ export type InvoiceInput = {
   installments: Array<{ dueDate: string; amount: string }>
   lines: InvoiceLineInput[]
   collectionEnabled?: boolean
+  analyticValueIds?: string[]
 }
 
 export type CreditNoteInput = {
@@ -454,6 +482,7 @@ export type Payable = {
   taxClassification: 'DEDUCTIBLE_PENDING_REVIEW' | 'DEDUCTIBLE_CONFIRMED' | 'NON_DEDUCTIBLE'
   evidenceStatus: 'NONE' | 'ATTACHED' | 'PRELIMINARY' | 'FISCAL_XML'
   supportReference?: string | null
+  analyticAssignments: AnalyticAssignment[]
 }
 
 export type PayableMovement = {

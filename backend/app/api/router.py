@@ -51,6 +51,7 @@ from app.schemas.legal_commercial import (
     ContractVersionRead,
 )
 from app.schemas.masters import (
+    AnalyticAssignmentsUpdate,
     EmissionPointCreate,
     EmissionPointRead,
     EstablishmentCreate,
@@ -125,6 +126,8 @@ ALL_DEV_SCOPES = {
     "organization:write",
     "tags:read",
     "tags:write",
+    "analytics:read",
+    "analytics:write",
     "automation:read",
     "automation:write",
     "operations:read",
@@ -1544,6 +1547,7 @@ async def get_invoices(
     context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
     q: Annotated[str | None, Query(min_length=2)] = None,
     status: str | None = None,
+    analytic_value_id: Annotated[list[uuid.UUID] | None, Query(alias="analyticValueId")] = None,
 ) -> list[SalesDocumentRead]:
     """Lista facturas y notas de credito del tenant activo.
 
@@ -1553,7 +1557,13 @@ async def get_invoices(
     igual que el resto de listados del backend.
     """
 
-    entities = await billing.list_sales_documents(session, context, query=q, status=status)
+    entities = await billing.list_sales_documents(
+        session,
+        context,
+        query=q,
+        status=status,
+        analytic_value_ids=analytic_value_id,
+    )
     return [await billing.to_sales_document_read(session, context, entity) for entity in entities]
 
 
@@ -1565,6 +1575,33 @@ async def get_invoice(
 ) -> SalesDocumentRead:
     entity = await billing.get_sales_document(session, context, invoice_id)
     return await billing.to_sales_document_read(session, context, entity)
+
+
+@router.put("/invoices/{invoice_id}/analytic-assignments", response_model=SalesDocumentRead)
+async def put_invoice_analytic_assignments(
+    invoice_id: uuid.UUID,
+    data: AnalyticAssignmentsUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        entity = await billing.update_invoice_analytic_assignments(
+            session, context, invoice_id, value_ids=data.value_ids
+        )
+        response = await billing.to_sales_document_read(session, context, entity)
+        return str(entity.id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="invoices.analytic_assignments.update",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="invoice.analytic_assignments_updated",
+        entity_type="sales_document",
+        callback=update,
+    )
 
 
 @router.post("/invoices/{invoice_id}/archive", response_model=SalesDocumentRead)

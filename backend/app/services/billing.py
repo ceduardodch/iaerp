@@ -51,7 +51,16 @@ from app.schemas.billing import (
     SRITransmissionRead,
 )
 from app.services import access_key as access_key_service
-from app.services import crm_integrations, fiscal_settings, masters, ride, signing, sri_xml, storage
+from app.services import (
+    analytics,
+    crm_integrations,
+    fiscal_settings,
+    masters,
+    ride,
+    signing,
+    sri_xml,
+    storage,
+)
 from app.services.fiscal_policy import FiscalCalculationPolicy, LineInput, resolve_fiscal_policy
 from app.services.unit_of_work import append_audit
 
@@ -442,6 +451,13 @@ async def create_invoice_draft(
     )
     session.add(document)
     await session.flush()
+    await analytics.replace_assignments(
+        session,
+        context,
+        target_type="SALES_DOCUMENT",
+        target_id=document.id,
+        value_ids=data.analytic_value_ids,
+    )
 
     for index, (calculated_line, product_id, product_code, description) in enumerate(
         zip(calculation.lines, line_products, line_product_codes, line_descriptions, strict=True),
@@ -495,6 +511,29 @@ async def update_invoice_collection_policy(
         )
     document.collection_enabled = enabled
     await session.flush()
+    return document
+
+
+async def update_invoice_analytic_assignments(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+    *,
+    value_ids: list[uuid.UUID],
+) -> SalesDocument:
+    document = await get_sales_document(session, context, document_id)
+    if document.status != "DRAFT":
+        raise HTTPException(
+            status_code=409,
+            detail="Analytic classifications can only change on a draft invoice",
+        )
+    await analytics.replace_assignments(
+        session,
+        context,
+        target_type="SALES_DOCUMENT",
+        target_id=document.id,
+        value_ids=value_ids,
+    )
     return document
 
 
@@ -987,6 +1026,7 @@ async def list_sales_documents(
     *,
     query: str | None = None,
     status: str | None = None,
+    analytic_value_ids: list[uuid.UUID] | None = None,
     limit: int = _LIST_SALES_DOCUMENTS_MAX_LIMIT,
 ) -> list[SalesDocument]:
     """Lista documentos del tenant activo (``GET /invoices``, Fase 5).
@@ -1013,6 +1053,14 @@ async def list_sales_documents(
         statement = statement.where(
             (SalesDocument.sequential.ilike(pattern)) | (SalesDocument.access_key.ilike(pattern))
         )
+    if analytic_value_ids:
+        matching_ids = await analytics.target_ids_matching_values(
+            session,
+            tenant_id=context.tenant_id,
+            target_type="SALES_DOCUMENT",
+            value_ids=analytic_value_ids,
+        )
+        statement = statement.where(SalesDocument.id.in_(matching_ids))
     effective_limit = min(limit, _LIST_SALES_DOCUMENTS_MAX_LIMIT)
     return list(
         (
@@ -1112,6 +1160,12 @@ async def to_sales_document_read(
         retention_total=retention_total,
         collection_enabled=document.collection_enabled,
         commercial_snapshot=document.commercial_snapshot,
+        analytic_assignments=await analytics.list_assignments(
+            session,
+            tenant_id=context.tenant_id,
+            target_type="SALES_DOCUMENT",
+            target_id=document.id,
+        ),
         lines=[
             SalesDocumentLineRead(
                 id=line.id,

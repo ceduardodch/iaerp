@@ -19,6 +19,7 @@ import {
   ErpStatusBadge,
   ErpToolbar,
 } from '../erp'
+import { AnalyticClassificationPicker } from '../analytics/AnalyticClassificationPicker'
 import './PurchasesPage.css'
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
@@ -53,6 +54,7 @@ interface PurchaseFormProps {
 
 function PurchaseForm({ token, draft, onSaved, onCancel }: PurchaseFormProps) {
   const [paymentTiming, setPaymentTiming] = useState<'PAID_NOW' | 'PAY_LATER'>('PAID_NOW')
+  const [analyticValueIds, setAnalyticValueIds] = useState<string[]>([])
   const createPurchase = useMutation({
     mutationFn: (payload: Record<string, unknown>) => apiRequest<Payable>(token, '/payables', {
       method: 'POST',
@@ -83,6 +85,7 @@ function PurchaseForm({ token, draft, onSaved, onCancel }: PurchaseFormProps) {
       taxClassification: String(form.get('taxClassification')),
       evidenceStatus: supportReference ? 'ATTACHED' : 'NONE',
       supportReference,
+      analyticValueIds,
     })
   }
 
@@ -96,6 +99,7 @@ function PurchaseForm({ token, draft, onSaved, onCancel }: PurchaseFormProps) {
       onCancel={onCancel}
     >
       <p className="fine-print">Registra la operación ahora y completa el soporte después. Sin XML válido no se genera crédito IVA ni ATS.</p>
+      <AnalyticClassificationPicker token={token} valueIds={analyticValueIds} onChange={setAnalyticValueIds} />
       <label>Descripción<input name="description" required minLength={2} defaultValue={draft?.description ?? ''} placeholder="Ej. Gasolina vehículo" /></label>
       <label>Proveedor opcional<input name="supplierName" defaultValue={draft?.supplierName ?? ''} placeholder="Nombre o comercio" /></label>
       <label>Categoría<input name="category" required defaultValue={draft?.category ?? 'Combustible'} /></label>
@@ -385,7 +389,7 @@ export function PurchasesPage({ token }: { token: string }) {
         <ErpPanel title="Cuentas por pagar" count={payables.length}>
           {payablesQuery.isPending ? <p aria-busy="true">Cargando compras…</p> : null}
           {payablesQuery.error ? <p className="form-error" role="alert">{payablesQuery.error.message}</p> : null}
-          {payables.length ? <div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table"><thead><tr><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Fiscal</th><th>Acciones</th></tr></thead><tbody>{payables.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; return <tr key={item.id}><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small></td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>Vence {item.dueDate}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.evidenceStatus === 'FISCAL_XML' ? 'success' : 'warning'}>{item.evidenceStatus === 'FISCAL_XML' ? 'XML confirmado' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Deducible · revisar'}</ErpStatusBadge></td><td><ErpButton variant="secondary" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr> })}</tbody></table></div> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Usa Nueva compra para registrar gasolina, servicios o una factura por pagar." /> : null}
+          {payables.length ? <div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table"><thead><tr><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Fiscal</th><th>Clasificaciones</th><th>Acciones</th></tr></thead><tbody>{payables.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; return <tr key={item.id}><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small></td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>Vence {item.dueDate}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.evidenceStatus === 'FISCAL_XML' ? 'success' : 'warning'}>{item.evidenceStatus === 'FISCAL_XML' ? 'XML confirmado' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Deducible · revisar'}</ErpStatusBadge></td><td>{item.analyticAssignments.length ? item.analyticAssignments.map((assignment) => <small key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td><td><ErpButton variant="secondary" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr> })}</tbody></table></div> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Usa Nueva compra para registrar gasolina, servicios o una factura por pagar." /> : null}
         </ErpPanel>
       ) : null}
       {selectedPayable && !['BANK', 'RULES'].includes(view) ? <PayableDetail token={token} payable={selectedPayable} onClose={() => setSelectedPayableId(null)} /> : null}

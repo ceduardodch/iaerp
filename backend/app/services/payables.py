@@ -26,6 +26,7 @@ from app.schemas.payables import (
     PayableRead,
     PaymentScheduleCreate,
 )
+from app.services import analytics
 
 
 def _reversed_movement_ids(tenant_id: uuid.UUID) -> Select[tuple[uuid.UUID | None]]:
@@ -82,9 +83,7 @@ async def _active_movements(
 async def compute_open_amount(
     session: AsyncSession, *, tenant_id: uuid.UUID, payable: Payable
 ) -> Decimal:
-    active = await _active_movements(
-        session, tenant_id=tenant_id, payable_id=payable.id
-    )
+    active = await _active_movements(session, tenant_id=tenant_id, payable_id=payable.id)
     applied = sum((movement.amount for movement in active), Decimal("0.00"))
     return max(payable.total - applied, Decimal("0.00"))
 
@@ -99,12 +98,8 @@ def _public_status(payable: Payable, open_amount: Decimal) -> str:
     return "OPEN"
 
 
-async def to_read(
-    session: AsyncSession, *, tenant_id: uuid.UUID, payable: Payable
-) -> PayableRead:
-    open_amount = await compute_open_amount(
-        session, tenant_id=tenant_id, payable=payable
-    )
+async def to_read(session: AsyncSession, *, tenant_id: uuid.UUID, payable: Payable) -> PayableRead:
+    open_amount = await compute_open_amount(session, tenant_id=tenant_id, payable=payable)
     return PayableRead(
         id=payable.id,
         supplier_id=payable.supplier_id,
@@ -123,6 +118,12 @@ async def to_read(
         tax_classification=payable.tax_classification,
         evidence_status=payable.evidence_status,
         support_reference=payable.support_reference,
+        analytic_assignments=await analytics.list_assignments(
+            session,
+            tenant_id=tenant_id,
+            target_type="PAYABLE",
+            target_id=payable.id,
+        ),
     )
 
 
@@ -132,10 +133,19 @@ async def list_payables(
     tenant_id: uuid.UUID,
     status: str | None = None,
     due_before: date | None = None,
+    analytic_value_ids: list[uuid.UUID] | None = None,
 ) -> list[PayableRead]:
     query = select(Payable).where(Payable.tenant_id == tenant_id)
     if due_before is not None:
         query = query.where(Payable.due_date <= due_before)
+    if analytic_value_ids:
+        matching_ids = await analytics.target_ids_matching_values(
+            session,
+            tenant_id=tenant_id,
+            target_type="PAYABLE",
+            value_ids=analytic_value_ids,
+        )
+        query = query.where(Payable.id.in_(matching_ids))
     entities = list(
         await session.scalars(query.order_by(Payable.issue_date.desc(), Payable.created_at.desc()))
     )
@@ -198,6 +208,13 @@ async def create_payable(
     )
     session.add(payable)
     await session.flush()
+    await analytics.replace_assignments(
+        session,
+        context,
+        target_type="PAYABLE",
+        target_id=payable.id,
+        value_ids=data.analytic_value_ids,
+    )
     installment_values = (
         [(item.due_date, item.amount) for item in data.installments]
         if data.installments
@@ -228,6 +245,32 @@ async def create_payable(
                 reference=data.payment_reference,
             ),
         )
+    return await to_read(session, tenant_id=context.tenant_id, payable=payable)
+
+
+async def update_payable_analytic_assignments(
+    session: AsyncSession,
+    context: AuthContext,
+    payable_id: uuid.UUID,
+    *,
+    value_ids: list[uuid.UUID],
+) -> PayableRead:
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    if (
+        await compute_open_amount(session, tenant_id=context.tenant_id, payable=payable)
+        != payable.total
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Analytic classifications cannot change after a payable has movements",
+        )
+    await analytics.replace_assignments(
+        session,
+        context,
+        target_type="PAYABLE",
+        target_id=payable.id,
+        value_ids=value_ids,
+    )
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
 
 
@@ -265,22 +308,15 @@ async def _record_application(
     method: str | None,
     reference: str | None,
 ) -> None:
-    open_amount = await compute_open_amount(
-        session, tenant_id=context.tenant_id, payable=payable
-    )
+    open_amount = await compute_open_amount(session, tenant_id=context.tenant_id, payable=payable)
     if amount > open_amount:
         raise HTTPException(status_code=422, detail="Movement exceeds payable open amount")
-    installments = await _installments(
-        session, tenant_id=context.tenant_id, payable_id=payable.id
-    )
-    active = await _active_movements(
-        session, tenant_id=context.tenant_id, payable_id=payable.id
-    )
+    installments = await _installments(session, tenant_id=context.tenant_id, payable_id=payable.id)
+    active = await _active_movements(session, tenant_id=context.tenant_id, payable_id=payable.id)
     applied_by_installment: dict[uuid.UUID, Decimal] = {}
     for movement in active:
         applied_by_installment[movement.installment_id] = (
-            applied_by_installment.get(movement.installment_id, Decimal("0.00"))
-            + movement.amount
+            applied_by_installment.get(movement.installment_id, Decimal("0.00")) + movement.amount
         )
     remaining = amount
     for installment in installments:
@@ -319,9 +355,7 @@ async def record_payment(
     payable_id: uuid.UUID,
     data: PayablePaymentCreate,
 ) -> PayableRead:
-    payable = await lock_payable(
-        session, tenant_id=context.tenant_id, payable_id=payable_id
-    )
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
     if payable.status == "VOID":
         raise HTTPException(status_code=422, detail="Voided payable cannot receive payments")
     await _record_application(
@@ -344,9 +378,7 @@ async def record_adjustment(
     payable_id: uuid.UUID,
     data: PayableAdjustmentCreate,
 ) -> PayableRead:
-    payable = await lock_payable(
-        session, tenant_id=context.tenant_id, payable_id=payable_id
-    )
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
     await _record_application(
         session,
         context,
@@ -369,9 +401,7 @@ async def reverse_movement(
     reason: str,
     effective_date: date,
 ) -> PayableRead:
-    payable = await lock_payable(
-        session, tenant_id=context.tenant_id, payable_id=payable_id
-    )
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
     movement = await session.scalar(
         select(PayableMovement).where(
             PayableMovement.tenant_id == context.tenant_id,
@@ -405,9 +435,7 @@ async def reverse_movement(
         )
     )
     await session.flush()
-    open_amount = await compute_open_amount(
-        session, tenant_id=context.tenant_id, payable=payable
-    )
+    open_amount = await compute_open_amount(session, tenant_id=context.tenant_id, payable=payable)
     payable.status = "OPEN" if open_amount == payable.total else "PARTIALLY_PAID"
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
 
@@ -435,12 +463,8 @@ async def schedule_payment(
     payable_id: uuid.UUID,
     data: PaymentScheduleCreate,
 ) -> SupplierPaymentSchedule:
-    payable = await lock_payable(
-        session, tenant_id=context.tenant_id, payable_id=payable_id
-    )
-    open_amount = await compute_open_amount(
-        session, tenant_id=context.tenant_id, payable=payable
-    )
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    open_amount = await compute_open_amount(session, tenant_id=context.tenant_id, payable=payable)
     if data.amount > open_amount:
         raise HTTPException(status_code=422, detail="Schedule exceeds payable open amount")
     schedule = SupplierPaymentSchedule(
@@ -582,8 +606,7 @@ async def sync_fiscal_document(
                 Payable.fiscal_document_id.is_(None),
                 Payable.issue_date == document.issue_date,
                 Payable.total == document.total,
-                func.lower(Payable.supplier_name)
-                == (document.counterparty_name or "").lower(),
+                func.lower(Payable.supplier_name) == (document.counterparty_name or "").lower(),
             )
         )
     )

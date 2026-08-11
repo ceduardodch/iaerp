@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from app.schemas.base import APIModel
+from app.schemas.masters import AnalyticAssignmentRead
 from app.schemas.receivables import PaymentMethod
 
 PayableStatus = Literal["OPEN", "PARTIAL", "SETTLED", "VOIDED"]
@@ -42,13 +43,12 @@ class PayableCreate(APIModel):
     payment_date: date | None = None
     payment_method: PaymentMethod | None = None
     payment_reference: str | None = Field(default=None, max_length=300)
+    analytic_value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def validate_plan(self) -> PayableCreate:
         if self.installments:
-            installment_total = sum(
-                (item.amount for item in self.installments), Decimal("0.00")
-            )
+            installment_total = sum((item.amount for item in self.installments), Decimal("0.00"))
             if installment_total != self.total:
                 raise ValueError("Installments must add up to the payable total")
         if self.payment_timing == "PAID_NOW" and self.installments:
@@ -103,6 +103,7 @@ class PayableRead(APIModel):
     tax_classification: TaxClassification
     evidence_status: EvidenceStatus
     support_reference: str | None
+    analytic_assignments: list[AnalyticAssignmentRead] = Field(default_factory=list)
 
 
 class PayableMovementRead(APIModel):
