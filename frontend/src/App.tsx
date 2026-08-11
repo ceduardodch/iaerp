@@ -2317,7 +2317,7 @@ function InvoicesPage({
                     <td><InvoiceStatusBadge status={invoice.status} /></td>
                     <td><CollectionStatusBadge status={invoice.collectionStatus} /></td>
                     <td><ErpStatusBadge tone={Number(invoice.retentionTotal) > 0 ? 'success' : 'neutral'}>{Number(invoice.retentionTotal) > 0 ? `$${formatAmount(invoice.retentionTotal)}` : 'Sin retención'}</ErpStatusBadge></td>
-                    <td>{invoice.analyticAssignments.length ? invoice.analyticAssignments.map((item) => <small key={item.classificationId}>{item.classificationName}: {item.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td>
+                    <td>{(invoice.analyticAssignments ?? []).length ? (invoice.analyticAssignments ?? []).map((item) => <small key={item.classificationId}>{item.classificationName}: {item.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td>
                     <td>${formatAmount(invoice.total)}</td>
                     <td>
                       <ErpActionCell>

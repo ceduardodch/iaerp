@@ -16,7 +16,7 @@ EXPECTED_TOOL_FINGERPRINTS = {
     ),
     "invoices.get": "8ab5c5b6cf7c22ce2bdc1b1bcfb554b76b4aecc7ac17df181c05ef132652db25",  # pragma: allowlist secret
     "invoices.create_draft": (
-        "ff9ce6592aa45210cf63d1427fef52d492c30cdb2cafa56aad12e1fed00cf838"  # pragma: allowlist secret
+        "143f994ca96d058274076052e60e54da306380efedd2d9fc8a5015082b3090ec"  # pragma: allowlist secret
     ),
     "invoices.issue": "503285bd8fa6e9e4a6f7c0847dcd904cc0f85926a8586e70c01421876633b4f3",  # pragma: allowlist secret
     "credit_notes.create_and_issue": (
@@ -32,7 +32,7 @@ EXPECTED_TOOL_FINGERPRINTS = {
         "7bf3c061c255df09f4ad70cafe2f7c586b8fe97941fe9f2680b425bbec29bbe4"  # pragma: allowlist secret
     ),
     "payables.list": "7a2bb13faaa5cc6344b8b923260936e053363ad8607939e0528e7fce37a430f4",  # pragma: allowlist secret
-    "payables.create": "92bc68bc03e741463996d340fb09097b114154b2a8dccf16921d6aa07d822a61",  # pragma: allowlist secret
+    "payables.create": "f0f79db2ffce051ae715b098d60e39a0f9fbbb2c793826ca04bec2975fec2fef",  # pragma: allowlist secret
     "payables.create_from_document": (
         "fb74b3320414a6e9af5c423e2ebd755227cb343328e41bfaad2ce7dff8358c98"  # pragma: allowlist secret
     ),
