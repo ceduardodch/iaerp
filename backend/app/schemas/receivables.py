@@ -49,6 +49,8 @@ class AccountItemRead(APIModel):
     original_amount: Decimal
     open_amount: Decimal
     currency: Literal["USD"] = "USD"
+    issue_date: date | None = None
+    days_since_invoice: int | None = Field(default=None, ge=0)
     due_date: date | None = None
     aging: AgingRead | None = None
 

@@ -7,6 +7,17 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Correctivo de operación preparado para `main`: 2026-08-11
+  `America/Guayaquil`. Tributario conserva grupos compactos y su prueba de
+  historia abre el grupo correspondiente antes de consultar el expediente.
+  Cartera muestra los días desde la fecha de factura y ordena de mayor a
+  menor. CRM deja crear prospectos sin RUC o cédula mediante una referencia
+  interna no fiscal; facturación conserva sus validaciones de identificación.
+  El resumen de campañas queda plegado para que el pipeline aparezca primero.
+  Pasan Ruff, mypy, 21 pruebas backend dirigidas, lint/build frontend y los
+  26 recorridos Playwright de Tributario en escritorio y móvil. Pendiente CI,
+  despliegue Coolify y comprobación pública.
+
 - Clasificaciones analíticas por tenant en promoción a `main`: 2026-08-11
   `America/Guayaquil`. Empresa configura catálogos de uno a tres niveles y
   valores controlados; Facturas y Compras los asignan sin texto libre. Compras

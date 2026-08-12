@@ -1851,6 +1851,8 @@ def _summary_to_account_item(summary: receivables.ReceivableSummary) -> AccountI
         original_amount=summary.original_amount,
         open_amount=summary.open_amount,
         currency=summary.currency,
+        issue_date=summary.issue_date,
+        days_since_invoice=summary.days_since_invoice,
         due_date=summary.due_date,
         aging=(
             {"bucket": summary.aging_bucket, "days_overdue": summary.aging_days_overdue}

@@ -7,7 +7,8 @@ import type { UseKanbanReturn } from '../../hooks/useKanban'
 /**
  * Form compacto para crear un lead desde una columna del kanban (Sprint 2).
  *
- * Campos mínimos: título, contacto (nombre + identificación) y opcionales de
+ * Campos mínimos: título y contacto; la identificación es opcional mientras
+ * el contacto sigue siendo un prospecto, y opcionales de
  * negocio. El backend crea siempre en NEW; el hook encadena un salto a la
  * columna destino solo si es una transición directa válida (ver
  * `crmTransitions.isQuickAddSingleHop`); si no, el lead queda en NEW y
@@ -38,7 +39,7 @@ export function QuickAddLeadForm({
       partyIdentificationType: form.get(
         'identificationType'
       ) as LeadWithPartyCreate['partyIdentificationType'],
-      partyIdentificationNumber: String(form.get('identificationNumber')),
+      partyIdentificationNumber: String(form.get('identificationNumber') || '') || null,
       partyEmail: String(form.get('email') || '') || null,
       partyPhone: String(form.get('phone') || '') || null,
       productId: String(form.get('productId') || '') || null,
@@ -70,7 +71,8 @@ export function QuickAddLeadForm({
       <div className="field-row">
         <label>
           Identificación
-          <select name="identificationType" defaultValue="CEDULA">
+          <select name="identificationType" defaultValue="FINAL_CONSUMER">
+            <option value="FINAL_CONSUMER">Aún no disponible</option>
             <option value="RUC">RUC</option>
             <option value="CEDULA">Cédula</option>
             <option value="PASSPORT">Pasaporte</option>
@@ -79,7 +81,7 @@ export function QuickAddLeadForm({
         </label>
         <label>
           Número
-          <input name="identificationNumber" required />
+          <input name="identificationNumber" placeholder="Opcional" />
         </label>
       </div>
       <div className="field-row">

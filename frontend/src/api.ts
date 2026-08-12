@@ -334,6 +334,8 @@ export type AccountItem = {
   originalAmount: string
   openAmount: string
   currency: string
+  issueDate?: string | null
+  daysSinceInvoice?: number | null
   dueDate?: string | null
   aging?: { bucket: AgingBucket; daysOverdue: number } | null
 }
@@ -712,7 +714,7 @@ export type LeadUpdate = {
 export type LeadWithPartyCreate = {
   partyName: string
   partyIdentificationType: 'RUC' | 'CEDULA' | 'PASSPORT' | 'FINAL_CONSUMER'
-  partyIdentificationNumber: string
+  partyIdentificationNumber?: string | null
   partyEmail?: string | null
   partyPhone?: string | null
   partyAddress?: string | null

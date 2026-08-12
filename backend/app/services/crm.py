@@ -205,7 +205,12 @@ async def create_lead_with_party(
     party_data: dict[str, object] = {
         "name": data.party_name,
         "identification_type": data.party_identification_type,
-        "identification_number": data.party_identification_number,
+        # Un prospecto todavía no es cliente ni documento fiscal. Cuando no
+        # conocemos su identificación se guarda una clave interna única; al
+        # facturar, el flujo de clientes sigue exigiendo la identificación real.
+        "identification_number": (
+            data.party_identification_number or f"lead-{uuid.uuid4().hex[:25]}"
+        ),
         "email": data.party_email,
         "phone": data.party_phone,
         "address": data.party_address,

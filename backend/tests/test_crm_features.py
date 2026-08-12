@@ -30,6 +30,30 @@ def auth(token: str, key: str | None = None) -> dict[str, str]:
     return headers
 
 
+async def test_lead_with_new_contact_allows_missing_identification_for_prospect(client):
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["leads:read", "leads:write", "parties:read"],
+    )
+    response = await client.post(
+        "/api/v1/crm/leads/with-party",
+        headers=auth(token, "crm-prospect-without-id-0001"),
+        json={
+            "partyName": "Prospecto sin RUC",
+            "partyEmail": "prospecto@example.com",
+            "title": "Primera conversación",
+        },
+    )
+    assert response.status_code == 201, response.text
+    parties = await client.get("/api/v1/parties", headers=auth(token))
+    assert parties.status_code == 200, parties.text
+    party = next(item for item in parties.json() if item["name"] == "Prospecto sin RUC")
+    assert party["identificationType"] == "FINAL_CONSUMER"
+    assert party["identificationNumber"].startswith("lead-")
+
+
 async def test_lead_with_new_contact_has_title_summary_owner_and_customer_conversion(client):
     token = await token_for(
         client,

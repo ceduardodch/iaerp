@@ -427,6 +427,7 @@ test('despliega la historia del comprobante con retención y cobro', async ({ pa
     },
   }))
 
+  await page.locator('details').filter({ hasText: 'Compras recibidas' }).locator('summary').click()
   await page.getByRole('button', { name: /Ver historia del comprobante/ }).first().click()
 
   const dossier = page.locator('.tax-dossier')

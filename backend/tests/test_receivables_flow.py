@@ -563,6 +563,8 @@ async def test_get_receivable_by_id_returns_account_item_shape(client) -> None:
     assert body["originalAmount"] == "81.25"
     assert body["openAmount"] == "81.25"
     assert body["currency"] == "USD"
+    assert body["issueDate"] == "2026-06-01"
+    assert body["daysSinceInvoice"] is not None
     # 2026-06-01 due date is in the past relative to any fiscal "today" in
     # this sprint's test window, so the account item surfaces as OVERDUE.
     assert body["status"] == "OVERDUE"

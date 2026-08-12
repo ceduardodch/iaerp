@@ -3507,11 +3507,12 @@ function ReceivablesPage({
         statusFilter && statusFilter !== 'OUTSTANDING' ? `/receivables?status=${statusFilter}` : '/receivables',
       ),
   })
-  const receivables = (receivablesQuery.data ?? []).filter((item) =>
-    statusFilter === 'OUTSTANDING'
+  const receivables = (receivablesQuery.data ?? [])
+    .filter((item) => statusFilter === 'OUTSTANDING'
       ? ['OPEN', 'PARTIAL', 'OVERDUE'].includes(item.status)
-      : true,
-  )
+      : true)
+    .slice()
+    .sort((left, right) => (right.daysSinceInvoice ?? -1) - (left.daysSinceInvoice ?? -1))
   const collectionsQuery = useQuery({
     queryKey: ['receivables', 'collections'],
     queryFn: () => apiRequest<CollectionsBreakdown>(token, '/receivables/collections'),
@@ -3645,6 +3646,7 @@ function ReceivablesPage({
                   <th>Monto original</th>
                   <th>Saldo</th>
                   <th>Estado</th>
+                  <th>Días desde factura</th>
                   <th>Aging</th>
                   <th>Acciones</th>
                 </tr>
@@ -3657,6 +3659,7 @@ function ReceivablesPage({
                     <td>${formatAmount(receivable.originalAmount)}</td>
                     <td>${formatAmount(receivable.openAmount)}</td>
                     <td><ReceivableStatusBadge status={receivable.status} /></td>
+                    <td>{receivable.daysSinceInvoice === undefined || receivable.daysSinceInvoice === null ? '—' : `${receivable.daysSinceInvoice} días`}</td>
                     <td><AgingChip aging={receivable.aging} status={receivable.status} /></td>
                     <td>
                       {/* Iconos y no texto: cuatro acciones escritas empujaban la

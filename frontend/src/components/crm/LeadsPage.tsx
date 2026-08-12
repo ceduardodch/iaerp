@@ -133,7 +133,7 @@ export function LeadsPage({
         ...common,
         partyName: String(data.get('partyName')),
         partyIdentificationType: data.get('identificationType') as LeadWithPartyCreate['partyIdentificationType'],
-        partyIdentificationNumber: String(data.get('identificationNumber')),
+        partyIdentificationNumber: String(data.get('identificationNumber') || '') || null,
         partyEmail: String(data.get('email') || '') || null,
         partyPhone: String(data.get('phone') || '') || null,
         partyAddress: String(data.get('address') || '') || null,
@@ -167,7 +167,7 @@ export function LeadsPage({
           ) : (
             <div className="lead-contact-fields">
               <label>Nombre o razón social<input name="partyName" required /></label>
-              <div className="field-row"><label>Identificación<select name="identificationType"><option value="RUC">RUC</option><option value="CEDULA">Cédula</option><option value="PASSPORT">Pasaporte</option><option value="FINAL_CONSUMER">Consumidor final</option></select></label><label>Número<input name="identificationNumber" required /></label></div>
+              <div className="field-row"><label>Identificación<select name="identificationType" defaultValue="FINAL_CONSUMER"><option value="FINAL_CONSUMER">Aún no disponible</option><option value="RUC">RUC</option><option value="CEDULA">Cédula</option><option value="PASSPORT">Pasaporte</option></select></label><label>Número<input name="identificationNumber" placeholder="Opcional mientras es prospecto" /></label></div>
               <div className="field-row"><label>Correo<input name="email" type="email" /></label><label>Teléfono<input name="phone" /></label></div>
               <label>Dirección<input name="address" /></label>
             </div>

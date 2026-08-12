@@ -251,8 +251,10 @@ class LeadWithPartyCreate(APIModel):
     """Crear un lead junto con su Party asociado."""
 
     party_name: str = Field(min_length=1, max_length=200)
-    party_identification_type: Literal["RUC", "CEDULA", "PASSPORT", "FINAL_CONSUMER"]
-    party_identification_number: str = Field(min_length=1, max_length=30)
+    party_identification_type: Literal[
+        "RUC", "CEDULA", "PASSPORT", "FINAL_CONSUMER"
+    ] = "FINAL_CONSUMER"
+    party_identification_number: str | None = Field(default=None, min_length=1, max_length=30)
     party_email: str | None = Field(default=None, max_length=320)
     party_phone: str | None = Field(default=None, max_length=40)
     party_address: str | None = Field(default=None, max_length=500)

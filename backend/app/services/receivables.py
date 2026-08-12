@@ -144,6 +144,8 @@ class ReceivableSummary:
     original_amount: Decimal
     open_amount: Decimal
     currency: str
+    issue_date: date | None = None
+    days_since_invoice: int | None = None
     due_date: date | None = None
     aging_bucket: str | None = None
     aging_days_overdue: int | None = None
@@ -1068,6 +1070,8 @@ async def list_receivables(
                 original_amount=entity.original_amount,
                 open_amount=summary.open_amount,
                 currency=entity.currency,
+                issue_date=summary.issue_date,
+                days_since_invoice=summary.days_since_invoice,
                 due_date=summary.due_date,
                 aging=aging,
             )
@@ -1215,12 +1219,14 @@ async def to_receivable_summary(
             ReceivableInstallment.receivable_id == receivable.id,
         )
     )
-    invoice_sequential = await session.scalar(
-        select(SalesDocument.sequential).where(
+    invoice_row = (await session.execute(
+        select(SalesDocument.sequential, SalesDocument.issue_date).where(
             SalesDocument.tenant_id == tenant_id,
             SalesDocument.id == receivable.sales_document_id,
         )
-    )
+    )).one_or_none()
+    invoice_sequential = invoice_row[0] if invoice_row is not None else None
+    issue_date = invoice_row[1] if invoice_row is not None else None
 
     return ReceivableSummary(
         id=receivable.id,
@@ -1230,6 +1236,8 @@ async def to_receivable_summary(
         original_amount=receivable.original_amount,
         open_amount=open_amount,
         currency=receivable.currency,
+        issue_date=issue_date,
+        days_since_invoice=max((effective_as_of - issue_date).days, 0) if issue_date else None,
         due_date=earliest_due_date,
         aging_bucket=aging_bucket,
         aging_days_overdue=aging_days_overdue,

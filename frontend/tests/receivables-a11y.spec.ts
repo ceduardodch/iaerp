@@ -207,7 +207,7 @@ test('settled receivable is available only when explicitly requested', async ({ 
   const settledRow = page.getByRole('row', {
     name: /\$80,00/,
   })
-  await expect(settledRow.getByRole('cell').nth(5)).toHaveText('—')
+  await expect(settledRow.getByRole('cell').nth(6)).toHaveText('—')
   await expect(settledRow).not.toContainText('Más de 90 días')
   await expect(settledRow.getByRole('button', { name: /Registrar cobro/ })).toBeDisabled()
   await expect(settledRow.getByRole('button', { name: /correo de cobro/i })).toBeDisabled()

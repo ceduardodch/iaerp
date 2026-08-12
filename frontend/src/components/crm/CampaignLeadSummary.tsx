@@ -38,12 +38,15 @@ export function CampaignLeadSummary({ leads }: { leads: Lead[] }) {
       {campaigns.length === 0 ? (
         <ErpEmptyState title="Sin leads atribuidos" description="Los leads que lleguen desde redes mostrarán aquí su campaña y conversión comercial." />
       ) : (
-        <div className="erp-table-wrap">
+        <details className="campaign-summary-details">
+          <summary>Ver rendimiento de campañas</summary>
+          <div className="erp-table-wrap">
           <table className="campaign-summary-table">
             <thead><tr><th>Campaña</th><th>Origen</th><th>Captados</th><th>Calificados</th><th>Ganados</th></tr></thead>
             <tbody>{campaigns.map((campaign) => <tr key={campaign.key}><td><strong>{campaign.name}</strong></td><td><ErpStatusBadge tone="neutral">{campaign.source}</ErpStatusBadge></td><td>{campaign.total}</td><td><span aria-label={`Calificados: ${campaign.qualified}`}>{campaign.qualified}</span></td><td><span aria-label={`Ganados: ${campaign.won}`}>{campaign.won}</span></td></tr>)}</tbody>
           </table>
-        </div>
+          </div>
+        </details>
       )}
     </ErpPanel>
   )
