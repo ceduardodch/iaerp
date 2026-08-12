@@ -40,12 +40,14 @@ export function ErpModal({
   size = 'md',
   closeLabel = 'Cerrar ventana',
   describedById,
+  variant = 'dialog',
 }: PropsWithChildren<{
   title: ReactNode
   onClose: () => void
   size?: 'sm' | 'md' | 'lg'
   closeLabel?: string
   describedById?: string
+  variant?: 'dialog' | 'drawer'
 }>) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -95,14 +97,14 @@ export function ErpModal({
 
   return createPortal(
     <div
-      className="erp-modal-overlay"
+      className={`erp-modal-overlay${variant === 'drawer' ? ' erp-drawer-overlay' : ''}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
     >
       <div
         ref={dialogRef}
-        className={`erp-modal erp-modal-${size}`}
+        className={`erp-modal erp-modal-${size}${variant === 'drawer' ? ' erp-drawer' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

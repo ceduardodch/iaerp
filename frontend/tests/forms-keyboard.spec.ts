@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { navigateToSection } from './navigation'
 
 test.describe('Form Keyboard Navigation', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,7 +8,7 @@ test.describe('Form Keyboard Navigation', () => {
   })
 
   test('navigates CRM lead form with keyboard', async ({ page }) => {
-    await page.getByRole('button', { name: 'CRM' }).click()
+    await navigateToSection(page, 'CRM')
     await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()
 
     // Test tab navigation through form fields
@@ -43,7 +44,7 @@ test.describe('Form Keyboard Navigation', () => {
   })
 
   test('uses escape to cancel form', async ({ page }) => {
-    await page.getByRole('button', { name: 'CRM' }).click()
+    await navigateToSection(page, 'CRM')
     await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()
 
     // Fill some data
@@ -58,7 +59,7 @@ test.describe('Form Keyboard Navigation', () => {
   })
 
   test('uses space to activate buttons', async ({ page }) => {
-    await page.getByRole('button', { name: 'CRM' }).click()
+    await navigateToSection(page, 'CRM')
 
     // El botón "+" de una columna (quick-add) abre un modal. "Nueva
     // oportunidad" (cabecera) abre una página completa, no un modal; aquí se
@@ -79,7 +80,7 @@ test.describe('Form Validation', () => {
   })
 
   test('validates required fields in lead form', async ({ page }) => {
-    await page.getByRole('button', { name: 'CRM' }).click()
+    await navigateToSection(page, 'CRM')
     await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()
 
     // Try to submit without filling required fields
@@ -97,7 +98,7 @@ test.describe('Form Validation', () => {
   })
 
   test('shows validation for email format', async ({ page }) => {
-    await page.getByRole('button', { name: 'Facturas' }).click()
+    await navigateToSection(page, 'Facturas')
     await page.getByRole('button', { name: 'Nueva factura' }).first().click()
 
     // Try to fill an email field with invalid format (if present in form)
@@ -121,7 +122,7 @@ test.describe('Form Validation', () => {
   })
 
   test('validates number fields', async ({ page }) => {
-    await page.getByRole('button', { name: 'Facturas' }).click()
+    await navigateToSection(page, 'Facturas')
     await page.getByRole('button', { name: 'Nueva factura' }).first().click()
 
     // Test number field validation
@@ -146,7 +147,7 @@ test.describe('Form Validation', () => {
   })
 
   test('resets validation state on form cancel', async ({ page }) => {
-    await page.getByRole('button', { name: 'CRM' }).click()
+    await navigateToSection(page, 'CRM')
     await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()
 
     // Trigger validation
@@ -170,7 +171,7 @@ test.describe('Form Accessibility', () => {
   })
 
   test('has proper label associations', async ({ page }) => {
-    await page.getByRole('button', { name: 'CRM' }).click()
+    await navigateToSection(page, 'CRM')
     await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()
 
     // Check that form controls have associated labels
@@ -196,7 +197,7 @@ test.describe('Form Accessibility', () => {
   })
 
   test('shows visible focus indicators', async ({ page }) => {
-    await page.getByRole('button', { name: 'CRM' }).click()
+    await navigateToSection(page, 'CRM')
 
     // Test focus visibility on buttons
     const button = page.getByRole('button', { name: 'Nueva oportunidad' }).first()
@@ -212,7 +213,7 @@ test.describe('Form Accessibility', () => {
   })
 
   test('uses semantic form structure', async ({ page }) => {
-    await page.getByRole('button', { name: 'CRM' }).click()
+    await navigateToSection(page, 'CRM')
     await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()
 
     // Check for proper use of fieldset/legend or form sections
@@ -228,7 +229,7 @@ test.describe('Form Accessibility', () => {
   })
 
   test('provides keyboard shortcuts documentation', async ({ page }) => {
-    await page.getByRole('button', { name: 'CRM' }).click()
+    await navigateToSection(page, 'CRM')
 
     // Check if there's any keyboard shortcut help available
     const hasShortcutHint = await page.locator('[title*="keyboard"], [aria-label*="atajo"], .shortcuts-hint').count() > 0

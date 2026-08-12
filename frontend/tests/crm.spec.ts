@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
+import { navigateToSection } from './navigation'
 
 test('creates an opportunity and advances it through the accessible CRM flow', async ({ page }) => {
   const title = `Venta AWS E2E ${Date.now()}`
 
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
-  await page.getByRole('button', { name: 'CRM' }).click()
+  await navigateToSection(page, 'CRM')
   await expect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Nueva oportunidad' }).first().click()

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { navigateToSection } from './navigation'
 
 test.skip(
   process.env.E2E_OIDC !== '1',
@@ -18,6 +19,21 @@ async function login(page: Page, alias: string, expectedTenant: string) {
   await expect(page.getByRole('heading', { name: expectedTenant })).toBeVisible()
 }
 
+async function logout(page: Page) {
+  const mobileMenu = page.getByRole('button', { name: 'Menú', exact: true })
+
+  if (await mobileMenu.isVisible()) {
+    await mobileMenu.click()
+    await page
+      .getByRole('dialog', { name: 'Menú principal' })
+      .getByRole('button', { name: 'Cerrar sesión' })
+      .click()
+    return
+  }
+
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
+}
+
 test('PKCE login changes tenant only through a new organization authorization', async ({
   page,
 }) => {
@@ -29,22 +45,22 @@ test('PKCE login changes tenant only through a new organization authorization', 
     page.getByRole('heading', { name: 'IAERP Demo Norte' }),
   ).toBeVisible()
 
-  await page.getByRole('button', { name: 'Contactos' }).click()
+  await navigateToSection(page, 'Contactos')
   await expect(
     page.getByText('Cliente Sintetico Norte', { exact: true }),
   ).toBeVisible()
 
-  await page.getByRole('button', { name: 'Compras' }).click()
+  await navigateToSection(page, 'Compras')
   await expect(
     page.getByRole('heading', { name: 'Cuentas por pagar' }),
   ).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
+  await logout(page)
 
   await expect(page.getByRole('heading', { name: 'Elegir empresa' })).toBeVisible()
   await login(page, 'iaerp-sur', 'IAERP Demo Sur')
-  await page.getByRole('button', { name: 'Contactos' }).click()
+  await navigateToSection(page, 'Contactos')
   await expect(
     page.getByText('Cliente Sintetico Norte', { exact: true }),
   ).toHaveCount(0)

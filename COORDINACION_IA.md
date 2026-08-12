@@ -55,7 +55,8 @@
 | Codex (este hilo, scopes CxP) | 🟡 LISTA PARA REVISIÓN | Corrige `403 payables:read`: scopes OIDC web, despliegue de cambios Keycloak y E2E PKCE hasta Compras; falta revisión independiente e integración | 2026-08-05 |
 | Codex (este hilo, campañas Meta) | ✅ EN MAIN | Preparar/activar/pausar por outbox con reintentos; corte y tope por tenant; variantes, Insights, webhook firmado con cuota durable, historial, atribución y calificación; pendiente Meta real y publicación autorizada | 2026-08-04 |
 | Claude (envío CRM) | ✅ EN MAIN | El modal del kanban ya despacha el correo por `/messages` y agenda el seguimiento; cierre del recordatorio por endpoint propio | 2026-08-05 |
-| Codex (este hilo, agente CRM) | 🚀 EN ENTREGA | Credencial renovable para Claude, tools CRM cerradas, rate durable, scopes y guardas REST/MCP; publicación autorizada por `release -> PR -> main` | 2026-08-09 |
+| Codex (este hilo, agente CRM) | ✅ OPERATIVA | PR #33 en producción; cuenta `Claude CRM BTOB` emitida con `leads:read/write`, escritura automática habilitada, secreto local `0600` y lectura real validada | 2026-08-10 |
+| Codex (este hilo, menú UI/UX) | 🚀 EN PROMOCIÓN | Menú agrupado en desktop y panel lateral accesible hasta 960 px; pruebas responsive, foco, teclado y WCAG verdes; publicación autorizada hacia `main` | 2026-08-11 |
 
 > **Orden de migraciones:** resuelto. Campañas se integró después de CxP, así
 > que `e5f6a7b8c9d0` pasó a colgar de `e6f7a8b9c0d1` en vez de `da1e2f3a4b5c`.

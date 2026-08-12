@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { pickCombobox } from './combobox'
 import { mockDashboardEndpoints } from './dashboard-mocks'
+import { navigateToSection } from './navigation'
 
 const product = {
   id: '16161616-1616-4616-8616-161616161616',
@@ -86,7 +87,7 @@ async function mockApi(page: Page) {
 async function openInvoiceForm(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
-  await page.getByRole('button', { name: 'Facturas' }).click()
+  await navigateToSection(page, 'Facturas')
   await page.getByRole('button', { name: 'Nueva factura' }).first().click()
 }
 

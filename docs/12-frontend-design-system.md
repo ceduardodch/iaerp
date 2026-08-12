@@ -98,6 +98,25 @@ posiciones de acciones.
 - La barra fija movil no cubre campos ni mensajes.
 - `prefers-reduced-motion` elimina movimientos no esenciales.
 
+## Navegacion principal
+
+- Los modulos conservan estos grupos: `Resumen`; `Comercial` (`CRM`,
+  `Contactos`, `Contratos`); `Operaciones` (`Facturas`, `Cartera`, `Compras`,
+  `Tributario`); y `Administracion` (`Catalogos`, `Empresa`).
+- En desktop, `Resumen` es un acceso directo y los otros grupos abren menus
+  cortos. El grupo y el modulo activos deben quedar señalados.
+- En movil, la cabecera muestra la marca, la seccion actual y un boton `Menu`.
+  El boton abre un panel lateral con todos los grupos; no se usa una fila
+  horizontal de modulos.
+- El panel movil se cierra con `Escape`, clic exterior, el boton de cierre o al
+  elegir un modulo. Atrapa el foco mientras esta abierto y lo devuelve al boton
+  `Menu` al cerrar.
+- Todos los destinos y controles moviles miden al menos 44 por 44 pixeles. La
+  lista permite desplazamiento vertical sin crear scroll horizontal en la
+  pagina.
+- Al elegir un modulo, el foco pasa a `#main-content` para evitar que usuarios
+  de teclado recorran otra vez toda la cabecera.
+
 ## Revision
 
 Una pantalla no cumple Definition of Done si:

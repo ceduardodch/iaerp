@@ -32,7 +32,17 @@ alcance y las decisiones.
   Playwright de Tributario. Pendiente CI, despliegue Coolify y comprobación
   pública para declararlo operativo en producción.
 
-- Acceso seguro de agentes al CRM listo en el árbol local de `main`: 2026-08-09
+- Navegacion principal responsive lista en el arbol local de `release`:
+  2026-08-11 `America/Guayaquil`. Los diez modulos dejaron de competir en una
+  fila plana: escritorio usa `Resumen` y tres grupos (`Comercial`,
+  `Operaciones`, `Administracion`); hasta 960 px muestra una barra de 56 px y
+  un panel lateral con todos los destinos. El panel tiene controles tactiles de
+  44 px, scroll vertical, cierre con `Escape` y clic exterior, trampa y retorno
+  de foco, estado actual y sesion. Al navegar, el foco pasa al contenido. Lint
+  y build pasan; 28 recorridos dirigidos de navegacion y WCAG pasan en
+  escritorio/movil, junto con 49 recorridos de Facturas, Cartera, Compras y
+  Tributario. Pendiente CI, PR, despliegue Coolify y comprobacion publica.
+- Acceso seguro de agentes al CRM operativo en producción: 2026-08-10
   `America/Guayaquil`. MCP expone consulta, alta de leads y actividades con
   esquemas cerrados, scopes `leads:read/write`, paridad con REST, idempotencia,
   auditoría, apagado común y límite durable por tenant, actor y herramienta.
@@ -43,10 +53,12 @@ alcance y las decisiones.
   y reintenta una vez ante `401`; no guarda Bearer fijos. Ruff, mypy, contratos,
   45 pruebas dirigidas, tres omisiones PostgreSQL y el DDL PostgreSQL de
   subida/bajada pasan. Los conectores sociales usan el scope separado
-  `leads:capture`; la cuenta CRM no puede falsear atribución. Falta emitir
-  la cuenta real del tenant y guardar su secreto local `0600`. La publicación
-  fue autorizada el 2026-08-09 y debe completar `release -> PR -> main`, CI,
-  despliegue y prueba pública antes de declararse operativa.
+  `leads:capture`; la cuenta CRM no puede falsear atribución. PR #33 quedó en
+  `main` como `02012e2`; CI `31348855398`, despliegue Coolify y salud pública
+  pasaron. La cuenta `Claude CRM BTOB` está activa hasta 2027-08-10 solo con
+  `leads:read` y `leads:write`; el tenant permite escrituras automatizadas.
+  `backend/.env` guarda el client id y secreto con modo `0600`, sin Bearer fijo,
+  y `crm_agent_cli.py leads --limit 1` obtuvo una respuesta real válida.
 - Corrección OIDC de CxP lista en copia aislada de `origin/main`: 2026-08-05
   `America/Guayaquil`. Producción responde `403 Missing scopes:
   payables:read` porque el cliente `iaerp-web` no recibió los scopes de CxP al

@@ -12,6 +12,7 @@ ni aprobacion humana.
 | Ecuador SRI Expert | `experts/ecuador-sri.md` | Reglas locales del repositorio |
 | MCP AI Security Expert | `experts/mcp-ai-security.md` | mcp-patterns, seguridad |
 | Frontend A11y Expert | `experts/frontend-a11y.md` | a11y-playwright-testing, React |
+| IAERP UI/UX Expert | `experts/ui-ux.md` | ui-ux-designer, design-system, frontend-design-review |
 | QA Reliability Expert | `experts/qa-reliability.md` | pruebas, contratos, operaciones |
 
 ## Reglas

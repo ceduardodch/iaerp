@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { mockDashboardEndpoints } from './dashboard-mocks'
+import { navigateToSection } from './navigation'
 
 const context = {
   tenantId: '11111111-1111-4111-8111-111111111111',
@@ -177,7 +178,7 @@ async function loginAndOpenReceivables(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
   await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
-  await page.getByRole('button', { name: 'Cartera' }).click()
+  await navigateToSection(page, 'Cartera')
   await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
 }
 
