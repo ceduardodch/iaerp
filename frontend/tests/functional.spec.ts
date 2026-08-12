@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { navigateToSection } from './navigation'
+import { logout, navigateToSection } from './navigation'
 
 const tenantNorte = '11111111-1111-4111-8111-111111111111'
 const tenantSur = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -50,7 +50,7 @@ test('login and tenant switch preserve isolation', async ({ page }) => {
   await page.getByRole('button', { name: 'Guardar' }).click()
   await expect(page.getByText(editedName, { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
+  await logout(page)
   await login(page, tenantSur)
   await expect(
     page.getByRole('heading', { name: 'IAERP Demo Sur' }),
