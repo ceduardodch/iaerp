@@ -39,3 +39,19 @@ export async function navigateToSection(page: Page, section: string): Promise<vo
   }
   await destination.click()
 }
+
+/** Cierra la sesión desde la cabecera desktop o desde el panel móvil. */
+export async function logout(page: Page): Promise<void> {
+  const mobileMenu = page.getByRole('button', { name: 'Menú', exact: true })
+
+  if (await mobileMenu.isVisible()) {
+    await mobileMenu.click()
+    await page
+      .getByRole('dialog', { name: 'Menú principal' })
+      .getByRole('button', { name: 'Cerrar sesión' })
+      .click()
+    return
+  }
+
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
+}

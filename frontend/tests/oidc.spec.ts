@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { navigateToSection } from './navigation'
+import { logout, navigateToSection } from './navigation'
 
 test.skip(
   process.env.E2E_OIDC !== '1',
@@ -17,21 +17,6 @@ async function login(page: Page, alias: string, expectedTenant: string) {
 
   await expect(page).toHaveURL('http://localhost:8088/')
   await expect(page.getByRole('heading', { name: expectedTenant })).toBeVisible()
-}
-
-async function logout(page: Page) {
-  const mobileMenu = page.getByRole('button', { name: 'Menú', exact: true })
-
-  if (await mobileMenu.isVisible()) {
-    await mobileMenu.click()
-    await page
-      .getByRole('dialog', { name: 'Menú principal' })
-      .getByRole('button', { name: 'Cerrar sesión' })
-      .click()
-    return
-  }
-
-  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
 }
 
 test('PKCE login changes tenant only through a new organization authorization', async ({
