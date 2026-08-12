@@ -12,6 +12,7 @@ import { ErpButton, ErpEmptyState, ErpPanel } from '../erp'
 export function AnalyticClassificationSettings({ token }: { token: string }) {
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState('')
+  const [classificationFormError, setClassificationFormError] = useState('')
   const classifications = useQuery({
     queryKey: ['analytic-classifications'],
     queryFn: () => apiRequest<AnalyticClassification[]>(token, '/analytic-classifications'),
@@ -40,8 +41,18 @@ export function AnalyticClassificationSettings({ token }: { token: string }) {
   function submitClassification(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
+    const code = String(form.get('code')).trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_')
+    if (!/^[A-Z][A-Z0-9_]{1,39}$/.test(code)) {
+      setClassificationFormError('El código debe empezar con una letra y usar solo letras, números o guion bajo.')
+      return
+    }
+    if (classifications.data?.some((item) => item.code === code)) {
+      setClassificationFormError(`Ya existe una clasificación con el código ${code}.`)
+      return
+    }
+    setClassificationFormError('')
     createClassification.mutate({
-      code: String(form.get('code')).trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_'),
+      code,
       name: String(form.get('name')).trim(),
       maxDepth: Number(form.get('maxDepth')),
     })
@@ -65,9 +76,9 @@ export function AnalyticClassificationSettings({ token }: { token: string }) {
       <p className="fine-print">Define aquí franquicias, sucursales, proyectos, centros de costo u otros catálogos. Cada tenant decide sus propios niveles; ningún nivel es obligatorio en los documentos.</p>
       <form className="company-profile-editor" onSubmit={submitClassification}>
         <label>Nombre<input name="name" required minLength={2} placeholder="Ej. Franquicia" /></label>
-        <label>Código<input name="code" required minLength={2} placeholder="FRANQUICIA" /></label>
+        <label>Código<input name="code" required minLength={2} maxLength={40} pattern="[A-Za-z][A-Za-z0-9_]{1,39}" title="Empieza con una letra y usa solo letras, números o guion bajo" placeholder="FRANQUICIA" /></label>
         <label>Niveles máximos<select name="maxDepth" defaultValue="1"><option value="1">1 nivel</option><option value="2">2 niveles</option><option value="3">3 niveles</option></select></label>
-        {createClassification.error ? <p className="form-error" role="alert">{createClassification.error.message}</p> : null}
+        {classificationFormError || createClassification.error ? <p className="form-error" role="alert">{classificationFormError || createClassification.error?.message}</p> : null}
         <ErpButton variant="primary" type="submit" disabled={createClassification.isPending}>{createClassification.isPending ? 'Guardando…' : 'Crear clasificación'}</ErpButton>
       </form>
     </ErpPanel>

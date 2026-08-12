@@ -77,6 +77,50 @@ async def assert_downgraded_to_base(url: URL) -> None:
         raise RuntimeError(f"Downgrade left application tables behind: {names}")
 
 
+async def assert_analytic_classification_insert(url: URL) -> None:
+    """Prove migrated tables can apply their timestamp defaults on a real insert."""
+    connection = await asyncpg.connect(
+        host=url.host or "127.0.0.1",
+        port=url.port or 5432,
+        user=url.username,
+        password=url.password,
+        database=url.database,
+    )
+    try:
+        await connection.execute(
+            """
+            INSERT INTO tenants (ruc, name, organization_id, active, id)
+            VALUES (
+                '1799999999001',
+                'Migration validation tenant',
+                'migration-validation',
+                true,
+                '11111111-1111-4111-8111-111111111111'
+            )
+            """
+        )
+        row = await connection.fetchrow(
+            """
+            INSERT INTO analytic_classifications (
+                code, name, max_depth, active, id, tenant_id
+            )
+            VALUES (
+                'VALIDATION',
+                'Migration validation',
+                1,
+                true,
+                '22222222-2222-4222-8222-222222222222',
+                '11111111-1111-4111-8111-111111111111'
+            )
+            RETURNING created_at, updated_at
+            """
+        )
+    finally:
+        await connection.close()
+    if row is None or row["created_at"] is None or row["updated_at"] is None:
+        raise RuntimeError("Analytic classification timestamp defaults are missing.")
+
+
 def alembic(*arguments: str) -> None:
     subprocess.run(
         [sys.executable, "-m", "alembic", *arguments],
@@ -90,6 +134,7 @@ def main() -> None:
     url = database_url()
     asyncio.run(reset_database(url))
     alembic("upgrade", "head")
+    asyncio.run(assert_analytic_classification_insert(url))
     alembic("downgrade", "base")
     asyncio.run(assert_downgraded_to_base(url))
     alembic("upgrade", "head")
