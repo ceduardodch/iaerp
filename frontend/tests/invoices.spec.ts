@@ -51,6 +51,7 @@ test('creates an invoice draft with two lines and a discount; UI shows exactly t
   await page.getByRole('button', { name: 'Facturas' }).click()
   await expect(page.getByRole('heading', { name: 'Facturas', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Nueva factura' }).first().click()
+  await expect(page.getByText('Clasificaciones analíticas', { exact: true })).toBeVisible()
 
   await pickCombobox(page, 'Cliente', 'Cliente Sintetico Norte')
   await pickCombobox(page, 'Producto 1', productName)

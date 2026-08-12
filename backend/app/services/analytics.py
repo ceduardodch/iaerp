@@ -199,6 +199,17 @@ async def list_classifications(
 async def create_classification(
     session: AsyncSession, context: AuthContext, data: AnalyticClassificationCreate
 ) -> AnalyticClassification:
+    existing = await session.scalar(
+        select(AnalyticClassification).where(
+            AnalyticClassification.tenant_id == context.tenant_id,
+            AnalyticClassification.code == data.code,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Analytic classification code {data.code} already exists",
+        )
     entity = AnalyticClassification(tenant_id=context.tenant_id, **data.model_dump(by_alias=False))
     session.add(entity)
     await session.flush()
@@ -229,6 +240,18 @@ async def create_value(
     data: AnalyticClassificationValueCreate,
 ) -> AnalyticClassificationValue:
     classification = await _get_classification(session, context, classification_id)
+    existing = await session.scalar(
+        select(AnalyticClassificationValue).where(
+            AnalyticClassificationValue.tenant_id == context.tenant_id,
+            AnalyticClassificationValue.classification_id == classification_id,
+            AnalyticClassificationValue.code == data.code,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Analytic value code {data.code} already exists in {classification.name}",
+        )
     if data.parent_id is not None:
         parent = await session.scalar(
             select(AnalyticClassificationValue).where(

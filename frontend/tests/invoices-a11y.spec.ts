@@ -196,6 +196,7 @@ async function mockApi(page: Page) {
   )
   await page.route('**/api/v1/establishments', (route) => route.fulfill({ json: [establishment] }))
   await page.route('**/api/v1/emission-points', (route) => route.fulfill({ json: [emissionPoint] }))
+  await page.route('**/api/v1/analytic-classifications', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/invoices/preview', (route) =>
     route.fulfill({
       json: {
@@ -375,6 +376,8 @@ test('new invoice full-page view is keyboard reachable, labelled and passes axe'
 
   await expect(page.getByRole('heading', { name: 'Nueva factura', level: 1 })).toBeVisible()
   await expect(page.getByLabel('Cliente')).toBeVisible()
+  await expect(page.getByText('Clasificaciones analíticas', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Aún no hay valores configurados/)).toBeVisible()
   await expect(page.getByLabel('Establecimiento')).toBeVisible()
   await expect(page.getByLabel('Punto de emisión')).toBeVisible()
   await expect(page.getByLabel('Fecha de emisión')).toBeVisible()

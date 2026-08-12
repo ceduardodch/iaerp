@@ -37,12 +37,32 @@ async def test_classifications_are_tenant_safe_and_allow_partial_hierarchy(clien
     assert created.status_code == 201, created.text
     classification_id = created.json()["id"]
 
+    duplicate_classification = await client.post(
+        "/api/v1/analytic-classifications",
+        headers=_headers(writer, "analytic-classification-duplicate-0001"),
+        json={"code": "FRANQUICIA", "name": "Otra franquicia", "maxDepth": 1},
+    )
+    assert duplicate_classification.status_code == 409
+    assert duplicate_classification.json()["detail"] == (
+        "Analytic classification code FRANQUICIA already exists"
+    )
+
     group = await client.post(
         f"/api/v1/analytic-classifications/{classification_id}/values",
         headers=_headers(writer, "analytic-classification-value-0001"),
         json={"code": "FARMA", "name": "Farmacia Norte", "color": "#1769AA"},
     )
     assert group.status_code == 201, group.text
+
+    duplicate_value = await client.post(
+        f"/api/v1/analytic-classifications/{classification_id}/values",
+        headers=_headers(writer, "analytic-value-duplicate-0001"),
+        json={"code": "FARMA", "name": "Otra farmacia"},
+    )
+    assert duplicate_value.status_code == 409
+    assert duplicate_value.json()["detail"] == (
+        "Analytic value code FARMA already exists in Franquicia"
+    )
 
     child = await client.post(
         f"/api/v1/analytic-classifications/{classification_id}/values",

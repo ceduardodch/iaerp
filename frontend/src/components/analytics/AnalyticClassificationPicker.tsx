@@ -29,8 +29,16 @@ export function AnalyticClassificationPicker({
     })),
   })
 
-  if (classifications.isPending || !classifications.data?.length) return null
-  if (classifications.error) return <p className="fine-print">No se pudieron cargar las clasificaciones analíticas.</p>
+  if (classifications.isPending) return null
+  if (classifications.error) return <p className="form-error" role="alert">No se pudieron cargar las clasificaciones: {classifications.error.message}</p>
+  if (!classifications.data?.length) {
+    return (
+      <fieldset>
+        <legend>Clasificaciones analíticas</legend>
+        <p className="fine-print">Aún no hay valores configurados. Créelos en Empresa → Clasificaciones para poder elegirlos aquí.</p>
+      </fieldset>
+    )
+  }
 
   return (
     <fieldset>

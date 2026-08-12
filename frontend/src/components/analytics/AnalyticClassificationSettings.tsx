@@ -74,7 +74,7 @@ export function AnalyticClassificationSettings({ token }: { token: string }) {
     <ErpPanel title="Valores controlados" count={classifications.data?.length ?? 0}>
       {classifications.isPending ? <p>Cargando…</p> : null}
       {classifications.error ? <p className="form-error" role="alert">{classifications.error.message}</p> : null}
-      {!classifications.isPending && !classifications.data?.length ? <ErpEmptyState title="Sin clasificaciones" description="Crea primero un catálogo para usarlo en Facturas y Compras." /> : null}
+      {!classifications.isPending && !classifications.error && !classifications.data?.length ? <ErpEmptyState title="Sin clasificaciones" description="Crea primero un catálogo para usarlo en Facturas y Compras." /> : null}
       {classifications.data?.length ? <>
         <label>Clasificación<select value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.target.value)}>{classifications.data.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.maxDepth} nivel(es)</option>)}</select></label>
         <ul className="establishment-list">{selectedValues.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.parentId ? 'Subnivel configurado' : 'Nivel principal'}</small></div></li>)}</ul>
