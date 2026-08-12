@@ -911,6 +911,26 @@ export class ApiError extends Error {
   }
 }
 
+function apiErrorMessage(body: unknown, status: number): string {
+  if (!body || typeof body !== 'object') {
+    return `No se pudo completar la solicitud (HTTP ${status})`
+  }
+  const errorBody = body as { detail?: unknown; message?: unknown }
+  if (typeof errorBody.detail === 'string') return errorBody.detail
+  if (typeof errorBody.message === 'string') return errorBody.message
+  if (Array.isArray(errorBody.detail)) {
+    const messages = errorBody.detail.flatMap((item) => {
+      if (!item || typeof item !== 'object') return []
+      const validation = item as { loc?: unknown; msg?: unknown }
+      if (typeof validation.msg !== 'string') return []
+      const location = Array.isArray(validation.loc) ? validation.loc.at(-1) : null
+      return [typeof location === 'string' ? `${location}: ${validation.msg}` : validation.msg]
+    })
+    if (messages.length) return messages.join('. ')
+  }
+  return `No se pudo completar la solicitud (HTTP ${status})`
+}
+
 const apiUrl = import.meta.env.VITE_API_URL ?? '/api/v1'
 
 type TokenProvider = (forceRefresh?: boolean) => Promise<string>
@@ -942,15 +962,8 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as
-      | { detail?: string; message?: string }
-      | null
-    throw new ApiError(
-      body?.detail ??
-        body?.message ??
-        `No se pudo completar la solicitud (HTTP ${response.status})`,
-      response.status,
-    )
+    const body = await response.json().catch(() => null) as unknown
+    throw new ApiError(apiErrorMessage(body, response.status), response.status)
   }
   return response.json() as Promise<T>
 }

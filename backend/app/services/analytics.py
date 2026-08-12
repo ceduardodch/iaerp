@@ -2,9 +2,11 @@ import uuid
 
 from fastapi import HTTPException
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
+from app.db.integrity import unique_constraint_name
 from app.models.analytics import (
     AnalyticAssignment,
     AnalyticClassification,
@@ -208,11 +210,20 @@ async def create_classification(
     if existing is not None:
         raise HTTPException(
             status_code=409,
-            detail=f"Analytic classification code {data.code} already exists",
+            detail=f"Ya existe una clasificación con el código {data.code}",
         )
     entity = AnalyticClassification(tenant_id=context.tenant_id, **data.model_dump(by_alias=False))
     session.add(entity)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        constraint = unique_constraint_name(exc)
+        if constraint == "uq_analytic_classifications_tenant_code":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Ya existe una clasificación con el código {data.code}",
+            ) from exc
+        raise
     return entity
 
 
@@ -250,7 +261,7 @@ async def create_value(
     if existing is not None:
         raise HTTPException(
             status_code=409,
-            detail=f"Analytic value code {data.code} already exists in {classification.name}",
+            detail=f"Ya existe el valor {data.code} en {classification.name}",
         )
     if data.parent_id is not None:
         parent = await session.scalar(
@@ -274,7 +285,16 @@ async def create_value(
         **data.model_dump(by_alias=False),
     )
     session.add(entity)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        constraint = unique_constraint_name(exc)
+        if constraint == "uq_analytic_values_tenant_classification_code":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Ya existe el valor {data.code} en {classification.name}",
+            ) from exc
+        raise
     return entity
 
 

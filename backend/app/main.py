@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -15,10 +16,12 @@ from app.api.payables import router as payables_router
 from app.api.router import router
 from app.api.tax import router as tax_router
 from app.core.config import get_settings
+from app.db.integrity import integrity_sqlstate, is_unique_violation
 from app.health import readiness, startup_readiness
 from app.mcp.server import mcp, mcp_http_app
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -65,14 +68,30 @@ async def correlation_middleware(
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(
     request: Request,
-    _exc: IntegrityError,
+    exc: IntegrityError,
 ) -> JSONResponse:
+    correlation_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+    if not is_unique_violation(exc):
+        logger.error(
+            "Database integrity error correlation_id=%s error_type=%s sqlstate=%s",
+            correlation_id,
+            type(exc.orig).__name__,
+            integrity_sqlstate(exc),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "code": "database_integrity_error",
+                "message": "No se pudo guardar el registro",
+                "correlationId": correlation_id,
+            },
+        )
     return JSONResponse(
         status_code=409,
         content={
             "code": "conflict",
-            "message": "A record with the same business key already exists",
-            "correlationId": request.state.correlation_id,
+            "message": "Ya existe un registro con esos datos",
+            "correlationId": correlation_id,
         },
     )
 

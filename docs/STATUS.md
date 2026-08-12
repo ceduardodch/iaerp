@@ -7,6 +7,21 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Correctivo de clasificaciones analíticas listo en `release`: 2026-08-12
+  `America/Guayaquil`. Producción no guardaba el primer catálogo: la migración
+  creó `created_at` y `updated_at` obligatorios sin `DEFAULT now()`, PostgreSQL
+  rechazaba el `INSERT`, la transacción se revertía y el manejador general lo
+  mostraba como conflicto de clave. Una migración nueva repara los defaults en
+  clasificaciones, valores y asignaciones; el validador de migraciones prueba
+  ahora un alta real en PostgreSQL. La pantalla además valida el código antes
+  de enviar, muestra en español los conflictos `409` y deja de renderizar los
+  `422` como `[object Object]`. El manejador global distingue violaciones
+  únicas de otros fallos de integridad y el contrato asyncpg se prueba contra
+  PostgreSQL real. Pasan Ruff, mypy, 4 pruebas backend dirigidas,
+  lint/build frontend, 4 recorridos Playwright en escritorio/móvil y la
+  reproducción PostgreSQL antes/después. Falta autorización para commit, push
+  y promoción.
+
 - Correctivo de operación preparado para `main`: 2026-08-11
   `America/Guayaquil`. Tributario conserva grupos compactos y su prueba de
   historia abre el grupo correspondiente antes de consultar el expediente.

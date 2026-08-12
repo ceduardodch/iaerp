@@ -1,9 +1,54 @@
 import uuid
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+
+from app.db.integrity import unique_constraint_name
+from app.db.session import SessionFactory, engine
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
 TENANT_B = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    engine.dialect.name != "postgresql",
+    reason="The asyncpg constraint contract requires PostgreSQL",
+)
+async def test_asyncpg_reports_analytic_unique_constraint():
+    async with SessionFactory() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO analytic_classifications (
+                    code, name, max_depth, active, id, tenant_id
+                ) VALUES (
+                    'DUPLICATE', 'Primera', 1, true,
+                    '33333333-3333-4333-8333-333333333331', :tenant_id
+                )
+                """
+            ),
+            {"tenant_id": TENANT_A},
+        )
+        await session.commit()
+        with pytest.raises(IntegrityError) as captured:
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO analytic_classifications (
+                        code, name, max_depth, active, id, tenant_id
+                    ) VALUES (
+                        'DUPLICATE', 'Segunda', 1, true,
+                        '33333333-3333-4333-8333-333333333332', :tenant_id
+                    )
+                    """
+                ),
+                {"tenant_id": TENANT_A},
+            )
+        assert unique_constraint_name(captured.value) == (
+            "uq_analytic_classifications_tenant_code"
+        )
 
 
 async def _token(client, tenant_id: uuid.UUID, scopes: list[str]) -> str:
@@ -44,7 +89,7 @@ async def test_classifications_are_tenant_safe_and_allow_partial_hierarchy(clien
     )
     assert duplicate_classification.status_code == 409
     assert duplicate_classification.json()["detail"] == (
-        "Analytic classification code FRANQUICIA already exists"
+        "Ya existe una clasificación con el código FRANQUICIA"
     )
 
     group = await client.post(
@@ -60,9 +105,7 @@ async def test_classifications_are_tenant_safe_and_allow_partial_hierarchy(clien
         json={"code": "FARMA", "name": "Otra farmacia"},
     )
     assert duplicate_value.status_code == 409
-    assert duplicate_value.json()["detail"] == (
-        "Analytic value code FARMA already exists in Franquicia"
-    )
+    assert duplicate_value.json()["detail"] == "Ya existe el valor FARMA en Franquicia"
 
     child = await client.post(
         f"/api/v1/analytic-classifications/{classification_id}/values",
