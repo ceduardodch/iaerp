@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { navigateToSection } from './navigation'
 
 const tenantNorte = '11111111-1111-4111-8111-111111111111'
 const tenantSur = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -35,7 +36,7 @@ test('login and tenant switch preserve isolation', async ({ page }) => {
     page.getByRole('heading', { name: 'IAERP Demo Norte' }),
   ).toBeVisible()
 
-  await page.getByRole('button', { name: 'Contactos' }).click()
+  await navigateToSection(page, 'Contactos')
   await page.getByRole('button', { name: 'Nuevo contacto' }).click()
   await page.getByLabel('Nombre o razón social').fill(contactName)
   await page.getByLabel('Número').fill(identification)
@@ -54,7 +55,7 @@ test('login and tenant switch preserve isolation', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: 'IAERP Demo Sur' }),
   ).toBeVisible()
-  await page.getByRole('button', { name: 'Contactos' }).click()
+  await navigateToSection(page, 'Contactos')
   await expect(page.getByText(editedName)).toHaveCount(0)
 })
 
@@ -65,7 +66,7 @@ test('creates a product through the real API and refreshes the catalog', async (
   const productName = `Producto E2E ${suffix}`
 
   await login(page, tenantNorte)
-  await page.getByRole('button', { name: 'Catálogos' }).click()
+  await navigateToSection(page, 'Catálogos')
   await page.getByRole('button', { name: 'Nuevo producto' }).click()
   await page.getByLabel('Nombre').fill(productName)
   await page.getByLabel('Código interno').fill(`E2E-${suffix}`)

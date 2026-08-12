@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { pickCombobox } from './combobox'
+import { navigateToSection } from './navigation'
 
 const tenantNorte = '11111111-1111-4111-8111-111111111111'
 const ownerEmail = 'owner@iaerp.local'
@@ -40,7 +41,7 @@ test('creates an invoice draft with two lines and a discount; UI shows exactly t
   await expect(page.getByRole('heading', { name: 'IAERP Demo Norte' })).toBeVisible()
 
   // Producto propio de este test para no depender de datos sintéticos compartidos.
-  await page.getByRole('button', { name: 'Catálogos' }).click()
+  await navigateToSection(page, 'Catálogos')
   await page.getByRole('button', { name: 'Nuevo producto' }).click()
   await page.getByLabel('Nombre').fill(productName)
   await page.getByLabel('Código interno').fill(`FACT-E2E-${suffix}`)
@@ -48,7 +49,7 @@ test('creates an invoice draft with two lines and a discount; UI shows exactly t
   await page.getByRole('button', { name: 'Guardar' }).click()
   await expect(page.getByRole('heading', { name: productName })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Facturas' }).click()
+  await navigateToSection(page, 'Facturas')
   await expect(page.getByRole('heading', { name: 'Facturas', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Nueva factura' }).first().click()
 

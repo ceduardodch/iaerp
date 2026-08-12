@@ -100,12 +100,10 @@ const PurchasesPage = lazy(() =>
   import('./components/purchases').then((module) => ({ default: module.PurchasesPage })),
 )
 import { InvoiceSpreadsheet } from './components/InvoiceSpreadsheet'
-import { Sidebar } from './components/Sidebar'
+import { Sidebar, type Section } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionLoadingSkeleton } from './components/LoadingSkeleton'
 import { useToast } from './components/Toast'
-
-type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'purchases' | 'receivables' | 'organization' | 'contracts' | 'crm' | 'tax'
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
   minimumFractionDigits: 2,
@@ -4214,6 +4212,7 @@ function Workspace() {
             setSection(newSection)
             setNavigationVersion((current) => current + 1)
           })
+          window.requestAnimationFrame(() => document.getElementById('main-content')?.focus())
         }}
         organizationName={contextQuery.data.name}
         ruc={contextQuery.data.ruc}

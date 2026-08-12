@@ -93,8 +93,22 @@ test('dashboard exposes a working keyboard skip link', async ({ page }) => {
 test('primary sections are keyboard reachable and labelled', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
+  await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
 
-  const contacts = page.getByRole('button', { name: 'Contactos' })
+  const menu = page.getByRole('button', { name: 'Menú', exact: true })
+  let contacts
+  if (await menu.isVisible()) {
+    await menu.focus()
+    await page.keyboard.press('Enter')
+    contacts = page.getByRole('navigation', { name: 'Navegación principal móvil' })
+      .getByRole('button', { name: 'Contactos', exact: true })
+  } else {
+    const commercial = page.getByRole('button', { name: 'Comercial', exact: true })
+    await commercial.focus()
+    await page.keyboard.press('Enter')
+    contacts = page.getByRole('navigation', { name: 'Navegación principal' })
+      .getByRole('button', { name: 'Contactos', exact: true })
+  }
   await contacts.focus()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('heading', { name: 'Contactos', exact: true })).toBeVisible()
@@ -114,7 +128,10 @@ test('layout reflows at 320 CSS px and at 200% zoom without horizontal scroll', 
   await expectNoHorizontalOverflow(page)
   await expectNoA11yViolations(page)
 
-  await page.getByRole('button', { name: 'Contactos' }).click()
+  await page.getByRole('button', { name: 'Menú', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Navegación principal móvil' })
+    .getByRole('button', { name: 'Contactos', exact: true })
+    .click()
   await expect(page.getByRole('heading', { name: 'Contactos', exact: true })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { pickCombobox } from './combobox'
 import { mockDashboardEndpoints } from './dashboard-mocks'
+import { navigateToSection } from './navigation'
 
 const context = {
   tenantId: '11111111-1111-4111-8111-111111111111',
@@ -316,7 +317,7 @@ async function loginAndOpenInvoices(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
   await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
-  await page.getByRole('button', { name: 'Facturas' }).click()
+  await navigateToSection(page, 'Facturas')
   await expect(page.getByRole('heading', { name: 'Facturas', exact: true })).toBeVisible()
   // Espera a que la LISTA cargue (el mock devuelve 3 facturas). Sin esto, entre
   // que aparece el encabezado y resuelve la query de facturas se muestra el
@@ -496,7 +497,7 @@ test('duplicate creates a separate draft from a rejected invoice', async ({ page
 test('contracts are reachable from navigation and customer details', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
-  await page.getByRole('button', { name: 'Contratos' }).click()
+  await navigateToSection(page, 'Contratos')
   await expect(page.getByRole('heading', { name: 'Contratos', exact: true })).toBeVisible()
   await expect(page.getByText('CT-2026-001', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Abrir' }).click()

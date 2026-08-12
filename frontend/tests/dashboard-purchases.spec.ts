@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { navigateToSection } from './navigation'
 
 const dashboard = {
   trend: [
@@ -184,7 +185,7 @@ test('el tablero completo pasa la auditoría de accesibilidad', async ({ page })
 })
 
 test('Compras une CxP con el XML y muestra el desglose de IVA', async ({ page }) => {
-  await page.getByRole('button', { name: 'Compras' }).click()
+  await navigateToSection(page, 'Compras')
 
   await expect(page.getByRole('heading', { name: 'Compras', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Cuentas por pagar' })).toBeVisible()
@@ -200,7 +201,7 @@ test('Compras une CxP con el XML y muestra el desglose de IVA', async ({ page })
 })
 
 test('Compras carga, confirma y muestra en historial un pago del mismo extracto', async ({ page }) => {
-  await page.getByRole('button', { name: 'Compras' }).click()
+  await navigateToSection(page, 'Compras')
   await page.getByRole('button', { name: 'Conciliación bancaria' }).click()
   await page.getByLabel('Extracto Banco Bolivariano').setInputFiles({
     name: 'estado.txt',
@@ -242,7 +243,7 @@ test('Compras permite preparar un reparto manual antes de confirmar', async ({ p
     } })
   })
 
-  await page.getByRole('button', { name: 'Compras' }).click()
+  await navigateToSection(page, 'Compras')
   await page.getByRole('button', { name: 'Conciliación bancaria' }).click()
   await page.getByLabel('Extracto Banco Bolivariano').setInputFiles({ name: 'estado.txt', mimeType: 'text/plain', buffer: Buffer.from('extracto sintetico') })
   await page.getByRole('button', { name: 'Revisar movimientos' }).click()

@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { pickCombobox } from './combobox'
 import { mockDashboardEndpoints } from './dashboard-mocks'
+import { navigateToSection } from './navigation'
 
 // Sprint 6 (HU-17): el formulario de nueva factura muestra si la condición de
 // pago aplicada proviene del override del cliente o del default de la empresa.
@@ -70,7 +71,7 @@ async function mockApi(page: Page) {
 async function openInvoiceForm(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
-  await page.getByRole('button', { name: 'Facturas' }).click()
+  await navigateToSection(page, 'Facturas')
   await page.getByRole('button', { name: 'Nueva factura' }).first().click()
 }
 

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mockDashboardEndpoints } from './dashboard-mocks'
+import { navigateToSection } from './navigation'
 
 // Sección tributaria (ADR 0012): valores listos para copiar, distinción entre
 // campos "para pegar" y "solo control", y aviso explícito cuando los datos son
@@ -184,7 +185,7 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page)
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
-  await page.getByRole('button', { name: 'Tributario' }).click()
+  await navigateToSection(page, 'Tributario')
   await expect(page.getByRole('heading', { name: 'Tributario' })).toBeVisible()
 })
 

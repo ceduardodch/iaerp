@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { navigateToSection } from './navigation'
 
 // La sección CRM se carga con code-splitting (React.lazy + Suspense) dentro de un
 // startTransition. Navegar y auditar de inmediato puede medir el fallback de
@@ -6,7 +7,7 @@ import { expect, test, type Page } from '@playwright/test'
 // transición). Este helper espera a que el contenido real del CRM —el board
 // "Pipeline"— esté montado antes de que el test inspeccione el DOM.
 async function gotoCrm(page: Page) {
-  await page.getByRole('button', { name: 'CRM' }).click()
+  await navigateToSection(page, 'CRM')
   await expect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible()
 }
 
