@@ -5,6 +5,7 @@ import {
   apiRequest,
   idempotencyKey,
   type TaxBulkResult,
+  type AnalyticClassification,
   type TaxDocumentDossier,
   type TaxAnnex,
   type TaxFiscalDocument,
@@ -154,6 +155,7 @@ export function TaxPage({ token }: { token: string }) {
   const [applyRetentions, setApplyRetentions] = useState(false)
   const [openDossierId, setOpenDossierId] = useState<string | null>(null)
   const [exceptionEvidence, setExceptionEvidence] = useState<Record<string, string>>({})
+  const [groupByClassificationId, setGroupByClassificationId] = useState('')
 
   const periodsQuery = useQuery({
     queryKey: ['tax', 'periods'],
@@ -178,6 +180,11 @@ export function TaxPage({ token }: { token: string }) {
     queryFn: () =>
       apiRequest<TaxFiscalDocument[]>(token, `/tax/periods/${activePeriodId}/documents`),
     enabled: Boolean(activePeriodId),
+  })
+
+  const classificationsQuery = useQuery({
+    queryKey: ['analytic-classifications'],
+    queryFn: () => apiRequest<AnalyticClassification[]>(token, '/analytic-classifications'),
   })
 
   const historicalCandidatesQuery = useQuery({
@@ -374,6 +381,27 @@ export function TaxPage({ token }: { token: string }) {
     }
     return groups
   }, [documentsQuery.data])
+
+  const visibleDocumentGroups = useMemo(() => {
+    if (!groupByClassificationId) return documentGroups
+    const classification = (classificationsQuery.data ?? []).find((item) => item.id === groupByClassificationId)
+    if (!classification) return documentGroups
+    const groups = new Map<string, TaxFiscalDocument[]>()
+    documentGroups.flatMap((group) => group.items).forEach((document) => {
+      const assignment = (document.analyticAssignments ?? []).find(
+        (item) => item.classificationId === groupByClassificationId,
+      )
+      const name = assignment ? assignment.path.map((part) => part.name).join(' / ') : 'Sin clasificar'
+      groups.set(name, [...(groups.get(name) ?? []), document])
+    })
+    return [...groups.entries()].map(([name, items]) => ({
+      key: `${classification.id}-${name}`,
+      title: name,
+      description: `${classification.name} · agrupación de solo lectura para revisar el periodo.`,
+      matches: () => false,
+      items,
+    }))
+  }, [classificationsQuery.data, documentGroups, groupByClassificationId])
 
   return (
     <>
@@ -800,9 +828,10 @@ export function TaxPage({ token }: { token: string }) {
           </ErpPanel>
 
           <ErpPanel title="Documentos usados" count={documentsQuery.data?.length ?? 0}>
-            <div className="tax-document-groups" aria-label="Documentos del periodo agrupados por tipo">
-              {documentGroups.filter((group) => group.items.length > 0).map((group) => (
-                <details className="tax-document-group" key={group.key} open>
+            {(classificationsQuery.data ?? []).length ? <label className="tax-group-select">Agrupar por tag<select value={groupByClassificationId} onChange={(event) => setGroupByClassificationId(event.target.value)}><option value="">Tipo de comprobante</option>{classificationsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
+            <div className="tax-document-groups" aria-label="Documentos del periodo agrupados">
+              {visibleDocumentGroups.filter((group) => group.items.length > 0).map((group) => (
+                <details className="tax-document-group" key={group.key}>
                   <summary>
                     <span>
                       <strong>{group.title}</strong>
@@ -822,6 +851,7 @@ export function TaxPage({ token }: { token: string }) {
                       </span>
                       <h3>{DOCUMENT_TYPE_LABELS[document.docType] ?? document.docType} · {document.issueDate}</h3>
                       <p>{document.counterpartyName ?? document.counterpartyIdentification ?? 'Sin contraparte'}</p>
+                      {(document.analyticAssignments ?? []).length ? <p className="tax-document-tags">{document.analyticAssignments.map((assignment) => `${assignment.classificationName}: ${assignment.path.map((part) => part.name).join(' / ')}`).join(' · ')}</p> : null}
                     </div>
                     {document.isPreliminary ? (
                       <ErpStatusBadge tone="warning">Preliminar</ErpStatusBadge>

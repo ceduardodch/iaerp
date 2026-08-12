@@ -7,6 +7,7 @@ from decimal import Decimal
 from pydantic import Field
 
 from app.schemas.base import APIModel
+from app.schemas.masters import AnalyticAssignmentRead
 
 
 class TaxPeriodRead(APIModel):
@@ -176,6 +177,7 @@ class FiscalDocumentRead(APIModel):
     total: Decimal
     payment_methods: list[str]
     is_preliminary: bool
+    analytic_assignments: list[AnalyticAssignmentRead] = Field(default_factory=list)
 
 
 class PurchaseTaxLineRead(APIModel):

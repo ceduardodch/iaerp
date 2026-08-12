@@ -1033,6 +1033,7 @@ export type TaxFiscalDocument = {
   total: string
   paymentMethods?: string[]
   isPreliminary: boolean
+  analyticAssignments: AnalyticAssignment[]
 }
 
 export type PurchaseTaxLine = {

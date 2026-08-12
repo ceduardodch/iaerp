@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthContext, require_scopes
 from app.core.timezones import today_in_fiscal_timezone
 from app.db.session import get_session
+from app.models.payables import Payable
 from app.models.platform import Tenant
 from app.models.tax import FiscalDocument, SRIValidationIssue, TaxAnnex
 from app.schemas.tax import (
@@ -44,7 +45,7 @@ from app.schemas.tax import (
     TaxPeriodRead,
     TaxPeriodStatusUpdate,
 )
-from app.services import receivables
+from app.services import analytics, receivables
 from app.services.tax import annexes as annexes_service
 from app.services.tax import bulk as bulk_service
 from app.services.tax import dossier as dossier_service
@@ -583,15 +584,43 @@ async def get_period_documents(
     period_id: uuid.UUID,
 ) -> list[FiscalDocumentRead]:
     period = await periods_service.get_period(session, context, period_id=period_id)
-    documents = await session.scalars(
+    documents = list(await session.scalars(
         select(FiscalDocument)
         .where(
             FiscalDocument.tenant_id == context.tenant_id,
             FiscalDocument.tax_period_id == period.id,
         )
         .order_by(FiscalDocument.issue_date, FiscalDocument.access_key)
+    ))
+    payables = list(await session.scalars(
+        select(Payable).where(
+            Payable.tenant_id == context.tenant_id,
+            Payable.fiscal_document_id.in_([document.id for document in documents]),
+        )
+    )) if documents else []
+    payable_by_document_id = {
+        payable.fiscal_document_id: payable.id
+        for payable in payables
+        if payable.fiscal_document_id is not None
+    }
+    assignments_by_payable = await analytics.list_assignments_for_targets(
+        session,
+        tenant_id=context.tenant_id,
+        target_type="payable",
+        target_ids=[payable.id for payable in payables],
     )
-    return [FiscalDocumentRead.model_validate(document) for document in documents]
+    assignments_by_document_id = {
+        document_id: assignments_by_payable.get(payable_id, [])
+        for document_id, payable_id in payable_by_document_id.items()
+    }
+    return [
+        FiscalDocumentRead.model_validate(document).model_copy(
+            update={
+                "analytic_assignments": assignments_by_document_id.get(document.id, [])
+            }
+        )
+        for document in documents
+    ]
 
 
 @router.get("/documents/{document_id}/dossier", response_model=DocumentDossierRead)

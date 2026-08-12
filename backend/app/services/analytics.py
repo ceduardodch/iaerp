@@ -55,6 +55,55 @@ async def list_assignments(
     ]
 
 
+async def list_assignments_for_targets(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    target_type: str,
+    target_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, list[dict[str, object]]]:
+    """Lee asignaciones de varios documentos sin hacer una consulta por fila."""
+    if not target_ids:
+        return {}
+    rows = list(
+        await session.scalars(
+            select(AnalyticAssignment)
+            .where(
+                AnalyticAssignment.tenant_id == tenant_id,
+                AnalyticAssignment.target_type == target_type,
+                AnalyticAssignment.target_id.in_(target_ids),
+            )
+            .order_by(AnalyticAssignment.created_at)
+        )
+    )
+    classifications = {
+        item.id: item
+        for item in list(
+            await session.scalars(
+                select(AnalyticClassification).where(
+                    AnalyticClassification.tenant_id == tenant_id,
+                    AnalyticClassification.id.in_([row.classification_id for row in rows]),
+                )
+            )
+        )
+    }
+    grouped: dict[uuid.UUID, list[dict[str, object]]] = {}
+    for row in rows:
+        classification = classifications.get(row.classification_id)
+        if classification is None:
+            continue
+        grouped.setdefault(row.target_id, []).append(
+            {
+                "classification_id": row.classification_id,
+                "classification_code": classification.code,
+                "classification_name": classification.name,
+                "value_id": row.value_id,
+                "path": row.path_snapshot,
+            }
+        )
+    return grouped
+
+
 async def replace_assignments(
     session: AsyncSession,
     context: AuthContext,

@@ -1,10 +1,11 @@
-import { useDeferredValue, useState, type FormEvent } from 'react'
+import { Fragment, useDeferredValue, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
   apiRequest,
   idempotencyKey,
   type BankStatementImport,
+  type AnalyticClassification,
   type ExpenseRule,
   type Payable,
   type PayableMovement,
@@ -269,6 +270,28 @@ function statusBadge(payable: Payable) {
   return <ErpStatusBadge tone={tones[payable.status]}>{labels[payable.status]}</ErpStatusBadge>
 }
 
+function PayableClassificationEditor({ token, payable, onSaved }: {
+  token: string
+  payable: Payable
+  onSaved: () => void
+}) {
+  const [valueIds, setValueIds] = useState((payable.analyticAssignments ?? []).map((item) => item.valueId))
+  const save = useMutation({
+    mutationFn: () => apiRequest<Payable>(token, `/payables/${payable.id}/analytic-assignments`, {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': idempotencyKey('web-payable-analytics') },
+      body: JSON.stringify({ valueIds }),
+    }),
+    onSuccess: onSaved,
+  })
+
+  return <div className="purchase-tag-editor">
+    <AnalyticClassificationPicker token={token} valueIds={valueIds} onChange={setValueIds} />
+    {save.error ? <p className="form-error" role="alert">{save.error.message}</p> : null}
+    <ErpButton variant="primary" onClick={() => save.mutate()} disabled={save.isPending}>{save.isPending ? 'Guardando…' : 'Guardar tags'}</ErpButton>
+  </div>
+}
+
 function PayableDetail({ token, payable, onClose }: { token: string; payable: Payable; onClose: () => void }) {
   const queryClient = useQueryClient()
   const [reversingMovementId, setReversingMovementId] = useState<string | null>(null)
@@ -361,9 +384,12 @@ export function PurchasesPage({ token }: { token: string }) {
   const [isCreating, setIsCreating] = useState(false)
   const [draft, setDraft] = useState<ExpenseDraft | undefined>()
   const [selectedPayableId, setSelectedPayableId] = useState<string | null>(null)
+  const [editingTagsFor, setEditingTagsFor] = useState<string | null>(null)
+  const [groupByClassificationId, setGroupByClassificationId] = useState('')
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase())
   const payablesQuery = useQuery({ queryKey: ['payables'], queryFn: () => apiRequest<Payable[]>(token, '/payables') })
   const fiscalQuery = useQuery({ queryKey: ['tax', 'purchases'], queryFn: () => apiRequest<PurchaseDocument[]>(token, '/tax/purchases') })
+  const classificationsQuery = useQuery({ queryKey: ['analytic-classifications'], queryFn: () => apiRequest<AnalyticClassification[]>(token, '/analytic-classifications') })
   const payables = (payablesQuery.data ?? []).filter((item) => {
     const statusMatches = view === 'ALL' || (view === 'OPEN' && ['OPEN', 'PARTIAL'].includes(item.status)) || (view === 'SETTLED' && item.status === 'SETTLED')
     const haystack = `${item.supplierName ?? ''} ${item.description} ${item.documentNumber ?? ''} ${item.category}`.toLocaleLowerCase()
@@ -373,6 +399,15 @@ export function PurchasesPage({ token }: { token: string }) {
   const fiscalById = new Map((fiscalQuery.data ?? []).map((item) => [item.id, item]))
   const unlinkedFiscal = (fiscalQuery.data ?? []).filter((item) => !linkedFiscalIds.has(item.id))
   const selectedPayable = (payablesQuery.data ?? []).find((item) => item.id === selectedPayableId)
+  const selectedClassification = (classificationsQuery.data ?? []).find((item) => item.id === groupByClassificationId)
+  const payableGroups = groupByClassificationId
+    ? Array.from(payables.reduce((groups, payable) => {
+      const assignment = (payable.analyticAssignments ?? []).find((item) => item.classificationId === groupByClassificationId)
+      const key = assignment ? assignment.path.map((part) => part.name).join(' / ') : 'Sin clasificar'
+      groups.set(key, [...(groups.get(key) ?? []), payable])
+      return groups
+    }, new Map<string, Payable[]>()).entries())
+    : [['Todas las compras', payables] as [string, Payable[]]]
 
   if (isCreating) return <PurchaseForm token={token} draft={draft} onCancel={() => { setIsCreating(false); setDraft(undefined) }} onSaved={() => { setIsCreating(false); setDraft(undefined); void queryClient.invalidateQueries({ queryKey: ['payables'] }) }} />
 
@@ -382,14 +417,15 @@ export function PurchasesPage({ token }: { token: string }) {
       <ErpToolbar ariaLabel="Vistas de compras">
         {([['ALL', 'Todas'], ['OPEN', 'Por pagar'], ['SETTLED', 'Pagadas'], ['BANK', 'Conciliación bancaria'], ['RULES', 'Reglas']] as const).map(([value, label]) => <ErpButton key={value} variant={view === value ? 'primary' : 'ghost'} onClick={() => setView(value)}>{label}</ErpButton>)}
         {!['BANK', 'RULES'].includes(view) ? <label className="search-field"><span>Buscar compra</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Proveedor, concepto o número" /></label> : null}
+        {!['BANK', 'RULES'].includes(view) && (classificationsQuery.data ?? []).length ? <label className="search-field"><span>Agrupar por tag</span><select value={groupByClassificationId} onChange={(event) => setGroupByClassificationId(event.target.value)}><option value="">Sin agrupación</option>{classificationsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
       </ErpToolbar>
       {view === 'BANK' ? <BankReconciliation token={token} payables={payablesQuery.data ?? []} onCreateExpense={(expenseDraft) => { setDraft(expenseDraft); setIsCreating(true) }} /> : null}
       {view === 'RULES' ? <RuleManager token={token} /> : null}
       {!['BANK', 'RULES'].includes(view) ? (
-        <ErpPanel title="Cuentas por pagar" count={payables.length}>
+        <ErpPanel title={selectedClassification ? `Compras por ${selectedClassification.name}` : 'Cuentas por pagar'} count={payables.length}>
           {payablesQuery.isPending ? <p aria-busy="true">Cargando compras…</p> : null}
           {payablesQuery.error ? <p className="form-error" role="alert">{payablesQuery.error.message}</p> : null}
-          {payables.length ? <div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table"><thead><tr><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Fiscal</th><th>Clasificaciones</th><th>Acciones</th></tr></thead><tbody>{payables.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; const assignments = item.analyticAssignments ?? []; return <tr key={item.id}><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small></td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>Vence {item.dueDate}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.evidenceStatus === 'FISCAL_XML' ? 'success' : 'warning'}>{item.evidenceStatus === 'FISCAL_XML' ? 'XML confirmado' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Deducible · revisar'}</ErpStatusBadge></td><td>{assignments.length ? assignments.map((assignment) => <small key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td><td><ErpButton variant="secondary" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr> })}</tbody></table></div> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Usa Nueva compra para registrar gasolina, servicios o una factura por pagar." /> : null}
+          {payables.length ? <div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table"><thead><tr><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Fiscal</th><th>Clasificaciones</th><th>Acciones</th></tr></thead>{payableGroups.map(([group, items]) => <tbody key={group}>{groupByClassificationId ? <tr><th colSpan={10} scope="colgroup">{group} · {items.length} compras</th></tr> : null}{items.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; const assignments = item.analyticAssignments ?? []; const editing = editingTagsFor === item.id; return <Fragment key={item.id}><tr><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small></td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>Vence {item.dueDate}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.evidenceStatus === 'FISCAL_XML' ? 'success' : 'warning'}>{item.evidenceStatus === 'FISCAL_XML' ? 'XML confirmado' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Deducible · revisar'}</ErpStatusBadge></td><td>{assignments.length ? assignments.map((assignment) => <small key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td><td><ErpButton variant="secondary" onClick={() => setEditingTagsFor(editing ? null : item.id)}>{editing ? 'Cerrar tags' : 'Clasificar'}</ErpButton><ErpButton variant="ghost" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr>{editing ? <tr><td colSpan={10}><PayableClassificationEditor token={token} payable={item} onSaved={() => { setEditingTagsFor(null); void queryClient.invalidateQueries({ queryKey: ['payables'] }) }} /></td></tr> : null}</Fragment> })}</tbody>)}</table></div> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Usa Nueva compra para registrar gasolina, servicios o una factura por pagar." /> : null}
         </ErpPanel>
       ) : null}
       {selectedPayable && !['BANK', 'RULES'].includes(view) ? <PayableDetail token={token} payable={selectedPayable} onClose={() => setSelectedPayableId(null)} /> : null}

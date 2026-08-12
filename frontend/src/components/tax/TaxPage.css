@@ -3,6 +3,25 @@
   gap: 1rem;
 }
 
+.tax-group-select {
+  display: grid;
+  max-width: 22rem;
+  gap: .35rem;
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+.tax-group-select select {
+  min-height: 2.5rem;
+  padding: .45rem .6rem;
+  border: 1px solid var(--line);
+  border-radius: .45rem;
+  background: var(--paper);
+  color: var(--ink);
+}
+
 .tax-document-group {
   overflow: hidden;
   border: 1px solid var(--line);
@@ -82,6 +101,12 @@
 .tax-document-header h3,
 .tax-document-header p {
   margin: .2rem 0 0;
+}
+
+.tax-document-header .tax-document-tags {
+  color: var(--ink);
+  font-size: .76rem;
+  font-weight: 650;
 }
 
 .tax-document-header h3 {
