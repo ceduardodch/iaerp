@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { mockDashboardEndpoints } from './dashboard-mocks'
+import { navigateToSection } from './navigation'
 
 /**
  * E2E del Sprint 1 - CRM Kanban Foundation, con mocks `page.route` (sin
@@ -200,7 +201,7 @@ async function mockApi(page: Page) {
 async function openCrm(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
-  await page.getByRole('button', { name: /CRM/ }).click()
+  await navigateToSection(page, 'CRM')
   await expect(page.getByRole('heading', { name: 'Pipeline' })).toBeVisible()
   await page.waitForSelector('.crm-kanban')
 }
