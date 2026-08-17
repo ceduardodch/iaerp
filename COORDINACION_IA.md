@@ -58,6 +58,7 @@
 | Codex (este hilo, agente CRM) | ✅ OPERATIVA | PR #33 en producción; cuenta `Claude CRM BTOB` emitida con `leads:read/write`, escritura automática habilitada, secreto local `0600` y lectura real validada | 2026-08-10 |
 | Codex (este hilo, menú UI/UX) | 🚀 EN PROMOCIÓN | Menú agrupado en desktop y panel lateral accesible hasta 960 px; pruebas responsive, foco, teclado y WCAG verdes; publicación autorizada hacia `main` | 2026-08-11 |
 | Codex (este hilo, clasificaciones) | 🟡 LISTA PARA REVISIÓN | Corrige el default PostgreSQL ausente que revertía toda alta y disfrazaba el fallo como 409; separa unique de otros IntegrityError, mejora 409/422 y valida migración + asyncpg reales; publicación autorizada | 2026-08-12 |
+| Codex (este hilo, cobranza) | 🚀 EN PROMOCIÓN | Habilitación por cuenta desde Cartera para facturas ya emitidas; mensajes claros, tenant, idempotencia, auditoría y WCAG validados; publicación autorizada hacia `main` | 2026-08-17 |
 
 > **Orden de migraciones:** resuelto. Campañas se integró después de CxP, así
 > que `e5f6a7b8c9d0` pasó a colgar de `e6f7a8b9c0d1` en vez de `da1e2f3a4b5c`.

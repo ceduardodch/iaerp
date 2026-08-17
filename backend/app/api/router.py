@@ -96,6 +96,7 @@ from app.schemas.receivables import (
     MovementRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
+    ReceivableCollectionUpdate,
     ReceivableDueDateUpdate,
     ReminderInput,
     ReminderRead,
@@ -1859,6 +1860,7 @@ def _summary_to_account_item(summary: receivables.ReceivableSummary) -> AccountI
             if summary.aging_bucket is not None
             else None
         ),
+        collection_enabled=summary.collection_enabled,
     )
 
 
@@ -2125,6 +2127,37 @@ async def put_receivable_due_date(
         idempotency_key=idempotency_key,
         request_payload={"receivable_id": str(receivable_id), **data.model_dump(mode="json")},
         action="receivable.due_date_corrected",
+        entity_type="receivable",
+        callback=update,
+    )
+
+
+@router.put("/receivables/{receivable_id}/collection-policy", response_model=AccountItemRead)
+async def put_receivable_collection_policy(
+    receivable_id: uuid.UUID,
+    data: ReceivableCollectionUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:notify"))],
+) -> dict[str, object]:
+    """Activa o pausa mensajes para una cuenta, incluso con factura emitida."""
+
+    async def update() -> tuple[str, dict[str, object]]:
+        summary = await receivables.update_receivable_collection_policy(
+            session,
+            context,
+            receivable_id=receivable_id,
+            enabled=data.enabled,
+        )
+        return str(receivable_id), _account_item_response(_summary_to_account_item(summary))
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.account_collection_policy.update",
+        idempotency_key=idempotency_key,
+        request_payload={"receivable_id": str(receivable_id), **data.model_dump(mode="json")},
+        action="receivable.collection_policy_updated",
         entity_type="receivable",
         callback=update,
     )

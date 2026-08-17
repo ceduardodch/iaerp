@@ -3152,6 +3152,10 @@ function SendReminderForm({
   const [scheduledAt, setScheduledAt] = useState('')
   const [message, setMessage] = useState('')
   const [resendReason, setResendReason] = useState('')
+  const [collectionEnabled, setCollectionEnabled] = useState(receivable.collectionEnabled)
+  const [collectionPermissionUpdated, setCollectionPermissionUpdated] = useState(false)
+  const channelRef = useRef<HTMLSelectElement>(null)
+  const queryClient = useQueryClient()
 
   // Se lee la plantilla configurada solo para mostrar qué se va a enviar; el
   // servidor la vuelve a renderizar con los valores reales del receivable.
@@ -3160,6 +3164,21 @@ function SendReminderForm({
     queryFn: () => apiRequest<CollectionPolicy>(token, '/receivables/collection-policy'),
   })
   const policy = policyQuery.data
+
+  const updateCollection = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiRequest<AccountItem>(token, `/receivables/${receivable.id}/collection-policy`, {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('web-receivable-collection') },
+        body: JSON.stringify({ enabled }),
+      }),
+    onSuccess: (updated) => {
+      setCollectionEnabled(updated.collectionEnabled)
+      setCollectionPermissionUpdated(updated.collectionEnabled)
+      void queryClient.invalidateQueries({ queryKey: ['receivables'] })
+      requestAnimationFrame(() => channelRef.current?.focus())
+    },
+  })
 
   const sendReminder = useMutation({
     mutationFn: () =>
@@ -3181,6 +3200,7 @@ function SendReminderForm({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!policy?.enabled || !collectionEnabled) return
     sendReminder.mutate()
   }
 
@@ -3193,14 +3213,43 @@ function SendReminderForm({
       submitLabel={scheduledAt ? 'Programar' : 'Enviar ahora'}
       pendingLabel="Enviando…"
       pending={sendReminder.isPending}
+      submitDisabled={!policy?.enabled || !collectionEnabled || updateCollection.isPending}
       error={sendReminder.error?.message}
       onSubmit={submit}
       onCancel={onCancel}
     >
       <p className="fine-print">Saldo pendiente ${formatAmount(receivable.openAmount)}.</p>
+      {policyQuery.error ? (
+        <p className="form-error" role="alert">
+          No se pudo leer la configuración de cobranza: {policyQuery.error.message}
+        </p>
+      ) : null}
+      {policy && !policy.enabled ? (
+        <p className="form-warning" role="alert">
+          La cobranza general está pausada. Actívala en Empresa → Cobranza automática.
+        </p>
+      ) : null}
+      {!collectionEnabled ? (
+        <section className="form-warning" aria-labelledby="collection-permission-title">
+          <strong id="collection-permission-title">Esta factura no permite mensajes de cobranza.</strong>
+          <p>Activa el permiso para poder enviar o programar este correo.</p>
+          <ErpButton
+            variant="secondary"
+            type="button"
+            disabled={updateCollection.isPending}
+            onClick={() => updateCollection.mutate(true)}
+          >
+            {updateCollection.isPending ? 'Activando…' : 'Permitir cobranza para esta factura'}
+          </ErpButton>
+          {updateCollection.error ? <p className="form-error" role="alert">{updateCollection.error.message}</p> : null}
+        </section>
+      ) : null}
+      {collectionPermissionUpdated ? (
+        <p className="form-success" role="status">Cobranza permitida. Ya puedes enviar o programar el correo.</p>
+      ) : null}
       <label>
         Canal
-        <select value={channel} onChange={(event) => setChannel(event.target.value as ReminderInput['channel'])} required>
+        <select ref={channelRef} value={channel} onChange={(event) => setChannel(event.target.value as ReminderInput['channel'])} required>
           <option value="EMAIL">Correo electrónico</option>
           <option value="WHATSAPP">WhatsApp</option>
         </select>
@@ -3229,15 +3278,29 @@ function SendReminderForm({
         </p>
       ) : null}
       <label>
-        Mensaje personalizado
-        <textarea
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-          rows={4}
-          placeholder="Opcional: reemplaza el cuerpo. El saldo y los datos de pago se agregan igual."
+        Programar para
+        <input
+          type="datetime-local"
+          value={scheduledAt}
+          onChange={(event) => {
+            setScheduledAt(event.target.value)
+            if (event.target.value) setMessage('')
+          }}
         />
       </label>
-      <label>Programar para<input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
+      {scheduledAt ? (
+        <p className="fine-print" role="status">Los correos programados usan la plantilla general configurada arriba.</p>
+      ) : (
+        <label>
+          Mensaje personalizado
+          <textarea
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            rows={4}
+            placeholder="Opcional: reemplaza el cuerpo. El saldo y los datos de pago se agregan igual."
+          />
+        </label>
+      )}
       <label>
         Motivo para reenviar
         <textarea value={resendReason} onChange={(event) => setResendReason(event.target.value)} rows={2} placeholder="Solo si ya hubo un envío igual." />
