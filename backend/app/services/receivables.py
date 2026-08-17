@@ -149,6 +149,7 @@ class ReceivableSummary:
     due_date: date | None = None
     aging_bucket: str | None = None
     aging_days_overdue: int | None = None
+    collection_enabled: bool = False
 
 
 def _xml_text(parent: Element, path: str) -> str | None:
@@ -1074,6 +1075,7 @@ async def list_receivables(
                 days_since_invoice=summary.days_since_invoice,
                 due_date=summary.due_date,
                 aging=aging,
+                collection_enabled=entity.collection_enabled,
             )
         )
     return items
@@ -1149,6 +1151,40 @@ async def correct_receivable_due_date(
             "reason": reason.strip(),
         },
     )
+    await session.flush()
+    return await to_receivable_summary(
+        session,
+        tenant_id=context.tenant_id,
+        receivable=locked,
+        as_of=today_in_fiscal_timezone(),
+    )
+
+
+async def update_receivable_collection_policy(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    receivable_id: uuid.UUID,
+    enabled: bool,
+) -> ReceivableSummary:
+    """Cambia el permiso de cobranza sin alterar el comprobante fiscal.
+
+    El permiso pertenece a la operación de cartera y puede cambiar después de
+    autorizar la factura. Se refleja también en el metadato comercial del
+    documento para que Facturas y Cartera no muestren decisiones distintas.
+    """
+    locked = await lock_receivable(
+        session, tenant_id=context.tenant_id, receivable_id=receivable_id
+    )
+    locked.collection_enabled = enabled
+    document = await session.scalar(
+        select(SalesDocument).where(
+            SalesDocument.tenant_id == context.tenant_id,
+            SalesDocument.id == locked.sales_document_id,
+        )
+    )
+    if document is not None:
+        document.collection_enabled = enabled
     await session.flush()
     return await to_receivable_summary(
         session,
@@ -1241,6 +1277,7 @@ async def to_receivable_summary(
         due_date=earliest_due_date,
         aging_bucket=aging_bucket,
         aging_days_overdue=aging_days_overdue,
+        collection_enabled=receivable.collection_enabled,
     )
 
 
@@ -1780,8 +1817,12 @@ async def send_reminder(
     if receivable is None:
         raise HTTPException(status_code=404, detail="Receivable not found")
     policy = await session.get(CollectionPolicy, tenant_id)
-    if not receivable.collection_enabled or policy is None or not policy.enabled:
-        raise HTTPException(status_code=422, detail="Collection messages are disabled")
+    if policy is None or not policy.enabled:
+        raise HTTPException(status_code=422, detail="La cobranza general está pausada")
+    if not receivable.collection_enabled:
+        raise HTTPException(
+            status_code=422, detail="Esta factura no permite mensajes de cobranza"
+        )
 
     # Buscar party para validar consent_opt_out y obtener el destinatario
     from app.models.masters import Party
@@ -1906,8 +1947,12 @@ async def send_real_reminder(
     if receivable is None:
         raise HTTPException(status_code=404, detail="Receivable not found")
     policy = await session.get(CollectionPolicy, context.tenant_id)
-    if not receivable.collection_enabled or policy is None or not policy.enabled:
-        raise HTTPException(status_code=422, detail="Collection messages are disabled")
+    if policy is None or not policy.enabled:
+        raise HTTPException(status_code=422, detail="La cobranza general está pausada")
+    if not receivable.collection_enabled:
+        raise HTTPException(
+            status_code=422, detail="Esta factura no permite mensajes de cobranza"
+        )
     from app.models.masters import Party
 
     party = await session.scalar(
@@ -1924,7 +1969,16 @@ async def send_real_reminder(
     recipient = party.email if channel == "EMAIL" else party.phone
     if not recipient:
         raise HTTPException(status_code=422, detail=f"Party has no contact for {channel}")
-    scheduled_at = reminder.scheduled_at or datetime.now(UTC)
+    now = datetime.now(UTC)
+    scheduled_at = reminder.scheduled_at or now
+    if scheduled_at > now and reminder.message:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Los correos programados usan la plantilla general; "
+                "el mensaje personalizado solo se admite al enviar ahora"
+            ),
+        )
     existing = await session.scalar(
         select(CollectionReminder.id).where(
             CollectionReminder.tenant_id == context.tenant_id,
@@ -1953,7 +2007,7 @@ async def send_real_reminder(
     )
     session.add(record)
     await session.flush()
-    if scheduled_at > datetime.now(UTC):
+    if scheduled_at > now:
         return record
     try:
         message = reminder.message or (

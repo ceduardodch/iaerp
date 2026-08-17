@@ -7,6 +7,24 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Corrección de permisos de cobranza lista en `release`: 2026-08-17
+  `America/Guayaquil`. La regla general del tenant estaba activa, pero las
+  facturas emitidas conservaban `collection_enabled=false` y la única pantalla
+  para cambiarlo desaparecía después del borrador. Cartera ahora muestra cuál
+  permiso falta, bloquea el envío hasta resolverlo y permite habilitar la
+  cobranza de esa cuenta sin cambiar XML, RIDE, autorización SRI, importes ni
+  saldo. Los envíos manuales programados sin cuota concreta usan el saldo total
+  y el vencimiento abierto más antiguo al ejecutarse, en vez de fallar por
+  contexto incompleto; usan la plantilla general y rechazan un texto propio
+  que no pueda conservarse. Si la cuenta se paga antes de ejecutar un correo
+  programado, el worker lo omite y no contacta al cliente. La escritura es
+  tenant-safe, idempotente y auditada; mantiene
+  iguales el permiso operativo de la cuenta y el metadato comercial de la
+  factura. Pasan Ruff, mypy, 24 pruebas backend dirigidas, contratos YAML, lint/build y
+  24 recorridos Playwright de Cartera en escritorio/móvil con WCAG 2.1 AA.
+  Dos revisiones independientes quedaron en GO y el usuario autorizó commit,
+  push y promoción a producción.
+
 - Correctivo de clasificaciones analíticas listo en `release`: 2026-08-12
   `America/Guayaquil`. Producción no guardaba el primer catálogo: la migración
   creó `created_at` y `updated_at` obligatorios sin `DEFAULT now()`, PostgreSQL

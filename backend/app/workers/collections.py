@@ -20,7 +20,7 @@ from app.models.receivables import (
 )
 from app.services import crm_integrations
 from app.services.collection_email import render_collection_email
-from app.services.receivables import compute_installment_balance
+from app.services.receivables import compute_installment_balance, compute_receivable_balance
 from app.workers.outbox import OutboxMessage
 
 FISCAL_TZ = ZoneInfo("America/Guayaquil")
@@ -181,19 +181,60 @@ async def handle_collection_reminder_due(
         token_id="collection-scheduler",
     )
     try:
+        installment = (
+            await session.get(ReceivableInstallment, reminder.installment_id)
+            if reminder.installment_id
+            else None
+        )
+        open_amount = (
+            await compute_installment_balance(
+                session, tenant_id=reminder.tenant_id, installment=installment
+            )
+            if installment is not None
+            else await compute_receivable_balance(
+                session, tenant_id=reminder.tenant_id, receivable=receivable
+            )
+        )
+        if open_amount <= 0:
+            reminder.status = "SKIPPED"
+            reminder.error_message = "Receivable has no open balance"
+            return
         if reminder.channel == "EMAIL":
             if integration is None:
                 raise RuntimeError("Google Workspace is not connected")
-            installment = (
-                await session.get(ReceivableInstallment, reminder.installment_id)
-                if reminder.installment_id
-                else None
-            )
-            if installment is None:
-                raise RuntimeError("Collection reminder context is incomplete")
-            open_amount = await compute_installment_balance(
-                session, tenant_id=reminder.tenant_id, installment=installment
-            )
+            if installment is not None:
+                due_date = installment.due_date
+            else:
+                # Un envío manual programado pertenece a la cuenta completa,
+                # no a una cuota concreta. Conserva installment_id=None y al
+                # vencer usa el saldo total y el primer vencimiento, igual que
+                # la vista previa que vio la persona al programarlo.
+                installments = list(
+                    await session.scalars(
+                        select(ReceivableInstallment)
+                        .where(
+                            ReceivableInstallment.tenant_id == reminder.tenant_id,
+                            ReceivableInstallment.receivable_id == receivable.id,
+                        )
+                        .order_by(ReceivableInstallment.due_date)
+                    )
+                )
+                open_installments = [
+                    item
+                    for item in installments
+                    if await compute_installment_balance(
+                        session, tenant_id=reminder.tenant_id, installment=item
+                    )
+                    > 0
+                ]
+                reference = (
+                    open_installments[0]
+                    if open_installments
+                    else (installments[-1] if installments else None)
+                )
+                if reference is None:
+                    raise RuntimeError("Collection reminder context is incomplete")
+                due_date = reference.due_date
             tenant = await session.get(Tenant, reminder.tenant_id)
             if tenant is None:
                 raise RuntimeError("Collection reminder tenant is missing")
@@ -202,7 +243,7 @@ async def handle_collection_reminder_due(
                 company_name=tenant.name,
                 party_name=party.name,
                 open_amount=open_amount,
-                due_date=installment.due_date,
+                due_date=due_date,
                 as_of=datetime.now(FISCAL_TZ).date(),
             )
             reminder.provider_message_id = await crm_integrations.send_google_email(

@@ -53,6 +53,7 @@ class AccountItemRead(APIModel):
     days_since_invoice: int | None = Field(default=None, ge=0)
     due_date: date | None = None
     aging: AgingRead | None = None
+    collection_enabled: bool = False
 
 
 class RetentionInput(APIModel):
@@ -166,6 +167,10 @@ class ReceivableDueDateUpdate(APIModel):
 
     due_date: date
     reason: str = Field(min_length=3, max_length=500)
+
+
+class ReceivableCollectionUpdate(APIModel):
+    enabled: bool
 
 
 class AgingBucketTotalRead(APIModel):
@@ -359,6 +364,7 @@ __all__ = [
     "CollectionContactCreate",
     "CollectionHistoryEntryRead",
     "ReversalInput",
+    "ReceivableCollectionUpdate",
     "ReceivableDueDateUpdate",
     "RetentionInput",
     "RetentionXmlPreviewItem",

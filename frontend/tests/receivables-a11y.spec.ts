@@ -38,6 +38,7 @@ const overdueReceivable = {
   // Fecha fija muy en el pasado: el bucket "90+" no debe depender del reloj real de CI.
   dueDate: '2020-01-01',
   aging: { bucket: '90+' as const, daysOverdue: 2400 },
+  collectionEnabled: false,
 }
 
 const partialReceivable = {
@@ -49,6 +50,7 @@ const partialReceivable = {
   currency: 'USD',
   dueDate: '2026-08-15',
   aging: { bucket: 'CURRENT' as const, daysOverdue: 0 },
+  collectionEnabled: true,
 }
 
 const settledReceivable = {
@@ -61,6 +63,7 @@ const settledReceivable = {
   // La fecha histórica se conserva, pero una cuenta sin saldo no tiene aging pendiente.
   dueDate: '2020-01-01',
   aging: null,
+  collectionEnabled: false,
 }
 
 const updatedAfterPayment = {
@@ -132,6 +135,15 @@ async function mockApi(page: Page) {
         item.id === updatedAfterPayment.id ? updatedAfterPayment : item,
       )
       return route.fulfill({ status: 201, json: updatedAfterPayment })
+    }
+    return route.fallback()
+  })
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/collection-policy`, (route) => {
+    if (route.request().method() === 'PUT') {
+      currentReceivables = currentReceivables.map((item) =>
+        item.id === overdueReceivable.id ? { ...item, collectionEnabled: true } : item,
+      )
+      return route.fulfill({ json: { ...overdueReceivable, collectionEnabled: true } })
     }
     return route.fallback()
   })
@@ -267,7 +279,22 @@ test('send collection email view is keyboard reachable, labelled and passes axe'
 
   await expect(page.getByRole('heading', { name: 'Enviar correo de cobro', level: 1 })).toBeVisible()
   await expect(page.getByLabel('Canal')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Enviar ahora', exact: true })).toBeDisabled()
+  await expect(page.getByText('Esta factura no permite mensajes de cobranza.')).toBeVisible()
   await expectNoA11yViolations(page)
+
+  const enableCollection = page.getByRole('button', { name: 'Permitir cobranza para esta factura' })
+  await enableCollection.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('Cobranza permitida. Ya puedes enviar o programar el correo.')).toBeVisible()
+  await expect(page.getByLabel('Canal')).toBeFocused()
+  await expect(page.getByRole('button', { name: 'Enviar ahora', exact: true })).toBeEnabled()
+
+  await page.getByLabel('Programar para').fill('2026-08-20T09:00')
+  await expect(page.getByText('Los correos programados usan la plantilla general configurada arriba.')).toBeVisible()
+  await expect(page.getByLabel('Mensaje personalizado')).toHaveCount(0)
+  await page.getByLabel('Programar para').fill('')
+  await expect(page.getByLabel('Mensaje personalizado')).toBeVisible()
 
   // Ya no se pide escribir un id de plantilla: se muestra la configurada, con
   // sus datos bancarios, y se envía directo.

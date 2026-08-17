@@ -338,6 +338,7 @@ export type AccountItem = {
   daysSinceInvoice?: number | null
   dueDate?: string | null
   aging?: { bucket: AgingBucket; daysOverdue: number } | null
+  collectionEnabled: boolean
 }
 
 export type ReceivableMovement = {

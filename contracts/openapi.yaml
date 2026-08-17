@@ -1118,6 +1118,42 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           description: Receivable no encontrado
+  /receivables/{receivableId}/collection-policy:
+    put:
+      operationId: updateReceivableCollectionPolicy
+      summary: Activar o pausar mensajes para una cuenta por cobrar
+      description: >-
+        Cambia solo el permiso operativo de cobranza. No modifica XML, RIDE,
+        autorización SRI, importes ni saldo de la factura.
+      security:
+        - oauth2: ["receivables:notify"]
+      parameters:
+        - $ref: "#/components/parameters/ReceivableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Permiso actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Cuenta por cobrar no encontrada
   /receivables/{receivableId}/reminders:
     post:
       operationId: sendCollectionReminder
@@ -2124,6 +2160,9 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Aging"
             - type: "null"
+        collectionEnabled:
+          type: boolean
+          description: Permiso operativo para enviar mensajes de cobranza de esta factura.
     BankStatementMatch:
       type: object
       additionalProperties: false

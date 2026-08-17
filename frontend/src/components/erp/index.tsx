@@ -106,6 +106,7 @@ export function ErpFormPanel({
   submitLabel = 'Guardar',
   pendingLabel = 'Guardando…',
   pending = false,
+  submitDisabled = false,
   error,
   onSubmit,
   onCancel,
@@ -116,6 +117,7 @@ export function ErpFormPanel({
   submitLabel?: string
   pendingLabel?: string
   pending?: boolean
+  submitDisabled?: boolean
   error?: string
   onSubmit: FormEventHandler<HTMLFormElement>
   onCancel: () => void
@@ -131,7 +133,7 @@ export function ErpFormPanel({
           <ErpButton variant="secondary" onClick={onCancel} disabled={pending}>
             Cancelar
           </ErpButton>
-          <ErpButton variant="primary" type="submit" disabled={pending}>
+          <ErpButton variant="primary" type="submit" disabled={pending || submitDisabled}>
             {pending ? pendingLabel : submitLabel}
           </ErpButton>
         </div>
