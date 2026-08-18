@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Revisión masiva de compras SRI lista en el árbol local de `release`:
+- Revisión masiva de compras SRI publicada en `main`:
   2026-08-18 `America/Guayaquil`. La bandeja permite seleccionar hasta 100
   comprobantes visibles y aplicar en un solo paso su uso tributario, tags y
   estado de pago. El modo seguro no registra pagos ni borra tags; marcar varias
@@ -17,8 +17,10 @@ alcance y las decisiones.
   protegidas, omitidas y fallidas; un reintento conserva la clave idempotente y
   solo mantiene seleccionados los fallos. Pasan Ruff, mypy, 20 pruebas backend,
   contratos OpenAPI, lint/build y 22 recorridos Playwright de Compras en
-  escritorio/móvil. Dos revisiones independientes quedaron en GO. El usuario
-  autorizó commit, push y promoción por `release -> PR -> main`.
+  escritorio/móvil. Dos revisiones independientes quedaron en GO. El PR #39
+  se fusionó como `4b03098`; la CI `32180155631`, Coolify y los chequeos
+  públicos `/health/live`, `/health/ready` y OpenAPI quedaron verdes. `main` y
+  `release` apuntan al mismo commit.
 
 - Revisión rápida de compras SRI publicada en `main`:
   2026-08-18 `America/Guayaquil`. Compras prioriza una bandeja de comprobantes
