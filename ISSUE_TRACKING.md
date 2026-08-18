@@ -47,6 +47,13 @@
 > revisión independiente e integración por `release -> PR -> main`; el error
 > seguirá en producción hasta desplegar el cambio.
 
+> Corte 2026-08-18: revisión rápida de gastos cargados desde el SRI lista en
+> `release`. La bandeja pendiente permite decidir uso tributario, estado/fecha
+> de pago y tags en un solo guardado idempotente. El alta manual queda como
+> excepción. Backend, contrato, build y recorridos responsive/WCAG pasan
+> localmente; dos revisiones independientes dieron GO y el usuario autorizó la
+> publicación. Quedan CI, Coolify y comprobación pública.
+
 ---
 
 ## 🎯 Objetivo de este Documento

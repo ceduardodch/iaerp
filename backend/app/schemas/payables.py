@@ -60,6 +60,25 @@ class PayableFromDocumentCreate(APIModel):
     document_id: uuid.UUID
 
 
+class PayableDocumentReviewCreate(APIModel):
+    document_id: uuid.UUID
+    tax_classification: Literal["DEDUCTIBLE_CONFIRMED", "NON_DEDUCTIBLE"]
+    analytic_value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    payment_state: Literal["PAID", "SCHEDULED", "UNCONFIRMED", "KEEP_EXISTING"]
+    payment_date: date | None = None
+    payment_method: PaymentMethod | None = None
+    payment_reference: str | None = Field(default=None, max_length=300)
+    scheduled_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_review(self) -> PayableDocumentReviewCreate:
+        if self.payment_state == "PAID" and self.payment_date is None:
+            raise ValueError("paymentDate is required when the expense is already paid")
+        if self.payment_state == "SCHEDULED" and self.scheduled_date is None:
+            raise ValueError("scheduledDate is required when payment is planned")
+        return self
+
+
 class PayablePaymentCreate(APIModel):
     amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
     payment_date: date
@@ -95,7 +114,7 @@ class PayableRead(APIModel):
     document_type: str
     document_number: str | None
     issue_date: date
-    due_date: date
+    due_date: date | None
     total: Decimal
     open_amount: Decimal
     currency: Literal["USD"] = "USD"

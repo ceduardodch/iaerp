@@ -7,6 +7,23 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Revisión rápida de compras SRI lista en el árbol local de `release`:
+  2026-08-18 `America/Guayaquil`. Compras prioriza una bandeja de comprobantes
+  SRI pendientes sobre el alta manual. En un solo guardado el usuario decide
+  si la compra es gasto deducible, solo registro tributario/no deducible o
+  queda pendiente; registra si ya se pagó, fija una fecha prevista o deja el
+  pago sin confirmar; y aplica valores de los catálogos analíticos existentes.
+  El caso de uso enlaza o reutiliza la CxP creada por la carga SRI, conserva el
+  XML y sus importes, exige scopes de extracción y escritura, y usa la unidad
+  de trabajo idempotente con auditoría. Una fecha desconocida se guarda como
+  tal y no entra al filtro de vencidas; pagos posteriores reducen o cancelan
+  la agenda para que nunca quede una CxP saldada con pago futuro activo. Pasan
+  Ruff, mypy, 17 pruebas backend dirigidas (una PostgreSQL ajena omitida),
+  contratos OpenAPI, DDL offline de subida/bajada, build y 18 recorridos
+  Playwright de Compras en escritorio/móvil con axe. Dos revisiones
+  independientes quedaron en GO. El usuario autorizó commit, push y promoción
+  a `main`; quedan CI, despliegue Coolify y comprobación pública.
+
 - Corrección de permisos de cobranza lista en `release`: 2026-08-17
   `America/Guayaquil`. La regla general del tenant estaba activa, pero las
   facturas emitidas conservaban `collection_enabled=false` y la única pantalla
