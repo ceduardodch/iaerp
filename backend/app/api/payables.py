@@ -20,6 +20,9 @@ from app.schemas.payables import (
     ExpenseRuleRead,
     PayableAdjustmentCreate,
     PayableCreate,
+    PayableDocumentBulkReviewCreate,
+    PayableDocumentBulkReviewItemRead,
+    PayableDocumentBulkReviewRead,
     PayableDocumentReviewCreate,
     PayableFromDocumentCreate,
     PayableMovementRead,
@@ -191,6 +194,90 @@ async def post_payable_document_review(
         action="payable.document_reviewed",
         entity_type="payable",
         callback=review,
+    )
+
+
+@router.post(
+    "/payables/from-document/reviews",
+    response_model=PayableDocumentBulkReviewRead,
+    summary="Revisar varias compras cargadas desde el SRI",
+)
+async def post_payable_document_bulk_review(
+    data: PayableDocumentBulkReviewCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[
+        AuthContext,
+        Depends(require_scopes("payables:extract", "payables:write")),
+    ],
+) -> PayableDocumentBulkReviewRead:
+    results: list[PayableDocumentBulkReviewItemRead] = []
+    base_payload = data.model_dump(mode="json")
+
+    for document_id in data.document_ids:
+        child_key = (
+            "sri-bulk:" + hashlib.sha256(f"{idempotency_key}:{document_id}".encode()).hexdigest()
+        )
+        item_payload = {**base_payload, "documentIds": [str(document_id)]}
+
+        async def review_item(
+            current_document_id: uuid.UUID = document_id,
+        ) -> tuple[str, dict[str, object]]:
+            review_data, protected, already_reviewed = await payables.prepare_bulk_fiscal_review(
+                session,
+                context,
+                document_id=current_document_id,
+                data=data,
+            )
+            item = await payables.review_fiscal_document(
+                session,
+                context,
+                review_data,
+                allow_existing_classification=already_reviewed,
+            )
+            status = "SKIPPED" if already_reviewed else "PROTECTED" if protected else "REVIEWED"
+            return str(item.id), {
+                "documentId": str(current_document_id),
+                "payableId": str(item.id),
+                "status": status,
+                "detail": (
+                    "La clasificación existente se conservó y el XML quedó enlazado"
+                    if already_reviewed
+                    else "Pago y tags existentes conservados"
+                    if protected
+                    else "Compra revisada"
+                ),
+            }
+
+        try:
+            response = await execute_idempotent(
+                session,
+                context=context,
+                operation="payables.review_from_document.bulk_item",
+                idempotency_key=child_key,
+                request_payload=item_payload,
+                action="payable.document_reviewed",
+                entity_type="payable",
+                callback=review_item,
+            )
+            results.append(PayableDocumentBulkReviewItemRead.model_validate(response))
+        except HTTPException as exc:
+            detail = str(exc.detail)
+            skipped = exc.status_code == 409 and detail == "This SRI purchase was already reviewed"
+            results.append(
+                PayableDocumentBulkReviewItemRead(
+                    document_id=document_id,
+                    status="SKIPPED" if skipped else "FAILED",
+                    detail=("La compra ya había sido revisada" if skipped else detail),
+                )
+            )
+
+    return PayableDocumentBulkReviewRead(
+        reviewed_count=sum(item.status == "REVIEWED" for item in results),
+        protected_count=sum(item.status == "PROTECTED" for item in results),
+        skipped_count=sum(item.status == "SKIPPED" for item in results),
+        failed_count=sum(item.status == "FAILED" for item in results),
+        items=results,
     )
 
 

@@ -7,7 +7,20 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Revisión rápida de compras SRI lista en el árbol local de `release`:
+- Revisión masiva de compras SRI lista en el árbol local de `release`:
+  2026-08-18 `America/Guayaquil`. La bandeja permite seleccionar hasta 100
+  comprobantes visibles y aplicar en un solo paso su uso tributario, tags y
+  estado de pago. El modo seguro no registra pagos ni borra tags; marcar varias
+  como pagadas exige una confirmación final con cantidad y total. Las CxP con
+  movimientos conservan pagos y tags, incluso cuando el XML se reconcilia en
+  ese momento con una compra manual. Los resultados separan revisadas,
+  protegidas, omitidas y fallidas; un reintento conserva la clave idempotente y
+  solo mantiene seleccionados los fallos. Pasan Ruff, mypy, 20 pruebas backend,
+  contratos OpenAPI, lint/build y 22 recorridos Playwright de Compras en
+  escritorio/móvil. Dos revisiones independientes quedaron en GO. El usuario
+  autorizó commit, push y promoción por `release -> PR -> main`.
+
+- Revisión rápida de compras SRI publicada en `main`:
   2026-08-18 `America/Guayaquil`. Compras prioriza una bandeja de comprobantes
   SRI pendientes sobre el alta manual. En un solo guardado el usuario decide
   si la compra es gasto deducible, solo registro tributario/no deducible o
@@ -21,8 +34,8 @@ alcance y las decisiones.
   Ruff, mypy, 17 pruebas backend dirigidas (una PostgreSQL ajena omitida),
   contratos OpenAPI, DDL offline de subida/bajada, build y 18 recorridos
   Playwright de Compras en escritorio/móvil con axe. Dos revisiones
-  independientes quedaron en GO. El usuario autorizó commit, push y promoción
-  a `main`; quedan CI, despliegue Coolify y comprobación pública.
+  independientes quedaron en GO. `origin/main` y `origin/release` apuntan al
+  mismo corte publicado `47f946a`.
 
 - Corrección de permisos de cobranza lista en `release`: 2026-08-17
   `America/Guayaquil`. La regla general del tenant estaba activa, pero las

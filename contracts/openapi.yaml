@@ -1320,6 +1320,31 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /payables/from-document/reviews:
+    post:
+      operationId: reviewPayablesFromDocuments
+      summary: Revisar varias compras cargadas desde el SRI
+      security:
+        - oauth2: ["payables:extract", "payables:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PayableDocumentBulkReviewInput"
+      responses:
+        "200":
+          description: Resultado por cada comprobante seleccionado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayableDocumentBulkReviewResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /payables/{payableId}/schedule:
     post:
       operationId: scheduleSupplierPayment
@@ -2746,6 +2771,89 @@ components:
         scheduledDate:
           type: [string, "null"]
           format: date
+    PayableDocumentBulkReviewInput:
+      type: object
+      additionalProperties: false
+      required: [documentIds, taxClassification]
+      properties:
+        documentIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        taxClassification:
+          type: string
+          enum: [DEDUCTIBLE_CONFIRMED, NON_DEDUCTIBLE]
+        analyticChange:
+          type: object
+          additionalProperties: false
+          properties:
+            mode:
+              type: string
+              enum: [KEEP_EXISTING, APPLY]
+              default: KEEP_EXISTING
+            valueIds:
+              type: array
+              maxItems: 20
+              items:
+                type: string
+                format: uuid
+        paymentAction:
+          type: string
+          enum: [KEEP_EXISTING_OR_UNCONFIRMED, PAID, SCHEDULED]
+          default: KEEP_EXISTING_OR_UNCONFIRMED
+        paymentDate:
+          type: [string, "null"]
+          format: date
+        paymentMethod:
+          type: [string, "null"]
+          enum: [TRANSFER, CHECK, CASH, CARD, OTHER, null]
+        paymentReference:
+          type: [string, "null"]
+          maxLength: 300
+        scheduledDate:
+          type: [string, "null"]
+          format: date
+    PayableDocumentBulkReviewItem:
+      type: object
+      additionalProperties: false
+      required: [documentId, payableId, status, detail]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        payableId:
+          type: [string, "null"]
+          format: uuid
+        status:
+          type: string
+          enum: [REVIEWED, PROTECTED, SKIPPED, FAILED]
+        detail:
+          type: string
+    PayableDocumentBulkReviewResult:
+      type: object
+      additionalProperties: false
+      required: [reviewedCount, protectedCount, skippedCount, failedCount, items]
+      properties:
+        reviewedCount:
+          type: integer
+          minimum: 0
+        protectedCount:
+          type: integer
+          minimum: 0
+        skippedCount:
+          type: integer
+          minimum: 0
+        failedCount:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PayableDocumentBulkReviewItem"
     SupplierPaymentInput:
       type: object
       additionalProperties: false
