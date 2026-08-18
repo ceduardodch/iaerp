@@ -305,6 +305,132 @@ test('Compras revisa un comprobante SRI con pago y tag en un solo guardado', asy
   expect(results.violations).toEqual([])
 })
 
+test('Compras selecciona y revisa varios comprobantes SRI con confirmación de pago', async ({ page }) => {
+  let bulkCalls = 0
+  let bulkBody: Record<string, unknown> | undefined
+  await page.route('**/api/v1/payables', (route) => route.fulfill({ json: [] }))
+  await page.route('**/api/v1/payables/from-document/reviews', async (route) => {
+    bulkCalls += 1
+    bulkBody = route.request().postDataJSON() as Record<string, unknown>
+    await route.fulfill({ status: 200, json: {
+      reviewedCount: 1,
+      protectedCount: 1,
+      skippedCount: 0,
+      failedCount: 0,
+      items: purchases.map((purchase, index) => ({
+        documentId: purchase.id,
+        payableId: `aaaaaaaa-2222-4333-8444-55555555555${index}`,
+        status: index === 0 ? 'REVIEWED' : 'PROTECTED',
+        detail: index === 0 ? 'Compra revisada' : 'Pago y tags existentes conservados',
+      })),
+    } })
+  })
+
+  await navigateToSection(page, 'Compras')
+  await page.getByRole('button', { name: 'Pendientes SRI (2)' }).click()
+  const selectAll = page.getByRole('checkbox', { name: 'Seleccionar los 2 comprobantes visibles' })
+  const firstRow = page.getByRole('row', { name: /001-001-000000123/ })
+  await firstRow.getByRole('checkbox').check()
+  await expect(selectAll).toHaveJSProperty('indeterminate', true)
+  await expect(page.getByRole('status')).toContainText('1 seleccionada')
+  await selectAll.check()
+  await expect(page.getByRole('status')).toContainText('2 seleccionadas')
+  await expect(page.getByRole('status')).toContainText('Total $345,00')
+
+  await page.getByRole('button', { name: 'Revisar selección' }).click()
+  await expect(page.getByLabel('Revisión masiva de 2 compras SRI')).toBeFocused()
+  await expect(page.getByRole('radio', { name: /No registrar pagos/ })).toBeChecked()
+  await page.getByRole('radio', { name: /Gasto del negocio/ }).check()
+  await page.getByRole('radio', { name: /Aplicar los mismos tags/ }).check()
+  await page.getByLabel('Proyecto').selectOption('44444444-5555-4666-8777-888888888888')
+  await page.getByRole('radio', { name: /Marcar como pagadas/ }).check()
+  await page.getByLabel('Fecha de pago').fill('2026-08-08')
+  await page.getByRole('button', { name: 'Revisar 2 compras' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Confirmar pagos de varias compras' })
+  await expect(dialog).toContainText('2 compras por $345,00')
+  await dialog.getByRole('button', { name: 'Cancelar' }).click()
+  expect(bulkCalls).toBe(0)
+
+  await page.getByRole('button', { name: 'Revisar 2 compras' }).click()
+  await page.getByRole('dialog', { name: 'Confirmar pagos de varias compras' }).getByRole('button', { name: 'Marcar 2 como pagadas' }).click()
+  await expect(page.getByRole('status')).toHaveText('1 compra revisada · 1 conservó pago y tags.')
+  await expect(page.getByRole('status')).toBeFocused()
+  expect(bulkCalls).toBe(1)
+  expect(bulkBody).toMatchObject({
+    documentIds: purchases.map((purchase) => purchase.id),
+    taxClassification: 'DEDUCTIBLE_CONFIRMED',
+    analyticChange: { mode: 'APPLY', valueIds: ['44444444-5555-4666-8777-888888888888'] },
+    paymentAction: 'PAID',
+    paymentDate: '2026-08-08',
+    paymentMethod: 'TRANSFER',
+  })
+
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(results.violations).toEqual([])
+})
+
+test('Compras conserva solo fallidos y reintenta el lote con la misma clave', async ({ page }) => {
+  const requestKeys: string[] = []
+  let attempts = 0
+  await page.route('**/api/v1/payables', (route) => route.fulfill({ json: attempts ? [{
+    id: 'aaaaaaaa-2222-4333-8444-555555555550',
+    supplierId: null,
+    supplierName: purchases[0].supplierName,
+    fiscalDocumentId: purchases[0].id,
+    description: 'Compra revisada',
+    category: 'Sin clasificar',
+    documentType: 'INVOICE',
+    documentNumber: purchases[0].documentNumber,
+    issueDate: purchases[0].issueDate,
+    dueDate: null,
+    total: purchases[0].total,
+    openAmount: purchases[0].total,
+    currency: 'USD',
+    status: 'OPEN',
+    taxClassification: 'DEDUCTIBLE_CONFIRMED',
+    evidenceStatus: 'FISCAL_XML',
+    supportReference: purchases[0].accessKey,
+    analyticAssignments: [],
+  }] : [] }))
+  await page.route('**/api/v1/payables/from-document/reviews', async (route) => {
+    attempts += 1
+    requestKeys.push(route.request().headers()['idempotency-key'])
+    const ids = (route.request().postDataJSON() as { documentIds: string[] }).documentIds
+    const failed = attempts === 1 ? ids.at(-1) : undefined
+    await route.fulfill({ status: 200, json: {
+      reviewedCount: ids.length - (failed ? 1 : 0),
+      protectedCount: 0,
+      skippedCount: 0,
+      failedCount: failed ? 1 : 0,
+      items: ids.map((id) => ({
+        documentId: id,
+        payableId: id === failed ? null : 'aaaaaaaa-2222-4333-8444-555555555550',
+        status: id === failed ? 'FAILED' : 'REVIEWED',
+        detail: id === failed ? 'Error temporal' : 'Compra revisada',
+      })),
+    } })
+  })
+
+  await navigateToSection(page, 'Compras')
+  await page.getByRole('button', { name: 'Pendientes SRI (2)' }).click()
+  await page.getByRole('checkbox', { name: 'Seleccionar los 2 comprobantes visibles' }).check()
+  await page.getByRole('button', { name: 'Revisar selección' }).click()
+  await page.getByRole('radio', { name: /Gasto del negocio/ }).check()
+  await page.getByRole('button', { name: 'Revisar 2 compras' }).click()
+  await expect(page.getByRole('status').filter({ hasText: '1 compra revisada' })).toHaveText('1 compra revisada · 1 no pudo guardarse.')
+  await expect(page.getByRole('button', { name: 'Revisar selección' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Revisar selección' }).click()
+  await page.getByRole('radio', { name: /Gasto del negocio/ }).check()
+  await page.getByRole('button', { name: 'Revisar 1 compra' }).click()
+  await expect(page.getByRole('status').filter({ hasText: '1 compra revisada' })).toHaveText('1 compra revisada.')
+  expect(requestKeys).toHaveLength(2)
+  expect(requestKeys[0]).toBe(requestKeys[1])
+})
+
 test('Compras conserva pago y tags al clasificar una CxP que ya tuvo movimientos', async ({ page }) => {
   let reviewed = false
   const partial = {

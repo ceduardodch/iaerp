@@ -29,6 +29,15 @@
 .purchase-review-existing legend { padding: 0 .35rem; font-weight: 700; }
 .purchase-review-existing p { margin: .35rem 0; }
 .purchase-sri-review-button { min-height: 44px; }
+.purchase-bulk-selection-status { display: flex; align-items: center; gap: .5rem 1rem; margin: 0 auto 0 0; }
+.purchase-bulk-selection-status span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.purchase-bulk-protection { margin: 0; padding: .75rem 1rem; color: var(--warning-text); background: var(--amber-50); border-radius: var(--radius-md); }
+.purchase-sri-checkbox { display: inline-grid; width: 44px; height: 44px; place-items: center; cursor: pointer; }
+.purchase-sri-checkbox input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+.purchase-sri-select-all { display: flex; align-items: center; gap: .5rem; padding: .35rem 1rem; border-bottom: 1px solid var(--border-divider); color: var(--text-body); font-size: var(--text-sm); font-weight: 600; }
+.purchase-sri-select-cell { width: 60px; padding: 0 8px !important; text-align: center !important; }
+.purchase-sri-table tr[aria-selected='true'] td { background: var(--surface-inset); }
+.purchase-sri-table tr[aria-selected='true'] .purchase-sri-select-cell { box-shadow: inset 3px 0 0 var(--accent); }
 .purchase-rule-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, .8fr); gap: 1rem; }
 .purchase-rule-list, .purchase-bank-columns ul { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
 .purchase-rule-list li, .purchase-bank-columns li { display: grid; grid-template-columns: 1fr auto; gap: .2rem .75rem; padding: .75rem; border: 1px solid var(--border-card); border-radius: var(--radius-md); }
@@ -55,4 +64,16 @@
 @media (max-width: 760px) {
   .purchase-form-grid, .purchase-rule-layout, .purchase-bank-columns, .purchase-detail-layout, .purchase-sri-summary, .purchase-review-options { grid-template-columns: 1fr; }
   .purchase-grid-wide { grid-column: auto; }
+  .purchase-bulk-selection-status { display: grid; width: 100%; gap: .15rem; }
+  .purchase-bulk-selection-status + .erp-button { margin-top: .25rem; }
+  .purchase-sri-table tr { grid-template-columns: 44px minmax(0, 1fr); gap: .25rem .75rem; }
+  .purchase-sri-table td:nth-child(n) { grid-column: 2; width: auto; color: inherit; font-size: inherit; }
+  .purchase-sri-table tr > td.purchase-sri-select-cell { position: relative; z-index: 2; grid-column: 1 !important; grid-row: 1 / span 5; align-self: start; justify-self: start; width: 44px !important; padding: 0 !important; }
+  .purchase-sri-table tr > td.purchase-sri-select-cell .purchase-sri-checkbox { width: 44px; }
+  .purchase-sri-table .purchase-sri-document-cell { grid-row: 1; font-weight: 700; }
+  .purchase-sri-table .purchase-sri-supplier-cell { grid-row: 2; color: var(--text-heading); font-size: var(--text-sm); }
+  .purchase-sri-table .purchase-sri-date-cell, .purchase-sri-table .purchase-sri-total-cell { grid-row: auto; color: var(--muted); font-size: var(--text-xs); }
+  .purchase-sri-table .purchase-sri-evidence-cell { margin-top: .25rem; }
+  .purchase-sri-table .purchase-sri-action-cell { grid-column: 1 / -1; width: 100%; margin-top: .5rem; }
+  .purchase-sri-table .purchase-sri-action-cell .erp-button { width: 100%; }
 }

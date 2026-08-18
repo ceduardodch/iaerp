@@ -14,13 +14,21 @@ from app.models.payables import (
     PayableMovement,
     SupplierPaymentSchedule,
 )
+from app.models.platform import AuditEvent, OutboxEvent
 from app.models.tax import FiscalDocument
 from tests.test_bank_statement_import import _row, _statement
 from tests.test_billing_api import TENANT_A, TENANT_B, auth, token_for
 from tests.test_receivables_payments_api import _create_receivable_via_event
 
 
-async def _create_payable(client, token: str, *, timing: str, total: str) -> dict[str, object]:
+async def _create_payable(
+    client,
+    token: str,
+    *,
+    timing: str,
+    total: str,
+    tax_classification: str = "DEDUCTIBLE_PENDING_REVIEW",
+) -> dict[str, object]:
     response = await client.post(
         "/api/v1/payables",
         headers=auth(token, f"create-payable-{timing.lower()}-{total}"),
@@ -34,7 +42,7 @@ async def _create_payable(client, token: str, *, timing: str, total: str) -> dic
             "paymentTiming": timing,
             "paymentDate": "2026-01-10",
             "paymentMethod": "TRANSFER",
-            "taxClassification": "DEDUCTIBLE_PENDING_REVIEW",
+            "taxClassification": tax_classification,
             "evidenceStatus": "NONE",
         },
     )
@@ -42,7 +50,13 @@ async def _create_payable(client, token: str, *, timing: str, total: str) -> dic
     return response.json()
 
 
-async def _create_fiscal_purchase(*, sequential: str, total: str = "115.00") -> uuid.UUID:
+async def _create_fiscal_purchase(
+    *,
+    sequential: str,
+    total: str = "115.00",
+    issue_date: date = date(2026, 8, 1),
+    supplier_name: str = "Proveedor SRI Ejemplo",
+) -> uuid.UUID:
     async with SessionFactory.begin() as session:
         document = FiscalDocument(
             tenant_id=TENANT_A,
@@ -50,12 +64,12 @@ async def _create_fiscal_purchase(*, sequential: str, total: str = "115.00") -> 
             doc_type="FACTURA",
             access_key=sequential.zfill(49),
             authorization_number=sequential.zfill(49),
-            issue_date=date(2026, 8, 1),
+            issue_date=issue_date,
             establishment_code="001",
             emission_point_code="001",
             sequential=sequential.zfill(9),
             counterparty_identification="1799999999001",
-            counterparty_name="Proveedor SRI Ejemplo",
+            counterparty_name=supplier_name,
             subtotal=Decimal("100.00"),
             tax_total=Decimal(total) - Decimal("100.00"),
             total=Decimal(total),
@@ -196,6 +210,15 @@ async def test_sri_review_requires_both_extract_and_write_scopes(client) -> None
         },
     )
     assert denied.status_code == 403
+    bulk_denied = await client.post(
+        "/api/v1/payables/from-document/reviews",
+        headers=auth(token, "sri-bulk-review-scope-0001"),
+        json={
+            "documentIds": [str(document_id)],
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+        },
+    )
+    assert bulk_denied.status_code == 403
 
 
 async def test_sri_review_preserves_payment_and_tags_after_a_movement(client) -> None:
@@ -250,6 +273,357 @@ async def test_sri_review_preserves_payment_and_tags_after_a_movement(client) ->
     assert reviewed.json()["openAmount"] == "75.00"
     assert reviewed.json()["taxClassification"] == "NON_DEDUCTIBLE"
     assert reviewed.json()["analyticAssignments"][0]["valueId"] == value.json()["id"]
+
+
+async def test_sri_bulk_review_is_idempotent_and_protects_existing_movements(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    new_document_id = await _create_fiscal_purchase(sequential="810000008")
+    partial_document_id = await _create_fiscal_purchase(sequential="810000009")
+    reviewed_document_id = await _create_fiscal_purchase(sequential="810000010")
+
+    linked = await client.post(
+        "/api/v1/payables/from-document",
+        headers=auth(token, "sri-bulk-link-partial-0001"),
+        json={"documentId": str(partial_document_id)},
+    )
+    assert linked.status_code == 201, linked.text
+    partial_payable_id = linked.json()["id"]
+    partial_payment = await client.post(
+        f"/api/v1/payables/{partial_payable_id}/payments",
+        headers=auth(token, "sri-bulk-payment-partial-0001"),
+        json={"amount": "40.00", "paymentDate": "2026-08-06", "method": "TRANSFER"},
+    )
+    assert partial_payment.status_code == 201, partial_payment.text
+
+    already_reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-bulk-already-reviewed-0001"),
+        json={
+            "documentId": str(reviewed_document_id),
+            "taxClassification": "NON_DEDUCTIBLE",
+            "paymentState": "UNCONFIRMED",
+        },
+    )
+    assert already_reviewed.status_code == 201, already_reviewed.text
+
+    payload = {
+        "documentIds": [
+            str(new_document_id),
+            str(partial_document_id),
+            str(reviewed_document_id),
+        ],
+        "taxClassification": "DEDUCTIBLE_CONFIRMED",
+        "analyticChange": {"mode": "KEEP_EXISTING", "valueIds": []},
+        "paymentAction": "PAID",
+        "paymentDate": "2026-08-08",
+        "paymentMethod": "TRANSFER",
+    }
+    bulk = await client.post(
+        "/api/v1/payables/from-document/reviews",
+        headers=auth(token, "sri-bulk-review-00000001"),
+        json=payload,
+    )
+    assert bulk.status_code == 200, bulk.text
+    assert bulk.json()["reviewedCount"] == 1
+    assert bulk.json()["protectedCount"] == 1
+    assert bulk.json()["skippedCount"] == 1
+    assert bulk.json()["failedCount"] == 0
+    statuses = {item["documentId"]: item["status"] for item in bulk.json()["items"]}
+    assert statuses[str(new_document_id)] == "REVIEWED"
+    assert statuses[str(partial_document_id)] == "PROTECTED"
+    assert statuses[str(reviewed_document_id)] == "SKIPPED"
+
+    replay = await client.post(
+        "/api/v1/payables/from-document/reviews",
+        headers=auth(token, "sri-bulk-review-00000001"),
+        json=payload,
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json() == bulk.json()
+
+    new_payable_id = next(
+        item["payableId"]
+        for item in bulk.json()["items"]
+        if item["documentId"] == str(new_document_id)
+    )
+    async with SessionFactory() as session:
+        movements = list(
+            await session.scalars(
+                select(PayableMovement).where(
+                    PayableMovement.movement_type == "PAYMENT",
+                    PayableMovement.payable_id.in_(
+                        [uuid.UUID(new_payable_id), uuid.UUID(partial_payable_id)]
+                    ),
+                )
+            )
+        )
+        audits = list(
+            await session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.tenant_id == TENANT_A,
+                    AuditEvent.action == "payable.document_reviewed",
+                    AuditEvent.entity_id.in_([new_payable_id, partial_payable_id]),
+                )
+            )
+        )
+        outbox = list(
+            await session.scalars(
+                select(OutboxEvent).where(
+                    OutboxEvent.tenant_id == TENANT_A,
+                    OutboxEvent.event_type == "payable.document_reviewed",
+                    OutboxEvent.aggregate_id.in_([new_payable_id, partial_payable_id]),
+                )
+            )
+        )
+    assert len(movements) == 2
+    assert len(audits) == 2
+    assert len(outbox) == 2
+
+
+async def test_sri_bulk_safe_default_preserves_an_existing_payment_schedule(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    document_id = await _create_fiscal_purchase(sequential="810000011")
+    linked = await client.post(
+        "/api/v1/payables/from-document",
+        headers=auth(token, "sri-bulk-schedule-link-0001"),
+        json={"documentId": str(document_id)},
+    )
+    assert linked.status_code == 201, linked.text
+    payable_id = linked.json()["id"]
+    scheduled = await client.post(
+        f"/api/v1/payables/{payable_id}/schedule",
+        headers=auth(token, "sri-bulk-schedule-create-0001"),
+        json={"scheduledDate": "2026-08-30", "amount": "115.00", "priority": "NORMAL"},
+    )
+    assert scheduled.status_code == 201, scheduled.text
+
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/reviews",
+        headers=auth(token, "sri-bulk-schedule-review-0001"),
+        json={
+            "documentIds": [str(document_id)],
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "paymentAction": "KEEP_EXISTING_OR_UNCONFIRMED",
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["reviewedCount"] == 1
+
+    async with SessionFactory() as session:
+        schedule = await session.scalar(
+            select(SupplierPaymentSchedule).where(
+                SupplierPaymentSchedule.payable_id == uuid.UUID(payable_id)
+            )
+        )
+    assert schedule is not None
+    assert schedule.status == "SCHEDULED"
+    assert schedule.scheduled_date == date(2026, 8, 30)
+    assert schedule.amount == Decimal("115.00")
+
+
+async def test_sri_bulk_reconciles_manual_purchase_without_losing_tags_or_schedule(
+    client,
+) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["analytics:write", "payables:extract", "payables:read", "payables:write"],
+    )
+    classification = await client.post(
+        "/api/v1/analytic-classifications",
+        headers=auth(token, "sri-bulk-manual-classification-0001"),
+        json={"code": "MANUAL_SRI", "name": "Manual SRI", "maxDepth": 1},
+    )
+    value = await client.post(
+        f"/api/v1/analytic-classifications/{classification.json()['id']}/values",
+        headers=auth(token, "sri-bulk-manual-value-0001"),
+        json={"code": "CENTRO", "name": "Centro"},
+    )
+    manual = await _create_payable(client, token, timing="PAY_LATER", total="115.00")
+    tagged = await client.put(
+        f"/api/v1/payables/{manual['id']}/analytic-assignments",
+        headers=auth(token, "sri-bulk-manual-tags-0001"),
+        json={"valueIds": [value.json()["id"]]},
+    )
+    assert tagged.status_code == 200, tagged.text
+    scheduled = await client.post(
+        f"/api/v1/payables/{manual['id']}/schedule",
+        headers=auth(token, "sri-bulk-manual-schedule-0001"),
+        json={"scheduledDate": "2026-02-15", "amount": "115.00", "priority": "NORMAL"},
+    )
+    assert scheduled.status_code == 201, scheduled.text
+    document_id = await _create_fiscal_purchase(
+        sequential="810000012",
+        issue_date=date(2026, 1, 10),
+        supplier_name="Gasolinera Ejemplo",
+    )
+
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/reviews",
+        headers=auth(token, "sri-bulk-manual-review-0001"),
+        json={
+            "documentIds": [str(document_id)],
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "paymentAction": "KEEP_EXISTING_OR_UNCONFIRMED",
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["reviewedCount"] == 1
+    assert reviewed.json()["items"][0]["payableId"] == manual["id"]
+
+    async with SessionFactory() as session:
+        schedule = await session.scalar(
+            select(SupplierPaymentSchedule).where(
+                SupplierPaymentSchedule.payable_id == uuid.UUID(str(manual["id"]))
+            )
+        )
+        assignments = list(
+            await session.scalars(
+                select(AnalyticAssignment).where(
+                    AnalyticAssignment.target_id == uuid.UUID(str(manual["id"]))
+                )
+            )
+        )
+    assert schedule is not None
+    assert schedule.status == "SCHEDULED"
+    assert schedule.scheduled_date == date(2026, 2, 15)
+    assert [str(item.value_id) for item in assignments] == [value.json()["id"]]
+
+
+async def test_sri_bulk_protects_reconciled_manual_purchase_with_partial_payment(
+    client,
+) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["analytics:write", "payables:extract", "payables:read", "payables:write"],
+    )
+    classification = await client.post(
+        "/api/v1/analytic-classifications",
+        headers=auth(token, "sri-bulk-protected-classification-0001"),
+        json={"code": "PROTECTED_SRI", "name": "Protegida SRI", "maxDepth": 1},
+    )
+    value = await client.post(
+        f"/api/v1/analytic-classifications/{classification.json()['id']}/values",
+        headers=auth(token, "sri-bulk-protected-value-0001"),
+        json={"code": "ORIGINAL", "name": "Original"},
+    )
+    manual = await _create_payable(client, token, timing="PAY_LATER", total="115.00")
+    tagged = await client.put(
+        f"/api/v1/payables/{manual['id']}/analytic-assignments",
+        headers=auth(token, "sri-bulk-protected-tags-0001"),
+        json={"valueIds": [value.json()["id"]]},
+    )
+    assert tagged.status_code == 200, tagged.text
+    payment = await client.post(
+        f"/api/v1/payables/{manual['id']}/payments",
+        headers=auth(token, "sri-bulk-protected-payment-0001"),
+        json={"amount": "40.00", "paymentDate": "2026-01-20", "method": "TRANSFER"},
+    )
+    assert payment.status_code == 201, payment.text
+    document_id = await _create_fiscal_purchase(
+        sequential="810000013",
+        issue_date=date(2026, 1, 10),
+        supplier_name="Gasolinera Ejemplo",
+    )
+
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/reviews",
+        headers=auth(token, "sri-bulk-protected-review-0001"),
+        json={
+            "documentIds": [str(document_id)],
+            "taxClassification": "NON_DEDUCTIBLE",
+            "analyticChange": {"mode": "KEEP_EXISTING", "valueIds": []},
+            "paymentAction": "PAID",
+            "paymentDate": "2026-01-25",
+            "paymentMethod": "TRANSFER",
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["protectedCount"] == 1
+    assert reviewed.json()["failedCount"] == 0
+    assert reviewed.json()["items"][0]["payableId"] == manual["id"]
+
+    payable = await client.get(f"/api/v1/payables/{manual['id']}", headers=auth(token))
+    assert payable.status_code == 200, payable.text
+    assert payable.json()["openAmount"] == "75.00"
+    assert payable.json()["taxClassification"] == "NON_DEDUCTIBLE"
+    assert payable.json()["analyticAssignments"][0]["valueId"] == value.json()["id"]
+
+
+async def test_sri_bulk_links_manual_purchase_that_was_already_classified(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    manual = await _create_payable(
+        client,
+        token,
+        timing="PAY_LATER",
+        total="115.00",
+        tax_classification="NON_DEDUCTIBLE",
+    )
+    document_id = await _create_fiscal_purchase(
+        sequential="810000015",
+        issue_date=date(2026, 1, 10),
+        supplier_name="Gasolinera Ejemplo",
+    )
+
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/reviews",
+        headers=auth(token, "sri-bulk-classified-manual-0001"),
+        json={
+            "documentIds": [str(document_id)],
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "paymentAction": "PAID",
+            "paymentDate": "2026-01-25",
+            "paymentMethod": "TRANSFER",
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["skippedCount"] == 1
+    assert reviewed.json()["failedCount"] == 0
+    assert reviewed.json()["items"][0]["payableId"] == manual["id"]
+
+    payable = await client.get(f"/api/v1/payables/{manual['id']}", headers=auth(token))
+    assert payable.status_code == 200, payable.text
+    assert payable.json()["fiscalDocumentId"] == str(document_id)
+    assert payable.json()["taxClassification"] == "NON_DEDUCTIBLE"
+    assert payable.json()["openAmount"] == "115.00"
+
+
+async def test_sri_bulk_rejects_apply_without_tags(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:write"],
+    )
+    document_id = await _create_fiscal_purchase(sequential="810000014")
+    response = await client.post(
+        "/api/v1/payables/from-document/reviews",
+        headers=auth(token, "sri-bulk-empty-tags-0001"),
+        json={
+            "documentIds": [str(document_id)],
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "analyticChange": {"mode": "APPLY", "valueIds": []},
+        },
+    )
+    assert response.status_code == 422
 
 
 async def test_sri_review_cancels_active_schedule_when_marked_paid(client) -> None:
@@ -416,9 +790,7 @@ async def test_paid_now_and_pay_later_share_the_same_purchase_flow(client) -> No
     assert payment.json()["status"] == "PARTIAL"
     assert payment.json()["openAmount"] == "60.00"
 
-    movements = await client.get(
-        f"/api/v1/payables/{pending['id']}/movements", headers=auth(token)
-    )
+    movements = await client.get(f"/api/v1/payables/{pending['id']}/movements", headers=auth(token))
     assert movements.status_code == 200, movements.text
     assert len(movements.json()) == 1
     movement_id = movements.json()[0]["id"]
@@ -497,9 +869,7 @@ async def test_payable_adjustments_schedule_and_reversal_keep_separate_history(c
     )
     assert over_schedule.status_code == 422
 
-    movements = await client.get(
-        f"/api/v1/payables/{payable['id']}/movements", headers=auth(token)
-    )
+    movements = await client.get(f"/api/v1/payables/{payable['id']}/movements", headers=auth(token))
     retention_movement = next(
         item for item in movements.json() if item["movementType"] == "RETENTION"
     )
@@ -510,9 +880,7 @@ async def test_payable_adjustments_schedule_and_reversal_keep_separate_history(c
     )
     assert reversal.status_code == 201, reversal.text
     assert reversal.json()["openAmount"] == "80.00"
-    history = await client.get(
-        f"/api/v1/payables/{payable['id']}/movements", headers=auth(token)
-    )
+    history = await client.get(f"/api/v1/payables/{payable['id']}/movements", headers=auth(token))
     assert {item["movementType"] for item in history.json()} == {
         "RETENTION",
         "CREDIT_NOTE",
@@ -575,9 +943,7 @@ async def test_one_statement_reconciles_receivable_credit_and_payable_debit(clie
     result = applied.json()
     assert result["matches"][0]["status"] == "REGISTERED"
     assert result["debitMatches"][0]["status"] == "REGISTERED"
-    payable_after = await client.get(
-        f"/api/v1/payables/{payable['id']}", headers=auth(token)
-    )
+    payable_after = await client.get(f"/api/v1/payables/{payable['id']}", headers=auth(token))
     assert payable_after.json()["status"] == "SETTLED"
 
     async with SessionFactory() as session:
@@ -680,9 +1046,7 @@ async def test_one_debit_can_be_split_manually_across_payables(client) -> None:
         assert item.json()["status"] == "SETTLED"
 
     async with SessionFactory() as session:
-        allocation_rows = list(
-            await session.scalars(select(BankTransactionAllocation))
-        )
+        allocation_rows = list(await session.scalars(select(BankTransactionAllocation)))
     assert len(allocation_rows) == 2
 
 
@@ -730,13 +1094,9 @@ async def test_bank_links_paid_now_evidence_without_duplicate_on_reimport(client
     assert repeated.status_code == 200, repeated.text
     assert repeated.json()["debitMatches"] == []
 
-    movements = await client.get(
-        f"/api/v1/payables/{payable['id']}/movements", headers=auth(token)
-    )
+    movements = await client.get(f"/api/v1/payables/{payable['id']}/movements", headers=auth(token))
     assert len(movements.json()) == 1
     assert movements.json()[0]["supportReference"].startswith("BANCO PAGO-DIRECTO-001")
     async with SessionFactory() as session:
-        allocation_rows = list(
-            await session.scalars(select(BankTransactionAllocation))
-        )
+        allocation_rows = list(await session.scalars(select(BankTransactionAllocation)))
     assert len(allocation_rows) == 1

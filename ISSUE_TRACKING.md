@@ -54,6 +54,14 @@
 > localmente; dos revisiones independientes dieron GO y el usuario autorizó la
 > publicación. Quedan CI, Coolify y comprobación pública.
 
+> Corte 2026-08-18: selección masiva de compras SRI lista localmente en
+> `release`. Permite revisar hasta 100 comprobantes, conserva pagos, agendas y
+> tags existentes por defecto, confirma los pagos masivos y reintenta solo los
+> fallos con la misma clave. También cubre el cruce tardío entre XML y una
+> compra manual. Ruff, mypy, 20 pruebas backend, contratos, lint/build y 22
+> recorridos Playwright escritorio/móvil pasan; dos revisiones independientes
+> dieron GO. El usuario autorizó publicarlo por `release -> PR -> main`.
+
 ---
 
 ## 🎯 Objetivo de este Documento

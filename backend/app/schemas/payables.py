@@ -79,6 +79,54 @@ class PayableDocumentReviewCreate(APIModel):
         return self
 
 
+class PayableBulkAnalyticChange(APIModel):
+    mode: Literal["KEEP_EXISTING", "APPLY"] = "KEEP_EXISTING"
+    value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+
+
+class PayableDocumentBulkReviewCreate(APIModel):
+    document_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+    tax_classification: Literal["DEDUCTIBLE_CONFIRMED", "NON_DEDUCTIBLE"]
+    analytic_change: PayableBulkAnalyticChange = Field(default_factory=PayableBulkAnalyticChange)
+    payment_action: Literal["KEEP_EXISTING_OR_UNCONFIRMED", "PAID", "SCHEDULED"] = (
+        "KEEP_EXISTING_OR_UNCONFIRMED"
+    )
+    payment_date: date | None = None
+    payment_method: PaymentMethod | None = None
+    payment_reference: str | None = Field(default=None, max_length=300)
+    scheduled_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_bulk_review(self) -> PayableDocumentBulkReviewCreate:
+        if len(set(self.document_ids)) != len(self.document_ids):
+            raise ValueError("documentIds must be unique")
+        if self.analytic_change.mode == "APPLY" and not self.analytic_change.value_ids:
+            raise ValueError("Select at least one tag when applying bulk tags")
+        if self.payment_action == "PAID":
+            if self.payment_date is None or self.payment_method is None:
+                raise ValueError(
+                    "paymentDate and paymentMethod are required when marking purchases paid"
+                )
+        if self.payment_action == "SCHEDULED" and self.scheduled_date is None:
+            raise ValueError("scheduledDate is required when payment is planned")
+        return self
+
+
+class PayableDocumentBulkReviewItemRead(APIModel):
+    document_id: uuid.UUID
+    payable_id: uuid.UUID | None = None
+    status: Literal["REVIEWED", "PROTECTED", "SKIPPED", "FAILED"]
+    detail: str
+
+
+class PayableDocumentBulkReviewRead(APIModel):
+    reviewed_count: int = Field(ge=0)
+    protected_count: int = Field(ge=0)
+    skipped_count: int = Field(ge=0)
+    failed_count: int = Field(ge=0)
+    items: list[PayableDocumentBulkReviewItemRead]
+
+
 class PayablePaymentCreate(APIModel):
     amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
     payment_date: date

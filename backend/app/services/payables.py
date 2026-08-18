@@ -22,6 +22,7 @@ from app.schemas.payables import (
     ExpenseRuleCreate,
     PayableAdjustmentCreate,
     PayableCreate,
+    PayableDocumentBulkReviewCreate,
     PayableDocumentReviewCreate,
     PayablePaymentCreate,
     PayableRead,
@@ -305,6 +306,8 @@ async def review_fiscal_document(
     session: AsyncSession,
     context: AuthContext,
     data: PayableDocumentReviewCreate,
+    *,
+    allow_existing_classification: bool = False,
 ) -> PayableRead:
     """Enlaza un comprobante SRI y completa su revisión operativa de una vez."""
 
@@ -322,17 +325,15 @@ async def review_fiscal_document(
             status_code=422,
             detail="Fiscal document cannot create an operational payable",
         )
-    payable = await lock_payable(
-        session, tenant_id=context.tenant_id, payable_id=synced.id
-    )
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=synced.id)
     if payable.tax_classification != "DEDUCTIBLE_PENDING_REVIEW":
+        if allow_existing_classification:
+            return await to_read(session, tenant_id=context.tenant_id, payable=payable)
         raise HTTPException(
             status_code=409,
             detail="This SRI purchase was already reviewed",
         )
-    open_amount = await compute_open_amount(
-        session, tenant_id=context.tenant_id, payable=payable
-    )
+    open_amount = await compute_open_amount(session, tenant_id=context.tenant_id, payable=payable)
     if open_amount != payable.total:
         if data.payment_state != "KEEP_EXISTING":
             raise HTTPException(
@@ -342,12 +343,6 @@ async def review_fiscal_document(
         payable.tax_classification = data.tax_classification
         await session.flush()
         return await to_read(session, tenant_id=context.tenant_id, payable=payable)
-    if data.payment_state == "KEEP_EXISTING":
-        raise HTTPException(
-            status_code=409,
-            detail="This payable has no payment movements to keep",
-        )
-
     payable.tax_classification = data.tax_classification
     await analytics.replace_assignments(
         session,
@@ -370,7 +365,9 @@ async def review_fiscal_document(
         )
     )
 
-    if data.payment_state == "SCHEDULED":
+    if data.payment_state == "KEEP_EXISTING":
+        pass
+    elif data.payment_state == "SCHEDULED":
         assert data.scheduled_date is not None
         installments = await _installments(
             session, tenant_id=context.tenant_id, payable_id=payable.id
@@ -421,6 +418,86 @@ async def review_fiscal_document(
 
     await session.flush()
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
+
+
+async def prepare_bulk_fiscal_review(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    document_id: uuid.UUID,
+    data: PayableDocumentBulkReviewCreate,
+) -> tuple[PayableDocumentReviewCreate, bool, bool]:
+    """Adapta una decisión común sin pisar pagos o tags ya registrados."""
+
+    document = await session.scalar(
+        select(FiscalDocument).where(
+            FiscalDocument.tenant_id == context.tenant_id,
+            FiscalDocument.id == document_id,
+        )
+    )
+    if document is None:
+        raise HTTPException(status_code=404, detail="Fiscal document not found")
+    payable = await sync_fiscal_document(session, context, document=document)
+    if payable is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Fiscal document cannot create an operational payable",
+        )
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable.id)
+    already_reviewed = payable.tax_classification != "DEDUCTIBLE_PENDING_REVIEW"
+    has_movements = False
+    current_value_ids: list[uuid.UUID] = []
+    has_movements = (
+        await compute_open_amount(session, tenant_id=context.tenant_id, payable=payable)
+        != payable.total
+    )
+    assignments = await analytics.list_assignments(
+        session,
+        tenant_id=context.tenant_id,
+        target_type="PAYABLE",
+        target_id=payable.id,
+    )
+    current_value_ids = [
+        value_id
+        for assignment in assignments
+        if isinstance((value_id := assignment.get("value_id")), uuid.UUID)
+    ]
+
+    if has_movements or already_reviewed:
+        payment_state = "KEEP_EXISTING"
+        analytic_value_ids = current_value_ids
+    else:
+        payment_state = (
+            "KEEP_EXISTING"
+            if data.payment_action == "KEEP_EXISTING_OR_UNCONFIRMED"
+            else {
+                "KEEP_EXISTING_OR_UNCONFIRMED": "UNCONFIRMED",
+                "PAID": "PAID",
+                "SCHEDULED": "SCHEDULED",
+            }[data.payment_action]
+        )
+        analytic_value_ids = (
+            current_value_ids
+            if data.analytic_change.mode == "KEEP_EXISTING"
+            else data.analytic_change.value_ids
+        )
+
+    return (
+        PayableDocumentReviewCreate(
+            document_id=document_id,
+            tax_classification=(
+                payable.tax_classification if already_reviewed else data.tax_classification
+            ),
+            analytic_value_ids=analytic_value_ids,
+            payment_state=payment_state,
+            payment_date=data.payment_date if payment_state == "PAID" else None,
+            payment_method=data.payment_method if payment_state == "PAID" else None,
+            payment_reference=(data.payment_reference if payment_state == "PAID" else None),
+            scheduled_date=(data.scheduled_date if payment_state == "SCHEDULED" else None),
+        ),
+        has_movements,
+        already_reviewed,
+    )
 
 
 async def _record_application(
