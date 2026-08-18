@@ -69,6 +69,7 @@ class Payable(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     document_number: Mapped[str | None] = mapped_column(String(80))
     issue_date: Mapped[date] = mapped_column(Date)
     due_date: Mapped[date] = mapped_column(Date)
+    due_date_known: Mapped[bool] = mapped_column(Boolean, default=True)
     total: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     status: Mapped[str] = mapped_column(String(20), default="OPEN")

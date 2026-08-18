@@ -22,6 +22,7 @@ from app.schemas.payables import (
     ExpenseRuleCreate,
     PayableAdjustmentCreate,
     PayableCreate,
+    PayableDocumentReviewCreate,
     PayablePaymentCreate,
     PayableRead,
     PaymentScheduleCreate,
@@ -110,7 +111,7 @@ async def to_read(session: AsyncSession, *, tenant_id: uuid.UUID, payable: Payab
         document_type=payable.document_type,
         document_number=payable.document_number,
         issue_date=payable.issue_date,
-        due_date=payable.due_date,
+        due_date=payable.due_date if payable.due_date_known else None,
         total=payable.total,
         open_amount=open_amount,
         currency=payable.currency,
@@ -137,7 +138,10 @@ async def list_payables(
 ) -> list[PayableRead]:
     query = select(Payable).where(Payable.tenant_id == tenant_id)
     if due_before is not None:
-        query = query.where(Payable.due_date <= due_before)
+        query = query.where(
+            Payable.due_date_known.is_(True),
+            Payable.due_date <= due_before,
+        )
     if analytic_value_ids:
         matching_ids = await analytics.target_ids_matching_values(
             session,
@@ -297,6 +301,128 @@ async def create_from_fiscal_document(
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
 
 
+async def review_fiscal_document(
+    session: AsyncSession,
+    context: AuthContext,
+    data: PayableDocumentReviewCreate,
+) -> PayableRead:
+    """Enlaza un comprobante SRI y completa su revisión operativa de una vez."""
+
+    document = await session.scalar(
+        select(FiscalDocument).where(
+            FiscalDocument.tenant_id == context.tenant_id,
+            FiscalDocument.id == data.document_id,
+        )
+    )
+    if document is None:
+        raise HTTPException(status_code=404, detail="Fiscal document not found")
+    synced = await sync_fiscal_document(session, context, document=document)
+    if synced is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Fiscal document cannot create an operational payable",
+        )
+    payable = await lock_payable(
+        session, tenant_id=context.tenant_id, payable_id=synced.id
+    )
+    if payable.tax_classification != "DEDUCTIBLE_PENDING_REVIEW":
+        raise HTTPException(
+            status_code=409,
+            detail="This SRI purchase was already reviewed",
+        )
+    open_amount = await compute_open_amount(
+        session, tenant_id=context.tenant_id, payable=payable
+    )
+    if open_amount != payable.total:
+        if data.payment_state != "KEEP_EXISTING":
+            raise HTTPException(
+                status_code=409,
+                detail="Keep the existing payment when reviewing a payable with movements",
+            )
+        payable.tax_classification = data.tax_classification
+        await session.flush()
+        return await to_read(session, tenant_id=context.tenant_id, payable=payable)
+    if data.payment_state == "KEEP_EXISTING":
+        raise HTTPException(
+            status_code=409,
+            detail="This payable has no payment movements to keep",
+        )
+
+    payable.tax_classification = data.tax_classification
+    await analytics.replace_assignments(
+        session,
+        context,
+        target_type="PAYABLE",
+        target_id=payable.id,
+        value_ids=data.analytic_value_ids,
+    )
+
+    active_schedules = list(
+        await session.scalars(
+            select(SupplierPaymentSchedule)
+            .where(
+                SupplierPaymentSchedule.tenant_id == context.tenant_id,
+                SupplierPaymentSchedule.payable_id == payable.id,
+                SupplierPaymentSchedule.status == "SCHEDULED",
+            )
+            .order_by(SupplierPaymentSchedule.created_at, SupplierPaymentSchedule.id)
+            .with_for_update()
+        )
+    )
+
+    if data.payment_state == "SCHEDULED":
+        assert data.scheduled_date is not None
+        installments = await _installments(
+            session, tenant_id=context.tenant_id, payable_id=payable.id
+        )
+        if len(installments) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="SRI quick review requires a single payment installment",
+            )
+        payable.due_date = data.scheduled_date
+        payable.due_date_known = True
+        installments[0].due_date = data.scheduled_date
+        if not active_schedules:
+            session.add(
+                SupplierPaymentSchedule(
+                    tenant_id=context.tenant_id,
+                    payable_id=payable.id,
+                    scheduled_date=data.scheduled_date,
+                    amount=payable.total,
+                    priority="NORMAL",
+                    status="SCHEDULED",
+                )
+            )
+        else:
+            schedule = active_schedules[0]
+            schedule.scheduled_date = data.scheduled_date
+            schedule.amount = payable.total
+            for stale_schedule in active_schedules[1:]:
+                stale_schedule.status = "CANCELLED"
+    elif data.payment_state == "PAID":
+        assert data.payment_date is not None
+        for schedule in active_schedules:
+            schedule.status = "CANCELLED"
+        await _record_application(
+            session,
+            context,
+            payable=payable,
+            movement_type="PAYMENT",
+            amount=payable.total,
+            effective_date=data.payment_date,
+            method=data.payment_method,
+            reference=data.payment_reference,
+        )
+    else:
+        payable.due_date_known = False
+        for schedule in active_schedules:
+            schedule.status = "CANCELLED"
+
+    await session.flush()
+    return await to_read(session, tenant_id=context.tenant_id, payable=payable)
+
+
 async def _record_application(
     session: AsyncSession,
     context: AuthContext,
@@ -346,6 +472,25 @@ async def _record_application(
     await session.flush()
     new_open = open_amount - amount
     payable.status = "PAID" if new_open == 0 else "PARTIALLY_PAID"
+    schedules = list(
+        await session.scalars(
+            select(SupplierPaymentSchedule)
+            .where(
+                SupplierPaymentSchedule.tenant_id == context.tenant_id,
+                SupplierPaymentSchedule.payable_id == payable.id,
+                SupplierPaymentSchedule.status == "SCHEDULED",
+            )
+            .order_by(SupplierPaymentSchedule.scheduled_date, SupplierPaymentSchedule.id)
+            .with_for_update()
+        )
+    )
+    remaining_scheduled = new_open
+    for schedule in schedules:
+        if remaining_scheduled <= 0:
+            schedule.status = "CANCELLED"
+            continue
+        schedule.amount = min(schedule.amount, remaining_scheduled)
+        remaining_scheduled -= schedule.amount
 
 
 async def record_payment(
@@ -631,6 +776,7 @@ async def sync_fiscal_document(
         document_number=_document_number(document),
         issue_date=document.issue_date,
         due_date=document.issue_date,
+        due_date_known=False,
         total=document.total,
         currency="USD",
         status="OPEN",

@@ -1,4 +1,4 @@
-import { Fragment, useDeferredValue, useState, type FormEvent } from 'react'
+import { Fragment, useDeferredValue, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
@@ -128,6 +128,91 @@ function PurchaseForm({ token, draft, onSaved, onCancel }: PurchaseFormProps) {
       ) : <label>Vencimiento<input name="dueDate" type="date" required defaultValue={today()} /></label>}
     </ErpFormPanel>
   )
+}
+
+function SriPurchaseReview({ token, document, payable, onSaved, onCancel }: {
+  token: string
+  document: PurchaseDocument
+  payable?: Payable
+  onSaved: () => void
+  onCancel: () => void
+}) {
+  const hasMovements = Boolean(payable && Number(payable.openAmount) !== Number(payable.total))
+  const [taxClassification, setTaxClassification] = useState<
+    '' | 'DEDUCTIBLE_CONFIRMED' | 'NON_DEDUCTIBLE'
+  >('')
+  const [paymentState, setPaymentState] = useState<'PAID' | 'SCHEDULED' | 'UNCONFIRMED' | 'KEEP_EXISTING'>(hasMovements ? 'KEEP_EXISTING' : 'UNCONFIRMED')
+  const [analyticValueIds, setAnalyticValueIds] = useState<string[]>(
+    (payable?.analyticAssignments ?? []).map((item) => item.valueId),
+  )
+  const startRef = useRef<HTMLDivElement>(null)
+  const reviewIdempotencyKey = useRef(idempotencyKey('web-sri-purchase-review')).current
+  useEffect(() => startRef.current?.focus(), [])
+  const review = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => apiRequest<Payable>(token, '/payables/from-document/review', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': reviewIdempotencyKey },
+      body: JSON.stringify(payload),
+    }),
+    onSuccess: onSaved,
+  })
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!taxClassification) return
+    const form = new FormData(event.currentTarget)
+    review.mutate({
+      documentId: document.id,
+      taxClassification,
+      analyticValueIds,
+      paymentState,
+      paymentDate: paymentState === 'PAID' ? String(form.get('paymentDate')) : null,
+      paymentMethod: paymentState === 'PAID' ? String(form.get('paymentMethod')) : null,
+      paymentReference: paymentState === 'PAID' ? String(form.get('paymentReference') || '') || null : null,
+      scheduledDate: paymentState === 'SCHEDULED' ? String(form.get('scheduledDate')) : null,
+    })
+  }
+
+  return <div className="purchase-review-focus" ref={startRef} tabIndex={-1} role="region" aria-label={`Revisión SRI de ${document.supplierName ?? 'compra sin proveedor'}`}>
+    <ErpFormPanel
+      eyebrow="Revisión SRI"
+      title={document.supplierName ?? 'Compra sin proveedor'}
+      submitLabel="Guardar revisión"
+      pending={review.isPending}
+      submitDisabled={!taxClassification}
+      error={review.error?.message}
+      onSubmit={submit}
+      onCancel={onCancel}
+    >
+      <dl className="purchase-sri-summary">
+        <div><dt>Documento</dt><dd>{document.documentNumber ?? 'Sin número'}</dd></div>
+        <div><dt>Emisión</dt><dd>{document.issueDate}</dd></div>
+        <div><dt>Total</dt><dd>${formatAmount(document.total)}</dd></div>
+        <div><dt>Respaldo</dt><dd>{document.isPreliminary ? 'Preliminar' : 'XML confirmado'}</dd></div>
+      </dl>
+      <fieldset className="purchase-review-options">
+        <legend>Uso tributario</legend>
+        <p className="fine-print">Esto clasifica la compra; no cambia el XML ni los valores descargados del SRI.</p>
+        <label><input type="radio" name="taxClassification" checked={taxClassification === 'DEDUCTIBLE_CONFIRMED'} onChange={() => setTaxClassification('DEDUCTIBLE_CONFIRMED')} /><span><strong>Gasto del negocio</strong><small>Confirmar como deducible</small></span></label>
+        <label><input type="radio" name="taxClassification" checked={taxClassification === 'NON_DEDUCTIBLE'} onChange={() => setTaxClassification('NON_DEDUCTIBLE')} /><span><strong>Solo registro tributario</strong><small>No deducible</small></span></label>
+      </fieldset>
+      {!hasMovements ? <fieldset className="purchase-review-options">
+        <legend>Estado del pago</legend>
+        <label><input type="radio" name="paymentState" checked={paymentState === 'PAID'} onChange={() => setPaymentState('PAID')} /><span><strong>Ya pagado</strong><small>Registrar el pago completo</small></span></label>
+        <label><input type="radio" name="paymentState" checked={paymentState === 'SCHEDULED'} onChange={() => setPaymentState('SCHEDULED')} /><span><strong>Pago previsto</strong><small>Guardar la fecha acordada</small></span></label>
+        <label><input type="radio" name="paymentState" checked={paymentState === 'UNCONFIRMED'} onChange={() => setPaymentState('UNCONFIRMED')} /><span><strong>Sin fecha acordada</strong><small>Queda por pagar, sin inventar un vencimiento</small></span></label>
+      </fieldset> : <fieldset className="purchase-review-existing"><legend>Pago ya registrado</legend><p>Se conserva el estado actual ({payable?.status === 'SETTLED' ? 'pagado' : `saldo $${formatAmount(payable?.openAmount ?? 0)}`}). Esta revisión solo decide el uso tributario.</p></fieldset>}
+      {paymentState === 'PAID' ? (
+        <div className="purchase-form-grid">
+          <label>Fecha de pago<input name="paymentDate" type="date" required defaultValue={today()} /></label>
+          <label>Medio<select name="paymentMethod" defaultValue="TRANSFER"><option value="TRANSFER">Transferencia</option><option value="CARD">Tarjeta</option><option value="CASH">Efectivo</option><option value="CHECK">Cheque</option><option value="OTHER">Otro</option></select></label>
+          <label className="purchase-grid-wide">Referencia opcional<input name="paymentReference" /></label>
+        </div>
+      ) : null}
+      {paymentState === 'SCHEDULED' ? <label>Fecha prevista de pago<input name="scheduledDate" type="date" required defaultValue={today()} /></label> : null}
+      {!hasMovements ? <AnalyticClassificationPicker token={token} valueIds={analyticValueIds} onChange={setAnalyticValueIds} /> : (payable?.analyticAssignments ?? []).length ? <fieldset className="purchase-review-existing"><legend>Tags conservados</legend>{payable?.analyticAssignments.map((assignment) => <p key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</p>)}</fieldset> : null}
+    </ErpFormPanel>
+  </div>
 }
 
 function RuleManager({ token }: { token: string }) {
@@ -379,12 +464,25 @@ function PayableDetail({ token, payable, onClose }: { token: string; payable: Pa
 
 export function PurchasesPage({ token }: { token: string }) {
   const queryClient = useQueryClient()
-  const [view, setView] = useState<'ALL' | 'OPEN' | 'SETTLED' | 'BANK' | 'RULES'>('ALL')
+  const [view, setView] = useState<'SRI' | 'ALL' | 'OPEN' | 'SETTLED' | 'BANK' | 'RULES'>('ALL')
   const [query, setQuery] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [draft, setDraft] = useState<ExpenseDraft | undefined>()
   const [selectedPayableId, setSelectedPayableId] = useState<string | null>(null)
   const [editingTagsFor, setEditingTagsFor] = useState<string | null>(null)
+  const [reviewingFiscalId, setReviewingFiscalId] = useState<string | null>(null)
+  const [restoreReviewFocusId, setRestoreReviewFocusId] = useState<string | null>(null)
+  const [reviewNotice, setReviewNotice] = useState('')
+  const reviewStatusRef = useRef<HTMLParagraphElement>(null)
+  useEffect(() => {
+    if (reviewNotice) reviewStatusRef.current?.focus()
+  }, [reviewNotice])
+  useEffect(() => {
+    if (!reviewingFiscalId && restoreReviewFocusId) {
+      document.querySelector<HTMLButtonElement>(`[data-sri-review-id="${restoreReviewFocusId}"]`)?.focus()
+      setRestoreReviewFocusId(null)
+    }
+  }, [restoreReviewFocusId, reviewingFiscalId])
   const [groupByClassificationId, setGroupByClassificationId] = useState('')
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase())
   const payablesQuery = useQuery({ queryKey: ['payables'], queryFn: () => apiRequest<Payable[]>(token, '/payables') })
@@ -397,7 +495,12 @@ export function PurchasesPage({ token }: { token: string }) {
   })
   const linkedFiscalIds = new Set((payablesQuery.data ?? []).map((item) => item.fiscalDocumentId).filter(Boolean))
   const fiscalById = new Map((fiscalQuery.data ?? []).map((item) => [item.id, item]))
-  const unlinkedFiscal = (fiscalQuery.data ?? []).filter((item) => !linkedFiscalIds.has(item.id))
+  const payableByFiscalId = new Map((payablesQuery.data ?? []).filter((item) => item.fiscalDocumentId).map((item) => [item.fiscalDocumentId, item]))
+  const pendingFiscal = (fiscalQuery.data ?? []).filter((item) => {
+    if (!linkedFiscalIds.has(item.id)) return true
+    return payableByFiscalId.get(item.id)?.taxClassification === 'DEDUCTIBLE_PENDING_REVIEW'
+  })
+  const reviewingFiscal = pendingFiscal.find((item) => item.id === reviewingFiscalId)
   const selectedPayable = (payablesQuery.data ?? []).find((item) => item.id === selectedPayableId)
   const selectedClassification = (classificationsQuery.data ?? []).find((item) => item.id === groupByClassificationId)
   const payableGroups = groupByClassificationId
@@ -413,23 +516,24 @@ export function PurchasesPage({ token }: { token: string }) {
 
   return (
     <>
-      <ErpPageHeader eyebrow="Compras y gastos" title="Compras" subtitle="Registra gastos directos o por pagar, conserva el soporte fiscal y cruza sus pagos con el banco." actions={<ErpButton variant="primary" onClick={() => setIsCreating(true)}>Nueva compra</ErpButton>} />
+      <ErpPageHeader eyebrow="Compras y gastos" title="Compras" subtitle="Carga desde el SRI y revisa en pocos pasos si es gasto real, cómo se pagó y qué tags le corresponden." actions={<ErpButton variant="secondary" onClick={() => setIsCreating(true)}>Nueva compra manual</ErpButton>} />
       <ErpToolbar ariaLabel="Vistas de compras">
-        {([['ALL', 'Todas'], ['OPEN', 'Por pagar'], ['SETTLED', 'Pagadas'], ['BANK', 'Conciliación bancaria'], ['RULES', 'Reglas']] as const).map(([value, label]) => <ErpButton key={value} variant={view === value ? 'primary' : 'ghost'} onClick={() => setView(value)}>{label}</ErpButton>)}
-        {!['BANK', 'RULES'].includes(view) ? <label className="search-field"><span>Buscar compra</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Proveedor, concepto o número" /></label> : null}
-        {!['BANK', 'RULES'].includes(view) && (classificationsQuery.data ?? []).length ? <label className="search-field"><span>Agrupar por tag</span><select value={groupByClassificationId} onChange={(event) => setGroupByClassificationId(event.target.value)}><option value="">Sin agrupación</option>{classificationsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
+        {([['SRI', `Pendientes SRI (${pendingFiscal.length})`], ['ALL', 'Todas'], ['OPEN', 'Por pagar'], ['SETTLED', 'Pagadas'], ['BANK', 'Conciliación bancaria'], ['RULES', 'Reglas']] as const).map(([value, label]) => <ErpButton key={value} variant={view === value ? 'primary' : 'ghost'} onClick={() => { setView(value); setReviewingFiscalId(null); setReviewNotice('') }}>{label}</ErpButton>)}
+        {!['SRI', 'BANK', 'RULES'].includes(view) ? <label className="search-field"><span>Buscar compra</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Proveedor, concepto o número" /></label> : null}
+        {!['SRI', 'BANK', 'RULES'].includes(view) && (classificationsQuery.data ?? []).length ? <label className="search-field"><span>Agrupar por tag</span><select value={groupByClassificationId} onChange={(event) => setGroupByClassificationId(event.target.value)}><option value="">Sin agrupación</option>{classificationsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
       </ErpToolbar>
+      {reviewNotice ? <p className="purchase-review-status" role="status" tabIndex={-1} ref={reviewStatusRef}>{reviewNotice}</p> : null}
+      {view === 'SRI' ? reviewingFiscal ? <SriPurchaseReview token={token} document={reviewingFiscal} payable={payableByFiscalId.get(reviewingFiscal.id)} onCancel={() => { setRestoreReviewFocusId(reviewingFiscal.id); setReviewingFiscalId(null) }} onSaved={() => { setReviewingFiscalId(null); setReviewNotice('Compra SRI revisada y guardada.'); void queryClient.invalidateQueries({ queryKey: ['payables'] }) }} /> : <ErpPanel title="Pendientes de revisar desde el SRI" count={pendingFiscal.length}><p className="fine-print">Revisa el uso tributario, pago y tags sin volver a ingresar los datos del comprobante.</p>{fiscalQuery.isPending ? <p aria-busy="true">Cargando comprobantes SRI…</p> : null}{fiscalQuery.error ? <p className="form-error" role="alert">{fiscalQuery.error.message}</p> : null}{pendingFiscal.length ? <div className="table-wrap" tabIndex={0}><table className="erp-responsive-table purchase-table"><thead><tr><th>Documento</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Evidencia</th><th>Acción</th></tr></thead><tbody>{pendingFiscal.map((item) => <tr key={item.id}><td>{item.documentNumber ?? 'Sin número'}</td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}</td><td>${formatAmount(item.total)}</td><td><ErpStatusBadge tone={item.isPreliminary ? 'warning' : 'success'}>{item.isPreliminary ? 'Preliminar' : 'XML confirmado'}</ErpStatusBadge></td><td><ErpButton className="purchase-sri-review-button" data-sri-review-id={item.id} variant="primary" onClick={() => { setReviewNotice(''); setReviewingFiscalId(item.id) }}>Revisar</ErpButton></td></tr>)}</tbody></table></div> : !fiscalQuery.isPending ? <ErpEmptyState title="Todo revisado" description="No quedan comprobantes del SRI pendientes de clasificar." /> : null}</ErpPanel> : null}
       {view === 'BANK' ? <BankReconciliation token={token} payables={payablesQuery.data ?? []} onCreateExpense={(expenseDraft) => { setDraft(expenseDraft); setIsCreating(true) }} /> : null}
       {view === 'RULES' ? <RuleManager token={token} /> : null}
-      {!['BANK', 'RULES'].includes(view) ? (
+      {!['SRI', 'BANK', 'RULES'].includes(view) ? (
         <ErpPanel title={selectedClassification ? `Compras por ${selectedClassification.name}` : 'Cuentas por pagar'} count={payables.length}>
           {payablesQuery.isPending ? <p aria-busy="true">Cargando compras…</p> : null}
           {payablesQuery.error ? <p className="form-error" role="alert">{payablesQuery.error.message}</p> : null}
-          {payables.length ? <div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table"><thead><tr><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Fiscal</th><th>Clasificaciones</th><th>Acciones</th></tr></thead>{payableGroups.map(([group, items]) => <tbody key={group}>{groupByClassificationId ? <tr><th colSpan={10} scope="colgroup">{group} · {items.length} compras</th></tr> : null}{items.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; const assignments = item.analyticAssignments ?? []; const editing = editingTagsFor === item.id; return <Fragment key={item.id}><tr><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small></td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>Vence {item.dueDate}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.evidenceStatus === 'FISCAL_XML' ? 'success' : 'warning'}>{item.evidenceStatus === 'FISCAL_XML' ? 'XML confirmado' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Deducible · revisar'}</ErpStatusBadge></td><td>{assignments.length ? assignments.map((assignment) => <small key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td><td><ErpButton variant="secondary" onClick={() => setEditingTagsFor(editing ? null : item.id)}>{editing ? 'Cerrar tags' : 'Clasificar'}</ErpButton><ErpButton variant="ghost" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr>{editing ? <tr><td colSpan={10}><PayableClassificationEditor token={token} payable={item} onSaved={() => { setEditingTagsFor(null); void queryClient.invalidateQueries({ queryKey: ['payables'] }) }} /></td></tr> : null}</Fragment> })}</tbody>)}</table></div> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Usa Nueva compra para registrar gasolina, servicios o una factura por pagar." /> : null}
+          {payables.length ? <div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table"><thead><tr><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Fiscal</th><th>Clasificaciones</th><th>Acciones</th></tr></thead>{payableGroups.map(([group, items]) => <tbody key={group}>{groupByClassificationId ? <tr><th colSpan={10} scope="colgroup">{group} · {items.length} compras</th></tr> : null}{items.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; const assignments = item.analyticAssignments ?? []; const editing = editingTagsFor === item.id; return <Fragment key={item.id}><tr><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small></td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>{item.dueDate ? `Vence ${item.dueDate}` : 'Sin fecha acordada'}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.evidenceStatus === 'FISCAL_XML' ? 'success' : 'warning'}>{item.evidenceStatus === 'FISCAL_XML' ? 'XML confirmado' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Deducible · revisar'}</ErpStatusBadge></td><td>{assignments.length ? assignments.map((assignment) => <small key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td><td><ErpButton variant="secondary" onClick={() => setEditingTagsFor(editing ? null : item.id)}>{editing ? 'Cerrar tags' : 'Clasificar'}</ErpButton><ErpButton variant="ghost" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr>{editing ? <tr><td colSpan={10}><PayableClassificationEditor token={token} payable={item} onSaved={() => { setEditingTagsFor(null); void queryClient.invalidateQueries({ queryKey: ['payables'] }) }} /></td></tr> : null}</Fragment> })}</tbody>)}</table></div> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Usa Nueva compra para registrar gasolina, servicios o una factura por pagar." /> : null}
         </ErpPanel>
       ) : null}
-      {selectedPayable && !['BANK', 'RULES'].includes(view) ? <PayableDetail token={token} payable={selectedPayable} onClose={() => setSelectedPayableId(null)} /> : null}
-      {view === 'ALL' && unlinkedFiscal.length ? <ErpPanel title="Documentos fiscales anteriores pendientes de enlazar" count={unlinkedFiscal.length}><p className="fine-print">Estos comprobantes ya existían en Tributario antes de CxP. Siguen visibles y no se duplican como gasto.</p><div className="table-wrap" tabIndex={0}><table className="erp-responsive-table purchase-table"><thead><tr><th>Documento</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Evidencia</th></tr></thead><tbody>{unlinkedFiscal.map((item) => <tr key={item.id}><td>{item.documentNumber ?? 'Sin número'}</td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}</td><td>${formatAmount(item.total)}</td><td><ErpStatusBadge tone={item.isPreliminary ? 'warning' : 'success'}>{item.isPreliminary ? 'Preliminar' : 'XML confirmado'}</ErpStatusBadge></td></tr>)}</tbody></table></div></ErpPanel> : null}
+      {selectedPayable && !['SRI', 'BANK', 'RULES'].includes(view) ? <PayableDetail token={token} payable={selectedPayable} onClose={() => setSelectedPayableId(null)} /> : null}
     </>
   )
 }

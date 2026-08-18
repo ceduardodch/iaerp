@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import select
 
 from app.db.session import SessionFactory
-from app.models.payables import BankTransactionAllocation, PayableMovement
+from app.models.analytics import AnalyticAssignment
+from app.models.payables import (
+    BankTransactionAllocation,
+    PayableMovement,
+    SupplierPaymentSchedule,
+)
+from app.models.tax import FiscalDocument
 from tests.test_bank_statement_import import _row, _statement
 from tests.test_billing_api import TENANT_A, TENANT_B, auth, token_for
 from tests.test_receivables_payments_api import _create_receivable_via_event
@@ -33,6 +40,351 @@ async def _create_payable(client, token: str, *, timing: str, total: str) -> dic
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+async def _create_fiscal_purchase(*, sequential: str, total: str = "115.00") -> uuid.UUID:
+    async with SessionFactory.begin() as session:
+        document = FiscalDocument(
+            tenant_id=TENANT_A,
+            direction="RECIBIDO",
+            doc_type="FACTURA",
+            access_key=sequential.zfill(49),
+            authorization_number=sequential.zfill(49),
+            issue_date=date(2026, 8, 1),
+            establishment_code="001",
+            emission_point_code="001",
+            sequential=sequential.zfill(9),
+            counterparty_identification="1799999999001",
+            counterparty_name="Proveedor SRI Ejemplo",
+            subtotal=Decimal("100.00"),
+            tax_total=Decimal(total) - Decimal("100.00"),
+            total=Decimal(total),
+            payment_methods=["20"],
+            is_preliminary=False,
+        )
+        session.add(document)
+        await session.flush()
+        return document.id
+
+
+async def test_sri_review_links_classifies_tags_and_records_paid_expense(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["analytics:write", "payables:extract", "payables:read", "payables:write"],
+    )
+    classification = await client.post(
+        "/api/v1/analytic-classifications",
+        headers=auth(token, "sri-review-classification-0001"),
+        json={"code": "PROYECTO_SRI", "name": "Proyecto SRI", "maxDepth": 1},
+    )
+    assert classification.status_code == 201, classification.text
+    value = await client.post(
+        f"/api/v1/analytic-classifications/{classification.json()['id']}/values",
+        headers=auth(token, "sri-review-value-0001"),
+        json={"code": "IAERP", "name": "IAERP"},
+    )
+    assert value.status_code == 201, value.text
+    document_id = await _create_fiscal_purchase(sequential="810000001")
+    payload = {
+        "documentId": str(document_id),
+        "taxClassification": "DEDUCTIBLE_CONFIRMED",
+        "analyticValueIds": [value.json()["id"]],
+        "paymentState": "PAID",
+        "paymentDate": "2026-08-05",
+        "paymentMethod": "TRANSFER",
+        "paymentReference": "PAGO SRI 001",
+    }
+
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-review-paid-0001"),
+        json=payload,
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    body = reviewed.json()
+    assert body["fiscalDocumentId"] == str(document_id)
+    assert body["taxClassification"] == "DEDUCTIBLE_CONFIRMED"
+    assert body["status"] == "SETTLED"
+    assert body["openAmount"] == "0.00"
+    assert body["analyticAssignments"][0]["valueId"] == value.json()["id"]
+
+    replay = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-review-paid-0001"),
+        json=payload,
+    )
+    assert replay.status_code == 201, replay.text
+    assert replay.json() == body
+
+    async with SessionFactory() as session:
+        movements = list(
+            await session.scalars(
+                select(PayableMovement).where(PayableMovement.payable_id == uuid.UUID(body["id"]))
+            )
+        )
+        assignments = list(
+            await session.scalars(
+                select(AnalyticAssignment).where(
+                    AnalyticAssignment.target_id == uuid.UUID(body["id"])
+                )
+            )
+        )
+    assert len(movements) == 1
+    assert movements[0].effective_date == date(2026, 8, 5)
+    assert len(assignments) == 1
+
+
+async def test_sri_review_can_schedule_non_deductible_expense(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    document_id = await _create_fiscal_purchase(sequential="810000002")
+    linked = await client.post(
+        "/api/v1/payables/from-document",
+        headers=auth(token, "sri-review-prelinked-0001"),
+        json={"documentId": str(document_id)},
+    )
+    assert linked.status_code == 201, linked.text
+    assert linked.json()["taxClassification"] == "DEDUCTIBLE_PENDING_REVIEW"
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-review-scheduled-0001"),
+        json={
+            "documentId": str(document_id),
+            "taxClassification": "NON_DEDUCTIBLE",
+            "paymentState": "SCHEDULED",
+            "scheduledDate": "2026-08-31",
+        },
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    body = reviewed.json()
+    assert body["status"] == "OPEN"
+    assert body["dueDate"] == "2026-08-31"
+    assert body["taxClassification"] == "NON_DEDUCTIBLE"
+
+    async with SessionFactory() as session:
+        schedule = await session.scalar(
+            select(SupplierPaymentSchedule).where(
+                SupplierPaymentSchedule.payable_id == uuid.UUID(body["id"])
+            )
+        )
+    assert schedule is not None
+    assert schedule.scheduled_date == date(2026, 8, 31)
+    assert schedule.amount == Decimal("115.00")
+
+
+async def test_sri_review_requires_both_extract_and_write_scopes(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract"],
+    )
+    document_id = await _create_fiscal_purchase(sequential="810000003")
+    denied = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-review-scope-0001"),
+        json={
+            "documentId": str(document_id),
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "paymentState": "UNCONFIRMED",
+        },
+    )
+    assert denied.status_code == 403
+
+
+async def test_sri_review_preserves_payment_and_tags_after_a_movement(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["analytics:write", "payables:extract", "payables:read", "payables:write"],
+    )
+    classification = await client.post(
+        "/api/v1/analytic-classifications",
+        headers=auth(token, "sri-existing-classification-0001"),
+        json={"code": "SUCURSAL_SRI", "name": "Sucursal SRI", "maxDepth": 1},
+    )
+    value = await client.post(
+        f"/api/v1/analytic-classifications/{classification.json()['id']}/values",
+        headers=auth(token, "sri-existing-value-0001"),
+        json={"code": "NORTE", "name": "Norte"},
+    )
+    document_id = await _create_fiscal_purchase(sequential="810000004")
+    linked = await client.post(
+        "/api/v1/payables/from-document",
+        headers=auth(token, "sri-existing-link-0001"),
+        json={"documentId": str(document_id)},
+    )
+    payable_id = linked.json()["id"]
+    tagged = await client.put(
+        f"/api/v1/payables/{payable_id}/analytic-assignments",
+        headers=auth(token, "sri-existing-tags-0001"),
+        json={"valueIds": [value.json()["id"]]},
+    )
+    assert tagged.status_code == 200, tagged.text
+    payment = await client.post(
+        f"/api/v1/payables/{payable_id}/payments",
+        headers=auth(token, "sri-existing-payment-0001"),
+        json={"amount": "40.00", "paymentDate": "2026-08-06", "method": "TRANSFER"},
+    )
+    assert payment.status_code == 201, payment.text
+
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-existing-review-0001"),
+        json={
+            "documentId": str(document_id),
+            "taxClassification": "NON_DEDUCTIBLE",
+            "analyticValueIds": [],
+            "paymentState": "KEEP_EXISTING",
+        },
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    assert reviewed.json()["status"] == "PARTIAL"
+    assert reviewed.json()["openAmount"] == "75.00"
+    assert reviewed.json()["taxClassification"] == "NON_DEDUCTIBLE"
+    assert reviewed.json()["analyticAssignments"][0]["valueId"] == value.json()["id"]
+
+
+async def test_sri_review_cancels_active_schedule_when_marked_paid(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    document_id = await _create_fiscal_purchase(sequential="810000005")
+    linked = await client.post(
+        "/api/v1/payables/from-document",
+        headers=auth(token, "sri-schedule-link-0001"),
+        json={"documentId": str(document_id)},
+    )
+    payable_id = linked.json()["id"]
+    scheduled = await client.post(
+        f"/api/v1/payables/{payable_id}/schedule",
+        headers=auth(token, "sri-existing-schedule-0001"),
+        json={"scheduledDate": "2026-08-30", "amount": "115.00", "priority": "NORMAL"},
+    )
+    assert scheduled.status_code == 201, scheduled.text
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-schedule-paid-0001"),
+        json={
+            "documentId": str(document_id),
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "paymentState": "PAID",
+            "paymentDate": "2026-08-08",
+            "paymentMethod": "TRANSFER",
+        },
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    assert reviewed.json()["status"] == "SETTLED"
+
+    async with SessionFactory() as session:
+        schedule = await session.scalar(
+            select(SupplierPaymentSchedule).where(
+                SupplierPaymentSchedule.payable_id == uuid.UUID(payable_id)
+            )
+        )
+    assert schedule is not None
+    assert schedule.status == "CANCELLED"
+
+
+async def test_normal_payment_cancels_schedule_created_by_sri_review(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    document_id = await _create_fiscal_purchase(sequential="810000007")
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-scheduled-review-0001"),
+        json={
+            "documentId": str(document_id),
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "paymentState": "SCHEDULED",
+            "scheduledDate": "2026-08-31",
+        },
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    payable_id = reviewed.json()["id"]
+    partial = await client.post(
+        f"/api/v1/payables/{payable_id}/payments",
+        headers=auth(token, "sri-scheduled-payment-partial-0001"),
+        json={
+            "amount": "40.00",
+            "paymentDate": "2026-08-20",
+            "method": "TRANSFER",
+        },
+    )
+    assert partial.status_code == 201, partial.text
+    assert partial.json()["status"] == "PARTIAL"
+    async with SessionFactory() as session:
+        partial_schedule = await session.scalar(
+            select(SupplierPaymentSchedule).where(
+                SupplierPaymentSchedule.payable_id == uuid.UUID(payable_id)
+            )
+        )
+    assert partial_schedule is not None
+    assert partial_schedule.status == "SCHEDULED"
+    assert partial_schedule.amount == Decimal("75.00")
+
+    paid = await client.post(
+        f"/api/v1/payables/{payable_id}/payments",
+        headers=auth(token, "sri-scheduled-payment-final-0001"),
+        json={
+            "amount": "75.00",
+            "paymentDate": "2026-08-21",
+            "method": "TRANSFER",
+        },
+    )
+    assert paid.status_code == 201, paid.text
+    assert paid.json()["status"] == "SETTLED"
+
+    async with SessionFactory() as session:
+        schedule = await session.scalar(
+            select(SupplierPaymentSchedule).where(
+                SupplierPaymentSchedule.payable_id == uuid.UUID(payable_id)
+            )
+        )
+    assert schedule is not None
+    assert schedule.status == "CANCELLED"
+
+
+async def test_sri_review_keeps_unknown_due_date_out_of_due_filter(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    document_id = await _create_fiscal_purchase(sequential="810000006")
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-unknown-date-0001"),
+        json={
+            "documentId": str(document_id),
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "paymentState": "UNCONFIRMED",
+        },
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    assert reviewed.json()["dueDate"] is None
+
+    due = await client.get(
+        "/api/v1/payables?dueBefore=2026-12-31",
+        headers=auth(token),
+    )
+    assert due.status_code == 200, due.text
+    assert reviewed.json()["id"] not in {item["id"] for item in due.json()}
 
 
 async def test_paid_now_and_pay_later_share_the_same_purchase_flow(client) -> None:

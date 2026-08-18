@@ -20,6 +20,7 @@ from app.schemas.payables import (
     ExpenseRuleRead,
     PayableAdjustmentCreate,
     PayableCreate,
+    PayableDocumentReviewCreate,
     PayableFromDocumentCreate,
     PayableMovementRead,
     PayablePaymentCreate,
@@ -159,6 +160,37 @@ async def post_payable_from_document(
         action="payable.document_linked",
         entity_type="payable",
         callback=create,
+    )
+
+
+@router.post(
+    "/payables/from-document/review",
+    response_model=PayableRead,
+    status_code=201,
+    summary="Enlazar y revisar una compra cargada desde el SRI",
+)
+async def post_payable_document_review(
+    data: PayableDocumentReviewCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[
+        AuthContext,
+        Depends(require_scopes("payables:extract", "payables:write")),
+    ],
+) -> dict[str, object]:
+    async def review() -> tuple[str, dict[str, object]]:
+        item = await payables.review_fiscal_document(session, context, data)
+        return str(item.id), item.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="payables.review_from_document",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="payable.document_reviewed",
+        entity_type="payable",
+        callback=review,
     )
 
 

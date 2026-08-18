@@ -1295,6 +1295,31 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /payables/from-document/review:
+    post:
+      operationId: reviewPayableFromDocument
+      summary: Enlazar y revisar una compra cargada desde el SRI
+      security:
+        - oauth2: ["payables:extract", "payables:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PayableDocumentReviewInput"
+      responses:
+        "201":
+          description: Compra enlazada, clasificada y actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payable"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /payables/{payableId}/schedule:
     post:
       operationId: scheduleSupplierPayment
@@ -2689,6 +2714,38 @@ components:
           enum: [TRANSFER, CHECK, CASH, CARD, OTHER, null]
         paymentReference:
           type: [string, "null"]
+    PayableDocumentReviewInput:
+      type: object
+      additionalProperties: false
+      required: [documentId, taxClassification, paymentState]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        taxClassification:
+          type: string
+          enum: [DEDUCTIBLE_CONFIRMED, NON_DEDUCTIBLE]
+        analyticValueIds:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            format: uuid
+        paymentState:
+          type: string
+          enum: [PAID, SCHEDULED, UNCONFIRMED, KEEP_EXISTING]
+        paymentDate:
+          type: [string, "null"]
+          format: date
+        paymentMethod:
+          type: [string, "null"]
+          enum: [TRANSFER, CHECK, CASH, CARD, OTHER, null]
+        paymentReference:
+          type: [string, "null"]
+          maxLength: 300
+        scheduledDate:
+          type: [string, "null"]
+          format: date
     SupplierPaymentInput:
       type: object
       additionalProperties: false
@@ -2760,7 +2817,7 @@ components:
           type: string
           format: date
         dueDate:
-          type: string
+          type: [string, "null"]
           format: date
         total:
           $ref: "#/components/schemas/PositiveDecimal"
