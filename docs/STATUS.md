@@ -20,7 +20,7 @@ alcance y las decisiones.
   Playwright de factura en escritorio/móvil con axe; lint y build están
   verdes. Dos revisiones independientes dieron GO. PR `#43` quedó en `main`
   como `800c043`; CI, despliegue Coolify, salud pública y contrato OpenAPI
-  terminaron bien.
+  terminaron bien. `main` y `release` quedaron alineadas en el mismo corte.
 
 - Identidad del proveedor visible en el RIDE publicada en `main`: 2026-08-20
   `America/Guayaquil`. Las facturas y notas de crédito nuevas muestran en
