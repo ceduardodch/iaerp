@@ -299,6 +299,10 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 .erp-button-secondary:hover { border-color: var(--forest); background: white; }
 .erp-button-ghost { min-height: 32px; padding: .35rem .55rem; color: var(--forest); background: transparent; }
 .erp-button-ghost:hover { background: #e8eddf; }
+/* 44x44 es el área táctil mínima que verifica wcag-audit (2.5.5 Target Size);
+   el icono se dibuja a 18px pero el blanco alrededor cuenta como objetivo. */
+.erp-button-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0; color: var(--forest); border-color: transparent; background: transparent; }
+.erp-button-icon:hover:not(:disabled) { border-color: #bdb9ad; background: #e8eddf; }
 .erp-button-danger { color: white; background: var(--danger); }
 .erp-button-danger:hover { background: #7e2119; }
 .erp-status { display: inline-flex; align-items: center; min-height: 28px; padding: .3rem .55rem; border-radius: 99px; color: var(--muted); background: #e7e5dd; font-size: .66rem; font-weight: 700; white-space: nowrap; }

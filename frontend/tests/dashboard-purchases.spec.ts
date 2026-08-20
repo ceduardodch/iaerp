@@ -568,3 +568,29 @@ test('Compras permite preparar un reparto manual antes de confirmar', async ({ p
   await page.getByRole('button', { name: 'Revisar reparto' }).click()
   await expect(page.getByText('Reparto manual listo para confirmar')).toBeVisible()
 })
+
+test('el panel de revisión masiva no desborda a 400% de zoom', async ({ page }) => {
+  // La auditoría WCAG cubre reflow (1.4.10) pero solo sobre el CRM, por eso
+  // este panel se rompía sin que nadie lo notara: las columnas usaban un
+  // mínimo fijo que no puede encogerse y el texto salía de la tarjeta.
+  await page.route('**/api/v1/payables', (route) => route.fulfill({ json: [] }))
+
+  await navigateToSection(page, 'Compras')
+  await page.getByRole('button', { name: 'Pendientes SRI (2)' }).click()
+  await page.getByRole('checkbox', { name: 'Seleccionar los 2 comprobantes visibles' }).check()
+  await page.getByRole('button', { name: 'Revisar selección' }).click()
+  await expect(page.getByLabel('Revisión masiva de 2 compras SRI')).toBeVisible()
+
+  // 320x480 equivale a 400% de zoom sobre una pantalla de 1280.
+  await page.setViewportSize({ width: 320, height: 480 })
+
+  const desborda = await page.evaluate(() => document.body.scrollWidth > window.innerWidth)
+  expect(desborda).toBe(false)
+
+  // Y que ninguna tarjeta de opción se salga de su contenedor.
+  const opcionesFuera = await page.evaluate(() => {
+    const grupos = [...document.querySelectorAll<HTMLElement>('.purchase-review-options')]
+    return grupos.filter((grupo) => grupo.scrollWidth > grupo.clientWidth + 1).length
+  })
+  expect(opcionesFuera).toBe(0)
+})

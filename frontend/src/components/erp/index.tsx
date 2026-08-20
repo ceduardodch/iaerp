@@ -5,7 +5,8 @@ import type {
   ReactNode,
 } from 'react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
+/** `icon` es un botón cuadrado que solo lleva un icono; exige `aria-label`. */
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'icon'
 
 type ErpButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant
