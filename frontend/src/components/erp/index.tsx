@@ -91,7 +91,8 @@ export function ErpDataTable<T>({
     className?: string
   }>
   rows: readonly T[]
-  rowKey: (row: T) => string
+  /** Recibe el índice porque hay listados sin identificador estable. */
+  rowKey: (row: T, index: number) => string
   emptyState?: ReactNode
   className?: string
 }) {
@@ -109,8 +110,8 @@ export function ErpDataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={rowKey(row)}>
+          {rows.map((row, index) => (
+            <tr key={rowKey(row, index)}>
               {columns.map((column, index) => (
                 <td key={index} className={column.className}>
                   {column.cell(row)}

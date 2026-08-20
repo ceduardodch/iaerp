@@ -13,7 +13,7 @@ import {
   type TaxOwnDocumentsResult,
   type TaxPeriod,
 } from '../../api'
-import { ErpButton, ErpEmptyState, ErpPageHeader, ErpPanel, ErpStatusBadge } from '../erp'
+import { ErpButton, ErpDataTable, ErpEmptyState, ErpPageHeader, ErpPanel, ErpStatusBadge } from '../erp'
 import './TaxPage.css'
 
 const MONTHS = [
@@ -459,48 +459,32 @@ export function TaxPage({ token }: { token: string }) {
                 .join(' · ') || 'Sin comprobantes reconocidos.'}
               {bulkResult.errors > 0 ? ` · ${bulkResult.errors} con problema` : ''}
             </p>
-            <div className="table-wrap" tabIndex={0} aria-label="Detalle de la carga">
-              <table className="erp-responsive-table">
-                <thead>
-                  <tr>
-                    <th>Archivo</th><th>Tipo</th><th>Sentido</th>
-                    <th>Emisión</th><th>Periodo</th><th>Contraparte</th>
-                    <th>Total</th><th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bulkResult.items.map((item, index) => (
-                    <tr key={`${item.filename}-${item.accessKey ?? index}`}>
-                      <td>
-                        {item.filename}
+            <ErpDataTable
+          ariaLabel="Detalle de la carga"
+          rows={bulkResult.items}
+          rowKey={(item, index) => `${item.filename}-${item.accessKey ?? index}`}
+          columns={[
+            { header: 'Archivo', cell: (item) => (<>{item.filename}
                         {item.sourceArchive ? (
                           <small> · en {item.sourceArchive}</small>
-                        ) : null}
-                      </td>
-                      <td>{item.docType ?? '—'}</td>
-                      <td>{item.direction === 'EMITIDO' ? '↑ Emitido' : item.direction === 'RECIBIDO' ? '↓ Recibido' : '—'}</td>
-                      <td>{item.issueDate ?? '—'}</td>
-                      <td>
-                        {item.periodYear && item.periodMonth
+                        ) : null}</>) },
+            { header: 'Tipo', cell: (item) => (<>{item.docType ?? '—'}</>) },
+            { header: 'Sentido', cell: (item) => (<>{item.direction === 'EMITIDO' ? '↑ Emitido' : item.direction === 'RECIBIDO' ? '↓ Recibido' : '—'}</>) },
+            { header: 'Emisión', cell: (item) => (<>{item.issueDate ?? '—'}</>) },
+            { header: 'Periodo', cell: (item) => (<>{item.periodYear && item.periodMonth
                           ? `${monthName(item.periodMonth)} ${item.periodYear}`
-                          : '—'}
-                      </td>
-                      <td>{item.counterpartyName ?? item.counterpartyIdentification ?? '—'}</td>
-                      <td className="tax-value">{item.total ?? '—'}</td>
-                      <td>
-                        {item.status === 'ERROR' ? (
+                          : '—'}</>) },
+            { header: 'Contraparte', cell: (item) => (<>{item.counterpartyName ?? item.counterpartyIdentification ?? '—'}</>) },
+            { header: 'Total', cell: (item) => (<>{item.total ?? '—'}</>) },
+            { header: 'Estado', cell: (item) => (<>{item.status === 'ERROR' ? (
                           <ErpStatusBadge tone="danger">{item.error ?? 'Error'}</ErpStatusBadge>
                         ) : item.status === 'DUPLICADO' ? (
                           <ErpStatusBadge tone="neutral">Ya cargado · se validará de nuevo</ErpStatusBadge>
                         ) : (
                           <ErpStatusBadge tone="success">Listo</ErpStatusBadge>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        )}</>) },
+          ]}
+        />
 
             {applyBulk.data ? (
               <p className="tax-ingest-result" role="status">
@@ -737,68 +721,44 @@ export function TaxPage({ token }: { token: string }) {
                 )}
               </div>
             ) : null}
-            <div className="table-wrap" tabIndex={0} aria-label="Campos para copiar">
-              <table className="erp-responsive-table">
-                <thead>
-                  <tr>
-                    <th>Campo</th>
-                    <th>Concepto</th>
-                    <th>Valor</th>
-                    <th>Respaldo</th>
-                    <th>Acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pasteFields.map((field) => (
-                    <tr key={field.fieldCode}>
-                      <td><strong>{field.fieldCode}</strong></td>
-                      <td>
-                        {field.label}
+            <ErpDataTable
+          ariaLabel="Campos para copiar"
+          rows={pasteFields}
+          rowKey={(field) => field.fieldCode}
+          columns={[
+            { header: 'Campo', cell: (field) => (<><strong>{field.fieldCode}</strong></>) },
+            { header: 'Concepto', cell: (field) => (<>{field.label}
                         {field.needsReview ? (
                           <small className="tax-review"> · confirmar código</small>
-                        ) : null}
-                      </td>
-                      <td className="tax-value">{field.value}</td>
-                      <td>{field.documentCount} doc.</td>
-                      <td>
-                        <ErpButton
+                        ) : null}</>) },
+            { header: 'Valor', cell: (field) => (<>{field.value}</>) },
+            { header: 'Respaldo', cell: (field) => (<>{field.documentCount} doc.</>) },
+            { header: 'Acción', cell: (field) => (<><ErpButton
                           variant="ghost"
                           aria-label={`Copiar campo ${field.fieldCode}`}
                           onClick={() => void copyValue(field.fieldCode, field.value)}
                         >
                           {copiedField === field.fieldCode ? 'Copiado' : 'Copiar'}
-                        </ErpButton>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        </ErpButton></>) },
+          ]}
+        />
 
             {controlFields.length > 0 ? (
               <>
                 <p className="tax-subhead">Solo control (el SRI los calcula)</p>
-                <div className="table-wrap" tabIndex={0} aria-label="Campos de control">
-                  <table className="erp-responsive-table">
-                    <thead>
-                      <tr><th>Campo</th><th>Concepto</th><th>Valor</th></tr>
-                    </thead>
-                    <tbody>
-                      {controlFields.map((field) => (
-                        <tr key={field.fieldCode}>
-                          <td>{field.fieldCode}</td>
-                          <td>
-                            {field.label}
+                <ErpDataTable
+          ariaLabel="Campos de control"
+          rows={controlFields}
+          rowKey={(field) => field.fieldCode}
+          columns={[
+            { header: 'Campo', cell: (field) => (<>{field.fieldCode}</>) },
+            { header: 'Concepto', cell: (field) => (<>{field.label}
                             {field.needsReview ? (
                               <small className="tax-review"> · confirmar código</small>
-                            ) : null}
-                          </td>
-                          <td className="tax-value">{field.value}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                            ) : null}</>) },
+            { header: 'Valor', cell: (field) => (<>{field.value}</>) },
+          ]}
+        />
               </>
             ) : null}
           </ErpPanel>

@@ -1011,7 +1011,19 @@ function ContractsPage({
       <ErpPageHeader eyebrow="Comercial" title="Contratos" subtitle="PDF, firma, vigencia y cobros en un solo lugar. Las cláusulas se preparan fuera de IAERP." actions={<ErpButton variant="primary" onClick={() => { setNewPartyId(partyId); setCreating(true) }}>Nuevo contrato</ErpButton>} />
       <ErpToolbar ariaLabel="Filtros de contratos"><label>Cliente<select value={partyId} onChange={(event) => setPartyId(event.target.value)}><option value="">Todos los clientes</option>{customers.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></label></ErpToolbar>
       <ErpPanel title="Listado comercial" count={contractsQuery.data?.length ?? 0}>
-        <div className="table-wrap" tabIndex={0} aria-label="Listado de contratos"><table className="erp-responsive-table"><thead><tr><th>Contrato</th><th>Cliente</th><th>Tipo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{(contractsQuery.data ?? []).map((contract) => <tr key={contract.id}><td><strong>{contract.contractNumber}</strong><small>{contract.title}</small></td><td>{parties.find((party) => party.id === contract.partyId)?.name ?? 'Cliente'}</td><td>{contract.serviceType === 'AWS_MONTHLY' ? 'AWS' : contract.serviceType === 'FIXED_MONTHLY' ? 'Mensual fijo' : contract.serviceType === 'MILESTONE' ? 'Hitos' : 'Accesorio'}</td><td><ErpStatusBadge tone={contract.status === 'SIGNED' || contract.status === 'ACTIVE' ? 'success' : 'warning'}>{contract.status === 'ACTIVE' ? 'Activo' : contract.status === 'SIGNED' ? 'Firmado' : contract.status === 'PENDING_SIGNATURE' ? 'Esperando firma' : 'Borrador'}</ErpStatusBadge></td><td><ErpActionCell><ErpButton variant="ghost" onClick={() => setSelected(contract)}>Abrir</ErpButton></ErpActionCell></td></tr>)}</tbody></table>{!contractsQuery.isPending && (contractsQuery.data ?? []).length === 0 ? <ErpEmptyState title="No hay contratos" description="Crea un contrato para un cliente y agrega su primera versión." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} /> : null}</div>
+        <ErpDataTable
+          ariaLabel="Listado de contratos"
+          rows={contractsQuery.data ?? []}
+          rowKey={(contract) => contract.id}
+          emptyState={!contractsQuery.isPending ? <ErpEmptyState title="No hay contratos" description="Crea un contrato para un cliente y agrega su primera versión." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nuevo contrato</ErpButton>} /> : null}
+          columns={[
+            { header: 'Contrato', cell: (contract) => <><strong>{contract.contractNumber}</strong><small>{contract.title}</small></> },
+            { header: 'Cliente', cell: (contract) => parties.find((party) => party.id === contract.partyId)?.name ?? 'Cliente' },
+            { header: 'Tipo', cell: (contract) => contract.serviceType === 'AWS_MONTHLY' ? 'AWS' : contract.serviceType === 'FIXED_MONTHLY' ? 'Mensual fijo' : contract.serviceType === 'MILESTONE' ? 'Hitos' : 'Accesorio' },
+            { header: 'Estado', cell: (contract) => <ErpStatusBadge tone={contract.status === 'SIGNED' || contract.status === 'ACTIVE' ? 'success' : 'warning'}>{contract.status === 'ACTIVE' ? 'Activo' : contract.status === 'SIGNED' ? 'Firmado' : contract.status === 'PENDING_SIGNATURE' ? 'Esperando firma' : 'Borrador'}</ErpStatusBadge> },
+            { header: 'Acciones', cell: (contract) => <ErpActionCell><ErpButton variant="ghost" onClick={() => setSelected(contract)}>Abrir</ErpButton></ErpActionCell> },
+          ]}
+        />
         {contractsQuery.error ? <p className="form-error" role="alert">{contractsQuery.error.message}</p> : null}
       </ErpPanel>
     </>
@@ -1249,22 +1261,18 @@ function TaxCategoriesPage({
       />
       <section className="split-layout erp-list-only">
         <ErpPanel title="Tarifas vigentes" count={taxes.length}>
-          <div className="table-wrap" tabIndex={0} aria-label="Listado de categorías tributarias">
-            <table className="erp-responsive-table">
-              <thead><tr><th>Código SRI</th><th>Nombre</th><th>Tarifa</th><th>Vigente desde</th></tr></thead>
-              <tbody>
-                {taxes.map((tax) => (
-                  <tr key={tax.id}>
-                    <td>{tax.sriCode}</td>
-                    <td><strong>{tax.name}</strong></td>
-                    <td>{formatPercent(tax.rate)}</td>
-                    <td>{new Date(`${tax.validFrom}T00:00:00`).toLocaleDateString('es-EC')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {taxes.length === 0 ? <ErpEmptyState title="No hay categorías tributarias" description="Registra la primera tarifa para habilitar la creación de productos." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nueva categoría</ErpButton>} /> : null}
-          </div>
+          <ErpDataTable
+            ariaLabel="Listado de categorías tributarias"
+            rows={taxes}
+            rowKey={(tax) => tax.id}
+            emptyState={<ErpEmptyState title="No hay categorías tributarias" description="Registra la primera tarifa para habilitar la creación de productos." action={<ErpButton variant="primary" onClick={() => setCreating(true)}>Nueva categoría</ErpButton>} />}
+            columns={[
+              { header: 'Código SRI', cell: (tax) => tax.sriCode },
+              { header: 'Nombre', cell: (tax) => <strong>{tax.name}</strong> },
+              { header: 'Tarifa', cell: (tax) => formatPercent(tax.rate) },
+              { header: 'Vigente desde', cell: (tax) => new Date(`${tax.validFrom}T00:00:00`).toLocaleDateString('es-EC') },
+            ]}
+          />
         </ErpPanel>
       </section>
     </>
@@ -2343,34 +2351,20 @@ function InvoicesPage({
                 <span className="month-group-title">{new Date(`${month}-01T12:00:00`).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })}</span>
                 <span className="month-group-summary">{monthInvoices.length} factura{monthInvoices.length === 1 ? '' : 's'} · ${formatAmount(monthInvoices.reduce((total, invoice) => total + Number(invoice.total), 0))}</span>
               </summary>
-            <div className="table-wrap" tabIndex={0} aria-label={`Facturas de ${month}`}>
-              <table className="erp-responsive-table">
-              <thead>
-                <tr>
-                  <th>Número</th>
-                  <th>Cliente</th>
-                  <th>Fecha</th>
-                  <th>Estado</th>
-                  <th>Cobro</th>
-                  <th>Retenciones</th>
-                  <th>Clasificaciones</th>
-                  <th>Total</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {monthInvoices.map((invoice) => (
-                  <tr key={invoice.id}>
-                    <td><strong>{invoice.sequential}</strong></td>
-                    <td>{partiesById.get(invoice.partyId)?.name ?? '—'}</td>
-                    <td>{invoice.issueDate}</td>
-                    <td><InvoiceStatusBadge status={invoice.status} /></td>
-                    <td><CollectionStatusBadge status={invoice.collectionStatus} /></td>
-                    <td><ErpStatusBadge tone={Number(invoice.retentionTotal) > 0 ? 'success' : 'neutral'}>{Number(invoice.retentionTotal) > 0 ? `$${formatAmount(invoice.retentionTotal)}` : 'Sin retención'}</ErpStatusBadge></td>
-                    <td>{(invoice.analyticAssignments ?? []).length ? (invoice.analyticAssignments ?? []).map((item) => <small key={item.classificationId}>{item.classificationName}: {item.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td>
-                    <td>${formatAmount(invoice.total)}</td>
-                    <td>
-                      <ErpActionCell>
+            <ErpDataTable
+          ariaLabel={`Facturas de ${month}`}
+          rows={monthInvoices}
+          rowKey={(invoice) => invoice.id}
+          columns={[
+            { header: 'Número', cell: (invoice) => (<><strong>{invoice.sequential}</strong></>) },
+            { header: 'Cliente', cell: (invoice) => (<>{partiesById.get(invoice.partyId)?.name ?? '—'}</>) },
+            { header: 'Fecha', cell: (invoice) => (<>{invoice.issueDate}</>) },
+            { header: 'Estado', cell: (invoice) => (<><InvoiceStatusBadge status={invoice.status} /></>) },
+            { header: 'Cobro', cell: (invoice) => (<><CollectionStatusBadge status={invoice.collectionStatus} /></>) },
+            { header: 'Retenciones', cell: (invoice) => (<><ErpStatusBadge tone={Number(invoice.retentionTotal) > 0 ? 'success' : 'neutral'}>{Number(invoice.retentionTotal) > 0 ? `$${formatAmount(invoice.retentionTotal)}` : 'Sin retención'}</ErpStatusBadge></>) },
+            { header: 'Clasificaciones', cell: (invoice) => (<>{(invoice.analyticAssignments ?? []).length ? (invoice.analyticAssignments ?? []).map((item) => <small key={item.classificationId}>{item.classificationName}: {item.path.map((part) => part.name).join(' / ')}</small>) : '—'}</>) },
+            { header: 'Total', cell: (invoice) => (<>${formatAmount(invoice.total)}</>) },
+            { header: 'Acciones', cell: (invoice) => (<><ErpActionCell>
                         <ErpButton
                           variant="ghost"
                           aria-label={`Ver factura ${invoice.sequential}`}
@@ -2385,13 +2379,9 @@ function InvoicesPage({
                             Archivar
                           </ErpButton>
                         ) : null}
-                      </ErpActionCell>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              </table>
-            </div>
+                      </ErpActionCell></>) },
+          ]}
+        />
             </details>)}
             {invoices.length === 0 ? (
               <ErpEmptyState
@@ -2578,23 +2568,19 @@ function BatchRetentionImportForm({
             <h3>Resultado de la revisión</h3>
             <span>{matched.length} listo{matched.length === 1 ? '' : 's'} · {preview.items.length - matched.length} a revisar</span>
           </div>
-          <div className="table-wrap" tabIndex={0} aria-label="Resultado de XML de retención">
-            <table className="erp-responsive-table">
-              <thead><tr><th>Archivo</th><th>Factura</th><th>Emisión</th><th>Retención</th><th>Valor</th><th>Resultado</th></tr></thead>
-              <tbody>
-                {preview.items.map((item) => (
-                  <tr key={item.fileName}>
-                    <td>{item.fileName}</td>
-                    <td>{item.invoiceSequential ?? item.supportingDocument ?? '—'}</td>
-                    <td>{item.issueDate ?? '—'}</td>
-                    <td>{item.authorizationNumber ?? '—'}</td>
-                    <td>${formatAmount(item.total)}</td>
-                    <td><ErpStatusBadge tone={item.status === 'MATCHED' ? 'success' : 'warning'}>{item.detail}</ErpStatusBadge></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ErpDataTable
+          ariaLabel="Resultado de XML de retención"
+          rows={preview.items}
+          rowKey={(item) => item.fileName}
+          columns={[
+            { header: 'Archivo', cell: (item) => (<>{item.fileName}</>) },
+            { header: 'Factura', cell: (item) => (<>{item.invoiceSequential ?? item.supportingDocument ?? '—'}</>) },
+            { header: 'Emisión', cell: (item) => (<>{item.issueDate ?? '—'}</>) },
+            { header: 'Retención', cell: (item) => (<>{item.authorizationNumber ?? '—'}</>) },
+            { header: 'Valor', cell: (item) => (<>${formatAmount(item.total)}</>) },
+            { header: 'Resultado', cell: (item) => (<><ErpStatusBadge tone={item.status === 'MATCHED' ? 'success' : 'warning'}>{item.detail}</ErpStatusBadge></>) },
+          ]}
+        />
           {registerBatch.error ? <p className="form-error" role="alert">{registerBatch.error.message}</p> : null}
           {registered ? <p className="fine-print">Las retenciones mostradas como registradas ya redujeron el saldo de su factura. Las restantes no se modificaron.</p> : null}
           {!registered ? (
@@ -2706,80 +2692,64 @@ function BankStatementImportForm({
           </div>
           <p className="fine-print">Cuenta {preview.accountMasked ?? 'enmascarada'} · período {preview.period}. Se leyeron {preview.totalRows} movimientos: {preview.creditRows} abonos y {preview.debitRows ?? preview.ignoredDebitCount} débitos del período. Quedaron {preview.unmatchedCreditCount} abonos y {preview.unmatchedDebitCount ?? preview.ignoredDebitCount} débitos sin cruce.</p>
           {preview.matches.length > 0 ? (
-            <div className="table-wrap" tabIndex={0} aria-label="Coincidencias del estado bancario">
-              <table className="erp-responsive-table">
-                <thead><tr><th>Fecha</th><th>Referencia bancaria</th><th>Factura</th><th>Original</th><th>Retenciones</th><th>Abono</th><th>Resultado</th></tr></thead>
-                <tbody>
-                  {preview.matches.map((match) => (
-                    <tr key={match.transactionId}>
-                      <td>{match.paymentDate}</td>
-                      <td>{match.reference}</td>
-                      <td>{match.invoiceSequential}</td>
-                      <td>${formatAmount(match.originalAmount)}</td>
-                      <td>${formatAmount(match.retentionTotal)}</td>
-                      <td>${formatAmount(match.amount)}</td>
-                      <td><ErpStatusBadge tone="success">{match.detail}</ErpStatusBadge></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ErpDataTable
+          ariaLabel="Coincidencias del estado bancario"
+          rows={preview.matches}
+          rowKey={(match) => match.transactionId}
+          columns={[
+            { header: 'Fecha', cell: (match) => (<>{match.paymentDate}</>) },
+            { header: 'Referencia bancaria', cell: (match) => (<>{match.reference}</>) },
+            { header: 'Factura', cell: (match) => (<>{match.invoiceSequential}</>) },
+            { header: 'Original', cell: (match) => (<>${formatAmount(match.originalAmount)}</>) },
+            { header: 'Retenciones', cell: (match) => (<>${formatAmount(match.retentionTotal)}</>) },
+            { header: 'Abono', cell: (match) => (<>${formatAmount(match.amount)}</>) },
+            { header: 'Resultado', cell: (match) => (<><ErpStatusBadge tone="success">{match.detail}</ErpStatusBadge></>) },
+          ]}
+        />
           ) : null}
           {preview.manualCorrections.length > 0 ? (
-            <div className="table-wrap" tabIndex={0} aria-label="Correcciones de cobros manuales">
-              <table className="erp-responsive-table">
-                <thead><tr><th>Fecha banco</th><th>Referencia</th><th>Factura correcta</th><th>Factura manual</th><th>Valor</th><th>Resultado</th></tr></thead>
-                <tbody>
-                  {preview.manualCorrections.map((correction) => (
-                    <tr key={`${correction.transactionId}-${correction.manualMovementId}`}>
-                      <td>{correction.paymentDate}</td>
-                      <td>{correction.reference}</td>
-                      <td>{correction.targetInvoiceSequential}</td>
-                      <td>{correction.manualInvoiceSequential}</td>
-                      <td>${formatAmount(correction.amount)}</td>
-                      <td><ErpStatusBadge tone={correction.status === 'CORRECTED' ? 'success' : 'warning'}>{correction.detail}</ErpStatusBadge></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ErpDataTable
+          ariaLabel="Correcciones de cobros manuales"
+          rows={preview.manualCorrections}
+          rowKey={(correction) => `${correction.transactionId}-${correction.manualMovementId}`}
+          columns={[
+            { header: 'Fecha banco', cell: (correction) => (<>{correction.paymentDate}</>) },
+            { header: 'Referencia', cell: (correction) => (<>{correction.reference}</>) },
+            { header: 'Factura correcta', cell: (correction) => (<>{correction.targetInvoiceSequential}</>) },
+            { header: 'Factura manual', cell: (correction) => (<>{correction.manualInvoiceSequential}</>) },
+            { header: 'Valor', cell: (correction) => (<>${formatAmount(correction.amount)}</>) },
+            { header: 'Resultado', cell: (correction) => (<><ErpStatusBadge tone={correction.status === 'CORRECTED' ? 'success' : 'warning'}>{correction.detail}</ErpStatusBadge></>) },
+          ]}
+        />
           ) : null}
           {(preview.debitMatches ?? []).length > 0 ? (
-            <div className="table-wrap" tabIndex={0} aria-label="Pagos encontrados en el estado bancario">
-              <table className="erp-responsive-table">
-                <thead><tr><th>Fecha</th><th>Débito</th><th>Proveedor</th><th>Documento</th><th>Aplicación</th><th>Resultado</th></tr></thead>
-                <tbody>
-                  {(preview.debitMatches ?? []).map((match) => (
-                    <tr key={`${match.transactionId}-${match.payableId}`}>
-                      <td>{match.paymentDate}</td>
-                      <td>${formatAmount(match.allocatedAmount)}</td>
-                      <td>{match.supplierName ?? 'Sin proveedor'}</td>
-                      <td>{match.documentNumber ?? 'Gasto directo'}</td>
-                      <td>{match.linksExistingPayment ? 'Enlazar evidencia' : 'Registrar pago'}</td>
-                      <td><ErpStatusBadge tone="success">{match.detail}</ErpStatusBadge></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ErpDataTable
+          ariaLabel="Pagos encontrados en el estado bancario"
+          rows={(preview.debitMatches ?? [])}
+          rowKey={(match) => `${match.transactionId}-${match.payableId}`}
+          columns={[
+            { header: 'Fecha', cell: (match) => (<>{match.paymentDate}</>) },
+            { header: 'Débito', cell: (match) => (<>${formatAmount(match.allocatedAmount)}</>) },
+            { header: 'Proveedor', cell: (match) => (<>{match.supplierName ?? 'Sin proveedor'}</>) },
+            { header: 'Documento', cell: (match) => (<>{match.documentNumber ?? 'Gasto directo'}</>) },
+            { header: 'Aplicación', cell: (match) => (<>{match.linksExistingPayment ? 'Enlazar evidencia' : 'Registrar pago'}</>) },
+            { header: 'Resultado', cell: (match) => (<><ErpStatusBadge tone="success">{match.detail}</ErpStatusBadge></>) },
+          ]}
+        />
           ) : null}
           {(preview.debitSuggestions ?? []).length > 0 ? (
-            <div className="table-wrap" tabIndex={0} aria-label="Débitos pendientes de revisión">
-              <table className="erp-responsive-table">
-                <thead><tr><th>Fecha</th><th>Descripción</th><th>Valor</th><th>Regla</th><th>Resultado</th></tr></thead>
-                <tbody>
-                  {(preview.debitSuggestions ?? []).map((suggestion) => (
-                    <tr key={suggestion.transactionId}>
-                      <td>{suggestion.paymentDate}</td>
-                      <td>{suggestion.description}</td>
-                      <td>${formatAmount(suggestion.amount)}</td>
-                      <td>{suggestion.ruleName ?? 'Sin regla'}</td>
-                      <td><ErpStatusBadge tone="warning">{suggestion.detail}</ErpStatusBadge></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ErpDataTable
+          ariaLabel="Débitos pendientes de revisión"
+          rows={(preview.debitSuggestions ?? [])}
+          rowKey={(suggestion) => suggestion.transactionId}
+          columns={[
+            { header: 'Fecha', cell: (suggestion) => (<>{suggestion.paymentDate}</>) },
+            { header: 'Descripción', cell: (suggestion) => (<>{suggestion.description}</>) },
+            { header: 'Valor', cell: (suggestion) => (<>${formatAmount(suggestion.amount)}</>) },
+            { header: 'Regla', cell: (suggestion) => (<>{suggestion.ruleName ?? 'Sin regla'}</>) },
+            { header: 'Resultado', cell: (suggestion) => (<><ErpStatusBadge tone="warning">{suggestion.detail}</ErpStatusBadge></>) },
+          ]}
+        />
           ) : null}
           {preview.matches.length === 0 && preview.manualCorrections.length === 0 && (preview.debitMatches ?? []).length === 0 && (preview.debitSuggestions ?? []).length === 0 ? (
             <ErpEmptyState title="Sin coincidencias exactas" description="Los movimientos dudosos no modificaron CxC ni CxP." />
@@ -2827,23 +2797,19 @@ function ReceivableMovementHistory({
       {movementsQuery.error ? <p className="form-error" role="alert">{movementsQuery.error.message}</p> : null}
       {movementsQuery.data ? (
         movementsQuery.data.length > 0 ? (
-          <div className="table-wrap" tabIndex={0} aria-label="Movimientos de la factura">
-            <table className="erp-responsive-table">
-              <thead><tr><th>Fecha</th><th>Tipo</th><th>Valor</th><th>Referencia</th></tr></thead>
-              <tbody>
-                {movementsQuery.data.map((movement) => (
-                  <tr key={movement.id}>
-                    <td>{movement.effectiveDate
+          <ErpDataTable
+          ariaLabel="Movimientos de la factura"
+          rows={movementsQuery.data}
+          rowKey={(movement) => movement.id}
+          columns={[
+            { header: 'Fecha', cell: (movement) => (<>{movement.effectiveDate
                       ? movement.effectiveDate.split('-').reverse().join('/')
-                      : new Date(movement.createdAt).toLocaleString('es-EC')}</td>
-                    <td><ErpStatusBadge tone={movement.movementType === 'RETENTION' ? 'success' : 'neutral'}>{movementLabels[movement.movementType]}</ErpStatusBadge></td>
-                    <td>${formatAmount(movement.amount)}</td>
-                    <td>{movement.supportReference ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      : new Date(movement.createdAt).toLocaleString('es-EC')}</>) },
+            { header: 'Tipo', cell: (movement) => (<><ErpStatusBadge tone={movement.movementType === 'RETENTION' ? 'success' : 'neutral'}>{movementLabels[movement.movementType]}</ErpStatusBadge></>) },
+            { header: 'Valor', cell: (movement) => (<>${formatAmount(movement.amount)}</>) },
+            { header: 'Referencia', cell: (movement) => (<>{movement.supportReference ?? '—'}</>) },
+          ]}
+        />
         ) : <ErpEmptyState title="Sin movimientos" description="Todavía no se ha registrado ningún cobro, retención o descuento." />
       ) : null}
       <div className="erp-form-actions"><ErpButton variant="secondary" onClick={onClose}>Volver a Cartera</ErpButton></div>
@@ -3755,32 +3721,23 @@ function ReceivablesPage({
       <CollectionsBreakdownStrip breakdown={collectionsQuery.data} />
       <section className="split-layout erp-list-only">
         <ErpPanel title="Cuentas por cobrar" count={receivables.length}>
-          <div className="table-wrap" tabIndex={0} aria-label="Listado de cuentas por cobrar">
-            <table className="erp-responsive-table">
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Factura</th>
-                  <th>Monto original</th>
-                  <th>Saldo</th>
-                  <th>Estado</th>
-                  <th>Días desde factura</th>
-                  <th>Aging</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {receivables.map((receivable) => (
-                  <tr key={receivable.id}>
-                    <td><strong>{partiesById.get(receivable.partyId)?.name ?? receivable.partyId}</strong></td>
-                    <td>{receivable.invoiceSequential ?? '—'}</td>
-                    <td>${formatAmount(receivable.originalAmount)}</td>
-                    <td>${formatAmount(receivable.openAmount)}</td>
-                    <td><ReceivableStatusBadge status={receivable.status} /></td>
-                    <td>{receivable.daysSinceInvoice === undefined || receivable.daysSinceInvoice === null ? '—' : `${receivable.daysSinceInvoice} días`}</td>
-                    <td><AgingChip aging={receivable.aging} status={receivable.status} /></td>
-                    <td>
-                      {/* Iconos y no texto: cuatro acciones escritas empujaban la
+          <ErpDataTable
+            ariaLabel="Listado de cuentas por cobrar"
+            rows={receivables}
+            rowKey={(receivable) => receivable.id}
+            emptyState={<ErpEmptyState
+                title="No hay cuentas por cobrar"
+                description="La cartera se genera automáticamente al autorizar una factura."
+              />}
+            columns={[
+              { header: 'Cliente', cell: (receivable) => (<><strong>{partiesById.get(receivable.partyId)?.name ?? receivable.partyId}</strong></>) },
+              { header: 'Factura', cell: (receivable) => (<>{receivable.invoiceSequential ?? '—'}</>) },
+              { header: 'Monto original', cell: (receivable) => (<>${formatAmount(receivable.originalAmount)}</>) },
+              { header: 'Saldo', cell: (receivable) => (<>${formatAmount(receivable.openAmount)}</>) },
+              { header: 'Estado', cell: (receivable) => (<><ReceivableStatusBadge status={receivable.status} /></>) },
+              { header: 'Días desde factura', cell: (receivable) => (<>{receivable.daysSinceInvoice === undefined || receivable.daysSinceInvoice === null ? '—' : `${receivable.daysSinceInvoice} días`}</>) },
+              { header: 'Aging', cell: (receivable) => (<><AgingChip aging={receivable.aging} status={receivable.status} /></>) },
+              { header: 'Acciones', cell: (receivable) => (<>{/* Iconos y no texto: cuatro acciones escritas empujaban la
                           tabla a lo ancho y tapaban el saldo. El nombre completo
                           sigue disponible en aria-label y en el tooltip. */}
                       <ErpActionCell>
@@ -3832,19 +3789,9 @@ function ReceivablesPage({
                         >
                           <CalendarClock size={16} aria-hidden="true" />
                         </ErpButton>
-                      </ErpActionCell>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {receivables.length === 0 ? (
-              <ErpEmptyState
-                title="No hay cuentas por cobrar"
-                description="La cartera se genera automáticamente al autorizar una factura."
-              />
-            ) : null}
-          </div>
+                      </ErpActionCell></>) },
+            ]}
+          />
         </ErpPanel>
       </section>
     </>
