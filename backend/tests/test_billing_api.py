@@ -157,6 +157,53 @@ async def test_create_invoice_draft_recalculates_totals_ignoring_client_amounts(
     assert get_response.json() == body
 
 
+async def test_establishment_address_cannot_change_while_invoice_is_in_sri(client):
+    setup_token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(client, setup_token, key_prefix="address-lock")
+    invoice_token = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["invoices:write", "invoices:read"]
+    )
+    created = await client.post(
+        "/api/v1/invoices",
+        headers=auth(invoice_token, "address-lock-invoice-create"),
+        json=_invoice_payload(masters),
+    )
+    assert created.status_code == 201, created.text
+
+    async with SessionFactory() as session:
+        document = await session.get(SalesDocument, uuid.UUID(created.json()["id"]))
+        assert document is not None
+        document.status = "SIGNED"
+        await session.commit()
+
+    blocked = await client.put(
+        f"/api/v1/establishments/{masters['establishment_id']}",
+        headers=auth(setup_token, "address-lock-update-blocked"),
+        json={"name": "Matriz", "address": "Dirección B"},
+    )
+    assert blocked.status_code == 409
+    assert "proceso con el SRI" in blocked.json()["detail"]
+
+    async with SessionFactory() as session:
+        document = await session.get(SalesDocument, uuid.UUID(created.json()["id"]))
+        assert document is not None
+        document.status = "AUTHORIZED"
+        await session.commit()
+
+    updated = await client.put(
+        f"/api/v1/establishments/{masters['establishment_id']}",
+        headers=auth(setup_token, "address-lock-update-terminal"),
+        json={"name": "Matriz", "address": "Dirección B"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["address"] == "Dirección B"
+
+
 async def test_authorized_invoice_email_requires_confirmation_and_attaches_ride_and_xml(
     client, monkeypatch
 ):

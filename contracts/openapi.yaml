@@ -160,6 +160,41 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /establishments/{establishmentId}:
+    put:
+      operationId: updateEstablishment
+      summary: Editar nombre y dirección de un establecimiento del tenant
+      security:
+        - oauth2: ["organization:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: establishmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EstablishmentUpdate"
+      responses:
+        "200":
+          description: Establecimiento actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Establishment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: La dirección no puede cambiar mientras un comprobante del establecimiento está en proceso con el SRI, o la clave idempotente ya se usó con otro contenido
   /organization/fiscal-settings:
     get:
       operationId: getFiscalSettings
@@ -1705,6 +1740,19 @@ components:
           type: string
         address:
           type: string
+    EstablishmentUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, address]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        address:
+          type: string
+          minLength: 1
+          maxLength: 500
     FiscalSettingsInput:
       type: object
       additionalProperties: false

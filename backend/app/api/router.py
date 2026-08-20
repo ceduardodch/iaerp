@@ -56,6 +56,7 @@ from app.schemas.masters import (
     EmissionPointRead,
     EstablishmentCreate,
     EstablishmentRead,
+    EstablishmentUpdate,
     PartyCreate,
     PartyRead,
     ProductCreate,
@@ -520,6 +521,36 @@ async def post_establishment(
         action="establishment.created",
         entity_type="establishment",
         callback=create,
+    )
+
+
+@router.put("/establishments/{establishment_id}", response_model=EstablishmentRead)
+async def put_establishment(
+    establishment_id: uuid.UUID,
+    data: EstablishmentUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        entity = await masters.update_establishment(session, context, establishment_id, data)
+        return (
+            str(entity.id),
+            EstablishmentRead.model_validate(entity).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="establishments.update",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "establishment_id": str(establishment_id),
+            **data.model_dump(mode="json"),
+        },
+        action="establishment.updated",
+        entity_type="establishment",
+        callback=update,
     )
 
 
