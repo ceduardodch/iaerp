@@ -69,6 +69,62 @@ export function ErpToolbar({
 }
 
 /**
+ * Listado tabular estándar.
+ *
+ * El mismo armado —`table-wrap` con `tabIndex` para poder desplazar la tabla
+ * con el teclado, `erp-responsive-table`, cabecera y cuerpo— estaba copiado en
+ * 17 lugares. Cada copia podía olvidarse el `aria-label`, el `scope` de las
+ * cabeceras o el estado vacío, y de hecho varias lo hacían.
+ */
+export function ErpDataTable<T>({
+  ariaLabel,
+  columns,
+  rows,
+  rowKey,
+  emptyState,
+  className = '',
+}: {
+  ariaLabel: string
+  columns: ReadonlyArray<{
+    header: ReactNode
+    cell: (row: T) => ReactNode
+    className?: string
+  }>
+  rows: readonly T[]
+  rowKey: (row: T) => string
+  emptyState?: ReactNode
+  className?: string
+}) {
+  if (!rows.length && emptyState) return <>{emptyState}</>
+  return (
+    <div className="table-wrap" tabIndex={0} aria-label={ariaLabel}>
+      <table className={`erp-responsive-table ${className}`.trim()}>
+        <thead>
+          <tr>
+            {columns.map((column, index) => (
+              <th key={index} scope="col" className={column.className}>
+                {column.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={rowKey(row)}>
+              {columns.map((column, index) => (
+                <td key={index} className={column.className}>
+                  {column.cell(row)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/**
  * Pestañas con la semántica que espera un lector de pantalla.
  *
  * Las pantallas venían pintando botones sueltos: se anunciaban como "botón" en

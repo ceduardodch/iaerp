@@ -68,6 +68,7 @@ import { useAuth } from './auth'
 import {
   ErpActionCell,
   ErpButton,
+  ErpDataTable,
   ErpEmptyState,
   ErpFormPanel,
   ErpPageHeader,
@@ -675,53 +676,11 @@ function PartiesPage({
       </ErpToolbar>
       <section className="split-layout erp-list-only">
         <ErpPanel title="Clientes y proveedores" count={filtered.length}>
-          <div className="table-wrap" tabIndex={0} aria-label="Listado de contactos">
-            <table className="erp-responsive-table">
-              <thead><tr><th>Nombre</th><th>Identificación</th><th>Contacto</th><th>Dirección</th><th>Rol</th><th>Acciones</th></tr></thead>
-              <tbody>
-                {filtered.map((party) => (
-                  <tr key={party.id}>
-                    <td><strong>{party.name}</strong><small>{party.email ?? 'Sin correo'}</small></td>
-                    <td>{party.identificationNumber}</td>
-                    <td>{party.phone ?? 'Sin teléfono'}</td>
-                    <td>{party.address ?? 'Sin dirección'}</td>
-                    <td>
-                      {/* `roles` vacío pintaba una etiqueta gris sin texto. */}
-                      {party.roles.length ? (
-                        <span className="tag">{party.roles.join(' / ')}</span>
-                      ) : (
-                        <span className="fine-print">Sin rol</span>
-                      )}
-                    </td>
-                    <td>
-                      <ErpActionCell>
-                        <ErpButton
-                          variant="icon"
-                          aria-label={`Editar ${party.name}`}
-                          title="Editar"
-                          onClick={() => setEditor(party)}
-                        >
-                          <Pencil size={18} aria-hidden="true" />
-                        </ErpButton>
-                        {party.roles.includes('CUSTOMER') ? (
-                          <ErpButton
-                            variant="icon"
-                            // El botón de texto no tenía nombre accesible; con
-                            // icono se vuelve obligatorio.
-                            aria-label={`Contratos de ${party.name}`}
-                            title="Contratos"
-                            onClick={() => onOpenContracts(party.id)}
-                          >
-                            <FileText size={18} aria-hidden="true" />
-                          </ErpButton>
-                        ) : null}
-                      </ErpActionCell>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {filtered.length === 0 ? (
+          <ErpDataTable
+            ariaLabel="Listado de contactos"
+            rows={filtered}
+            rowKey={(party) => party.id}
+            emptyState={
               <ErpEmptyState
                 title="No hay contactos"
                 description="Crea el primer cliente o proveedor para comenzar."
@@ -731,8 +690,39 @@ function PartiesPage({
                   </ErpButton>
                 }
               />
-            ) : null}
-          </div>
+            }
+            columns={[
+              {
+                header: 'Nombre',
+                cell: (party) => <><strong>{party.name}</strong><small>{party.email ?? 'Sin correo'}</small></>,
+              },
+              { header: 'Identificación', cell: (party) => party.identificationNumber },
+              { header: 'Contacto', cell: (party) => party.phone ?? 'Sin teléfono' },
+              { header: 'Dirección', cell: (party) => party.address ?? 'Sin dirección' },
+              {
+                header: 'Rol',
+                // `roles` vacío pintaba una etiqueta gris sin texto.
+                cell: (party) => party.roles.length
+                  ? <span className="tag">{party.roles.join(' / ')}</span>
+                  : <span className="fine-print">Sin rol</span>,
+              },
+              {
+                header: 'Acciones',
+                cell: (party) => (
+                  <ErpActionCell>
+                    <ErpButton variant="icon" aria-label={`Editar ${party.name}`} title="Editar" onClick={() => setEditor(party)}>
+                      <Pencil size={18} aria-hidden="true" />
+                    </ErpButton>
+                    {party.roles.includes('CUSTOMER') ? (
+                      <ErpButton variant="icon" aria-label={`Contratos de ${party.name}`} title="Contratos" onClick={() => onOpenContracts(party.id)}>
+                        <FileText size={18} aria-hidden="true" />
+                      </ErpButton>
+                    ) : null}
+                  </ErpActionCell>
+                ),
+              },
+            ]}
+          />
         </ErpPanel>
       </section>
     </>
