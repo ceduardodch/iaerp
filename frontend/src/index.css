@@ -301,6 +301,10 @@ h2 { margin-bottom: .75rem; font-size: clamp(1.5rem, 2vw, 2.1rem); line-height: 
 .erp-button-ghost:hover { background: #e8eddf; }
 /* 44x44 es el área táctil mínima que verifica wcag-audit (2.5.5 Target Size);
    el icono se dibuja a 18px pero el blanco alrededor cuenta como objetivo. */
+.erp-tabs { display: flex; flex-wrap: wrap; gap: .35rem; }
+.erp-tab { min-height: 38px; padding: .62rem .9rem; border: 1px solid transparent; border-radius: .25rem; color: var(--forest); background: transparent; font-size: .74rem; font-weight: 750; cursor: pointer; }
+.erp-tab:hover:not(.erp-tab-active) { background: #e8eddf; }
+.erp-tab-active { color: white; background: var(--forest); }
 .erp-button-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0; color: var(--forest); border-color: transparent; background: transparent; }
 .erp-button-icon:hover:not(:disabled) { border-color: #bdb9ad; background: #e8eddf; }
 .erp-button-danger { color: white; background: var(--danger); }
@@ -1075,26 +1079,26 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
 .activity-reminder button { border: 1px solid var(--line); border-radius: 999px; background: transparent; padding: .1rem .55rem; font-size: .7rem; color: inherit; cursor: pointer; }
 .activity-reminder button:hover:not(:disabled) { background: rgba(216,239,133,.35); }
 
-/* Facturas agrupadas por periodo */
-.invoice-month-list { display: grid; gap: .75rem; }
-.invoice-month-accordion { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
-.invoice-month-accordion > summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; cursor: pointer; list-style: none; color: var(--ink); }
-.invoice-month-accordion > summary::-webkit-details-marker { display: none; }
-.invoice-month-accordion > summary::after { content: '⌄'; flex: 0 0 auto; font-size: 1.2rem; line-height: 1; transition: transform 160ms ease; }
-.invoice-month-accordion[open] > summary { border-bottom: 1px solid var(--line); background: rgba(216, 239, 133, .16); }
-.invoice-month-accordion[open] > summary::after { transform: rotate(180deg); }
-.invoice-month-accordion > summary:focus-visible { outline: 3px solid var(--lime); outline-offset: -3px; }
-.invoice-month-title { font-weight: 700; text-transform: capitalize; }
-.invoice-month-summary { color: var(--muted); font-size: .86rem; white-space: nowrap; }
-.invoice-month-accordion .table-wrap { border: 0; border-radius: 0; }
+/* Listados agrupados por mes: los usan Facturas y Compras */
+.month-group-list { display: grid; gap: .75rem; }
+.month-group-accordion { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.month-group-accordion > summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; cursor: pointer; list-style: none; color: var(--ink); }
+.month-group-accordion > summary::-webkit-details-marker { display: none; }
+.month-group-accordion > summary::after { content: '⌄'; flex: 0 0 auto; font-size: 1.2rem; line-height: 1; transition: transform 160ms ease; }
+.month-group-accordion[open] > summary { border-bottom: 1px solid var(--line); background: rgba(216, 239, 133, .16); }
+.month-group-accordion[open] > summary::after { transform: rotate(180deg); }
+.month-group-accordion > summary:focus-visible { outline: 3px solid var(--lime); outline-offset: -3px; }
+.month-group-title { font-weight: 700; text-transform: capitalize; }
+.month-group-summary { color: var(--muted); font-size: .86rem; white-space: nowrap; }
+.month-group-accordion .table-wrap { border: 0; border-radius: 0; }
 .retention-batch-results { display: grid; gap: .8rem; padding-top: .4rem; }
 .retention-batch-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
 .retention-batch-heading h3 { margin: 0; font-size: .98rem; }
 .retention-batch-heading span { color: var(--muted); font-size: .84rem; }
 @media (max-width: 640px) {
-  .invoice-month-accordion > summary { align-items: flex-start; padding: .8rem; }
-  .invoice-month-accordion > summary::after { order: -1; }
-  .invoice-month-summary { white-space: normal; }
+  .month-group-accordion > summary { align-items: flex-start; padding: .8rem; }
+  .month-group-accordion > summary::after { order: -1; }
+  .month-group-summary { white-space: normal; }
   .retention-batch-heading { align-items: flex-start; flex-direction: column; gap: .2rem; }
 }
 

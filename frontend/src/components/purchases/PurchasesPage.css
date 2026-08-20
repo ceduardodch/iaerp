@@ -86,3 +86,6 @@
   .purchase-sri-table .purchase-sri-action-cell { grid-column: 1 / -1; width: 100%; margin-top: .5rem; }
   .purchase-sri-table .purchase-sri-action-cell .erp-button { width: 100%; }
 }
+
+/* Cabecera de cada grupo del listado (mes o tag). */
+.purchase-group-heading { position: sticky; top: 0; padding: .5rem .75rem; text-align: left; text-transform: capitalize; color: var(--muted); background: var(--surface-inset); font-size: .78rem; }

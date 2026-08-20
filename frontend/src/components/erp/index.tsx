@@ -68,6 +68,57 @@ export function ErpToolbar({
   )
 }
 
+/**
+ * Pestañas con la semántica que espera un lector de pantalla.
+ *
+ * Las pantallas venían pintando botones sueltos: se anunciaban como "botón" en
+ * vez de "pestaña 2 de 3", no decían cuál estaba activa y obligaban a tabular
+ * por cada una. Un `tablist` real navega con flechas y solo la activa entra en
+ * el orden de tabulación (patrón ARIA de pestañas).
+ */
+export function ErpTabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  tabs: ReadonlyArray<{ value: T; label: string }>
+  value: T
+  onChange: (value: T) => void
+  ariaLabel: string
+}) {
+  function move(event: React.KeyboardEvent<HTMLDivElement>) {
+    const paso = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+    if (!paso) return
+    event.preventDefault()
+    const actual = tabs.findIndex((tab) => tab.value === value)
+    // Circular: desde la última la flecha derecha vuelve a la primera.
+    const destino = tabs[(actual + paso + tabs.length) % tabs.length]
+    if (!destino) return
+    onChange(destino.value)
+    document.getElementById(`tab-${destino.value}`)?.focus()
+  }
+
+  return (
+    <div className="erp-tabs" role="tablist" aria-label={ariaLabel} onKeyDown={move}>
+      {tabs.map((tab) => (
+        <button
+          key={tab.value}
+          id={`tab-${tab.value}`}
+          type="button"
+          role="tab"
+          aria-selected={tab.value === value}
+          tabIndex={tab.value === value ? 0 : -1}
+          className={`erp-tab${tab.value === value ? ' erp-tab-active' : ''}`}
+          onClick={() => onChange(tab.value)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function ErpPanel({
   title,
   count,

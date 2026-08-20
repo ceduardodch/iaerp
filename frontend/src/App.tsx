@@ -2323,11 +2323,11 @@ function InvoicesPage({
       />
       <section className="split-layout erp-list-only">
         <ErpPanel title="Documentos" count={invoices.length}>
-          <div className="invoice-month-list" aria-label="Listado de facturas">
-            {invoiceMonthEntries.map(([month, monthInvoices], index) => <details key={month} className="invoice-month-accordion" open={index === 0}>
+          <div className="month-group-list" aria-label="Listado de facturas">
+            {invoiceMonthEntries.map(([month, monthInvoices], index) => <details key={month} className="month-group-accordion" open={index === 0}>
               <summary>
-                <span className="invoice-month-title">{new Date(`${month}-01T12:00:00`).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })}</span>
-                <span className="invoice-month-summary">{monthInvoices.length} factura{monthInvoices.length === 1 ? '' : 's'} · ${formatAmount(monthInvoices.reduce((total, invoice) => total + Number(invoice.total), 0))}</span>
+                <span className="month-group-title">{new Date(`${month}-01T12:00:00`).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })}</span>
+                <span className="month-group-summary">{monthInvoices.length} factura{monthInvoices.length === 1 ? '' : 's'} · ${formatAmount(monthInvoices.reduce((total, invoice) => total + Number(invoice.total), 0))}</span>
               </summary>
             <div className="table-wrap" tabIndex={0} aria-label={`Facturas de ${month}`}>
               <table className="erp-responsive-table">

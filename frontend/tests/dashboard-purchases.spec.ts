@@ -271,7 +271,7 @@ test('Compras une CxP con el XML y muestra el desglose de IVA', async ({ page })
 
 test('Compras revisa un comprobante SRI con pago y tag en un solo guardado', async ({ page }) => {
   await navigateToSection(page, 'Compras')
-  await page.getByRole('button', { name: 'Pendientes SRI (1)' }).click()
+  await page.getByRole('tab', { name: 'Pendientes SRI (1)' }).click()
   const row = page.getByRole('row', { name: /001-001-000000124/ })
   await expect(row).toContainText('SERVICIOS CLOUD ECUADOR')
   await row.getByRole('button', { name: 'Revisar' }).click()
@@ -327,7 +327,7 @@ test('Compras selecciona y revisa varios comprobantes SRI con confirmación de p
   })
 
   await navigateToSection(page, 'Compras')
-  await page.getByRole('button', { name: 'Pendientes SRI (2)' }).click()
+  await page.getByRole('tab', { name: 'Pendientes SRI (2)' }).click()
   const selectAll = page.getByRole('checkbox', { name: 'Seleccionar los 2 comprobantes visibles' })
   const firstRow = page.getByRole('row', { name: /001-001-000000123/ })
   await firstRow.getByRole('checkbox').check()
@@ -415,7 +415,7 @@ test('Compras conserva solo fallidos y reintenta el lote con la misma clave', as
   })
 
   await navigateToSection(page, 'Compras')
-  await page.getByRole('button', { name: 'Pendientes SRI (2)' }).click()
+  await page.getByRole('tab', { name: 'Pendientes SRI (2)' }).click()
   await page.getByRole('checkbox', { name: 'Seleccionar los 2 comprobantes visibles' }).check()
   await page.getByRole('button', { name: 'Revisar selección' }).click()
   await page.getByRole('radio', { name: /Gasto del negocio/ }).check()
@@ -473,7 +473,7 @@ test('Compras conserva pago y tags al clasificar una CxP que ya tuvo movimientos
   })
 
   await navigateToSection(page, 'Compras')
-  await page.getByRole('button', { name: 'Pendientes SRI (1)' }).click()
+  await page.getByRole('tab', { name: 'Pendientes SRI (1)' }).click()
   await page.getByRole('button', { name: 'Revisar' }).click()
   await expect(page.getByRole('group', { name: 'Pago ya registrado' })).toContainText('saldo $100,00')
   await expect(page.getByRole('group', { name: 'Tags conservados' })).toContainText('Proyecto: IAERP')
@@ -501,7 +501,7 @@ test('Compras programa pago y reintenta con la misma clave idempotente', async (
   })
 
   await navigateToSection(page, 'Compras')
-  await page.getByRole('button', { name: 'Pendientes SRI (1)' }).click()
+  await page.getByRole('tab', { name: 'Pendientes SRI (1)' }).click()
   await page.getByRole('button', { name: 'Revisar' }).click()
   await page.getByRole('radio', { name: /Gasto del negocio/ }).check()
   await page.getByRole('radio', { name: /Pago previsto/ }).check()
@@ -516,7 +516,7 @@ test('Compras programa pago y reintenta con la misma clave idempotente', async (
 
 test('Compras carga, confirma y muestra en historial un pago del mismo extracto', async ({ page }) => {
   await navigateToSection(page, 'Compras')
-  await page.getByRole('button', { name: 'Conciliación bancaria' }).click()
+  await page.getByRole('tab', { name: 'Banco' }).click()
   await page.getByLabel('Extracto Banco Bolivariano').setInputFiles({
     name: 'estado.txt',
     mimeType: 'text/plain',
@@ -528,7 +528,7 @@ test('Compras carga, confirma y muestra en historial un pago del mismo extracto'
   await page.getByRole('button', { name: 'Confirmar 1 cruces' }).click()
   await expect(page.getByText('Pago registrado con evidencia bancaria')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Todas' }).click()
+  await page.getByRole('tab', { name: 'Compras' }).click()
   await page.getByRole('button', { name: 'Historial' }).click()
   await expect(page.getByRole('heading', { name: 'Historial' })).toBeVisible()
   await expect(page.getByText('BANK:DEBITO-001')).toBeVisible()
@@ -558,7 +558,7 @@ test('Compras permite preparar un reparto manual antes de confirmar', async ({ p
   })
 
   await navigateToSection(page, 'Compras')
-  await page.getByRole('button', { name: 'Conciliación bancaria' }).click()
+  await page.getByRole('tab', { name: 'Banco' }).click()
   await page.getByLabel('Extracto Banco Bolivariano').setInputFiles({ name: 'estado.txt', mimeType: 'text/plain', buffer: Buffer.from('extracto sintetico') })
   await page.getByRole('button', { name: 'Revisar movimientos' }).click()
   await expect(page.getByRole('heading', { name: 'Débitos por revisar' })).toBeVisible()
@@ -576,7 +576,7 @@ test('el panel de revisión masiva no desborda a 400% de zoom', async ({ page })
   await page.route('**/api/v1/payables', (route) => route.fulfill({ json: [] }))
 
   await navigateToSection(page, 'Compras')
-  await page.getByRole('button', { name: 'Pendientes SRI (2)' }).click()
+  await page.getByRole('tab', { name: 'Pendientes SRI (2)' }).click()
   await page.getByRole('checkbox', { name: 'Seleccionar los 2 comprobantes visibles' }).check()
   await page.getByRole('button', { name: 'Revisar selección' }).click()
   await expect(page.getByLabel('Revisión masiva de 2 compras SRI')).toBeVisible()
@@ -599,4 +599,31 @@ test('el panel de revisión masiva no desborda a 400% de zoom', async ({ page })
     }).length
   })
   expect(textosFuera).toBe(0)
+})
+
+test('las pestañas de Compras se anuncian y se recorren con flechas', async ({ page }) => {
+  // Antes eran seis botones sueltos: se anunciaban como "botón" en vez de
+  // "pestaña 2 de 3", no decían cuál estaba activa y había que tabular por
+  // cada una. Tres de esas seis eran solo un filtro de estado del mismo
+  // listado, así que ahora se elige dentro.
+  await page.route('**/api/v1/payables**', (route) => route.fulfill({ json: [] }))
+  await navigateToSection(page, 'Compras')
+
+  const pestanas = page.getByRole('tab')
+  await expect(pestanas).toHaveCount(3)
+  await expect(page.getByRole('tab', { name: 'Compras' })).toHaveAttribute('aria-selected', 'true')
+
+  // Las pestañas que se fueron ya no existen como destino.
+  await expect(page.getByRole('tab', { name: 'Reglas' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Pagadas' })).toHaveCount(0)
+  await expect(page.getByLabel('Estado')).toBeVisible()
+
+  // Solo la pestaña activa entra en el orden de tabulación; las flechas mueven.
+  await page.getByRole('tab', { name: 'Compras' }).focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab', { name: 'Banco' })).toBeFocused()
+  await expect(page.getByRole('tab', { name: 'Banco' })).toHaveAttribute('aria-selected', 'true')
+  // Y desde la última vuelve a la primera.
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab', { name: /Pendientes SRI/ })).toBeFocused()
 })

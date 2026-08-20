@@ -18,6 +18,7 @@ import {
   ErpPageHeader,
   ErpPanel,
   ErpStatusBadge,
+  ErpTabs,
   ErpToolbar,
 } from '../erp'
 import { AnalyticClassificationPicker } from '../analytics/AnalyticClassificationPicker'
@@ -583,7 +584,10 @@ function PayableDetail({ token, payable, onClose }: { token: string; payable: Pa
 
 export function PurchasesPage({ token }: { token: string }) {
   const queryClient = useQueryClient()
-  const [view, setView] = useState<'SRI' | 'ALL' | 'OPEN' | 'SETTLED' | 'BANK' | 'RULES'>('ALL')
+  // Antes había seis pestañas y tres de ellas eran solo un filtro de estado
+  // del mismo listado. Quedan tres destinos reales y el estado se elige dentro.
+  const [view, setView] = useState<'SRI' | 'LIST' | 'BANK'>('LIST')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'SETTLED'>('ALL')
   const [query, setQuery] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [draft, setDraft] = useState<ExpenseDraft | undefined>()
@@ -612,7 +616,7 @@ export function PurchasesPage({ token }: { token: string }) {
   const fiscalQuery = useQuery({ queryKey: ['tax', 'purchases'], queryFn: () => apiRequest<PurchaseDocument[]>(token, '/tax/purchases') })
   const classificationsQuery = useQuery({ queryKey: ['analytic-classifications'], queryFn: () => apiRequest<AnalyticClassification[]>(token, '/analytic-classifications') })
   const payables = (payablesQuery.data ?? []).filter((item) => {
-    const statusMatches = view === 'ALL' || (view === 'OPEN' && ['OPEN', 'PARTIAL'].includes(item.status)) || (view === 'SETTLED' && item.status === 'SETTLED')
+    const statusMatches = statusFilter === 'ALL' || (statusFilter === 'OPEN' && ['OPEN', 'PARTIAL'].includes(item.status)) || (statusFilter === 'SETTLED' && item.status === 'SETTLED')
     const haystack = `${item.supplierName ?? ''} ${item.description} ${item.documentNumber ?? ''} ${item.category}`.toLocaleLowerCase()
     return statusMatches && (!deferredQuery || haystack.includes(deferredQuery))
   })
@@ -641,7 +645,18 @@ export function PurchasesPage({ token }: { token: string }) {
       groups.set(key, [...(groups.get(key) ?? []), payable])
       return groups
     }, new Map<string, Payable[]>()).entries())
-    : [['Todas las compras', payables] as [string, Payable[]]]
+    // Sin agrupación por tag, se agrupa por mes: una lista corrida de compras
+    // de varios meses obliga a leer fecha por fecha para ubicarse.
+    : Array.from(payables.reduce((groups, payable) => {
+      const key = payable.issueDate.slice(0, 7)
+      groups.set(key, [...(groups.get(key) ?? []), payable])
+      return groups
+    }, new Map<string, Payable[]>()).entries())
+      .sort(([izquierda], [derecha]) => derecha.localeCompare(izquierda))
+      .map(([mes, items]) => [
+        new Date(`${mes}-01T12:00:00`).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' }),
+        items,
+      ] as [string, Payable[]])
 
   if (isCreating) return <PurchaseForm token={token} draft={draft} onCancel={() => { setIsCreating(false); setDraft(undefined) }} onSaved={() => { setIsCreating(false); setDraft(undefined); void queryClient.invalidateQueries({ queryKey: ['payables'] }) }} />
 
@@ -680,9 +695,19 @@ export function PurchasesPage({ token }: { token: string }) {
         <ErpButton variant="ghost" onClick={clearFiscalSelection}>Cancelar selección</ErpButton>
         <ErpButton data-sri-bulk-review variant="primary" onClick={() => setBulkReviewOpen(true)}>Revisar selección</ErpButton>
       </ErpToolbar> : <ErpToolbar ariaLabel="Vistas de compras">
-        {([['SRI', `Pendientes SRI (${pendingFiscal.length})`], ['ALL', 'Todas'], ['OPEN', 'Por pagar'], ['SETTLED', 'Pagadas'], ['BANK', 'Conciliación bancaria'], ['RULES', 'Reglas']] as const).map(([value, label]) => <ErpButton key={value} variant={view === value ? 'primary' : 'ghost'} onClick={() => { setView(value); setReviewingFiscalId(null); clearFiscalSelection(); setReviewNotice('') }}>{label}</ErpButton>)}
-        {!['SRI', 'BANK', 'RULES'].includes(view) ? <label className="search-field"><span>Buscar compra</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Proveedor, concepto o número" /></label> : null}
-        {!['SRI', 'BANK', 'RULES'].includes(view) && (classificationsQuery.data ?? []).length ? <label className="search-field"><span>Agrupar por tag</span><select value={groupByClassificationId} onChange={(event) => setGroupByClassificationId(event.target.value)}><option value="">Sin agrupación</option>{classificationsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
+        <ErpTabs
+          ariaLabel="Secciones de compras"
+          value={view}
+          onChange={(destino) => { setView(destino); setReviewingFiscalId(null); clearFiscalSelection(); setReviewNotice('') }}
+          tabs={[
+            { value: 'SRI', label: `Pendientes SRI (${pendingFiscal.length})` },
+            { value: 'LIST', label: 'Compras' },
+            { value: 'BANK', label: 'Banco' },
+          ]}
+        />
+        {view === 'LIST' ? <label className="search-field"><span>Estado</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="ALL">Todas</option><option value="OPEN">Por pagar</option><option value="SETTLED">Pagadas</option></select></label> : null}
+        {view === 'LIST' ? <label className="search-field"><span>Buscar compra</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Proveedor, concepto o número" /></label> : null}
+        {view === 'LIST' && (classificationsQuery.data ?? []).length ? <label className="search-field"><span>Agrupar por tag</span><select value={groupByClassificationId} onChange={(event) => setGroupByClassificationId(event.target.value)}><option value="">Sin agrupación</option>{classificationsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
       </ErpToolbar>}
       {reviewNotice ? <p className="purchase-review-status" role="status" tabIndex={-1} ref={reviewStatusRef}>{reviewNotice}</p> : null}
       {view === 'SRI' ? bulkReviewOpen ? (
@@ -726,16 +751,16 @@ export function PurchasesPage({ token }: { token: string }) {
           </div></> : !fiscalQuery.isPending ? <ErpEmptyState title="Todo revisado" description="No quedan comprobantes del SRI pendientes de clasificar." /> : null}
         </ErpPanel>
       ) : null}
-      {view === 'BANK' ? <BankReconciliation token={token} payables={payablesQuery.data ?? []} onCreateExpense={(expenseDraft) => { setDraft(expenseDraft); setIsCreating(true) }} /> : null}
-      {view === 'RULES' ? <RuleManager token={token} /> : null}
-      {!['SRI', 'BANK', 'RULES'].includes(view) ? (
+      {view === 'BANK' ? <><BankReconciliation token={token} payables={payablesQuery.data ?? []} onCreateExpense={(expenseDraft) => { setDraft(expenseDraft); setIsCreating(true) }} /><RuleManager token={token} /></> : null}
+      
+      {view === 'LIST' ? (
         <ErpPanel title={selectedClassification ? `Compras por ${selectedClassification.name}` : 'Cuentas por pagar'} count={payables.length}>
           {payablesQuery.isPending ? <p aria-busy="true">Cargando compras…</p> : null}
           {payablesQuery.error ? <p className="form-error" role="alert">{payablesQuery.error.message}</p> : null}
-          {payables.length ? <div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table"><thead><tr><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Fiscal</th><th>Clasificaciones</th><th>Acciones</th></tr></thead>{payableGroups.map(([group, items]) => <tbody key={group}>{groupByClassificationId ? <tr><th colSpan={10} scope="colgroup">{group} · {items.length} compras</th></tr> : null}{items.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; const assignments = item.analyticAssignments ?? []; const editing = editingTagsFor === item.id; return <Fragment key={item.id}><tr><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small></td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>{item.dueDate ? `Vence ${item.dueDate}` : 'Sin fecha acordada'}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.evidenceStatus === 'FISCAL_XML' ? 'success' : 'warning'}>{item.evidenceStatus === 'FISCAL_XML' ? 'XML confirmado' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Deducible · revisar'}</ErpStatusBadge></td><td>{assignments.length ? assignments.map((assignment) => <small key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td><td><ErpButton variant="secondary" onClick={() => setEditingTagsFor(editing ? null : item.id)}>{editing ? 'Cerrar tags' : 'Clasificar'}</ErpButton><ErpButton variant="ghost" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr>{editing ? <tr><td colSpan={10}><PayableClassificationEditor token={token} payable={item} onSaved={() => { setEditingTagsFor(null); void queryClient.invalidateQueries({ queryKey: ['payables'] }) }} /></td></tr> : null}</Fragment> })}</tbody>)}</table></div> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Usa Nueva compra para registrar gasolina, servicios o una factura por pagar." /> : null}
+          {payables.length ? <div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table"><thead><tr><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Fiscal</th><th>Clasificaciones</th><th>Acciones</th></tr></thead>{payableGroups.map(([group, items]) => <tbody key={group}><tr><th colSpan={10} scope="colgroup" className="purchase-group-heading">{group} · {items.length} compra{items.length === 1 ? '' : 's'} · ${formatAmount(items.reduce((total, item) => total + Number(item.total), 0))}</th></tr>{items.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; const assignments = item.analyticAssignments ?? []; const editing = editingTagsFor === item.id; return <Fragment key={item.id}><tr><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small></td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>{item.dueDate ? `Vence ${item.dueDate}` : 'Sin fecha acordada'}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.evidenceStatus === 'FISCAL_XML' ? 'success' : 'warning'}>{item.evidenceStatus === 'FISCAL_XML' ? 'XML confirmado' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Deducible · revisar'}</ErpStatusBadge></td><td>{assignments.length ? assignments.map((assignment) => <small key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td><td><ErpButton variant="secondary" onClick={() => setEditingTagsFor(editing ? null : item.id)}>{editing ? 'Cerrar tags' : 'Clasificar'}</ErpButton><ErpButton variant="ghost" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr>{editing ? <tr><td colSpan={10}><PayableClassificationEditor token={token} payable={item} onSaved={() => { setEditingTagsFor(null); void queryClient.invalidateQueries({ queryKey: ['payables'] }) }} /></td></tr> : null}</Fragment> })}</tbody>)}</table></div> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Usa Nueva compra para registrar gasolina, servicios o una factura por pagar." /> : null}
         </ErpPanel>
       ) : null}
-      {selectedPayable && !['SRI', 'BANK', 'RULES'].includes(view) ? <PayableDetail token={token} payable={selectedPayable} onClose={() => setSelectedPayableId(null)} /> : null}
+      {selectedPayable && view === 'LIST' ? <PayableDetail token={token} payable={selectedPayable} onClose={() => setSelectedPayableId(null)} /> : null}
     </>
   )
 }
