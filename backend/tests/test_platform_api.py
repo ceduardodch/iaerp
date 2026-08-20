@@ -123,6 +123,52 @@ async def test_tax_category_creation_is_tenant_scoped_and_idempotent(client):
     assert all(item["id"] != created.json()["id"] for item in tenant_b_taxes.json())
 
 
+async def test_establishment_address_update_is_tenant_scoped_and_idempotent(client):
+    token_a = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["organization:read", "organization:write"]
+    )
+    token_b = await token_for(
+        client, "b@iaerp.local", TENANT_B, ["organization:read", "organization:write"]
+    )
+    created = await client.post(
+        "/api/v1/establishments",
+        headers=auth(token_a, "establishment-create-for-update-0001"),
+        json={"code": "777", "name": "Sucursal original", "address": "Pifo"},
+    )
+    assert created.status_code == 201
+    establishment = created.json()
+    payload = {"name": "Matriz Quito", "address": "Av. Prueba 123, Quito"}
+    headers = auth(token_a, "establishment-update-0001")
+
+    updated = await client.put(
+        f"/api/v1/establishments/{establishment['id']}", headers=headers, json=payload
+    )
+    replay = await client.put(
+        f"/api/v1/establishments/{establishment['id']}", headers=headers, json=payload
+    )
+    foreign = await client.put(
+        f"/api/v1/establishments/{establishment['id']}",
+        headers=auth(token_b, "establishment-update-foreign-0001"),
+        json=payload,
+    )
+
+    assert updated.status_code == 200
+    assert replay.status_code == 200
+    assert updated.json() == replay.json()
+    assert updated.json()["code"] == establishment["code"]
+    assert updated.json()["address"] == payload["address"]
+    assert foreign.status_code == 404
+
+    async with SessionFactory() as session:
+        actions = list(
+            await session.scalars(
+                select(AuditEvent.action).where(AuditEvent.tenant_id == TENANT_A)
+            )
+        )
+        assert actions == ["establishment.created", "establishment.updated"]
+        assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+
+
 async def test_idempotency_audit_and_outbox_are_atomic(client):
     token = await token_for(client, "a@iaerp.local", TENANT_A)
     headers = auth(token, "party-idempotency-0001")

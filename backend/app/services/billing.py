@@ -205,14 +205,17 @@ async def _get_tenant_scoped_establishment(
     session: AsyncSession,
     context: AuthContext,
     establishment_id: uuid.UUID,
+    *,
+    for_update: bool = False,
 ) -> Establishment:
-    establishment = await session.scalar(
-        select(Establishment).where(
-            Establishment.id == establishment_id,
-            Establishment.tenant_id == context.tenant_id,
-            Establishment.active.is_(True),
-        )
+    statement = select(Establishment).where(
+        Establishment.id == establishment_id,
+        Establishment.tenant_id == context.tenant_id,
+        Establishment.active.is_(True),
     )
+    if for_update:
+        statement = statement.with_for_update()
+    establishment = await session.scalar(statement)
     if establishment is None:
         raise HTTPException(status_code=404, detail="Establishment not found")
     return establishment
@@ -1197,7 +1200,7 @@ async def _load_issue_context(
     document: SalesDocument,
 ) -> tuple[Establishment, EmissionPoint, Party]:
     establishment = await _get_tenant_scoped_establishment(
-        session, context, document.establishment_id
+        session, context, document.establishment_id, for_update=True
     )
     emission_point = await _get_tenant_scoped_emission_point(
         session, context, document.emission_point_id, establishment.id

@@ -62,6 +62,7 @@
 | Codex (este hilo, revisión compras SRI) | 🚀 EN PROMOCIÓN | Bandeja SRI primero: decisión tributaria, pago y tags en un solo guardado; fechas desconocidas y agendas reconciliadas; dos revisiones GO; publicación autorizada sin mezclar CRM/action queue | 2026-08-18 |
 | Codex (este hilo, revisión masiva SRI) | 🚀 EN PROMOCIÓN | Selección múltiple accesible y caso de uso masivo para clasificar uso tributario, pago y tags sin borrar datos existentes; dos revisiones GO y publicación autorizada | 2026-08-18 |
 | Codex (este hilo, proveedor en RIDE) | ✅ EN MAIN | Muestra BTOB SAS y RUC del proveedor en RIDE nuevos; XML, firma y documentos históricos quedan intactos; PR #41, CI, Coolify y salud pública verdes | 2026-08-20 |
+| Codex (este hilo, alta rápida en factura) | 🟡 LISTA PARA PUBLICAR | Nueva factura: crear cliente y producto sin salir; editar nombre/dirección fiscal desde factura y Empresa; dos revisiones GO, falta autorización para publicar | 2026-08-20 |
 
 > **Orden de migraciones:** resuelto. Campañas se integró después de CxP, así
 > que `e5f6a7b8c9d0` pasó a colgar de `e6f7a8b9c0d1` en vez de `da1e2f3a4b5c`.

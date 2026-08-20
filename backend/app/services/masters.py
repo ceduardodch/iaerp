@@ -10,11 +10,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
+from app.models.billing import SalesDocument
 from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag, TaxCategory
 from app.models.platform import AutomationSettings, ServiceAccount, Tenant
 from app.schemas.masters import (
     EmissionPointCreate,
     EstablishmentCreate,
+    EstablishmentUpdate,
     PartyCreate,
     ProductCreate,
     TagCreate,
@@ -62,6 +64,42 @@ async def create_establishment(
 ) -> Establishment:
     entity = Establishment(tenant_id=context.tenant_id, **data.model_dump(by_alias=False))
     session.add(entity)
+    await session.flush()
+    return entity
+
+
+async def update_establishment(
+    session: AsyncSession,
+    context: AuthContext,
+    establishment_id: uuid.UUID,
+    data: EstablishmentUpdate,
+) -> Establishment:
+    entity = await session.scalar(
+        select(Establishment).where(
+            Establishment.id == establishment_id,
+            Establishment.tenant_id == context.tenant_id,
+            Establishment.active.is_(True),
+        ).with_for_update()
+    )
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Establishment not found")
+    document_in_sri = await session.scalar(
+        select(SalesDocument.id).where(
+            SalesDocument.tenant_id == context.tenant_id,
+            SalesDocument.establishment_id == establishment_id,
+            SalesDocument.status.in_({"SIGNED", "RECEIVED", "PENDING_AUTHORIZATION"}),
+        )
+    )
+    if document_in_sri is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No se puede cambiar la dirección mientras hay comprobantes "
+                "en proceso con el SRI"
+            ),
+        )
+    entity.name = data.name
+    entity.address = data.address
     await session.flush()
     return entity
 

@@ -25,6 +25,7 @@ type InvoiceSpreadsheetProps = {
   onUpdateLine: (key: string, patch: Partial<InvoiceSpreadsheetLine>) => void
   onAddLine: () => void
   onRemoveLine: (key: string) => void
+  onCreateProduct?: () => void
 }
 
 function formatPercent(value: string | number): string {
@@ -62,6 +63,7 @@ export function InvoiceSpreadsheet({
   onUpdateLine,
   onAddLine,
   onRemoveLine,
+  onCreateProduct,
 }: InvoiceSpreadsheetProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const pendingFocusRow = useRef<number | null>(null)
@@ -235,9 +237,16 @@ export function InvoiceSpreadsheet({
           </tfoot>
         </table>
       </div>
-      <ErpButton variant="secondary" onClick={onAddLine}>
-        Agregar línea
-      </ErpButton>
+      <div className="invoice-spreadsheet-actions">
+        <ErpButton variant="secondary" onClick={onAddLine}>
+          Agregar línea
+        </ErpButton>
+        {onCreateProduct ? (
+          <ErpButton variant="secondary" onClick={onCreateProduct}>
+            Crear producto o servicio
+          </ErpButton>
+        ) : null}
+      </div>
     </div>
   )
 }

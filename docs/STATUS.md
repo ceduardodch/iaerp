@@ -7,6 +7,20 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Alta rápida de maestros desde Nueva factura lista en el árbol local de
+  `release`: 2026-08-20 `America/Guayaquil`. El usuario puede crear un cliente
+  con sus datos básicos o un producto con precio e impuesto y dejarlo
+  seleccionado sin salir ni perder cantidad, descuento o fecha del borrador.
+  La factura muestra la dirección fiscal del establecimiento y permite
+  cambiarla allí mismo o desde Empresa, solo con `organization:write`. El
+  código fiscal queda inmutable. Para que XML y RIDE nunca difieran, IAERP
+  bloquea el cambio mientras existan comprobantes `SIGNED`, `RECEIVED` o
+  `PENDING_AUTHORIZATION`, usando el mismo lock que la emisión. Pasan Ruff,
+  mypy, contratos, 27 pruebas backend dirigidas (2 omitidas) y 22 recorridos
+  Playwright de factura en escritorio/móvil con axe; lint y build están
+  verdes. Dos revisiones independientes dieron GO. Falta autorización humana
+  para push y promoción `release -> PR -> main`.
+
 - Identidad del proveedor visible en el RIDE publicada en `main`: 2026-08-20
   `America/Guayaquil`. Las facturas y notas de crédito nuevas muestran en
   `Información adicional` a BTOB SAS y su RUC 1793113192001, el mismo RUC que

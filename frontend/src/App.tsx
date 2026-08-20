@@ -1383,6 +1383,163 @@ type InvoicePanel =
   | { view: 'detail'; id: string }
   | { view: 'credit-note'; invoice: SalesDocument }
 
+function QuickCustomerModal({
+  token,
+  onCreated,
+  onClose,
+}: {
+  token: string
+  onCreated: (customer: Party) => void
+  onClose: () => void
+}) {
+  const requestKey = useRef(idempotencyKey('web-invoice-quick-customer'))
+  const [identificationType, setIdentificationType] = useState('RUC')
+  const createCustomer = useMutation({
+    mutationFn: (data: FormData) => apiRequest<Party>(token, '/parties', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': requestKey.current },
+      body: JSON.stringify({
+        name: data.get('name'),
+        identificationType: data.get('identificationType'),
+        identificationNumber: data.get('identificationNumber'),
+        roles: ['CUSTOMER'],
+        email: data.get('email') || null,
+        address: data.get('address') || null,
+      }),
+    }),
+    onSuccess: onCreated,
+  })
+
+  return (
+    <ErpModal title="Crear cliente" onClose={onClose} size="sm" initialFocusSelector='input[name="name"]' closeDisabled={createCustomer.isPending}>
+      <form className="quick-master-form" onSubmit={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        createCustomer.mutate(new FormData(event.currentTarget))
+      }}>
+        <p className="fine-print">Guarda solo los datos necesarios para facturar. Luego podrás completar el contacto.</p>
+        <div className="erp-form-fields">
+          <label>Nombre o razón social<input name="name" required /></label>
+          <div className="field-row">
+            <label>Tipo<select name="identificationType" value={identificationType} onChange={(event) => setIdentificationType(event.target.value)}><option>RUC</option><option>CEDULA</option><option>PASSPORT</option><option>FINAL_CONSUMER</option></select></label>
+            <label>Número<input key={identificationType} name="identificationNumber" required pattern={identificationType === 'RUC' ? '[0-9]{13}' : identificationType === 'CEDULA' ? '[0-9]{10}' : undefined} minLength={identificationType === 'PASSPORT' ? 3 : undefined} maxLength={30} defaultValue={identificationType === 'FINAL_CONSUMER' ? '9999999999999' : ''} readOnly={identificationType === 'FINAL_CONSUMER'} /></label>
+          </div>
+          <label>Correo<input name="email" type="email" /></label>
+          <label>Dirección<textarea name="address" rows={2} /></label>
+        </div>
+        {createCustomer.error ? <p className="form-error" role="alert">{createCustomer.error.message}</p> : null}
+        <div className="erp-form-actions">
+          <ErpButton variant="secondary" onClick={onClose} disabled={createCustomer.isPending}>Cancelar</ErpButton>
+          <ErpButton variant="primary" type="submit" disabled={createCustomer.isPending}>{createCustomer.isPending ? 'Creando…' : 'Crear y seleccionar'}</ErpButton>
+        </div>
+      </form>
+    </ErpModal>
+  )
+}
+
+function QuickProductModal({
+  token,
+  taxes,
+  onCreated,
+  onClose,
+}: {
+  token: string
+  taxes: TaxCategory[]
+  onCreated: (product: Product) => void
+  onClose: () => void
+}) {
+  const requestKey = useRef(idempotencyKey('web-invoice-quick-product'))
+  const createProduct = useMutation({
+    mutationFn: (data: FormData) => apiRequest<Product>(token, '/products', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': requestKey.current },
+      body: JSON.stringify({
+        name: data.get('name'),
+        code: data.get('code') || null,
+        unitPrice: data.get('unitPrice'),
+        taxCategoryId: data.get('taxCategoryId'),
+      }),
+    }),
+    onSuccess: onCreated,
+  })
+
+  return (
+    <ErpModal title="Crear producto o servicio" onClose={onClose} size="sm" initialFocusSelector='input[name="name"]' closeDisabled={createProduct.isPending}>
+      {taxes.length === 0 ? (
+        <div className="quick-master-empty">
+          <p role="alert">Primero debes crear una categoría tributaria en Catálogos.</p>
+          <ErpButton variant="secondary" onClick={onClose}>Volver a la factura</ErpButton>
+        </div>
+      ) : (
+        <form className="quick-master-form" onSubmit={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          createProduct.mutate(new FormData(event.currentTarget))
+        }}>
+          <p className="fine-print">El producto quedará guardado en el catálogo y seleccionado en esta factura.</p>
+          <div className="erp-form-fields">
+            <label>Nombre<input name="name" required /></label>
+            <label>Código interno<input name="code" /></label>
+            <div className="field-row">
+              <label>Precio unitario<input name="unitPrice" type="number" min="0" step="0.000001" required /></label>
+              <label>Impuesto<select name="taxCategoryId" defaultValue={taxes[0]?.id} required>{taxes.map((tax) => <option key={tax.id} value={tax.id}>{tax.name} · {formatPercent(tax.rate)}</option>)}</select></label>
+            </div>
+          </div>
+          {createProduct.error ? <p className="form-error" role="alert">{createProduct.error.message}</p> : null}
+          <div className="erp-form-actions">
+            <ErpButton variant="secondary" onClick={onClose} disabled={createProduct.isPending}>Cancelar</ErpButton>
+            <ErpButton variant="primary" type="submit" disabled={createProduct.isPending}>{createProduct.isPending ? 'Creando…' : 'Crear y agregar'}</ErpButton>
+          </div>
+        </form>
+      )}
+    </ErpModal>
+  )
+}
+
+function EstablishmentEditorModal({
+  token,
+  establishment,
+  onSaved,
+  onClose,
+}: {
+  token: string
+  establishment: Establishment
+  onSaved: (establishment: Establishment) => void
+  onClose: () => void
+}) {
+  const requestKey = useRef(idempotencyKey('web-establishment-update'))
+  const updateEstablishment = useMutation({
+    mutationFn: (data: FormData) => apiRequest<Establishment>(token, `/establishments/${establishment.id}`, {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': requestKey.current },
+      body: JSON.stringify({ name: data.get('name'), address: data.get('address') }),
+    }),
+    onSuccess: onSaved,
+  })
+
+  return (
+    <ErpModal title={`Editar establecimiento ${establishment.code}`} onClose={onClose} size="sm" initialFocusSelector='textarea[name="address"]' closeDisabled={updateEstablishment.isPending}>
+      <form className="quick-master-form" onSubmit={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        updateEstablishment.mutate(new FormData(event.currentTarget))
+      }}>
+        <p className="fine-print">Esta es la dirección fiscal del establecimiento que aparecerá en los próximos comprobantes. El código fiscal no cambia.</p>
+        <div className="erp-form-fields">
+          <label>Código fiscal<input value={establishment.code} readOnly /></label>
+          <label>Nombre<input name="name" defaultValue={establishment.name} required /></label>
+          <label>Dirección del establecimiento<textarea name="address" rows={3} defaultValue={establishment.address} required /></label>
+        </div>
+        {updateEstablishment.error ? <p className="form-error" role="alert">{updateEstablishment.error.message}</p> : null}
+        <div className="erp-form-actions">
+          <ErpButton variant="secondary" onClick={onClose} disabled={updateEstablishment.isPending}>Cancelar</ErpButton>
+          <ErpButton variant="primary" type="submit" disabled={updateEstablishment.isPending}>{updateEstablishment.isPending ? 'Guardando…' : 'Guardar dirección'}</ErpButton>
+        </div>
+      </form>
+    </ErpModal>
+  )
+}
+
 function NewInvoiceForm({
   token,
   customers,
@@ -1391,6 +1548,7 @@ function NewInvoiceForm({
   establishments,
   emissionPoints,
   defaultPaymentTermsDays,
+  scopes,
   onCreated,
   onCancel,
 }: {
@@ -1401,11 +1559,25 @@ function NewInvoiceForm({
   establishments: Establishment[]
   emissionPoints: EmissionPoint[]
   defaultPaymentTermsDays: number
+  scopes: string[]
   onCreated: (invoiceId: string) => void
   onCancel: () => void
 }) {
   const queryClient = useQueryClient()
   const { notify } = useToast()
+  const [createdCustomers, setCreatedCustomers] = useState<Party[]>([])
+  const [createdProducts, setCreatedProducts] = useState<Product[]>([])
+  const [establishmentOverrides, setEstablishmentOverrides] = useState<Record<string, Establishment>>({})
+  const [quickCreate, setQuickCreate] = useState<'customer' | 'product' | 'establishment' | null>(null)
+  const availableCustomers = useMemo(
+    () => Array.from(new Map([...customers, ...createdCustomers].map((item) => [item.id, item])).values()),
+    [customers, createdCustomers],
+  )
+  const availableProducts = useMemo(
+    () => Array.from(new Map([...products, ...createdProducts].map((item) => [item.id, item])).values()),
+    [products, createdProducts],
+  )
+  const availableEstablishments = establishments.map((item) => establishmentOverrides[item.id] ?? item)
   const [customerId, setCustomerId] = useState(customers[0]?.id ?? '')
   const [establishmentId, setEstablishmentId] = useState(establishments[0]?.id ?? '')
   const [emissionPointId, setEmissionPointId] = useState(
@@ -1414,7 +1586,7 @@ function NewInvoiceForm({
   const [issueDate, setIssueDate] = useState(todayInFiscalTimezone)
   const [lines, setLines] = useState<DraftLine[]>([emptyDraftLine()])
   const [analyticValueIds, setAnalyticValueIds] = useState<string[]>([])
-  const initialCustomer = customers.find((customer) => customer.id === customerId)
+  const initialCustomer = availableCustomers.find((customer) => customer.id === customerId)
   const [paymentTermsDays, setPaymentTermsDays] = useState(
     initialCustomer?.paymentTermsDays ?? defaultPaymentTermsDays ?? 0,
   )
@@ -1431,12 +1603,12 @@ function NewInvoiceForm({
   // igual y el RUC es lo que los distingue.
   const customerOptions = useMemo(
     () =>
-      customers.map((customer) => ({
+      availableCustomers.map((customer) => ({
         value: customer.id,
         label: customer.name,
         hint: customer.identificationNumber,
       })),
-    [customers],
+    [availableCustomers],
   )
   const previewPayload = JSON.stringify({
     issueDate,
@@ -1467,13 +1639,33 @@ function NewInvoiceForm({
   }
 
   function onProductChange(key: string, productId: string) {
-    const product = products.find((item) => item.id === productId)
+    const product = availableProducts.find((item) => item.id === productId)
     updateLine(key, {
       productId,
       description: product?.name ?? '',
       unitPrice: product?.unitPrice ?? '0.00',
       taxCode: taxes.find((tax) => tax.id === product?.taxCategoryId)?.sriCode ?? product?.taxCategoryId ?? '',
     })
+  }
+
+  function addCreatedProduct(product: Product) {
+    const taxCode = taxes.find((tax) => tax.id === product.taxCategoryId)?.sriCode ?? ''
+    setCreatedProducts((current) => [...current, product])
+    setLines((current) => {
+      const emptyIndex = current.findIndex((line) => !line.productId)
+      const nextLine = (line: DraftLine): DraftLine => ({
+        ...line,
+        productId: product.id,
+        description: product.name,
+        unitPrice: product.unitPrice,
+        taxCode,
+      })
+      if (emptyIndex >= 0) return current.map((line, index) => index === emptyIndex ? nextLine(line) : line)
+      return [...current, nextLine(emptyDraftLine())]
+    })
+    void queryClient.invalidateQueries({ queryKey: ['products'] })
+    setQuickCreate(null)
+    notify(`${product.name} creado y agregado`, 'success')
   }
 
   const createDraft = useMutation({
@@ -1545,8 +1737,8 @@ function NewInvoiceForm({
       onSubmit={submit}
       onCancel={onCancel}
     >
-      <label>
-        Cliente
+      <div className="quick-select-field">
+        <div className="field-label-with-action"><span>Cliente</span>{scopes.includes('parties:write') ? <button type="button" onClick={() => setQuickCreate('customer')}>Crear cliente</button> : null}</div>
         <ErpCombobox
           ariaLabel="Cliente"
           placeholder="Buscar por nombre o identificación…"
@@ -1554,11 +1746,11 @@ function NewInvoiceForm({
           value={customerId}
           onChange={(nextId) => {
             setCustomerId(nextId)
-            setPaymentTermsDays(customers.find((customer) => customer.id === nextId)?.paymentTermsDays ?? defaultPaymentTermsDays)
+            setPaymentTermsDays(availableCustomers.find((customer) => customer.id === nextId)?.paymentTermsDays ?? defaultPaymentTermsDays)
           }}
           required
         />
-      </label>
+      </div>
       <AnalyticClassificationPicker token={token} valueIds={analyticValueIds} onChange={setAnalyticValueIds} />
       <div className="field-row">
         <label>
@@ -1571,7 +1763,7 @@ function NewInvoiceForm({
             }}
             required
           >
-            {establishments.map((establishment) => (
+            {availableEstablishments.map((establishment) => (
               <option key={establishment.id} value={establishment.id}>{establishment.code}</option>
             ))}
           </select>
@@ -1586,6 +1778,12 @@ function NewInvoiceForm({
           </select>
         </label>
       </div>
+      {availableEstablishments.find((item) => item.id === establishmentId) ? (
+        <div className="invoice-establishment-address">
+          <span><strong>Dirección del establecimiento:</strong> {availableEstablishments.find((item) => item.id === establishmentId)?.address}</span>
+          {scopes.includes('organization:write') ? <ErpButton variant="ghost" onClick={() => setQuickCreate('establishment')}>Editar dirección</ErpButton> : null}
+        </div>
+      ) : null}
       <label>
         Fecha de emisión
         <input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} required />
@@ -1617,7 +1815,7 @@ function NewInvoiceForm({
       </p>
       <InvoiceSpreadsheet
         lines={lines}
-        products={products}
+        products={availableProducts}
         taxes={taxes}
         preview={previewQuery.data}
         previewPending={!previewIsCurrent}
@@ -1625,6 +1823,7 @@ function NewInvoiceForm({
         onUpdateLine={updateLine}
         onAddLine={() => setLines((current) => [...current, emptyDraftLine()])}
         onRemoveLine={(key) => setLines((current) => current.filter((item) => item.key !== key))}
+        onCreateProduct={scopes.includes('products:write') ? () => setQuickCreate('product') : undefined}
       />
       <section className="invoice-live-preview" aria-live="polite">
         <p className="section-number">Cálculo en vivo</p>
@@ -1643,6 +1842,28 @@ function NewInvoiceForm({
         ) : <p className="fine-print">Completa la primera línea para calcular los valores.</p>}
       </section>
       <p className="fine-print">El servidor valida impuestos, redondeos y total antes de crear el borrador.</p>
+      {quickCreate === 'customer' ? <QuickCustomerModal token={token} onClose={() => setQuickCreate(null)} onCreated={(customer) => {
+        setCreatedCustomers((current) => [...current, customer])
+        setCustomerId(customer.id)
+        setPaymentTermsDays(customer.paymentTermsDays ?? defaultPaymentTermsDays)
+        void queryClient.invalidateQueries({ queryKey: ['parties'] })
+        setQuickCreate(null)
+        notify(`${customer.name} creado y seleccionado`, 'success')
+      }} /> : null}
+      {quickCreate === 'product' ? <QuickProductModal token={token} taxes={taxes} onClose={() => setQuickCreate(null)} onCreated={addCreatedProduct} /> : null}
+      {quickCreate === 'establishment' && availableEstablishments.find((item) => item.id === establishmentId) ? (
+        <EstablishmentEditorModal
+          token={token}
+          establishment={availableEstablishments.find((item) => item.id === establishmentId)!}
+          onClose={() => setQuickCreate(null)}
+          onSaved={(establishment) => {
+            setEstablishmentOverrides((current) => ({ ...current, [establishment.id]: establishment }))
+            void queryClient.invalidateQueries({ queryKey: ['establishments'] })
+            setQuickCreate(null)
+            notify('Dirección de emisión actualizada', 'success')
+          }}
+        />
+      ) : null}
     </ErpFormPanel>
   )
 }
@@ -2233,6 +2454,7 @@ function InvoicesPage({
   establishments,
   emissionPoints,
   defaultPaymentTermsDays,
+  scopes,
   partyFilterId,
 }: {
   token: string
@@ -2242,6 +2464,7 @@ function InvoicesPage({
   establishments: Establishment[]
   emissionPoints: EmissionPoint[]
   defaultPaymentTermsDays: number
+  scopes: string[]
   /** Llega con valor al abrir Facturas desde la ficha de un cliente. */
   partyFilterId?: string
 }) {
@@ -2296,7 +2519,7 @@ function InvoicesPage({
     return (
       <>
         <ErpPageHeader eyebrow="Facturación electrónica" title="Nueva factura" subtitle="Crea el borrador; los totales serán calculados y validados por el servidor." />
-        <NewInvoiceForm token={token} customers={customers} products={products} taxes={taxes} establishments={establishments} emissionPoints={emissionPoints} defaultPaymentTermsDays={defaultPaymentTermsDays} onCreated={(invoiceId) => setPanel({ view: 'detail', id: invoiceId })} onCancel={closePanel} />
+        <NewInvoiceForm token={token} customers={customers} products={products} taxes={taxes} establishments={establishments} emissionPoints={emissionPoints} defaultPaymentTermsDays={defaultPaymentTermsDays} scopes={scopes} onCreated={(invoiceId) => setPanel({ view: 'detail', id: invoiceId })} onCancel={closePanel} />
       </>
     )
   }
@@ -3808,6 +4031,8 @@ function OrganizationPage({
   token: string
 }) {
   const queryClient = useQueryClient()
+  const { notify } = useToast()
+  const [editingEstablishment, setEditingEstablishment] = useState<Establishment | null>(null)
   const [settingsSection, setSettingsSection] = useState<'fiscal' | 'invoicing' | 'collections' | 'integrations' | 'analytics'>('fiscal')
   const fiscalQuery = useQuery({
     queryKey: ['organization', 'fiscal-settings'],
@@ -4042,7 +4267,7 @@ function OrganizationPage({
         </article>
         <ErpPanel title="Establecimientos" count={establishments.length}>
           <ul className="establishment-list">
-            {establishments.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.address}</small></div></li>)}
+            {establishments.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.address}</small></div>{context.scopes.includes('organization:write') ? <ErpButton variant="ghost" onClick={() => setEditingEstablishment(item)}>Editar dirección</ErpButton> : null}</li>)}
           </ul>
         </ErpPanel>
         <ErpPanel
@@ -4228,6 +4453,18 @@ function OrganizationPage({
         </ErpPanel>
         </> : null}
       </section>
+      {editingEstablishment ? (
+        <EstablishmentEditorModal
+          token={token}
+          establishment={editingEstablishment}
+          onClose={() => setEditingEstablishment(null)}
+          onSaved={() => {
+            void queryClient.invalidateQueries({ queryKey: ['establishments'] })
+            setEditingEstablishment(null)
+            notify('Dirección del establecimiento actualizada', 'success')
+          }}
+        />
+      ) : null}
     </>
   )
 }
@@ -4314,6 +4551,7 @@ function Workspace() {
             establishments={establishmentsQuery.data ?? []}
             emissionPoints={emissionPointsQuery.data ?? []}
             defaultPaymentTermsDays={contextQuery.data.defaultPaymentTermsDays}
+            scopes={contextQuery.data.scopes}
           />
         ) : null}
         {section === 'purchases' ? (

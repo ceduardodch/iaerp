@@ -20,6 +20,13 @@ class EstablishmentRead(EstablishmentCreate):
     active: bool
 
 
+class EstablishmentUpdate(APIModel):
+    """Datos editables sin alterar el código fiscal ni la numeración."""
+
+    name: str = Field(min_length=1, max_length=120)
+    address: str = Field(min_length=1, max_length=500)
+
+
 class EmissionPointCreate(APIModel):
     establishment_id: uuid.UUID
     code: str = Field(pattern=r"^[0-9]{3}$")

@@ -41,6 +41,8 @@ export function ErpModal({
   closeLabel = 'Cerrar ventana',
   describedById,
   variant = 'dialog',
+  initialFocusSelector,
+  closeDisabled = false,
 }: PropsWithChildren<{
   title: ReactNode
   onClose: () => void
@@ -48,23 +50,32 @@ export function ErpModal({
   closeLabel?: string
   describedById?: string
   variant?: 'dialog' | 'drawer'
+  initialFocusSelector?: string
+  closeDisabled?: boolean
 }>) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
   const previouslyFocused = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  const closeDisabledRef = useRef(closeDisabled)
+  onCloseRef.current = onClose
+  closeDisabledRef.current = closeDisabled
 
   useInertBackground(true)
 
   useEffect(() => {
     previouslyFocused.current = document.activeElement as HTMLElement | null
     const dialog = dialogRef.current
+    const initialFocus = initialFocusSelector
+      ? dialog?.querySelector<HTMLElement>(initialFocusSelector)
+      : undefined
     const focusable = dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
-    ;(focusable ?? dialog)?.focus()
+    ;(initialFocus ?? focusable ?? dialog)?.focus()
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.stopPropagation()
-        onClose()
+        if (!closeDisabledRef.current) onCloseRef.current()
         return
       }
       if (event.key !== 'Tab' || !dialog) return
@@ -99,7 +110,7 @@ export function ErpModal({
     <div
       className={`erp-modal-overlay${variant === 'drawer' ? ' erp-drawer-overlay' : ''}`}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
+        if (event.target === event.currentTarget && !closeDisabled) onClose()
       }}
     >
       <div
@@ -113,7 +124,7 @@ export function ErpModal({
       >
         <header className="erp-modal-header">
           <h2 id={titleId}>{title}</h2>
-          <button type="button" className="erp-modal-close" onClick={onClose} aria-label={closeLabel}>
+          <button type="button" className="erp-modal-close" onClick={onClose} aria-label={closeLabel} disabled={closeDisabled}>
             ×
           </button>
         </header>
