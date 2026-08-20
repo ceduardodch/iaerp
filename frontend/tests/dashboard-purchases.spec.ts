@@ -587,10 +587,16 @@ test('el panel de revisión masiva no desborda a 400% de zoom', async ({ page })
   const desborda = await page.evaluate(() => document.body.scrollWidth > window.innerWidth)
   expect(desborda).toBe(false)
 
-  // Y que ninguna tarjeta de opción se salga de su contenedor.
-  const opcionesFuera = await page.evaluate(() => {
-    const grupos = [...document.querySelectorAll<HTMLElement>('.purchase-review-options')]
-    return grupos.filter((grupo) => grupo.scrollWidth > grupo.clientWidth + 1).length
+  // El defecto era el texto saliéndose de su tarjeta, así que se mide eso y no
+  // el ancho del fieldset: un fieldset reporta 1px de más por cómo el navegador
+  // calcula su ancho mínimo, y esa diferencia varía con la fuente instalada.
+  const textosFuera = await page.evaluate(() => {
+    const tarjetas = [...document.querySelectorAll<HTMLElement>('.purchase-review-options label')]
+    return tarjetas.filter((tarjeta) => {
+      const texto = tarjeta.querySelector('span')
+      if (!texto) return false
+      return texto.getBoundingClientRect().right > tarjeta.getBoundingClientRect().right
+    }).length
   })
-  expect(opcionesFuera).toBe(0)
+  expect(textosFuera).toBe(0)
 })
