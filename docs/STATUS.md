@@ -7,6 +7,20 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Identidad del proveedor visible en el RIDE lista en `release`: 2026-08-20
+  `America/Guayaquil`. Las facturas y notas de crédito nuevas muestran en
+  `Información adicional` a BTOB SAS y su RUC 1793113192001, el mismo RUC que
+  ya se incorpora al XML conforme a la Resolución NAC-DGERCGC26-00000027.
+  La identidad viene de la configuración central de plataforma y no puede ser
+  alterada por un tenant. El cambio no modifica XML firmado, montos, clave de
+  acceso, autorización ni comprobantes históricos. La configuración central
+  normaliza el nombre y rechaza al arrancar un RUC que no tenga 13 dígitos
+  ASCII. Pasan Ruff, mypy, contratos y la suite backend aislada con 468
+  pruebas aprobadas, 36 omitidas y la prueba de salud local excluida porque
+  Redis no está levantado; el PDF sintético fue renderizado y revisado sin
+  cortes ni desbordes. Dos revisiones independientes dieron GO y el usuario
+  autorizó la promoción a `main`.
+
 - Revisión masiva de compras SRI lista en el árbol local de `release`:
   2026-08-18 `America/Guayaquil`. La bandeja permite seleccionar hasta 100
   comprobantes visibles y aplicar en un solo paso su uso tributario, tags y
@@ -470,10 +484,11 @@ alcance y las decisiones.
   central de IAERP. Es un dato de plataforma, separado del RUC de cada emisor
   y no editable por tenants. En comprobantes nuevos, antes de su firma, el XML
   agrega el RUC en `infoAdicional/campoAdicional`; aplica a facturas y notas de
-  crédito, sin alterar el RIDE ni documentos ya firmados. Pruebas de
-  configuración fiscal/XML, lint, build, Ruff y mypy pasan. Pendiente
-  promoción autorizada y alta/actualización de las actividades J62021002 o
-  J62021003 en el RUC de BTOB.
+  crédito. Desde el corte de 2026-08-20, el RIDE de comprobantes nuevos
+  también muestra el nombre y RUC del proveedor, sin cambiar documentos ya
+  firmados. Pruebas de configuración fiscal/XML, lint, build, Ruff y mypy
+  pasan. Sigue pendiente el alta o actualización de las actividades J62021002
+  o J62021003 en el RUC de BTOB.
 
 - Actualización local: 2026-07-30 `America/Guayaquil`.
   Al abrir “Registrar cobro”, una cuenta sin movimientos precarga las

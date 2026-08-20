@@ -154,6 +154,8 @@ def build_ride_pdf(
     emission_point: EmissionPoint,
     tenant_ruc: str,
     tenant_legal_name: str,
+    electronic_invoicing_provider_name: str,
+    electronic_invoicing_provider_ruc: str,
     buyer: Party,
     environment_code: str,
     logo_bytes: bytes | None = None,
@@ -169,6 +171,16 @@ def build_ride_pdf(
 
     if environment_code not in {"1", "2"}:
         raise ValueError("RIDE environment code must be '1' or '2'")
+
+    provider_name = electronic_invoicing_provider_name.strip()
+    if not provider_name:
+        raise ValueError("Electronic invoicing provider name is required")
+    if (
+        not electronic_invoicing_provider_ruc.isascii()
+        or not electronic_invoicing_provider_ruc.isdigit()
+        or len(electronic_invoicing_provider_ruc) != 13
+    ):
+        raise ValueError("Electronic invoicing provider RUC must be a 13-digit number")
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -328,6 +340,23 @@ def build_ride_pdf(
     additional_rows: list[list[object]] = [[Paragraph("Información adicional", body_style)]]
     if buyer.email:
         additional_rows.append([_paragraph(f"Email: {buyer.email}", small_style)])
+    additional_rows.extend(
+        [
+            [
+                _paragraph(
+                    f"Proveedor de facturación electrónica: {provider_name}",
+                    small_style,
+                )
+            ],
+            [
+                _paragraph(
+                    "RUC proveedor de facturación electrónica: "
+                    f"{electronic_invoicing_provider_ruc}",
+                    small_style,
+                )
+            ],
+        ]
+    )
     additional_rows.append(
         [Paragraph(f"Estado SRI: {_document_status_label(document.status)}", small_style)]
     )

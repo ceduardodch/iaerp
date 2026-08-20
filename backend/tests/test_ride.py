@@ -33,6 +33,9 @@ _ACCESS_KEY = build_access_key(
     )
 )
 
+_PROVIDER_NAME = "BTOB SAS"
+_PROVIDER_RUC = "1793113192001"
+
 
 _FixtureTuple = tuple[SalesDocument, list[SalesDocumentLine], Establishment, EmissionPoint, Party]
 
@@ -134,6 +137,8 @@ def test_build_ride_pdf_requires_access_key() -> None:
             emission_point=emission_point,
             tenant_ruc="1799999999001",
             tenant_legal_name="IAERP Demo S.A.",
+            electronic_invoicing_provider_name=_PROVIDER_NAME,
+            electronic_invoicing_provider_ruc=_PROVIDER_RUC,
             buyer=buyer,
             environment_code="1",
         )
@@ -149,6 +154,8 @@ def test_build_ride_pdf_is_not_empty_and_contains_access_key() -> None:
         emission_point=emission_point,
         tenant_ruc="1799999999001",
         tenant_legal_name="IAERP Demo S.A.",
+        electronic_invoicing_provider_name=_PROVIDER_NAME,
+        electronic_invoicing_provider_ruc=_PROVIDER_RUC,
         buyer=buyer,
         environment_code="1",
     )
@@ -167,6 +174,8 @@ def test_build_ride_pdf_is_not_empty_and_contains_access_key() -> None:
     assert "AMBIENTE: PRUEBAS" in text
     assert "PENDIENTE DE AUTORIZACIÓN" in text
     assert "Estado SRI: Firmada y pendiente de envío" in text
+    assert "Proveedor de facturación electrónica: BTOB SAS" in text
+    assert "RUC proveedor de facturación electrónica: 1793113192001" in text
 
 
 def test_build_ride_pdf_reflects_same_totals_as_document_without_recalculating() -> None:
@@ -178,6 +187,8 @@ def test_build_ride_pdf_reflects_same_totals_as_document_without_recalculating()
         emission_point=emission_point,
         tenant_ruc="1799999999001",
         tenant_legal_name="IAERP Demo S.A.",
+        electronic_invoicing_provider_name=_PROVIDER_NAME,
+        electronic_invoicing_provider_ruc=_PROVIDER_RUC,
         buyer=buyer,
         environment_code="1",
     )
@@ -200,6 +211,8 @@ def test_authorized_ride_includes_production_authorization_data() -> None:
             emission_point=emission_point,
             tenant_ruc="1799999999001",
             tenant_legal_name="IAERP Demo S.A.",
+            electronic_invoicing_provider_name=_PROVIDER_NAME,
+            electronic_invoicing_provider_ruc=_PROVIDER_RUC,
             buyer=buyer,
             environment_code="2",
         )
@@ -209,3 +222,33 @@ def test_authorized_ride_includes_production_authorization_data() -> None:
     assert "FECHA AUTORIZACIÓN: 29/07/2026 10:04:40 -05" in text
     assert "NÚMERO DE AUTORIZACIÓN" in text
     assert document.authorization_number in "".join(text.split())
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "provider_ruc", "message"),
+    [
+        (" ", _PROVIDER_RUC, "provider name"),
+        (_PROVIDER_NAME, "179311319200", "13-digit"),
+        (_PROVIDER_NAME, "17931131920A1", "13-digit"),
+    ],
+)
+def test_build_ride_pdf_rejects_invalid_provider_identity(
+    provider_name: str,
+    provider_ruc: str,
+    message: str,
+) -> None:
+    document, lines, establishment, emission_point, buyer = _build_fixture()
+
+    with pytest.raises(ValueError, match=message):
+        build_ride_pdf(
+            document=document,
+            lines=lines,
+            establishment=establishment,
+            emission_point=emission_point,
+            tenant_ruc="1799999999001",
+            tenant_legal_name="IAERP Demo S.A.",
+            electronic_invoicing_provider_name=provider_name,
+            electronic_invoicing_provider_ruc=provider_ruc,
+            buyer=buyer,
+            environment_code="1",
+        )

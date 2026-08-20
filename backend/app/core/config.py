@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -105,6 +105,22 @@ class Settings(BaseSettings):
     MINIO_SECURE: bool = False
     MINIO_REGION: str = "us-east-1"
     MINIO_DOCUMENTS_BUCKET: str = "iaerp-documents"
+
+    @field_validator("ELECTRONIC_INVOICING_PROVIDER_NAME")
+    @classmethod
+    def validate_electronic_invoicing_provider_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("ELECTRONIC_INVOICING_PROVIDER_NAME is required")
+        return normalized
+
+    @field_validator("ELECTRONIC_INVOICING_PROVIDER_RUC")
+    @classmethod
+    def validate_electronic_invoicing_provider_ruc(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized.isascii() or not normalized.isdigit() or len(normalized) != 13:
+            raise ValueError("ELECTRONIC_INVOICING_PROVIDER_RUC must contain 13 ASCII digits")
+        return normalized
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
