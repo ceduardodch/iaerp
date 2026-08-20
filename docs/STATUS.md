@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Identidad del proveedor visible en el RIDE lista en `release`: 2026-08-20
+- Identidad del proveedor visible en el RIDE publicada en `main`: 2026-08-20
   `America/Guayaquil`. Las facturas y notas de crédito nuevas muestran en
   `Información adicional` a BTOB SAS y su RUC 1793113192001, el mismo RUC que
   ya se incorpora al XML conforme a la Resolución NAC-DGERCGC26-00000027.
@@ -18,8 +18,10 @@ alcance y las decisiones.
   ASCII. Pasan Ruff, mypy, contratos y la suite backend aislada con 468
   pruebas aprobadas, 36 omitidas y la prueba de salud local excluida porque
   Redis no está levantado; el PDF sintético fue renderizado y revisado sin
-  cortes ni desbordes. Dos revisiones independientes dieron GO y el usuario
-  autorizó la promoción a `main`.
+  cortes ni desbordes. Dos revisiones independientes dieron GO. PR `#41`
+  quedó en `main` como `3eb7494`; CI, despliegue Coolify y salud pública
+  (`live`, `ready` y `startup`) terminaron bien. `main` y `release` quedaron
+  alineadas al mismo commit.
 
 - Revisión masiva de compras SRI lista en el árbol local de `release`:
   2026-08-18 `America/Guayaquil`. La bandeja permite seleccionar hasta 100
