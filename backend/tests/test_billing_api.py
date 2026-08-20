@@ -844,3 +844,48 @@ async def test_concurrent_tenant_writes_serialize_without_deadlock(client):
         )
         assert sequence_row is not None
         assert sequence_row.next_value == 6
+
+
+async def test_invoice_listing_filters_by_customer(client):
+    """Ver las facturas de un cliente exigía traerlas todas y filtrar en el
+    navegador, sobre una lista que además viene acotada a 100."""
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(client, token, key_prefix="filtro-a")
+    otro = await client.post(
+        "/api/v1/parties",
+        headers=auth(token, "filtro-otro-party-000"),
+        json={
+            "name": "Cliente Sin Facturas",
+            "identificationType": "CEDULA",
+            "identificationNumber": "1790000009",
+            "roles": ["CUSTOMER"],
+        },
+    )
+    assert otro.status_code == 201, otro.text
+
+    token_invoices = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["invoices:write", "invoices:read"]
+    )
+    creada = await client.post(
+        "/api/v1/invoices",
+        headers=auth(token_invoices, "filtro-invoice-0001"),
+        json=_invoice_payload(masters),
+    )
+    assert creada.status_code == 201, creada.text
+
+    propias = await client.get(
+        f"/api/v1/invoices?partyId={masters['party_id']}", headers=auth(token_invoices)
+    )
+    assert propias.status_code == 200, propias.text
+    assert [item["id"] for item in propias.json()] == [creada.json()["id"]]
+
+    ajenas = await client.get(
+        f"/api/v1/invoices?partyId={otro.json()['id']}", headers=auth(token_invoices)
+    )
+    assert ajenas.status_code == 200, ajenas.text
+    assert ajenas.json() == []

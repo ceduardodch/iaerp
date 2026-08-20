@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, DollarSign, FileText, History, Mail, MessageSquare, Pencil } from 'lucide-react'
+import { CalendarClock, DollarSign, FileText, History, Mail, MessageSquare, Pencil, Receipt, ShoppingCart } from 'lucide-react'
 import {
   lazy,
   startTransition,
@@ -541,10 +541,13 @@ function PartiesPage({
   parties,
   token,
   onOpenContracts,
+  onOpenPartySection,
 }: {
   parties: Party[]
   token: string
   onOpenContracts: (partyId: string) => void
+  /** Abre facturas, cartera o compras ya filtradas por este contacto. */
+  onOpenPartySection: (partyId: string, destino: 'invoices' | 'receivables' | 'purchases') => void
 }) {
   const queryClient = useQueryClient()
   const [query, setQuery] = useState('')
@@ -714,8 +717,21 @@ function PartiesPage({
                       <Pencil size={18} aria-hidden="true" />
                     </ErpButton>
                     {party.roles.includes('CUSTOMER') ? (
-                      <ErpButton variant="icon" aria-label={`Contratos de ${party.name}`} title="Contratos" onClick={() => onOpenContracts(party.id)}>
-                        <FileText size={18} aria-hidden="true" />
+                      <>
+                        <ErpButton variant="icon" aria-label={`Contratos de ${party.name}`} title="Contratos" onClick={() => onOpenContracts(party.id)}>
+                          <FileText size={18} aria-hidden="true" />
+                        </ErpButton>
+                        <ErpButton variant="icon" aria-label={`Facturas de ${party.name}`} title="Facturas" onClick={() => onOpenPartySection(party.id, 'invoices')}>
+                          <Receipt size={18} aria-hidden="true" />
+                        </ErpButton>
+                        <ErpButton variant="icon" aria-label={`Deudas de ${party.name}`} title="Deudas" onClick={() => onOpenPartySection(party.id, 'receivables')}>
+                          <DollarSign size={18} aria-hidden="true" />
+                        </ErpButton>
+                      </>
+                    ) : null}
+                    {party.roles.includes('SUPPLIER') ? (
+                      <ErpButton variant="icon" aria-label={`Compras a ${party.name}`} title="Compras" onClick={() => onOpenPartySection(party.id, 'purchases')}>
+                        <ShoppingCart size={18} aria-hidden="true" />
                       </ErpButton>
                     ) : null}
                   </ErpActionCell>
@@ -2209,6 +2225,7 @@ function InvoicesPage({
   establishments,
   emissionPoints,
   defaultPaymentTermsDays,
+  partyFilterId,
 }: {
   token: string
   customers: Party[]
@@ -2217,15 +2234,22 @@ function InvoicesPage({
   establishments: Establishment[]
   emissionPoints: EmissionPoint[]
   defaultPaymentTermsDays: number
+  /** Llega con valor al abrir Facturas desde la ficha de un cliente. */
+  partyFilterId?: string
 }) {
   const queryClient = useQueryClient()
   const [panel, setPanel] = useState<InvoicePanel | undefined>(undefined)
   const [archiveTarget, setArchiveTarget] = useState<SalesDocument | null>(null)
   const [archiveReason, setArchiveReason] = useState('Prueba de emisión SRI; comprobante no autorizado.')
   const lastTriggerRef = useRef<HTMLElement | null>(null)
+  // El filtro se resuelve en el servidor: la lista viene acotada a 100, así
+  // que filtrar en el navegador escondería facturas sin avisar.
   const invoicesQuery = useQuery({
-    queryKey: ['invoices'],
-    queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices'),
+    queryKey: ['invoices', partyFilterId ?? 'todas'],
+    queryFn: () => apiRequest<SalesDocument[]>(
+      token,
+      partyFilterId ? `/invoices?partyId=${partyFilterId}` : '/invoices'
+    ),
   })
   const invoices = invoicesQuery.data ?? []
   const invoiceMonths = invoices.reduce<Record<string, SalesDocument[]>>((groups, invoice) => {
@@ -3579,9 +3603,12 @@ function CollectionsBreakdownStrip({ breakdown }: { breakdown?: CollectionsBreak
 function ReceivablesPage({
   token,
   parties,
+  partyFilterId,
 }: {
   token: string
   parties: Party[]
+  /** Llega con valor al abrir Cartera desde la ficha de un contacto. */
+  partyFilterId?: string
 }) {
   const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<'' | 'OUTSTANDING' | AccountItemStatus>('OUTSTANDING')
@@ -3589,12 +3616,14 @@ function ReceivablesPage({
   const lastTriggerRef = useRef<HTMLElement | null>(null)
   const partiesById = new Map(parties.map((party) => [party.id, party]))
   const receivablesQuery = useQuery({
-    queryKey: ['receivables', statusFilter],
-    queryFn: () =>
-      apiRequest<AccountItem[]>(
-        token,
-        statusFilter && statusFilter !== 'OUTSTANDING' ? `/receivables?status=${statusFilter}` : '/receivables',
-      ),
+    queryKey: ['receivables', statusFilter, partyFilterId ?? 'todos'],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (statusFilter && statusFilter !== 'OUTSTANDING') params.set('status', statusFilter)
+      if (partyFilterId) params.set('partyId', partyFilterId)
+      const consulta = params.toString()
+      return apiRequest<AccountItem[]>(token, consulta ? `/receivables?${consulta}` : '/receivables')
+    },
   })
   const receivables = (receivablesQuery.data ?? [])
     .filter((item) => statusFilter === 'OUTSTANDING'
@@ -4261,6 +4290,9 @@ function Workspace() {
   const [section, setSection] = useState<Section>('overview')
   const [navigationVersion, setNavigationVersion] = useState(0)
   const [contractPartyId, setContractPartyId] = useState<string | undefined>()
+  // Contacto por el que vienen filtradas facturas, cartera o compras al llegar
+  // desde su ficha. Se limpia al navegar a cualquier otra parte.
+  const [partyFilterId, setPartyFilterId] = useState<string | undefined>()
   const tokenQuery = useQueries({
     queries: [{
       queryKey: ['auth-token'],
@@ -4299,6 +4331,7 @@ function Workspace() {
         currentSection={section}
         onNavigate={(newSection) => {
           if (newSection !== 'contracts') setContractPartyId(undefined)
+          setPartyFilterId(undefined)
           startTransition(() => {
             setSection(newSection)
             setNavigationVersion((current) => current + 1)
@@ -4310,11 +4343,23 @@ function Workspace() {
       />
       <main id="main-content" tabIndex={-1}>
        <div key={`${section}-${navigationVersion}`} className="section-fade">
+        {/* Sin este aviso la lista aparece recortada sin explicación. */}
+        {partyFilterId ? (
+          <p className="party-filter-notice" role="status">
+            <span>
+              Viendo solo lo de <strong>{parties.find((party) => party.id === partyFilterId)?.name ?? 'este contacto'}</strong>
+            </span>
+            <ErpButton variant="secondary" onClick={() => setPartyFilterId(undefined)}>
+              Ver todo
+            </ErpButton>
+          </p>
+        ) : null}
         {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}
-        {section === 'parties' ? <PartiesPage parties={parties} token={token} onOpenContracts={(partyId) => { setContractPartyId(partyId); startTransition(() => setSection('contracts')) }} /> : null}
+        {section === 'parties' ? <PartiesPage parties={parties} token={token} onOpenContracts={(partyId) => { setContractPartyId(partyId); startTransition(() => setSection('contracts')) }} onOpenPartySection={(partyId, destino) => { setPartyFilterId(partyId); startTransition(() => setSection(destino)) }} /> : null}
         {section === 'catalogs' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
         {section === 'invoices' ? (
           <InvoicesPage
+            partyFilterId={partyFilterId}
             token={token}
             customers={parties.filter((party) => party.roles.includes('CUSTOMER'))}
             products={products}
@@ -4327,12 +4372,12 @@ function Workspace() {
         {section === 'purchases' ? (
           <ErrorBoundary label="Compras">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando compras…" />}>
-              <PurchasesPage token={token} />
+              <PurchasesPage token={token} partyFilterId={partyFilterId} />
             </Suspense>
           </ErrorBoundary>
         ) : null}
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
-        {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} /> : null}
+        {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} partyFilterId={partyFilterId} /> : null}
         {section === 'contracts' ? <ContractsPage key={contractPartyId ?? 'all-contracts'} parties={parties} products={products} taxes={taxesQuery.data ?? []} establishments={establishmentsQuery.data ?? []} emissionPoints={emissionPointsQuery.data ?? []} token={token} initialPartyId={contractPartyId} /> : null}
         {section === 'crm' ? (
           <ErrorBoundary label="el CRM">

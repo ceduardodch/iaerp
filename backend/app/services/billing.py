@@ -1027,6 +1027,7 @@ async def list_sales_documents(
     query: str | None = None,
     status: str | None = None,
     analytic_value_ids: list[uuid.UUID] | None = None,
+    party_id: uuid.UUID | None = None,
     limit: int = _LIST_SALES_DOCUMENTS_MAX_LIMIT,
 ) -> list[SalesDocument]:
     """Lista documentos del tenant activo (``GET /invoices``, Fase 5).
@@ -1046,6 +1047,10 @@ async def list_sales_documents(
     )
     if document_type is not None:
         statement = statement.where(SalesDocument.document_type == document_type)
+    # Ver las facturas de un cliente exigia traerlas todas y filtrar en el
+    # navegador, sobre una lista que ya venia acotada a 100.
+    if party_id is not None:
+        statement = statement.where(SalesDocument.party_id == party_id)
     if status is not None:
         statement = statement.where(SalesDocument.status == status)
     if query:

@@ -1549,6 +1549,7 @@ async def get_invoices(
     q: Annotated[str | None, Query(min_length=2)] = None,
     status: str | None = None,
     analytic_value_id: Annotated[list[uuid.UUID] | None, Query(alias="analyticValueId")] = None,
+    party_id: Annotated[uuid.UUID | None, Query(alias="partyId")] = None,
 ) -> list[SalesDocumentRead]:
     """Lista facturas y notas de credito del tenant activo.
 
@@ -1564,6 +1565,7 @@ async def get_invoices(
         query=q,
         status=status,
         analytic_value_ids=analytic_value_id,
+        party_id=party_id,
     )
     return [await billing.to_sales_document_read(session, context, entity) for entity in entities]
 
@@ -1870,6 +1872,7 @@ async def get_receivables(
     context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
     status: str | None = None,
     due_before: Annotated[date | None, Query(alias="dueBefore")] = None,
+    party_id: Annotated[uuid.UUID | None, Query(alias="partyId")] = None,
 ) -> list[dict[str, object]]:
     """Consulta la cartera del tenant activo (Sprint 3, Fase 1: solo lectura).
 
@@ -1883,7 +1886,7 @@ async def get_receivables(
 
     as_of = due_before if due_before is not None else None
     items = await receivables.list_receivables(
-        session, tenant_id=context.tenant_id, status=status, as_of=as_of
+        session, tenant_id=context.tenant_id, status=status, as_of=as_of, party_id=party_id
     )
     return [_account_item_response(item) for item in items]
 

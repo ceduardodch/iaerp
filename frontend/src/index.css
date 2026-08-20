@@ -1272,3 +1272,6 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
   .dash-hero-value { font-size: 36px; }
   .campaign-card-grid { grid-template-columns: 1fr; }
 }
+
+/* Aviso de listado filtrado por contacto. */
+.party-filter-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 1rem; padding: .6rem 1rem; border: 1px solid var(--line); border-radius: var(--radius-md, .25rem); background: rgba(216,239,133,.28); font-size: .85rem; }

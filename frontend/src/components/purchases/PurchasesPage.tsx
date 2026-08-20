@@ -582,7 +582,14 @@ function PayableDetail({ token, payable, onClose }: { token: string; payable: Pa
   )
 }
 
-export function PurchasesPage({ token }: { token: string }) {
+export function PurchasesPage({
+  token,
+  partyFilterId,
+}: {
+  token: string
+  /** Llega con valor al abrir Compras desde la ficha de un proveedor. */
+  partyFilterId?: string
+}) {
   const queryClient = useQueryClient()
   // Antes había seis pestañas y tres de ellas eran solo un filtro de estado
   // del mismo listado. Quedan tres destinos reales y el estado se elige dentro.
@@ -612,7 +619,12 @@ export function PurchasesPage({ token }: { token: string }) {
   }, [restoreReviewFocusId, reviewingFiscalId])
   const [groupByClassificationId, setGroupByClassificationId] = useState('')
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase())
-  const payablesQuery = useQuery({ queryKey: ['payables'], queryFn: () => apiRequest<Payable[]>(token, '/payables') })
+  // El filtro se resuelve en el servidor para no depender de una lista que
+  // podría venir acotada.
+  const payablesQuery = useQuery({
+    queryKey: ['payables', partyFilterId ?? 'todos'],
+    queryFn: () => apiRequest<Payable[]>(token, partyFilterId ? `/payables?partyId=${partyFilterId}` : '/payables'),
+  })
   const fiscalQuery = useQuery({ queryKey: ['tax', 'purchases'], queryFn: () => apiRequest<PurchaseDocument[]>(token, '/tax/purchases') })
   const classificationsQuery = useQuery({ queryKey: ['analytic-classifications'], queryFn: () => apiRequest<AnalyticClassification[]>(token, '/analytic-classifications') })
   const payables = (payablesQuery.data ?? []).filter((item) => {

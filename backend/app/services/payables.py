@@ -136,8 +136,12 @@ async def list_payables(
     status: str | None = None,
     due_before: date | None = None,
     analytic_value_ids: list[uuid.UUID] | None = None,
+    supplier_id: uuid.UUID | None = None,
 ) -> list[PayableRead]:
     query = select(Payable).where(Payable.tenant_id == tenant_id)
+    # Permite abrir las compras de un proveedor desde su ficha de contacto.
+    if supplier_id is not None:
+        query = query.where(Payable.supplier_id == supplier_id)
     if due_before is not None:
         query = query.where(
             Payable.due_date_known.is_(True),

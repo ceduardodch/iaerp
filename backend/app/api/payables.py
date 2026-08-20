@@ -55,6 +55,7 @@ async def get_payables(
     status: Annotated[str | None, Query(pattern="^(OPEN|PARTIAL|SETTLED|VOIDED)$")] = None,
     due_before: Annotated[date | None, Query(alias="dueBefore")] = None,
     analytic_value_id: Annotated[list[uuid.UUID] | None, Query(alias="analyticValueId")] = None,
+    party_id: Annotated[uuid.UUID | None, Query(alias="partyId")] = None,
 ) -> list[PayableRead]:
     return await payables.list_payables(
         session,
@@ -62,6 +63,7 @@ async def get_payables(
         status=status,
         due_before=due_before,
         analytic_value_ids=analytic_value_id,
+        supplier_id=party_id,
     )
 
 
