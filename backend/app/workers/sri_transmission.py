@@ -187,6 +187,7 @@ async def _create_authorized_ride_version(
         )
     )
     version = int(current_version or 0) + 1
+    runtime_settings = get_settings()
     pdf_bytes = ride.build_ride_pdf(
         document=document,
         lines=lines,
@@ -194,6 +195,12 @@ async def _create_authorized_ride_version(
         emission_point=emission_point,
         tenant_ruc=tenant.ruc,
         tenant_legal_name=tenant.name,
+        electronic_invoicing_provider_name=(
+            runtime_settings.ELECTRONIC_INVOICING_PROVIDER_NAME
+        ),
+        electronic_invoicing_provider_ruc=(
+            runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
+        ),
         buyer=buyer,
         environment_code=document.access_key[23],
         logo_bytes=await fiscal_settings.load_ride_logo(session, tenant_id),

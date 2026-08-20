@@ -1405,6 +1405,12 @@ async def issue_document(
         emission_point=emission_point,
         tenant_ruc=tenant.ruc,
         tenant_legal_name=tenant.name,
+        electronic_invoicing_provider_name=(
+            runtime_settings.ELECTRONIC_INVOICING_PROVIDER_NAME
+        ),
+        electronic_invoicing_provider_ruc=(
+            runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
+        ),
         buyer=party,
         environment_code=fiscal.sri_environment,
         logo_bytes=await fiscal_settings.load_ride_logo(session, context.tenant_id),

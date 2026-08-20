@@ -161,7 +161,7 @@ def _append_electronic_invoicing_provider(
 
     if provider_ruc is None:
         return
-    if not provider_ruc.isdecimal() or len(provider_ruc) != 13:
+    if not provider_ruc.isascii() or not provider_ruc.isdigit() or len(provider_ruc) != 13:
         raise ValueError("Electronic invoicing provider RUC must be a 13-digit number")
 
     info_adicional = _sub(root, "infoAdicional")

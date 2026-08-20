@@ -100,3 +100,31 @@ def test_staging_forbids_sqlite() -> None:
             AUTH_MODE="oidc",
             DATABASE_URL="sqlite+aiosqlite:///./iaerp.db",  # pragma: allowlist secret
         )
+
+
+def test_electronic_invoicing_provider_identity_is_normalized() -> None:
+    settings = Settings(
+        ELECTRONIC_INVOICING_PROVIDER_NAME="  BTOB SAS  ",
+        ELECTRONIC_INVOICING_PROVIDER_RUC=" 1793113192001 ",
+    )
+
+    assert settings.ELECTRONIC_INVOICING_PROVIDER_NAME == "BTOB SAS"
+    assert settings.ELECTRONIC_INVOICING_PROVIDER_RUC == "1793113192001"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("ELECTRONIC_INVOICING_PROVIDER_NAME", "   ", "PROVIDER_NAME"),
+        ("ELECTRONIC_INVOICING_PROVIDER_RUC", "179311319200", "PROVIDER_RUC"),
+        ("ELECTRONIC_INVOICING_PROVIDER_RUC", "17931131920A1", "PROVIDER_RUC"),
+        ("ELECTRONIC_INVOICING_PROVIDER_RUC", "١٧٩٣١١٣١٩٢٠٠١", "PROVIDER_RUC"),
+    ],
+)
+def test_electronic_invoicing_provider_identity_rejects_invalid_values(
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        Settings(**{field: value})  # type: ignore[arg-type]
