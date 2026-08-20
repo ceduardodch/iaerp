@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, DollarSign, History, Mail, MessageSquare } from 'lucide-react'
+import { CalendarClock, DollarSign, FileText, History, Mail, MessageSquare, Pencil } from 'lucide-react'
 import {
   lazy,
   startTransition,
@@ -98,6 +98,11 @@ const TaxPage = lazy(() =>
 )
 const PurchasesPage = lazy(() =>
   import('./components/purchases').then((module) => ({ default: module.PurchasesPage })),
+)
+// Bandeja de acción: revisión agregada de cobranza + prospección, poco usada
+// frente al arranque normal, misma razón de code-splitting que las de arriba.
+const ActionQueuePage = lazy(() =>
+  import('./components/action-queue').then((module) => ({ default: module.ActionQueuePage })),
 )
 import { InvoiceSpreadsheet } from './components/InvoiceSpreadsheet'
 import { Sidebar, type Section } from './components/Sidebar'
@@ -360,7 +365,15 @@ function Overview({
   }))
 
   const currentTax = taxDashboard?.currentMonth
-  const salesTrend = (taxDashboard?.trend ?? []).map((point) => ({
+  const trendPoints = taxDashboard?.trend ?? []
+  // El año en curso es lo que se compara contra metas; la ventana móvil de 12
+  // meses arrancaba en septiembre del año pasado y confundía la lectura.
+  // En enero el año corriente tiene un solo punto y el gráfico se esconde, así
+  // que ahí se conserva la ventana móvil en vez de mostrar nada.
+  const currentYear = Number(todayInFiscalTimezone().slice(0, 4))
+  const yearPoints = trendPoints.filter((point) => point.year === currentYear)
+  const showCalendarYear = yearPoints.length > 1
+  const salesTrend = (showCalendarYear ? yearPoints : trendPoints).map((point) => ({
     label: monthLabel(point.year, point.month),
     value: Math.max(Number(point.total), 0),
   }))
@@ -488,10 +501,20 @@ function Overview({
 
       <SectionHeading index={canReadTax ? 3 : 2} title="Comercial" subtitle="¿Cómo viene la venta?" />
 
-      <ErpPanel title="Evolución de ventas emitidas" actions={<ErpStatusBadge>Últimos 12 meses</ErpStatusBadge>}>
+      <ErpPanel
+        title="Evolución de ventas emitidas"
+        actions={
+          <ErpStatusBadge>
+            {showCalendarYear ? `Año ${currentYear}` : 'Últimos 12 meses'}
+          </ErpStatusBadge>
+        }
+      >
         {taxDashboardQuery.isPending ? <p aria-busy="true">Cargando evolución…</p> : null}
         {salesTrend.length > 1 ? (
-          <ErpLineChart points={salesTrend} label="Ventas emitidas netas por mes, incluidos respaldos históricos, últimos doce meses" />
+          <ErpLineChart
+            points={salesTrend}
+            label={`Ventas emitidas netas por mes, incluidos respaldos históricos, ${showCalendarYear ? `año ${currentYear}` : 'últimos doce meses'}`}
+          />
         ) : !taxDashboardQuery.isPending ? (
           <p className="fine-print">Aún no hay suficientes meses para dibujar una tendencia.</p>
         ) : null}
@@ -662,19 +685,34 @@ function PartiesPage({
                     <td>{party.identificationNumber}</td>
                     <td>{party.phone ?? 'Sin teléfono'}</td>
                     <td>{party.address ?? 'Sin dirección'}</td>
-                    <td><span className="tag">{party.roles.join(' / ')}</span></td>
+                    <td>
+                      {/* `roles` vacío pintaba una etiqueta gris sin texto. */}
+                      {party.roles.length ? (
+                        <span className="tag">{party.roles.join(' / ')}</span>
+                      ) : (
+                        <span className="fine-print">Sin rol</span>
+                      )}
+                    </td>
                     <td>
                       <ErpActionCell>
                         <ErpButton
-                          variant="ghost"
+                          variant="icon"
                           aria-label={`Editar ${party.name}`}
+                          title="Editar"
                           onClick={() => setEditor(party)}
                         >
-                          Editar
+                          <Pencil size={18} aria-hidden="true" />
                         </ErpButton>
                         {party.roles.includes('CUSTOMER') ? (
-                          <ErpButton variant="ghost" onClick={() => onOpenContracts(party.id)}>
-                            Contratos
+                          <ErpButton
+                            variant="icon"
+                            // El botón de texto no tenía nombre accesible; con
+                            // icono se vuelve obligatorio.
+                            aria-label={`Contratos de ${party.name}`}
+                            title="Contratos"
+                            onClick={() => onOpenContracts(party.id)}
+                          >
+                            <FileText size={18} aria-hidden="true" />
                           </ErpButton>
                         ) : null}
                       </ErpActionCell>
@@ -4310,6 +4348,21 @@ function Workspace() {
           <ErrorBoundary label="el CRM">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando CRM…" />}>
               <LeadsPage token={token} parties={parties} products={products} />
+            </Suspense>
+          </ErrorBoundary>
+        ) : null}
+        {section === 'action-queue' ? (
+          <ErrorBoundary label="la bandeja de acción">
+            <Suspense fallback={<SectionLoadingSkeleton label="Cargando bandeja de acción…" />}>
+              <ActionQueuePage
+                token={token}
+                onGoToSettings={() => {
+                  startTransition(() => {
+                    setSection('organization')
+                    setNavigationVersion((current) => current + 1)
+                  })
+                }}
+              />
             </Suspense>
           </ErrorBoundary>
         ) : null}

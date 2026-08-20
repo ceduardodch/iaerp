@@ -797,6 +797,38 @@ export type IntegrationStatus = {
   whatsappCollectionsProvider: 'META' | 'EVOLUTION'
 }
 
+/**
+ * Bandeja de acción (`GET /crm/action-queue`): candidatos a WhatsApp de
+ * cobranza vencida + prospección de leads nuevos, agregados en un solo
+ * lugar. Es de solo lectura -- el envío real sigue pasando por
+ * `POST /receivables/{id}/reminders` y `POST /crm/leads/{id}/messages`.
+ */
+export type ActionQueueCollectionCandidate = {
+  receivableId: string
+  partyId: string
+  partyName: string
+  phone: string
+  openAmount: string
+  daysOverdue: number
+  lastReminderAt?: string | null
+  suggestedMessage: string
+}
+
+export type ActionQueueProspectingCandidate = {
+  leadId: string
+  partyId: string
+  partyName: string
+  phone: string
+  createdAt: string
+  lastActivityAt?: string | null
+  suggestedMessage: string
+}
+
+export type ActionQueueRead = {
+  collections: ActionQueueCollectionCandidate[]
+  prospecting: ActionQueueProspectingCandidate[]
+}
+
 export type EvolutionWhatsAppIntegration = {
   connected: boolean
   displayPhoneNumber?: string | null

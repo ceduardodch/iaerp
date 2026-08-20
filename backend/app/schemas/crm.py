@@ -492,3 +492,48 @@ class SocialCampaignInsightsRead(APIModel):
 
 class SocialCampaignActivation(APIModel):
     confirmed: Literal[True]
+
+
+# Action Queue Schemas (bandeja de acción: cobranza + prospección por WhatsApp)
+
+
+class ActionQueueCollectionCandidate(APIModel):
+    """Factura vencida candidata a recordatorio de cobranza.
+
+    Solo lectura: el envío real sigue pasando por
+    ``POST /receivables/{receivable_id}/reminders``. ``suggested_message`` usa
+    el saldo y los días de atraso reales del receivable, nunca un monto
+    inventado.
+    """
+
+    receivable_id: uuid.UUID
+    party_id: uuid.UUID
+    party_name: str
+    phone: str
+    open_amount: Decimal
+    days_overdue: int = Field(ge=0)
+    last_reminder_at: datetime | None = None
+    suggested_message: str
+
+
+class ActionQueueProspectingCandidate(APIModel):
+    """Lead en etapa temprana candidato a mensaje de primer contacto.
+
+    Solo lectura: el envío real sigue pasando por
+    ``POST /crm/leads/{lead_id}/messages``.
+    """
+
+    lead_id: uuid.UUID
+    party_id: uuid.UUID
+    party_name: str
+    phone: str
+    created_at: datetime
+    last_activity_at: datetime | None = None
+    suggested_message: str
+
+
+class ActionQueueRead(APIModel):
+    """Bandeja única de candidatos a mensaje de WhatsApp (cobranza + prospección)."""
+
+    collections: list[ActionQueueCollectionCandidate]
+    prospecting: list[ActionQueueProspectingCandidate]

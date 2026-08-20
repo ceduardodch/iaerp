@@ -60,8 +60,7 @@
 > fallos con la misma clave. También cubre el cruce tardío entre XML y una
 > compra manual. Ruff, mypy, 20 pruebas backend, contratos, lint/build y 22
 > recorridos Playwright escritorio/móvil pasan; dos revisiones independientes
-> dieron GO. El PR #39 se publicó como `4b03098`; CI, Coolify, salud pública y
-> la ruta OpenAPI masiva quedaron verdes. `main` y `release` están alineadas.
+> dieron GO. El usuario autorizó publicarlo por `release -> PR -> main`.
 
 ---
 

@@ -13,6 +13,7 @@ from app.core.auth import AuthContext, require_scopes
 from app.db.session import get_session
 from app.models.crm import LeadStatus, SocialCampaign
 from app.schemas.crm import (
+    ActionQueueRead,
     EvolutionWhatsAppIntegrationRead,
     EvolutionWhatsAppIntegrationUpdate,
     GmailSyncResult,
@@ -44,7 +45,7 @@ from app.schemas.crm import (
     WhatsAppIntegrationUpdate,
     WhatsAppRoutingUpdate,
 )
-from app.services import crm, crm_integrations, social_campaigns
+from app.services import action_queue, crm, crm_integrations, social_campaigns
 from app.services.unit_of_work import execute_idempotent
 
 router = APIRouter(prefix="/crm", tags=["crm"])
@@ -641,6 +642,42 @@ async def receive_evolution_whatsapp_webhook(
     )
     await session.commit()
     return {"activitiesCreated": created}
+
+
+@router.get("/action-queue", response_model=ActionQueueRead)
+async def get_action_queue(
+    session: Session,
+    context: Annotated[
+        AuthContext, Depends(require_scopes("receivables:read", "leads:read"))
+    ],
+    cooldown_days: Annotated[int, Query(ge=1, le=90, alias="cooldownDays")] = (
+        action_queue.DEFAULT_COOLDOWN_DAYS
+    ),
+    limit: Annotated[int, Query(ge=1, le=action_queue.MAX_LIMIT)] = (
+        action_queue.DEFAULT_LIMIT
+    ),
+) -> ActionQueueRead:
+    """Bandeja única de candidatos a WhatsApp: cobranza vencida + prospección.
+
+    Solo lectura y agregada: junta facturas vencidas con permiso de cobranza
+    (``Receivable.collection_enabled``) y leads en etapa temprana del pipeline
+    que aún no recibieron un mensaje reciente, para que el dueño del negocio
+    revise y dispare el envío desde un solo lugar en vez de entrar factura por
+    factura o lead por lead. El envío real sigue pasando por los endpoints ya
+    existentes: ``POST /receivables/{id}/reminders`` y
+    ``POST /crm/leads/{id}/messages`` (este endpoint no envía nada).
+
+    ``cooldownDays`` (por defecto 5) excluye un candidato que ya recibió un
+    recordatorio/mensaje activo dentro de esa ventana, para no repetir el
+    mismo mensaje seguido.
+    """
+    queue = await action_queue.build_action_queue(
+        session, context, cooldown_days=cooldown_days, limit=limit
+    )
+    return ActionQueueRead(
+        collections=queue.collections,
+        prospecting=queue.prospecting,
+    )
 
 
 @router.get("/leads", response_model=list[LeadRead])

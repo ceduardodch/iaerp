@@ -13,17 +13,35 @@
       "skillPath": "skills/a11y-playwright-testing/SKILL.md",
       "computedHash": "ed96439edae915cf9cfb7c646d22c6314547ae61a1bd0c84b00bf4ab264ec30f"
     },
+    "design-system": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/design-system/SKILL.md",
+      "computedHash": "a05715299135276628f53519484e1267ec8ad111e6355a09c2da1cf66aee2cc3"
+    },
     "fba": {
       "source": "fastapi-practices/skills",
       "sourceType": "github",
       "skillPath": "skills/fastapi-best-architecture/SKILL.md",
       "computedHash": "0eb630deb5f15ae6521946e3a71c4d6eaa4c0660b2a4900760284c202533e554"
     },
+    "frontend-design-review": {
+      "source": "microsoft/skills",
+      "sourceType": "github",
+      "skillPath": ".github/skills/frontend-design-review/SKILL.md",
+      "computedHash": "bdfcadec9604ec0225f337ffbcecb8c8a5ddf69b6b1a1335963df97a0665472e"
+    },
     "mcp-patterns": {
       "source": "yonatangross/orchestkit",
       "sourceType": "github",
       "skillPath": "plugins/ork/skills/mcp-patterns/SKILL.md",
       "computedHash": "f90ac0ddfa84cb0dc3dfd0d0d1b4b42c57d0b4c89d8fa532344399f8b6e38bf5"
+    },
+    "ui-ux-designer": {
+      "source": "sickn33/agentic-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ui-ux-designer/SKILL.md",
+      "computedHash": "dd094034d6f61ead543f5c15d9168f82c4d23fa6930688cdd120b34f74f988f9"
     }
   }
 }

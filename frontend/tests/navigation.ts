@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 
 const sectionGroups: Record<string, string> = {
+  'Bandeja de acción': 'Comercial',
   CRM: 'Comercial',
   Contactos: 'Comercial',
   Contratos: 'Comercial',
