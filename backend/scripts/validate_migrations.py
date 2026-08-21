@@ -248,7 +248,7 @@ def alembic(*arguments: str) -> None:
 def main() -> None:
     url = database_url()
     asyncio.run(reset_database(url))
-    alembic("upgrade", "d0e1f2a3b4c5")
+    alembic("upgrade", "d0e1f2a3b4c5")  # pragma: allowlist secret
     asyncio.run(seed_missing_tax_detail(url))
     alembic("upgrade", "head")
     asyncio.run(assert_missing_tax_detail_backfill(url))
