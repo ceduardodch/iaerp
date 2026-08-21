@@ -70,7 +70,6 @@
 > independientes dieron GO. Las 23 notas del listado entregado requieren sus
 > XML autorizados. CI `32508035636`, despliegue Coolify y salud pública
 > (`live`, `ready`, `startup`) quedaron verdes.
-
 > Corte 2026-08-21: corregido localmente el cálculo engañoso de compras desde
 > TXT. El portal trae totales generales, pero no bases por tarifa; esos registros
 > ya no se marcan completos ni dejan el periodo listo para declarar. IAERP
