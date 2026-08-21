@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Correctivo de compras TXT sin desglose listo localmente en `release`:
+- Correctivo de compras TXT sin desglose publicado en `main`:
   2026-08-21 `America/Guayaquil`. El listado TXT del portal puede traer
   subtotal, IVA y total, pero no separa las bases por tarifa; IAERP lo estaba
   marcando como completo y por eso contaba 417 comprobantes mientras mostraba
@@ -24,8 +24,9 @@ alcance y las decisiones.
   desde el head previo con backfill, downgrade a base, re-upgrade y
   `alembic check`; una prueba adicional confirmó aislamiento entre dos tenants,
   conservación de `DECLARADO` y documentos con desglose intactos. Dos revisiones
-  independientes dieron GO. Publicación autorizada hacia `main`; pendientes:
-  commit, push, CI y promoción.
+  independientes dieron GO. PR #48, CI `32517346780`, despliegue Coolify y
+  salud pública (`live`, `ready`, `startup`) quedaron verdes; el OpenAPI
+  productivo ya expone los cuatro campos de compras pendientes.
 
 - Notas de crédito recibidas publicadas en `main`:
   2026-08-21 `America/Guayaquil`. IAERP conserva el tipo y número del
