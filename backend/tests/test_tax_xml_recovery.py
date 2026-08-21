@@ -17,6 +17,7 @@ from app.models.platform import AuditEvent, OutboxEvent, Tenant
 from app.models.tax import (
     FiscalDocument,
     FiscalDocumentTax,
+    FiscalRetention,
     TaxPeriod,
     TaxXmlRecoveryItem,
     TaxXmlRecoveryJob,
@@ -31,8 +32,15 @@ from tests.fixtures.sri_documents import CREDIT_NOTE_RECEIVED_IVA15_XML
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
 RECEIVER_RUC = "0777777777001"
+NATURAL_PERSON_RUC = "1712345675001"
+NATURAL_PERSON_CEDULA = "1712345675"
 ISSUER_RUC = "0888888888001"
 FIXTURE = Path(__file__).parent / "fixtures" / "sri" / "factura_recibida_iva15.xml"
+RETENTION_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "sri" / "retencion_recibida_autorizada.xml"
+)
+RETENTION_FIXTURE_KEY = "1011202501066666666600120010010000000461234567818"
+RETENTION_KEY = "1011202507066666666600120010010000000461234567810"
 
 
 def _valid_key() -> str:
@@ -99,6 +107,14 @@ def _authorized_credit_note_xml(key: str) -> bytes:
     )
 
 
+def _authorized_retention_xml(*, receiver_ruc: str = RECEIVER_RUC) -> bytes:
+    return (
+        RETENTION_FIXTURE.read_bytes()
+        .replace(RETENTION_FIXTURE_KEY.encode(), RETENTION_KEY.encode())
+        .replace(RECEIVER_RUC.encode(), receiver_ruc.encode())
+    )
+
+
 async def _token(
     client,
     *,
@@ -125,10 +141,12 @@ def _auth(token: str, key: str | None = None) -> dict[str, str]:
     return headers
 
 
-async def _seed_preliminary() -> tuple[uuid.UUID, uuid.UUID, str]:
+async def _seed_preliminary(
+    *, tenant_ruc: str = RECEIVER_RUC
+) -> tuple[uuid.UUID, uuid.UUID, str]:
     key = _valid_key()
     async with SessionFactory() as session, session.begin():
-        await session.execute(update(Tenant).where(Tenant.id == TENANT_A).values(ruc=RECEIVER_RUC))
+        await session.execute(update(Tenant).where(Tenant.id == TENANT_A).values(ruc=tenant_ruc))
         period = TaxPeriod(
             tenant_id=TENANT_A,
             year=2025,
@@ -237,6 +255,36 @@ async def _seed_preliminary_credit_note() -> tuple[uuid.UUID, uuid.UUID, uuid.UU
         return period.id, note.id, payable.id, credit_note_key
 
 
+async def _seed_preliminary_retention(
+    *, tenant_ruc: str = RECEIVER_RUC
+) -> tuple[uuid.UUID, uuid.UUID]:
+    async with SessionFactory() as session, session.begin():
+        await session.execute(update(Tenant).where(Tenant.id == TENANT_A).values(ruc=tenant_ruc))
+        period = TaxPeriod(
+            tenant_id=TENANT_A,
+            year=2025,
+            month=11,
+            obligation_type="IVA",
+            status="EVIDENCIA_INCOMPLETA",
+        )
+        session.add(period)
+        await session.flush()
+        document = FiscalDocument(
+            tenant_id=TENANT_A,
+            tax_period_id=period.id,
+            direction="RECIBIDO",
+            doc_type="RETENCION",
+            access_key=RETENTION_KEY,
+            issue_date=date(2025, 11, 10),
+            counterparty_identification="0666666666001",
+            counterparty_name="CLIENTE AGENTE DEMO",
+            is_preliminary=True,
+        )
+        session.add(document)
+        await session.flush()
+        return period.id, document.id
+
+
 class FakeSRIClient:
     def __init__(self, xml: bytes) -> None:
         self.xml = xml
@@ -315,6 +363,43 @@ async def test_recovery_job_ingests_xml_and_completes_period(client, monkeypatch
     assert len(stored) == 1
     assert len(audits) == 1
     assert len(events) == 1
+
+
+async def test_recovery_accepts_natural_person_cedula_for_tenant_ruc(
+    client, monkeypatch
+) -> None:
+    period_id, document_id, key = await _seed_preliminary(tenant_ruc=NATURAL_PERSON_RUC)
+    stored: dict[str, bytes] = {}
+
+    async def fake_upload(*, object_key: str, data: bytes, **_kwargs) -> None:
+        stored[object_key] = data
+
+    monkeypatch.setattr(evidence_service.storage, "upload_private_object", fake_upload)
+    token = await _token(client)
+    created = await client.post(
+        f"/api/v1/tax/periods/{period_id}/xml-recovery",
+        headers=_auth(token, "recover-xml-natural-person"),
+    )
+    assert created.status_code == 201, created.text
+    job_id = uuid.UUID(created.json()["id"])
+
+    await run_recovery_job(
+        job_id,
+        sri_client=FakeSRIClient(
+            _authorized_xml(key, receiver_ruc=NATURAL_PERSON_CEDULA)
+        ),
+    )
+
+    async with SessionFactory() as session:
+        job = await session.get(TaxXmlRecoveryJob, job_id)
+        item = await session.scalar(
+            select(TaxXmlRecoveryItem).where(TaxXmlRecoveryItem.job_id == job_id)
+        )
+        document = await session.get(FiscalDocument, document_id)
+    assert job is not None and (job.recovered_count, job.failed_count) == (1, 0)
+    assert item is not None and item.status == "RECOVERED"
+    assert document is not None and document.is_preliminary is False
+    assert len(stored) == 1
 
 
 async def test_recovery_rejects_xml_for_another_tenant(client, monkeypatch) -> None:
@@ -555,3 +640,45 @@ async def test_credit_note_recovery_reduces_the_linked_payable(client, monkeypat
     assert note.related_access_key == _valid_key()
     assert payable is not None and payable.status == "PARTIALLY_PAID"
     assert len(movements) == 1 and movements[0].amount == Decimal("5.75")
+
+
+async def test_retention_recovery_reads_iva_and_income_tax_from_report_key(
+    client, monkeypatch
+) -> None:
+    period_id, document_id = await _seed_preliminary_retention(
+        tenant_ruc=NATURAL_PERSON_RUC
+    )
+
+    async def fake_upload(*, object_key: str, data: bytes, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(evidence_service.storage, "upload_private_object", fake_upload)
+    token = await _token(client)
+    created = await client.post(
+        f"/api/v1/tax/periods/{period_id}/xml-recovery",
+        headers=_auth(token, "recover-retention-xml"),
+    )
+    assert created.status_code == 201, created.text
+
+    await run_recovery_job(
+        uuid.UUID(created.json()["id"]),
+        sri_client=FakeSRIClient(
+            _authorized_retention_xml(receiver_ruc=NATURAL_PERSON_CEDULA)
+        ),
+    )
+
+    async with SessionFactory() as session:
+        document = await session.get(FiscalDocument, document_id)
+        retentions = list(
+            await session.scalars(
+                select(FiscalRetention).where(
+                    FiscalRetention.tenant_id == TENANT_A,
+                    FiscalRetention.fiscal_document_id == document_id,
+                )
+            )
+        )
+    by_kind = {retention.kind: retention for retention in retentions}
+    assert document is not None and document.is_preliminary is False
+    assert set(by_kind) == {"IVA", "RENTA"}
+    assert by_kind["IVA"].retained_amount == Decimal("32.80")
+    assert by_kind["RENTA"].retained_amount == Decimal("8.59")

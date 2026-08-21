@@ -392,6 +392,18 @@ const bulkPreview = {
       isRetention: true,
     },
     {
+      filename: 'Nota de crédito (1).xml',
+      status: 'OK',
+      docType: 'NOTA_CREDITO',
+      direction: 'RECIBIDO',
+      issueDate: '2025-11-21',
+      periodYear: 2025,
+      periodMonth: 11,
+      counterpartyName: 'PROVEEDOR DEMO CIA LTDA',
+      total: '5.75',
+      isRetention: false,
+    },
+    {
       filename: 'roto.xml',
       status: 'ERROR',
       isRetention: false,
@@ -402,7 +414,7 @@ const bulkPreview = {
   updated: 0,
   duplicates: 0,
   errors: 1,
-  periods: { '2025-11': 2 },
+  periods: { '2025-11': 3 },
   notes: [],
   retentionCount: 1,
   retentionsApplied: 0,
@@ -412,6 +424,7 @@ async function selectBulkFiles(page: Page) {
   await page.setInputFiles('input[type="file"]', [
     { name: 'Factura (1).xml', mimeType: 'application/xml', buffer: Buffer.from('<a/>') },
     { name: 'Retención (1).xml', mimeType: 'application/xml', buffer: Buffer.from('<b/>') },
+    { name: 'Nota de crédito (1).xml', mimeType: 'application/xml', buffer: Buffer.from('<c/>') },
   ])
 }
 
@@ -429,6 +442,11 @@ test('revisa el lote antes de guardar y clasifica cada archivo', async ({ page }
   await expect(invoiceRow).toContainText('FACTURA')
   await expect(invoiceRow).toContainText('Recibido')
   await expect(invoiceRow).toContainText('Noviembre 2025')
+  await expect(page.getByRole('row', { name: /Nota de crédito \(1\)\.xml/ }))
+    .toContainText('NOTA_CREDITO')
+  await expect(page.getByText(
+    'Puedes elegir juntos los reportes de facturas, notas de crédito y retenciones.',
+  )).toBeVisible()
   // El archivo ilegible se reporta sin abortar el resto.
   await expect(page.getByRole('row', { name: /roto\.xml/ })).toContainText('Invalid SRI XML')
   // Todavía no se guardó nada: sigue ofreciendo confirmar.

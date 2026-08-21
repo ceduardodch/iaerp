@@ -97,6 +97,15 @@
 > revisiones independientes dieron GO. PR #50 quedó en `main` como `e6b2b23`;
 > CI `32525550098`, Coolify, salud y OpenAPI públicos quedaron verdes.
 
+> Corte 2026-08-21: correctivo local para personas naturales. La recuperación
+> del SRI acepta la cédula de 10 dígitos del receptor solo cuando coincide con
+> la base de un RUC natural válido del tenant; empresas, identificaciones
+> inválidas y otros tenants siguen bloqueados. La misma carga admite juntos los
+> reportes de facturas, notas de crédito y retenciones, y hay pruebas completas
+> para los tres tipos. Backend, lint/build y Playwright están verdes; dos
+> revisiones independientes dieron GO. Falta autorización para commit, push y
+> promoción.
+
 ---
 
 ## 🎯 Objetivo de este Documento
