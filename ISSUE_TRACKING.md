@@ -79,6 +79,23 @@
 > PR #48, CI `32517346780`, despliegue Coolify y salud pública (`live`, `ready`,
 > `startup`) quedaron verdes. El OpenAPI público ya expone los totales pendientes.
 
+> Corte 2026-08-21: claridad del periodo IVA lista localmente en `release`.
+> Mientras falten XML, Tributario dice que aún no se puede declarar, bloquea la
+> copia de cifras parciales y lleva directo a cargar XML o ZIP. El resumen ya
+> separa compras gravadas con IVA, tarifa 0 %, exentas y no objeto. Lint, build
+> y 32 recorridos Playwright en escritorio/móvil pasan. Falta revisión
+> independiente y autorización para publicar.
+
+> Corte 2026-08-21: recuperación automática de XML recibidos lista localmente
+> en `release`. Usa las claves válidas ya cargadas desde el TXT, consulta el web
+> service oficial de autorización sin credenciales del portal, valida tenant y
+> período, guarda el XML privado y recalcula IVA/CxP. El proceso es durable,
+> auditable, reintenta fallas técnicas, bloquea trabajos dobles y muestra cuáles
+> comprobantes requieren carga manual. Los ítems viven en filas separadas y una
+> prueba de 1.201 documentos confirma que no hay corte ni reescritura cuadrática.
+> Validación backend/frontend y migración PostgreSQL completa verdes; dos
+> revisiones independientes dieron GO. Publicación hacia `main` autorizada.
+
 ---
 
 ## 🎯 Objetivo de este Documento

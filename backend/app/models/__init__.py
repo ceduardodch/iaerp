@@ -76,6 +76,8 @@ from app.models.tax import (
     TaxPeriod,
     TaxReturnDraft,
     TaxTask,
+    TaxXmlRecoveryItem,
+    TaxXmlRecoveryJob,
     TenantTaxProfile,
 )
 
@@ -147,6 +149,8 @@ __all__ = [
     "TaxPeriod",
     "TaxReturnDraft",
     "TaxTask",
+    "TaxXmlRecoveryItem",
+    "TaxXmlRecoveryJob",
     "TenantTaxProfile",
     "SupplierPaymentSchedule",
 ]

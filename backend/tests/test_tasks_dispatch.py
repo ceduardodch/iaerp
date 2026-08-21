@@ -9,6 +9,7 @@ handler dedicado.
 
 import uuid
 
+from app.services.tax.xml_recovery import RECOVERY_REQUESTED_EVENT
 from app.workers import collections, sri_transmission, tasks
 from app.workers.outbox import OutboxMessage
 
@@ -86,3 +87,35 @@ def test_consume_event_task_dispatches_to_resolved_handler(monkeypatch) -> None:
     assert result is True
     assert captured["consumer_name"] == sri_transmission.CONSUMER_NAME
     assert captured["handler"] is sri_transmission.handle_invoice_signed
+
+
+def test_consume_event_dispatches_xml_recovery_outside_inbox_transaction(monkeypatch) -> None:
+    """La llamada SRI no debe ejecutarse dentro de ``consume_once``/Inbox."""
+    import asyncio
+
+    captured: dict[str, object] = {}
+
+    async def fake_recovery(message):
+        captured["message"] = message
+
+    async def forbidden_consume_once(**_kwargs):
+        raise AssertionError("XML recovery must not run inside the Inbox transaction")
+
+    monkeypatch.setattr(tasks, "handle_recovery_requested", fake_recovery)
+    monkeypatch.setattr(tasks, "consume_once", forbidden_consume_once)
+    monkeypatch.setattr(tasks, "_run", asyncio.run)
+
+    message = _message(RECOVERY_REQUESTED_EVENT)
+    result = tasks.consume_event(
+        event_id=str(message.event_id),
+        tenant_id=str(message.tenant_id),
+        event_type=message.event_type,
+        aggregate_type="tax_xml_recovery_job",
+        aggregate_id=message.aggregate_id,
+        payload=message.payload,
+        correlation_id=message.correlation_id,
+        attempts=message.attempts,
+    )
+
+    assert result is True
+    assert captured["message"].event_type == RECOVERY_REQUESTED_EVENT

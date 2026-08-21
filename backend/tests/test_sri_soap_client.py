@@ -107,6 +107,9 @@ async def test_authorization_autorizado() -> None:
     assert result.authorization_number == "2607202601"
     assert isinstance(result.authorized_at, datetime)
     assert result.authorized_at.year == 2026
+    assert result.authorized_xml is not None
+    assert b"<estado>AUTORIZADO</estado>" in result.authorized_xml
+    assert b"&lt;factura/&gt;" in result.authorized_xml
 
 
 async def test_authorization_no_autorizado() -> None:

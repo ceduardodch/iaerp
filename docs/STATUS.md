@@ -7,6 +7,40 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Recuperación de XML recibidos desde el SRI lista en `release` local:
+  2026-08-21 `America/Guayaquil`. Tributario ofrece `Completar XML desde el
+  SRI` para las compras preliminares que ya tienen una clave válida del listado
+  mensual. La solicitud crea un trabajo durable y auditable; el worker consulta
+  una clave a la vez fuera de la transacción, valida autorización, clave, RUC
+  receptor y período, guarda el sobre XML en MinIO privado e ingiere el mismo
+  caso de uso fiscal existente. Las fallas temporales del SRI, MinIO o la base
+  se reintentan sin perder el ítem; un lease evita el doble proceso y el período
+  se bloquea al crear el trabajo. Cada comprobante tiene una fila durable propia,
+  por lo que el avance no reescribe un JSON creciente; una prueba con 1.201
+  documentos confirma que tampoco hay corte de 1.000. La pantalla
+  informa recuperados, no disponibles y errores, identifica por proveedor,
+  fecha y total los que requieren carga manual, y no habilita cifras hasta
+  tener el desglose real. El servicio SOAP conserva ahora el XML autorizado.
+  La migración completó upgrade, insert real, downgrade, re-upgrade y
+  `alembic check` en PostgreSQL 17. Ruff, mypy, contratos, lint/build, 109
+  pruebas fiscales y 36 recorridos Playwright de Tributario en escritorio/móvil están
+  verdes; incluye replay idempotente, scope/tenant, lease, reintento técnico y
+  nota de crédito que reduce la CxP. Dos revisiones independientes dieron GO;
+  publicación hacia `main` autorizada y en curso.
+
+- Claridad de compras para la declaración IVA lista en `release` local:
+  2026-08-21 `America/Guayaquil`. Tributario ya no presenta cifras parciales
+  como listas para copiar: mientras falten XML autorizados bloquea los botones
+  de copia, explica que el TXT sirve solo para control y lleva el foco directo
+  a la carga de XML o ZIP. El resumen muestra por separado compras gravadas con
+  IVA, tarifa 0 %, exentas y no objeto, usando el desglose que ya calcula el
+  servidor desde `FiscalDocumentTax`. Cuando la evidencia está completa anuncia
+  que el periodo puede pasar a revisión; el crédito tributario y los casilleros
+  marcados siguen sujetos a la revisión contable prevista en el plan fiscal.
+  Pasan lint, build y 32 recorridos Playwright de Tributario en escritorio y
+  móvil. Pendiente revisión independiente y autorización para commit, push y
+  promoción.
+
 - Correctivo de compras TXT sin desglose publicado en `main`:
   2026-08-21 `America/Guayaquil`. El listado TXT del portal puede traer
   subtotal, IVA y total, pero no separa las bases por tarifa; IAERP lo estaba

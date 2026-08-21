@@ -149,6 +149,82 @@ class TaxEvidence(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     processing_notes: Mapped[str | None] = mapped_column(Text)
 
 
+class TaxXmlRecoveryJob(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
+    """Trabajo durable para completar XML recibidos mediante su clave SRI."""
+
+    __tablename__ = "tax_xml_recovery_jobs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "tax_period_id"],
+            ["tax_periods.tenant_id", "tax_periods.id"],
+            name="fk_tax_xml_recovery_jobs_tenant_period",
+        ),
+        UniqueConstraint("tenant_id", "id", name="uq_tax_xml_recovery_jobs_tenant_id"),
+        CheckConstraint(
+            "status IN ('QUEUED', 'RUNNING', 'COMPLETED')",
+            name="tax_xml_recovery_status_valid",
+        ),
+        Index(
+            "ix_tax_xml_recovery_jobs_tenant_period_created",
+            "tenant_id",
+            "tax_period_id",
+            "created_at",
+        ),
+    )
+
+    tax_period_id: Mapped[uuid.UUID]
+    status: Mapped[str] = mapped_column(String(20), default="QUEUED")
+    total_count: Mapped[int] = mapped_column(Integer, default=0)
+    processed_count: Mapped[int] = mapped_column(Integer, default=0)
+    recovered_count: Mapped[int] = mapped_column(Integer, default=0)
+    unavailable_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    requested_by_actor_id: Mapped[str] = mapped_column(String(200))
+    requested_by_actor_type: Mapped[str] = mapped_column(String(30))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TaxXmlRecoveryItem(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
+    """Estado durable de un comprobante dentro de un trabajo de recuperación."""
+
+    __tablename__ = "tax_xml_recovery_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "job_id"],
+            ["tax_xml_recovery_jobs.tenant_id", "tax_xml_recovery_jobs.id"],
+            name="fk_tax_xml_recovery_items_tenant_job",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "fiscal_document_id"],
+            ["fiscal_documents.tenant_id", "fiscal_documents.id"],
+            name="fk_tax_xml_recovery_items_tenant_document",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "job_id",
+            "fiscal_document_id",
+            name="uq_tax_xml_recovery_items_job_document",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'RECOVERED', 'UNAVAILABLE', 'FAILED')",
+            name="tax_xml_recovery_item_status_valid",
+        ),
+        Index(
+            "ix_tax_xml_recovery_items_job_status",
+            "tenant_id",
+            "job_id",
+            "status",
+        ),
+    )
+
+    job_id: Mapped[uuid.UUID]
+    fiscal_document_id: Mapped[uuid.UUID]
+    status: Mapped[str] = mapped_column(String(20), default="PENDING")
+
+
 class FiscalDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     """Comprobante emitido o recibido, canonico para el calculo tributario.
 
@@ -167,8 +243,7 @@ class FiscalDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Bas
         ),
         CheckConstraint("direction IN ('EMITIDO', 'RECIBIDO')", name="direction_valid"),
         CheckConstraint(
-            "doc_type IN ('FACTURA', 'NOTA_CREDITO', 'NOTA_DEBITO', "
-            "'RETENCION', 'LIQUIDACION')",
+            "doc_type IN ('FACTURA', 'NOTA_CREDITO', 'NOTA_DEBITO', 'RETENCION', 'LIQUIDACION')",
             name="doc_type_valid",
         ),
         Index("ix_fiscal_documents_tenant_issue_date", "tenant_id", "issue_date"),

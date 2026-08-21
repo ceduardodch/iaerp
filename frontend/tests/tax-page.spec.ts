@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { mockDashboardEndpoints } from './dashboard-mocks'
 import { navigateToSection } from './navigation'
@@ -28,6 +29,8 @@ const summary = {
     ivaGenerado: '275.40',
     comprasGravadasBase: '13.13',
     comprasTarifaCeroBase: '276.30',
+    comprasExentasBase: '18.50',
+    comprasNoObjetoBase: '7.25',
     ivaCreditoTributario: '1.97',
     retencionesIvaRecibidas: '32.80',
     retencionesRentaRecibidas: '8.59',
@@ -67,6 +70,7 @@ const summary = {
 
 async function mockApi(page: Page) {
   let historicalApproved = false
+  let recoveryStarted = false
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
@@ -122,6 +126,21 @@ async function mockApi(page: Page) {
       },
     ],
   }))
+  await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/xml-recovery`, (route) => {
+    if (route.request().method() === 'POST') recoveryStarted = true
+    return route.fulfill({
+      json: recoveryStarted ? {
+        id: '12121212-1212-4212-8212-121212121212',
+        taxPeriodId: PERIOD_ID,
+        status: 'COMPLETED',
+        totalCount: 1,
+        processedCount: 1,
+        recoveredCount: 1,
+        unavailableCount: 0,
+        failedCount: 0,
+      } : null,
+    })
+  })
   await page.route(
     `**/api/v1/tax/periods/${PERIOD_ID}/historical-tax-candidates`,
     (route) => route.fulfill({
@@ -199,7 +218,7 @@ test('muestra los periodos agrupados por año', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Noviembre/ })).toBeVisible()
 })
 
-test('muestra los valores listos para copiar con dos decimales', async ({ page }) => {
+test('muestra los valores del formulario con dos decimales', async ({ page }) => {
   const row = page.getByRole('row', { name: /401/ })
   await expect(row).toContainText('1836.00')
   // Punto decimal, sin separador de miles.
@@ -219,8 +238,64 @@ test('separa los campos para pegar de los que el SRI autocalcula', async ({ page
 
 test('advierte cuando los datos son preliminares', async ({ page }) => {
   const warning = page.getByRole('alert')
-  await expect(warning).toContainText('Datos preliminares')
+  await expect(warning).toContainText('Aún no está listo para declarar')
   await expect(warning).toContainText('carga su XML autorizado antes de declarar')
+  await expect(page.getByRole('button', { name: 'Copiar campo 401' })).toBeDisabled()
+})
+
+test('lleva desde el periodo preliminar a cargar el ZIP de XML', async ({ page }) => {
+  const input = page.getByLabel('Archivos del mes (XML, TXT o ZIP · hasta 50)')
+  await page.getByRole('button', { name: 'Cargar XML o ZIP', exact: true }).click()
+  await expect(input).toBeFocused()
+})
+
+test('recupera los XML faltantes desde el SRI y muestra el resultado', async ({ page }) => {
+  await page.getByRole('button', { name: 'Completar XML desde el SRI' }).click()
+  const status = page.getByRole('status').filter({ hasText: 'Búsqueda en el SRI terminada' })
+  await expect(status).toContainText('1 de 1 revisados')
+  await expect(status).toContainText('1 recuperados')
+})
+
+test('identifica los comprobantes que el SRI no pudo recuperar', async ({ page }) => {
+  await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/xml-recovery`, (route) =>
+    route.fulfill({
+      json: {
+        id: '12121212-1212-4212-8212-121212121212',
+        taxPeriodId: PERIOD_ID,
+        status: 'COMPLETED',
+        totalCount: 1,
+        processedCount: 1,
+        recoveredCount: 0,
+        unavailableCount: 1,
+        failedCount: 0,
+        items: [{
+          documentId: '55555555-5555-4555-8555-555555555555',
+          status: 'UNAVAILABLE',
+        }],
+      },
+    }),
+  )
+  await page.getByRole('button', { name: 'Completar XML desde el SRI' }).click()
+  const missing = page.locator('.tax-recovery-missing')
+  await missing.getByText('Ver 1 comprobante(s) pendientes').click()
+  await expect(missing).toContainText('PROVEEDOR DEMO CIA LTDA')
+  await expect(missing).toContainText('$276.30')
+  const results = await new AxeBuilder({ page }).include('.tax-recovery-status').analyze()
+  expect(results.violations).toEqual([])
+})
+
+test('separa las compras por tratamiento de IVA', async ({ page }) => {
+  const summaryPanel = page
+    .getByRole('heading', { name: 'Resumen del periodo' })
+    .locator('xpath=ancestor::section[1]')
+  await expect(summaryPanel).toContainText('Compras gravadas con IVA')
+  await expect(summaryPanel).toContainText('$13.13')
+  await expect(summaryPanel).toContainText('Compras con tarifa 0 %')
+  await expect(summaryPanel).toContainText('$276.30')
+  await expect(summaryPanel).toContainText('Compras exentas de IVA')
+  await expect(summaryPanel).toContainText('$18.50')
+  await expect(summaryPanel).toContainText('Compras no objeto de IVA')
+  await expect(summaryPanel).toContainText('$7.25')
 })
 
 test('muestra el total de compras cargadas que aún esperan XML', async ({ page }) => {

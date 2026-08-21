@@ -1068,6 +1068,20 @@ export type TaxIngestResult = {
   notes: string[]
 }
 
+export type TaxXmlRecoveryJob = {
+  id: string
+  taxPeriodId: string
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED'
+  totalCount: number
+  processedCount: number
+  recoveredCount: number
+  unavailableCount: number
+  failedCount: number
+  items: Array<{ documentId: string; status: 'PENDING' | 'RECOVERED' | 'UNAVAILABLE' | 'FAILED' }>
+  startedAt?: string | null
+  completedAt?: string | null
+}
+
 export type TaxFiscalDocument = {
   id: string
   direction: 'EMITIDO' | 'RECIBIDO'

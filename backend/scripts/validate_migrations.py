@@ -236,6 +236,59 @@ async def assert_missing_tax_detail_backfill(url: URL) -> None:
         raise RuntimeError("An ATS task remained open for incomplete evidence.")
 
 
+async def assert_tax_xml_recovery_job_insert(url: URL) -> None:
+    """Prove the durable SRI recovery queue can reference a migrated period."""
+    connection = await asyncpg.connect(
+        host=url.host or "127.0.0.1",
+        port=url.port or 5432,
+        user=url.username,
+        password=url.password,
+        database=url.database,
+    )
+    try:
+        row = await connection.fetchrow(
+            """
+            INSERT INTO tax_xml_recovery_jobs (
+                id, tenant_id, tax_period_id, status, total_count,
+                processed_count, recovered_count, unavailable_count,
+                failed_count, requested_by_actor_id,
+                requested_by_actor_type
+            ) VALUES (
+                '88888888-8888-4888-8888-888888888888',
+                '33333333-3333-4333-8333-333333333333',
+                '44444444-4444-4444-8444-444444444444',
+                'QUEUED', 1, 0, 0, 0, 0, 'migration-validator', 'SYSTEM'
+            )
+            RETURNING created_at, updated_at
+            """
+        )
+        item = await connection.fetchrow(
+            """
+            INSERT INTO tax_xml_recovery_items (
+                id, tenant_id, job_id, fiscal_document_id, status
+            ) VALUES (
+                '99999999-9999-4999-8999-999999999999',
+                '33333333-3333-4333-8333-333333333333',
+                '88888888-8888-4888-8888-888888888888',
+                '55555555-5555-4555-8555-555555555555',
+                'PENDING'
+            )
+            RETURNING created_at, updated_at
+            """
+        )
+    finally:
+        await connection.close()
+    if (
+        row is None
+        or item is None
+        or row["created_at"] is None
+        or row["updated_at"] is None
+        or item["created_at"] is None
+        or item["updated_at"] is None
+    ):
+        raise RuntimeError("Tax XML recovery job timestamps are missing.")
+
+
 def alembic(*arguments: str) -> None:
     subprocess.run(
         [sys.executable, "-m", "alembic", *arguments],
@@ -253,6 +306,7 @@ def main() -> None:
     alembic("upgrade", "head")
     asyncio.run(assert_missing_tax_detail_backfill(url))
     asyncio.run(assert_analytic_classification_insert(url))
+    asyncio.run(assert_tax_xml_recovery_job_insert(url))
     alembic("downgrade", "base")
     asyncio.run(assert_downgraded_to_base(url))
     alembic("upgrade", "head")

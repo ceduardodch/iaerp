@@ -61,6 +61,9 @@ class AuthorizationResult:
     messages: list[dict[str, str]] = field(default_factory=list)
     authorization_number: str | None = None
     authorized_at: datetime | None = None
+    # Sobre <autorizacion> completo, solo cuando el SRI devolvio AUTORIZADO.
+    # Permite custodiar e ingerir comprobantes recibidos sin volver a pedirlos.
+    authorized_xml: bytes | None = None
 
 
 class SRIClient(Protocol):
