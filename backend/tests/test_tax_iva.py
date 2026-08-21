@@ -8,12 +8,18 @@ El flujo completo se ejercita por la API: subir evidencia -> ingerir -> calcular
 """
 
 import uuid
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 
+from app.db.session import SessionFactory
+from app.models.payables import Payable, PayableMovement
+from app.models.tax import FiscalDocument
 from app.services.tax import evidence as evidence_service
+from tests.fixtures.sri_documents import CREDIT_NOTE_RECEIVED_IVA15_XML
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sri"
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
@@ -59,8 +65,14 @@ def auth(token: str, key: str | None = None) -> dict[str, str]:
     return headers
 
 
-async def upload_and_ingest(client, token: str, filename: str) -> dict[str, Any]:
-    content = (FIXTURES / filename).read_bytes()
+async def upload_and_ingest(
+    client,
+    token: str,
+    filename: str,
+    *,
+    content: bytes | None = None,
+) -> dict[str, Any]:
+    content = content if content is not None else (FIXTURES / filename).read_bytes()
     upload = await client.post(
         "/api/v1/tax/evidence",
         headers=auth(token, f"tax-ev-{uuid.uuid4()}"),
@@ -140,6 +152,228 @@ async def test_purchases_split_by_bracket_and_credit(client, stored_objects) -> 
     # No hubo ventas: nada se infiere desde las compras.
     assert amounts["ventasBrutas"] == "0.00"
     assert amounts["ivaGenerado"] == "0.00"
+
+
+@pytest.mark.parametrize(
+    "filenames",
+    [
+        ("factura_recibida_iva15.xml", "nota_credito.xml"),
+        ("nota_credito.xml", "factura_recibida_iva15.xml"),
+    ],
+)
+async def test_received_credit_note_links_in_any_upload_order_and_reduces_payable(
+    client,
+    stored_objects,
+    filenames: tuple[str, str],
+) -> None:
+    token = await token_for(client)
+    for filename in filenames:
+        await upload_and_ingest(
+            client,
+            token,
+            filename,
+            content=(CREDIT_NOTE_RECEIVED_IVA15_XML if filename == "nota_credito.xml" else None),
+        )
+    # La misma evidencia se puede procesar otra vez sin duplicar el ajuste.
+    await upload_and_ingest(
+        client,
+        token,
+        "nota_credito.xml",
+        content=CREDIT_NOTE_RECEIVED_IVA15_XML,
+    )
+
+    period = await find_period(client, token, 2025, 11)
+    iva = await client.get(
+        f"/api/v1/tax/periods/{period['id']}/iva", headers=auth(token)
+    )
+    assert iva.status_code == 200, iva.text
+    amounts = iva.json()["amounts"]
+    assert amounts["comprasGravadasBase"] == "8.13"
+    assert amounts["ivaCreditoTributario"] == "1.22"
+
+    async with SessionFactory() as session:
+        invoice = await session.scalar(
+            select(FiscalDocument).where(FiscalDocument.doc_type == "FACTURA")
+        )
+        note = await session.scalar(
+            select(FiscalDocument).where(FiscalDocument.doc_type == "NOTA_CREDITO")
+        )
+        assert invoice is not None
+        assert note is not None
+        assert note.related_document_number == "001-002-000019877"
+        assert note.related_document_type == "FACTURA"
+        assert note.related_access_key == invoice.access_key
+
+        payable = await session.scalar(
+            select(Payable).where(Payable.fiscal_document_id == invoice.id)
+        )
+        assert payable is not None
+        movements = list(
+            await session.scalars(
+                select(PayableMovement).where(
+                    PayableMovement.payable_id == payable.id,
+                    PayableMovement.movement_type == "CREDIT_NOTE",
+                )
+            )
+        )
+        assert len(movements) == 1
+        assert movements[0].amount == Decimal("5.75")
+        assert payable.total - sum(
+            (movement.amount for movement in movements), Decimal("0.00")
+        ) == Decimal("9.35")
+        assert payable.status == "PARTIALLY_PAID"
+
+
+async def test_preliminary_txt_credit_note_never_creates_payable_movement(
+    client,
+    stored_objects,
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+
+    content = (
+        "RUC_EMISOR\tRAZON_SOCIAL_EMISOR\tTIPO_COMPROBANTE\tSERIE_COMPROBANTE\t"
+        "CLAVE_ACCESO\tFECHA_AUTORIZACION\tFECHA_EMISION\tIDENTIFICACION_RECEPTOR\t"
+        "VALOR_SIN_IMPUESTOS\tIVA\tIMPORTE_TOTAL\tNUMERO_DOCUMENTO_MODIFICADO\n"
+        "0888888888001\tPROVEEDOR IVA DEMO\tNota de crédito\t001-002-000000112\t"
+        "2211202504098888888800120010020000001121234567811\t22/11/2025\t"
+        "22/11/2025\t0777777777001\t5.00\t0.75\t5.75\t001-002-000019877\n"
+    ).encode("iso-8859-1")
+    upload = await client.post(
+        "/api/v1/tax/evidence",
+        headers=auth(token, "tax-credit-note-txt-evidence"),
+        files={"file": ("notas.txt", content, "text/plain")},
+        data={"origin": "PORTAL_SRI"},
+    )
+    assert upload.status_code == 201, upload.text
+    ingested = await client.post(
+        f"/api/v1/tax/evidence/{upload.json()['id']}/ingest",
+        headers=auth(token, "tax-credit-note-txt-ingest"),
+    )
+    assert ingested.status_code == 200, ingested.text
+    assert ingested.json()["preliminary"] == 1
+
+    async with SessionFactory() as session:
+        note = await session.scalar(
+            select(FiscalDocument).where(FiscalDocument.doc_type == "NOTA_CREDITO")
+        )
+        movement_count = len(
+            list(
+                await session.scalars(
+                    select(PayableMovement).where(
+                        PayableMovement.movement_type == "CREDIT_NOTE"
+                    )
+                )
+            )
+        )
+    assert note is not None
+    assert note.is_preliminary is True
+    assert note.related_document_number == "001-002-000019877"
+    assert note.related_access_key is not None
+    assert movement_count == 0
+
+
+async def test_credit_note_with_unsupported_modified_type_is_not_auto_linked(
+    client,
+    stored_objects,
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+    invalid_relation = CREDIT_NOTE_RECEIVED_IVA15_XML.replace(
+        b"<codDocModificado>01</codDocModificado>",
+        b"<codDocModificado>07</codDocModificado>",
+    )
+    await upload_and_ingest(
+        client,
+        token,
+        "nota_credito_tipo_no_soportado.xml",
+        content=invalid_relation,
+    )
+
+    async with SessionFactory() as session:
+        note = await session.scalar(
+            select(FiscalDocument).where(FiscalDocument.doc_type == "NOTA_CREDITO")
+        )
+        movement = await session.scalar(
+            select(PayableMovement).where(
+                PayableMovement.movement_type == "CREDIT_NOTE"
+            )
+        )
+    assert note is not None
+    assert note.related_document_type == "RETENCION"
+    assert note.related_access_key is None
+    assert movement is None
+
+
+async def test_credit_note_does_not_reopen_void_payable(client, stored_objects) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+    async with SessionFactory.begin() as session:
+        payable = await session.scalar(select(Payable))
+        assert payable is not None
+        payable.status = "VOID"
+
+    await upload_and_ingest(
+        client,
+        token,
+        "nota_credito.xml",
+        content=CREDIT_NOTE_RECEIVED_IVA15_XML,
+    )
+
+    async with SessionFactory() as session:
+        payable = await session.scalar(select(Payable))
+        movement = await session.scalar(
+            select(PayableMovement).where(
+                PayableMovement.movement_type == "CREDIT_NOTE"
+            )
+        )
+    assert payable is not None
+    assert payable.status == "VOID"
+    assert movement is None
+
+
+async def test_authorized_credit_note_cannot_be_relinked_after_application(
+    client,
+    stored_objects,
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+    await upload_and_ingest(
+        client,
+        token,
+        "nota_credito.xml",
+        content=CREDIT_NOTE_RECEIVED_IVA15_XML,
+    )
+    changed_relation = CREDIT_NOTE_RECEIVED_IVA15_XML.replace(
+        b"001-002-000019877", b"001-002-000019878"
+    )
+    upload = await client.post(
+        "/api/v1/tax/evidence",
+        headers=auth(token, "tax-credit-note-relink-evidence"),
+        files={"file": ("nota_credito_relink.xml", changed_relation, "application/xml")},
+        data={"origin": "PORTAL_SRI"},
+    )
+    assert upload.status_code == 201, upload.text
+    rejected = await client.post(
+        f"/api/v1/tax/evidence/{upload.json()['id']}/ingest",
+        headers=auth(token, "tax-credit-note-relink-ingest"),
+    )
+    assert rejected.status_code == 409, rejected.text
+
+    async with SessionFactory() as session:
+        note = await session.scalar(
+            select(FiscalDocument).where(FiscalDocument.doc_type == "NOTA_CREDITO")
+        )
+        movements = list(
+            await session.scalars(
+                select(PayableMovement).where(
+                    PayableMovement.movement_type == "CREDIT_NOTE"
+                )
+            )
+        )
+    assert note is not None
+    assert note.related_document_number == "001-002-000019877"
+    assert len(movements) == 1
 
 
 async def test_purchase_list_uses_received_xml_and_exposes_tax_breakdown(

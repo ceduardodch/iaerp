@@ -7,6 +7,25 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Notas de crédito recibidas listas en el árbol local de `release`:
+  2026-08-21 `America/Guayaquil`. IAERP conserva el tipo y número del
+  comprobante modificado, enlaza la nota con la compra por tenant, sentido,
+  RUC del proveedor, tipo y serie, y funciona aunque se cargue antes o después
+  de la factura. Solo el XML autorizado aplica el crédito a la CxP; el TXT del
+  portal queda preliminar aun cuando traiga un total. Reprocesar el XML no
+  duplica el movimiento, una CxP anulada no se reabre y una nota autorizada no
+  puede cambiar luego de factura sustento. IVA resta base e impuesto; el ATS
+  informa el detalle tipo `04` con valores positivos y los cinco datos
+  obligatorios del comprobante modificado, incluso si pertenece a otro mes.
+  Pasan Ruff, mypy, 68 pruebas dirigidas SQLite, 60 PostgreSQL, migración
+  completa con `alembic check` y validación del XML sintético contra el XSD
+  oficial del SRI. Dos revisiones independientes dieron GO. El listado real
+  entregado contiene 23 notas válidas para enlazar, pero las 23 carecen de
+  importe total y siguen preliminares: tras publicar se debe reingerir el TXT y
+  cargar los XML autorizados para cerrar cifras y saldos. El usuario autorizó
+  commit, push y promoción `release -> main`; quedan CI, Coolify y comprobación
+  pública.
+
 - Alta rápida de maestros desde Nueva factura publicada en `main`:
   2026-08-20 `America/Guayaquil`. El usuario puede crear un cliente
   con sus datos básicos o un producto con precio e impuesto y dejarlo

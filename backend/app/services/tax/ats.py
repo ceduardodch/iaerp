@@ -56,7 +56,6 @@ _PURCHASE_ORDER = (
     "valRetServ50",
     "valorRetServicios",
     "valRetServ100",
-    "totbasesImpReemb",
 )
 
 # Orden exacto de <detalleVentas>. `tipoEmision` ANTES de `numeroComprobantes`.
@@ -99,6 +98,11 @@ class AtsPurchase:
     ice_amount: Decimal = Decimal("0.00")
     iva_amount: Decimal = Decimal("0.00")
     payment_methods: list[str] = field(default_factory=list)
+    modified_document_type: str | None = None
+    modified_establishment: str | None = None
+    modified_emission_point: str | None = None
+    modified_sequential: str | None = None
+    modified_authorization: str | None = None
 
     @property
     def total(self) -> Decimal:
@@ -136,6 +140,7 @@ class AtsInput:
     purchases: list[AtsPurchase] = field(default_factory=list)
     sales: list[AtsSale] = field(default_factory=list)
     sales_by_establishment: dict[str, Decimal] = field(default_factory=dict)
+    sales_total: Decimal | None = None
 
 
 def _text_node(parent: Element, tag: str, value: str) -> None:
@@ -166,10 +171,12 @@ def build_ats_xml(data: AtsInput) -> bytes:
     _text_node(root, "Anio", str(data.year))
     _text_node(root, "Mes", format_month(data.month))
     _text_node(root, "numEstabRuc", data.establishment_count)
-    total_sales = sum(
-        (sale.base_no_iva + sale.base_zero_rate + sale.base_taxed for sale in data.sales),
-        Decimal("0.00"),
-    )
+    total_sales = data.sales_total
+    if total_sales is None:
+        total_sales = sum(
+            (sale.base_no_iva + sale.base_zero_rate + sale.base_taxed for sale in data.sales),
+            Decimal("0.00"),
+        )
     _text_node(root, "totalVentas", format_amount(total_sales))
     _text_node(root, "codigoOperativo", "IVA")
 
@@ -204,6 +211,7 @@ def build_ats_xml(data: AtsInput) -> bytes:
         }
         for tag in _PURCHASE_ORDER:
             _text_node(node, tag, values[tag])
+        _text_node(node, "totbasesImpReemb", values["totbasesImpReemb"])
 
         payment_exterior = SubElement(node, "pagoExterior")
         _text_node(payment_exterior, "pagoLocExt", "01")
@@ -214,6 +222,30 @@ def build_ats_xml(data: AtsInput) -> bytes:
         # La capa que arma el ATS valida que exista respaldo antes de llegar
         # aqui. El generador nunca inventa una forma de pago para completar XML.
         _append_payment_methods(node, purchase.payment_methods)
+        # El XSD ubica el comprobante modificado después de pagoExterior,
+        # formasDePago, AIR y retenciones. IAERP aún no emite AIR/retenciones
+        # en este bloque, por lo que estos cinco nodos van al final.
+        modified_values = (
+            purchase.modified_document_type,
+            purchase.modified_establishment,
+            purchase.modified_emission_point,
+            purchase.modified_sequential,
+            purchase.modified_authorization,
+        )
+        if all(modified_values):
+            for tag, value in zip(
+                (
+                    "docModificado",
+                    "estabModificado",
+                    "ptoEmiModificado",
+                    "secModificado",
+                    "autModificado",
+                ),
+                modified_values,
+                strict=True,
+            ):
+                assert value is not None
+                _text_node(node, tag, value)
 
     sales = SubElement(root, "ventas")
     for sale in data.sales:

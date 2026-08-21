@@ -21,7 +21,7 @@ from app.services.tax.ats import (
 )
 
 _ADD = {"FACTURA", "LIQUIDACION", "NOTA_DEBITO"}
-_SUBTRACT = {"NOTA_CREDITO"}
+_CREDIT_NOTES = {"NOTA_CREDITO"}
 _PURCHASE_DOC_CODES = {
     "FACTURA": "01",
     "LIQUIDACION": "03",
@@ -88,6 +88,7 @@ def build_ats_input(
     documents: list[FiscalDocument],
     taxes: list[FiscalDocumentTax],
     retentions: list[FiscalRetention],
+    related_documents: list[FiscalDocument] | None = None,
 ) -> AtsBuildResult:
     """Arma el ATS exclusivamente desde documentos del periodo.
 
@@ -103,14 +104,20 @@ def build_ats_input(
     purchases: list[AtsPurchase] = []
     sales_groups: dict[tuple[str, str, str], AtsSale] = {}
     sales_by_establishment: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+    sales_total = Decimal("0.00")
     retained_by_support: dict[str, list[FiscalRetention]] = defaultdict(list)
+    by_access_key = {
+        document.access_key: document
+        for document in [*documents, *(related_documents or [])]
+        if document.access_key
+    }
     for retention in retentions:
         supporting_number = _normalized_document_number(retention.supporting_document_number)
         if supporting_number:
             retained_by_support[supporting_number].append(retention)
 
     for document in documents:
-        if document.doc_type not in _ADD | _SUBTRACT:
+        if document.doc_type not in _ADD | _CREDIT_NOTES:
             continue
         if document.is_preliminary:
             missing.append(
@@ -128,7 +135,6 @@ def build_ats_input(
                 f"{_date(document.issue_date)} no tiene tipo de comprobante ATS soportado."
             )
             continue
-        sign = Decimal("-1") if document.doc_type in _SUBTRACT else Decimal("1")
         document_taxes = by_document.get(document.id, [])
 
         if document.direction == "RECIBIDO":
@@ -154,8 +160,34 @@ def build_ats_input(
             bases: defaultdict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
             iva = Decimal("0.00")
             for tax in document_taxes:
-                bases[tax.tax_bracket] += sign * tax.base_amount
-                iva += sign * tax.tax_amount
+                # El tipo 04 ya identifica una nota de credito en el ATS. Sus
+                # bases e IVA se reportan como importes positivos; el signo
+                # negativo solo pertenece al calculo mensual de IVA.
+                bases[tax.tax_bracket] += tax.base_amount
+                iva += tax.tax_amount
+            modified: FiscalDocument | None = None
+            if document.doc_type in _CREDIT_NOTES:
+                modified = (
+                    by_access_key.get(document.related_access_key)
+                    if document.related_access_key
+                    else None
+                )
+                if (
+                    modified is None
+                    or modified.doc_type not in _ADD
+                    or not all(
+                        (
+                            modified.establishment_code,
+                            modified.emission_point_code,
+                            modified.sequential,
+                            modified.authorization_number,
+                        )
+                    )
+                ):
+                    missing.append(
+                        f"Nota de crédito {_series(document) or _date(document.issue_date)} "
+                        "sin comprobante modificado enlazado para el ATS."
+                    )
             purchases.append(
                 AtsPurchase(
                     supplier_identification=document.counterparty_identification,
@@ -173,6 +205,17 @@ def build_ats_input(
                     base_exempt=bases["EXENTO"],
                     iva_amount=iva,
                     payment_methods=list(document.payment_methods),
+                    modified_document_type=(
+                        _PURCHASE_DOC_CODES.get(modified.doc_type) if modified else None
+                    ),
+                    modified_establishment=(modified.establishment_code if modified else None),
+                    modified_emission_point=(
+                        modified.emission_point_code if modified else None
+                    ),
+                    modified_sequential=(modified.sequential if modified else None),
+                    modified_authorization=(
+                        modified.authorization_number if modified else None
+                    ),
                 )
             )
             continue
@@ -205,12 +248,12 @@ def build_ats_input(
                 sale.payment_methods.append(method)
         for tax in document_taxes:
             if tax.tax_bracket == "NO_OBJETO":
-                sale.base_no_iva += sign * tax.base_amount
+                sale.base_no_iva += tax.base_amount
             elif tax.tax_bracket == "TARIFA_CERO":
-                sale.base_zero_rate += sign * tax.base_amount
+                sale.base_zero_rate += tax.base_amount
             elif tax.tax_bracket == "GRAVADO":
-                sale.base_taxed += sign * tax.base_amount
-            sale.iva_amount += sign * tax.tax_amount
+                sale.base_taxed += tax.base_amount
+            sale.iva_amount += tax.tax_amount
         document_number = _normalized_document_number(_series(document))
         for retention in retained_by_support.get(document_number or "", []):
             if retention.kind == "IVA":
@@ -218,7 +261,26 @@ def build_ats_input(
             elif retention.kind == "RENTA":
                 sale.withheld_income_tax += retention.retained_amount
         if document.establishment_code:
-            sales_by_establishment[document.establishment_code] += sign * document.subtotal
+            header_sign = (
+                Decimal("-1") if document.doc_type in _CREDIT_NOTES else Decimal("1")
+            )
+            sales_by_establishment[document.establishment_code] += (
+                header_sign * document.subtotal
+            )
+        sales_total += (
+            Decimal("-1") if document.doc_type in _CREDIT_NOTES else Decimal("1")
+        ) * document.subtotal
+
+    if sales_total < 0:
+        missing.append(
+            "Las notas de crédito superan las ventas del período; revisa el total ATS antes "
+            "de generarlo."
+        )
+    for establishment, total in sales_by_establishment.items():
+        if total < 0:
+            missing.append(
+                f"Las notas de crédito superan las ventas del establecimiento {establishment}."
+            )
 
     for purchase in purchases:
         # Faltante SOLO si supera el umbral Y ademas no trae forma de pago. La
@@ -242,6 +304,7 @@ def build_ats_input(
             purchases=purchases,
             sales=list(sales_groups.values()),
             sales_by_establishment=dict(sales_by_establishment),
+            sales_total=sales_total,
         ),
         missing=list(dict.fromkeys(missing)),
     )

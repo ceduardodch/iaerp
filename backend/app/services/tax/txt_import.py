@@ -140,6 +140,14 @@ def parse_received_txt(data: bytes) -> list[ParsedTxtRow]:
                 f"Tipo de comprobante no reconocido en el TXT: '{values['document_label']}'. "
                 "Carga el XML para confirmarlo."
             )
+        elif doc_type in {"NOTA_CREDITO", "NOTA_DEBITO"}:
+            # El listado puede traer totales, pero no el desglose tributario ni
+            # valida por sí solo el documento complementario autorizado. Sirve
+            # para enlazarlo y pedir el XML, no para mover saldos o cerrar IVA.
+            preliminary_reason = (
+                "La nota del TXT requiere su XML autorizado para aplicar el saldo "
+                "y el detalle tributario."
+            )
         elif total is None or subtotal is None:
             preliminary_reason = (
                 "El TXT no trae los valores de este comprobante. "

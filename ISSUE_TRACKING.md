@@ -62,6 +62,15 @@
 > recorridos Playwright escritorio/móvil pasan; dos revisiones independientes
 > dieron GO. El usuario autorizó publicarlo por `release -> PR -> main`.
 
+> Corte 2026-08-21: notas de crédito recibidas listas localmente en `release`.
+> El XML autorizado enlaza de forma tenant-safe la factura modificada, resta
+> IVA, genera el detalle ATS tipo 04 válido y aplica una sola vez el crédito a
+> CxP. El TXT solo sirve como evidencia preliminar y no mueve saldos. Pasan
+> pruebas SQLite/PostgreSQL, migración completa y XSD oficial; dos revisiones
+> independientes dieron GO. Las 23 notas del listado entregado requieren sus
+> XML autorizados. El usuario autorizó commit, push y promoción; quedan CI,
+> Coolify y comprobación pública.
+
 ---
 
 ## 🎯 Objetivo de este Documento

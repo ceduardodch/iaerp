@@ -95,6 +95,8 @@ class ParsedDocument:
     payment_methods: list[str] = field(default_factory=list)
     taxes: list[ParsedTax] = field(default_factory=list)
     retentions: list[ParsedRetention] = field(default_factory=list)
+    modified_document: str | None = None
+    modified_document_type: str | None = None
 
 
 def _local(tag: str) -> str:
@@ -265,6 +267,10 @@ def _parse_invoice_like(
         total=total,
         payment_methods=payment_methods,
         taxes=taxes,
+        modified_document=_text(document, f"{info_tag}/numDocModificado"),
+        modified_document_type=_DOC_TYPES.get(
+            _text(document, f"{info_tag}/codDocModificado") or ""
+        ),
     )
 
 
