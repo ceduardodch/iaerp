@@ -117,9 +117,7 @@ export function ErpDataTable<T>({
                 <td
                   key={index}
                   className={column.className}
-                  data-label={column.mobileLabel ?? (
-                    typeof column.header === 'string' ? column.header : undefined
-                  )}
+                  data-label={column.mobileLabel}
                 >
                   {column.cell(row)}
                 </td>

@@ -1115,10 +1115,10 @@ export function TaxPage({ token }: { token: string }) {
                   rows={dashboardQuery.data.annual.months}
                   rowKey={(month) => String(month.month)}
                   columns={[
-                    { header: 'Mes', cell: (month) => <>{monthName(month.month)}</> },
-                    { header: 'Ventas', cell: (month) => <>{formatDashboardCurrency(month.salesBase)}</> },
-                    { header: 'Compras deducibles', cell: (month) => <>{formatDashboardCurrency(month.deductiblePurchasesBase)}</> },
-                    { header: 'Retención de renta', cell: (month) => <>{formatDashboardCurrency(month.incomeTaxWithheld)}</> },
+                    { header: 'Mes', mobileLabel: 'Mes', cell: (month) => <>{monthName(month.month)}</> },
+                    { header: 'Ventas', mobileLabel: 'Ventas', cell: (month) => <>{formatDashboardCurrency(month.salesBase)}</> },
+                    { header: 'Compras deducibles', mobileLabel: 'Compras deducibles', cell: (month) => <>{formatDashboardCurrency(month.deductiblePurchasesBase)}</> },
+                    { header: 'Retención de renta', mobileLabel: 'Retención de renta', cell: (month) => <>{formatDashboardCurrency(month.incomeTaxWithheld)}</> },
                   ]}
                 />
                 <div className="tax-annual-limitations" role="note" aria-label="Límites del cálculo anual">
