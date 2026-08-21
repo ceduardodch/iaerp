@@ -17,6 +17,7 @@ from app.integrations.sri.soap import SoapSRIClient
 from app.models.platform import OutboxEvent, Tenant
 from app.models.tax import FiscalDocument, TaxPeriod, TaxXmlRecoveryItem, TaxXmlRecoveryJob
 from app.services.tax import evidence, ingest, periods
+from app.services.tax.identification import receiver_matches_tenant
 from app.services.tax.sri_xml import parse_authorized_document
 from app.services.unit_of_work import append_audit
 from app.workers.outbox import OutboxMessage
@@ -236,7 +237,7 @@ async def run_recovery_job(
                 assert period is not None
                 assert current is not None
                 _reject_unless(
-                    parsed.receiver_identification == tenant.ruc,
+                    receiver_matches_tenant(parsed.receiver_identification, tenant.ruc),
                     "SRI response receiver does not match tenant",
                 )
                 _reject_unless(

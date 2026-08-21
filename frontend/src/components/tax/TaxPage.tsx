@@ -471,6 +471,10 @@ export function TaxPage({ token }: { token: string }) {
               }}
             />
           </label>
+          <p className="fine-print">
+            Puedes elegir juntos los reportes de facturas, notas de crédito y retenciones.
+            IAERP usará sus claves para buscar cada XML autorizado.
+          </p>
           <ErpButton
             variant="primary"
             disabled={selectedFiles.length === 0 || previewBulk.isPending}

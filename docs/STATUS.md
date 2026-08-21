@@ -7,6 +7,20 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Correctivo de recuperación SRI para persona natural listo en `release`
+  local: 2026-08-21 `America/Guayaquil`. Algunos XML autorizados identifican al
+  receptor con su cédula de 10 dígitos aunque el tenant use el RUC natural de
+  13 dígitos. La recuperación acepta esa equivalencia solo cuando el RUC
+  termina en `001`, su base es una cédula válida y los primeros 10 dígitos son
+  exactos; conserva el rechazo para empresas, RUC inválidos, otra cédula y otro
+  tenant. El selector permite cargar juntos los reportes de facturas, notas de
+  crédito y retenciones, y el trabajo usa todas sus claves válidas para buscar
+  los XML. Las pruebas confirman factura, nota de crédito con ajuste de CxP y
+  retención con IVA y renta separadas. Pasan Ruff, mypy, 95 pruebas dirigidas,
+  lint/build y 36 recorridos Playwright de Tributario en escritorio/móvil. Dos
+  revisiones independientes dieron GO. El cambio aún no se publicó ni se
+  ejecutó contra producción.
+
 - Recuperación de XML recibidos desde el SRI publicada en `main`:
   2026-08-21 `America/Guayaquil`. Tributario ofrece `Completar XML desde el
   SRI` para las compras preliminares que ya tienen una clave válida del listado
