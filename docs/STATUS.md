@@ -7,6 +7,26 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Correctivo de compras TXT sin desglose listo localmente en `release`:
+  2026-08-21 `America/Guayaquil`. El listado TXT del portal puede traer
+  subtotal, IVA y total, pero no separa las bases por tarifa; IAERP lo estaba
+  marcando como completo y por eso contaba 417 comprobantes mientras mostraba
+  compras y crédito tributario en cero. Ahora todo comprobante TXT queda
+  preliminar hasta cargar su XML autorizado, el motor detecta también registros
+  heredados sin `FiscalDocumentTax` y la pantalla muestra por separado la
+  cantidad y el total general de compras pendientes de XML sin usarlo en los
+  casilleros. La migración corrige documentos ya cargados, la evidencia de la
+  CxP enlazada y los periodos no declarados; nunca reabre un periodo
+  `DECLARADO`. También descarta tareas abiertas de revisión/ATS que nacieron de
+  esa evidencia incompleta. Pasan Ruff, mypy, 112 pruebas fiscales/CxP, 74
+  pruebas dirigidas en PostgreSQL, contratos, lint/build y 28 recorridos
+  Playwright de Tributario en escritorio/móvil. La migración completó upgrade
+  desde el head previo con backfill, downgrade a base, re-upgrade y
+  `alembic check`; una prueba adicional confirmó aislamiento entre dos tenants,
+  conservación de `DECLARADO` y documentos con desglose intactos. Dos revisiones
+  independientes dieron GO. Publicación autorizada hacia `main`; pendientes:
+  commit, push, CI y promoción.
+
 - Notas de crédito recibidas publicadas en `main`:
   2026-08-21 `America/Guayaquil`. IAERP conserva el tipo y número del
   comprobante modificado, enlaza la nota con la compra por tenant, sentido,

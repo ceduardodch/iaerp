@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import SessionFactory
-from app.models.tax import FiscalDocument, TaxPeriod, TaxTask
+from app.models.tax import FiscalDocument, FiscalDocumentTax, TaxPeriod, TaxTask
+from app.services.tax.completeness import missing_tax_detail_document_ids
 
 _OPEN = ("PENDIENTE", "EN_PROCESO")
 
@@ -66,6 +67,19 @@ async def generate_tax_tasks_once() -> int:
                     )
                 )
             )
+            document_ids = [document.id for document in documents]
+            tax_document_ids = (
+                set(
+                    await session.scalars(
+                        select(FiscalDocumentTax.fiscal_document_id).where(
+                            FiscalDocumentTax.tenant_id == period.tenant_id,
+                            FiscalDocumentTax.fiscal_document_id.in_(document_ids),
+                        )
+                    )
+                )
+                if document_ids
+                else set()
+            )
             label = f"{period.month:02d}/{period.year}"
             if not documents:
                 created += await _ensure_task(
@@ -79,7 +93,9 @@ async def generate_tax_tasks_once() -> int:
                     ),
                 )
                 continue
-            if any(document.is_preliminary for document in documents):
+            if any(document.is_preliminary for document in documents) or (
+                missing_tax_detail_document_ids(documents, tax_document_ids)
+            ):
                 created += await _ensure_task(
                     session,
                     period=period,

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthContext
 from app.models.billing import SalesDocument
 from app.models.tax import FiscalDocument, FiscalDocumentTax, TaxPeriod
+from app.services.tax.completeness import missing_tax_detail_document_ids
 from app.services.tax.iva import compute_iva
 
 _PURCHASE_DOCUMENT_TYPES = ("FACTURA", "NOTA_CREDITO", "NOTA_DEBITO", "LIQUIDACION")
@@ -157,6 +158,9 @@ async def list_purchases(
                 tax_amount=row.tax_amount,
             )
         )
+    missing_tax_detail_ids = missing_tax_detail_document_ids(
+        documents, set(taxes_by_document)
+    )
     return [
         PurchaseRecord(
             id=document.id,
@@ -170,7 +174,9 @@ async def list_purchases(
             tax_total=document.tax_total,
             total=document.total,
             payment_methods=list(document.payment_methods or []),
-            is_preliminary=document.is_preliminary,
+            is_preliminary=(
+                document.is_preliminary or document.id in missing_tax_detail_ids
+            ),
             taxes=taxes_by_document.get(document.id, []),
         )
         for document in documents

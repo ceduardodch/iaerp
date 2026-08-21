@@ -19,6 +19,10 @@ const summary = {
   preliminaryReasons: [
     '1 comprobante(s) sin detalle confirmado: carga su XML autorizado antes de declarar.',
   ],
+  pendingPurchaseCount: 1,
+  pendingPurchaseSubtotal: '276.30',
+  pendingPurchaseTaxTotal: '0.00',
+  pendingPurchaseTotal: '276.30',
   amounts: {
     ventasBrutas: '1836.00',
     ivaGenerado: '275.40',
@@ -217,6 +221,12 @@ test('advierte cuando los datos son preliminares', async ({ page }) => {
   const warning = page.getByRole('alert')
   await expect(warning).toContainText('Datos preliminares')
   await expect(warning).toContainText('carga su XML autorizado antes de declarar')
+})
+
+test('muestra el total de compras cargadas que aún esperan XML', async ({ page }) => {
+  const pending = page.getByText('Compras pendientes de XML (1)')
+  await expect(pending).toBeVisible()
+  await expect(pending.locator('xpath=..')).toContainText('$276.30')
 })
 
 test('separa la retención de renta del IVA mensual', async ({ page }) => {

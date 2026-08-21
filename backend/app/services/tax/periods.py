@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
-from app.models.tax import FiscalDocument, TaxPeriod
+from app.models.tax import FiscalDocument, FiscalDocumentTax, TaxPeriod
+from app.services.tax.completeness import missing_tax_detail_document_ids
 
 
 async def list_periods(
@@ -114,9 +115,24 @@ async def refresh_period_statuses(
                 )
             )
         )
+        document_ids = [document.id for document in documents]
+        tax_document_ids = (
+            set(
+                await session.scalars(
+                    select(FiscalDocumentTax.fiscal_document_id).where(
+                        FiscalDocumentTax.tenant_id == context.tenant_id,
+                        FiscalDocumentTax.fiscal_document_id.in_(document_ids),
+                    )
+                )
+            )
+            if document_ids
+            else set()
+        )
         if not documents:
             period.status = "PENDIENTE_DESCARGA"
-        elif any(document.is_preliminary for document in documents):
+        elif any(document.is_preliminary for document in documents) or (
+            missing_tax_detail_document_ids(documents, tax_document_ids)
+        ):
             period.status = "EVIDENCIA_INCOMPLETA"
         elif period.status != "LISTO_DECLARAR":
             period.status = "LISTO_REVISAR"

@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
 from app.models.tax import FiscalDocument, FiscalDocumentTax, FiscalRetention, TaxPeriod
+from app.services.tax.completeness import missing_tax_detail_document_ids
 from app.services.tax.formatting import format_amount, quantize_amount
 
 # Documentos que suman y que restan dentro de su grupo.
@@ -60,6 +61,10 @@ class IvaSummary:
     is_preliminary: bool
     preliminary_reasons: list[str]
     document_count: int
+    pending_purchase_count: int
+    pending_purchase_subtotal: Decimal
+    pending_purchase_tax_total: Decimal
+    pending_purchase_total: Decimal
 
     def value(self, key: str) -> Decimal:
         return self.amounts[key].value if key in self.amounts else Decimal("0.00")
@@ -122,12 +127,6 @@ async def compute_iva(
     documents_by_id = {document.id: document for document in documents}
 
     preliminary_reasons: list[str] = []
-    preliminary_documents = [document for document in documents if document.is_preliminary]
-    if preliminary_documents:
-        preliminary_reasons.append(
-            f"{len(preliminary_documents)} comprobante(s) sin detalle confirmado: "
-            "carga su XML autorizado antes de declarar."
-        )
 
     if not documents_by_id:
         # Periodo sin comprobantes: todo queda en cero y se reporta el faltante,
@@ -142,6 +141,10 @@ async def compute_iva(
             is_preliminary=True,
             preliminary_reasons=preliminary_reasons,
             document_count=0,
+            pending_purchase_count=0,
+            pending_purchase_subtotal=Decimal("0.00"),
+            pending_purchase_tax_total=Decimal("0.00"),
+            pending_purchase_total=Decimal("0.00"),
         )
 
     document_ids = list(documents_by_id.keys())
@@ -153,6 +156,43 @@ async def compute_iva(
             )
         )
     )
+    tax_document_ids = {tax.fiscal_document_id for tax in taxes}
+    missing_tax_detail_ids = missing_tax_detail_document_ids(
+        documents, tax_document_ids
+    )
+    if missing_tax_detail_ids:
+        preliminary_reasons.append(
+            f"{len(missing_tax_detail_ids)} comprobante(s) sin desglose tributario "
+            "por tarifa: carga su XML autorizado antes de declarar."
+        )
+    other_preliminary_count = sum(
+        document.is_preliminary and document.id not in missing_tax_detail_ids
+        for document in documents
+    )
+    if other_preliminary_count:
+        preliminary_reasons.append(
+            f"{other_preliminary_count} comprobante(s) sin detalle confirmado: "
+            "carga su XML autorizado antes de declarar."
+        )
+    pending_purchases = [
+        document
+        for document in documents
+        if document.id in missing_tax_detail_ids
+        and document.direction == "RECIBIDO"
+    ]
+
+    pending_purchase_subtotal = Decimal("0.00")
+    pending_purchase_tax_total = Decimal("0.00")
+    pending_purchase_total = Decimal("0.00")
+    for pending_document in pending_purchases:
+        sign = (
+            Decimal("-1")
+            if pending_document.doc_type == "NOTA_CREDITO"
+            else Decimal("1")
+        )
+        pending_purchase_subtotal += sign * pending_document.subtotal
+        pending_purchase_tax_total += sign * pending_document.tax_total
+        pending_purchase_total += sign * pending_document.total
 
     for tax in taxes:
         document = documents_by_id.get(tax.fiscal_document_id)
@@ -235,6 +275,10 @@ async def compute_iva(
         is_preliminary=bool(preliminary_reasons),
         preliminary_reasons=preliminary_reasons,
         document_count=len(documents),
+        pending_purchase_count=len(pending_purchases),
+        pending_purchase_subtotal=quantize_amount(pending_purchase_subtotal),
+        pending_purchase_tax_total=quantize_amount(pending_purchase_tax_total),
+        pending_purchase_total=quantize_amount(pending_purchase_total),
     )
 
 

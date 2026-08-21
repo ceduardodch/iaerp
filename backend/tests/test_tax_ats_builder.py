@@ -126,6 +126,27 @@ def test_purchase_over_threshold_with_payment_method_is_not_missing() -> None:
     assert result.data.purchases[0].payment_methods == ["20"]
 
 
+def test_non_preliminary_document_without_tax_rows_blocks_ats() -> None:
+    document, _tax = _purchase(
+        sequential="000008699",
+        base=Decimal("100.00"),
+        iva=Decimal("15.00"),
+        payment_methods=["20"],
+    )
+    result = build_ats_input(
+        period=_period(),
+        identification="1799999999001",
+        legal_name="EMPRESA DEMO",
+        documents=[document],
+        taxes=[],
+        retentions=[],
+    )
+
+    assert len(result.missing) == 1
+    assert "desglose tributario por tarifa" in result.missing[0]
+    assert result.data.purchases == []
+
+
 def test_purchase_over_threshold_without_payment_method_is_missing() -> None:
     result = _build([
         _purchase(
