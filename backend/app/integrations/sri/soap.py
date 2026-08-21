@@ -200,6 +200,11 @@ class SoapSRIClient:
                 authorized_at=_parse_authorization_date(
                     _first_text(autorizacion, "fechaAutorizacion")
                 ),
+                authorized_xml=ET.tostring(
+                    autorizacion,
+                    encoding="utf-8",
+                    xml_declaration=True,
+                ),
             )
         if estado in {"EN PROCESO", "EN PROCESAMIENTO", "PPR", "PROCESAMIENTO"}:
             return AuthorizationResult(status="PENDING_AUTHORIZATION", messages=messages)

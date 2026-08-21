@@ -44,13 +44,14 @@ from app.schemas.tax import (
     TaxPeriodCreate,
     TaxPeriodRead,
     TaxPeriodStatusUpdate,
+    TaxXmlRecoveryJobRead,
 )
 from app.services import analytics, receivables
 from app.services.tax import annexes as annexes_service
 from app.services.tax import bulk as bulk_service
 from app.services.tax import dossier as dossier_service
 from app.services.tax import evidence as evidence_service
-from app.services.tax import form_fields, historical_exception, own_documents
+from app.services.tax import form_fields, historical_exception, own_documents, xml_recovery
 from app.services.tax import ingest as ingest_service
 from app.services.tax import iva as iva_service
 from app.services.tax import periods as periods_service
@@ -512,6 +513,59 @@ async def post_period_import_issued(
         action="tax.period.issued_imported",
         entity_type="tax_period",
         callback=run,
+    )
+
+
+@router.get(
+    "/periods/{period_id}/xml-recovery",
+    response_model=TaxXmlRecoveryJobRead | None,
+)
+async def get_period_xml_recovery(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:read"))],
+    period_id: uuid.UUID,
+) -> TaxXmlRecoveryJobRead | None:
+    job = await xml_recovery.latest_job(session, context, period_id=period_id)
+    if job is None:
+        return None
+    items = await xml_recovery.unresolved_items(session, context, job_id=job.id)
+    return TaxXmlRecoveryJobRead.model_validate(
+        {**job.__dict__, "items": items},
+    )
+
+
+@router.post(
+    "/periods/{period_id}/xml-recovery",
+    response_model=TaxXmlRecoveryJobRead,
+    status_code=201,
+)
+async def post_period_xml_recovery(
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+    period_id: uuid.UUID,
+) -> dict[str, object]:
+    """Inicia la recuperación segura de XML recibidos usando claves ya cargadas."""
+
+    async def create() -> tuple[str, dict[str, object]]:
+        job = await xml_recovery.create_job(session, context, period_id=period_id)
+        return (
+            str(job.id),
+            TaxXmlRecoveryJobRead.model_validate(
+                {**job.__dict__, "items": []},
+            ).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax.period.xml_recovery.create",
+        idempotency_key=idempotency_key,
+        request_payload={"periodId": str(period_id)},
+        action="tax.xml_recovery.requested",
+        entity_type="tax_xml_recovery_job",
+        event_type=xml_recovery.RECOVERY_REQUESTED_EVENT,
+        callback=create,
     )
 
 

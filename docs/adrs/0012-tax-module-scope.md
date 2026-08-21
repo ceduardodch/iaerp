@@ -28,10 +28,13 @@ Reglas vinculantes del modulo:
    PDF y reportes del portal. El sistema **no inventa** valores, autorizaciones,
    formas de pago, retenciones ni datos de terceros. Si falta soporte, el dato se
    marca preliminar y se reporta como faltante.
-2. **Carga manual de evidencia.** El usuario descarga del portal del SRI y sube
-   los archivos. No se automatiza el portal: el SRI no ofrece API publica para
-   comprobantes recibidos y el scraping seria fragil, obligaria a custodiar la
-   clave del contribuyente y podria chocar con los terminos del portal.
+2. **Carga manual del listado y recuperación oficial por clave.** El usuario
+   descarga del portal el listado mensual TXT, porque el SRI no ofrece un API
+   pública para enumerar todos los comprobantes recibidos. Con las claves de
+   acceso que ya constan en esa evidencia, IAERP puede consultar el servicio
+   oficial `autorizacionComprobante` y custodiar el XML autorizado que este
+   devuelva. No se automatiza ni se raspa el portal y no se guarda su clave.
+   Las respuestas ausentes quedan pendientes para reintento o carga manual.
 3. **Los PDF son solo evidencia.** Se guardan con hash y vinculo al documento,
    pero los valores se toman del XML/TXT. No se hace OCR: extraer cifras de un
    PDF de formato variable contradice la regla de no inventar valores.
@@ -72,8 +75,10 @@ que hoy estan fuera del alcance del producto.
 
 ## Alternativas descartadas
 
-- **Automatizar el portal del SRI** para descargar comprobantes: rechazada por
-  fragilidad, custodia de credenciales y riesgo respecto a los terminos de uso.
+- **Automatizar el portal del SRI** para listar o descargar comprobantes:
+  rechazada por fragilidad, custodia de credenciales y riesgo respecto a los
+  términos de uso. Esto no impide consultar el web service oficial de
+  autorización para una clave de acceso ya aportada por el usuario.
 - **OCR de PDF** para extraer valores: rechazada porque introduce cifras sin
   respaldo verificable y contradice la regla 1.
 - **Calcular la declaracion desde los datos internos de facturacion**: rechazada

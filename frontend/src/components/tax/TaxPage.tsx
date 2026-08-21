@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   apiRequest,
@@ -12,6 +12,7 @@ import {
   type TaxIvaSummary,
   type TaxOwnDocumentsResult,
   type TaxPeriod,
+  type TaxXmlRecoveryJob,
 } from '../../api'
 import { ErpButton, ErpDataTable, ErpEmptyState, ErpPageHeader, ErpPanel, ErpStatusBadge } from '../erp'
 import './TaxPage.css'
@@ -156,6 +157,7 @@ export function TaxPage({ token }: { token: string }) {
   const [openDossierId, setOpenDossierId] = useState<string | null>(null)
   const [exceptionEvidence, setExceptionEvidence] = useState<Record<string, string>>({})
   const [groupByClassificationId, setGroupByClassificationId] = useState('')
+  const evidenceInputRef = useRef<HTMLInputElement>(null)
 
   const periodsQuery = useQuery({
     queryKey: ['tax', 'periods'],
@@ -195,6 +197,36 @@ export function TaxPage({ token }: { token: string }) {
     ),
     enabled: Boolean(activePeriodId),
   })
+
+  const xmlRecoveryQuery = useQuery({
+    queryKey: ['tax', 'xml-recovery', activePeriodId],
+    queryFn: () => apiRequest<TaxXmlRecoveryJob | null>(
+      token,
+      `/tax/periods/${activePeriodId}/xml-recovery`,
+    ),
+    enabled: Boolean(activePeriodId),
+    refetchInterval: (query) => {
+      const job = query.state.data
+      return job?.status === 'QUEUED' || job?.status === 'RUNNING' ? 3000 : false
+    },
+  })
+
+  const recoveryMissingDocuments = useMemo(() => {
+    const unresolvedIds = new Set(
+      (xmlRecoveryQuery.data?.items ?? [])
+        .filter((item) => item.status === 'UNAVAILABLE' || item.status === 'FAILED')
+        .map((item) => item.documentId),
+    )
+    return (documentsQuery.data ?? []).filter((document) => unresolvedIds.has(document.id))
+  }, [documentsQuery.data, xmlRecoveryQuery.data?.items])
+
+  useEffect(() => {
+    if (xmlRecoveryQuery.data?.status === 'COMPLETED') {
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === 'tax' && query.queryKey[1] !== 'xml-recovery',
+      })
+    }
+  }, [queryClient, xmlRecoveryQuery.data?.completedAt, xmlRecoveryQuery.data?.status])
 
   // Carga en bloque: primero se revisa (no escribe), luego se confirma.
   function bulkFormData(files: File[], apply: boolean): FormData {
@@ -281,6 +313,18 @@ export function TaxPage({ token }: { token: string }) {
         headers: { 'Idempotency-Key': idempotencyKey('tax-import-issued') },
       }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tax'] })
+    },
+  })
+
+  const recoverXml = useMutation({
+    mutationFn: (periodId: string) =>
+      apiRequest<TaxXmlRecoveryJob>(token, `/tax/periods/${periodId}/xml-recovery`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('tax-xml-recovery') },
+      }),
+    onSuccess: (job) => {
+      queryClient.setQueryData(['tax', 'xml-recovery', job.taxPeriodId], job)
       void queryClient.invalidateQueries({ queryKey: ['tax'] })
     },
   })
@@ -416,6 +460,7 @@ export function TaxPage({ token }: { token: string }) {
           <label>
             Archivos del mes (XML, TXT o ZIP · hasta 50)
             <input
+              ref={evidenceInputRef}
               type="file"
               accept=".xml,.txt,.zip,.pdf"
               multiple
@@ -585,13 +630,98 @@ export function TaxPage({ token }: { token: string }) {
           ) : null}
 
           {summary.isPreliminary ? (
-            <div className="tax-warning" role="alert">
-              <strong>Datos preliminares.</strong>
-              <ul>
-                {summary.preliminaryReasons.map((reason) => (
-                  <li key={reason}>{reason}</li>
-                ))}
-              </ul>
+            <div className="tax-readiness tax-readiness-pending" role="alert">
+              <div>
+                <strong>Aún no está listo para declarar.</strong>
+                <p>
+                  El listado TXT sirve para comprobar el total, pero solo los XML autorizados
+                  separan la base con IVA, tarifa 0 %, exenta y no objeto.
+                </p>
+                <ul>
+                  {summary.preliminaryReasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              </div>
+              {summary.pendingPurchaseCount > 0 ? (
+                <div className="tax-readiness-actions">
+                  <ErpButton
+                    variant="primary"
+                    disabled={
+                      recoverXml.isPending ||
+                      xmlRecoveryQuery.data?.status === 'QUEUED' ||
+                      xmlRecoveryQuery.data?.status === 'RUNNING'
+                    }
+                    onClick={() => activePeriodId && recoverXml.mutate(activePeriodId)}
+                  >
+                    {recoverXml.isPending || xmlRecoveryQuery.data?.status === 'QUEUED'
+                      ? 'Preparando…'
+                      : xmlRecoveryQuery.data?.status === 'RUNNING'
+                        ? 'Buscando XML…'
+                        : 'Completar XML desde el SRI'}
+                  </ErpButton>
+                  <ErpButton
+                    variant="secondary"
+                    onClick={() => {
+                      evidenceInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                      evidenceInputRef.current?.focus()
+                    }}
+                  >
+                    Cargar XML o ZIP
+                  </ErpButton>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="tax-readiness tax-readiness-ready" role="status">
+              <strong>Desglose por tarifa completo.</strong>
+              <p>Ya puedes revisar los casilleros y el crédito tributario antes de declarar.</p>
+            </div>
+          )}
+
+          {recoverXml.error ? (
+            <p className="form-error" role="alert">{recoverXml.error.message}</p>
+          ) : null}
+          {xmlRecoveryQuery.data ? (
+            <div className="tax-recovery-status" role="status" aria-live="polite">
+              <strong>
+                {xmlRecoveryQuery.data.status === 'COMPLETED'
+                  ? 'Búsqueda en el SRI terminada.'
+                  : 'Buscando comprobantes autorizados en el SRI…'}
+              </strong>
+              <p>
+                {xmlRecoveryQuery.data.processedCount} de {xmlRecoveryQuery.data.totalCount} revisados
+                {' · '}{xmlRecoveryQuery.data.recoveredCount} recuperados
+                {' · '}{xmlRecoveryQuery.data.unavailableCount} no disponibles
+                {' · '}{xmlRecoveryQuery.data.failedCount} con error
+              </p>
+              {xmlRecoveryQuery.data.status === 'COMPLETED' &&
+              (xmlRecoveryQuery.data.unavailableCount > 0 || xmlRecoveryQuery.data.failedCount > 0) ? (
+                <>
+                  <p className="fine-print">
+                    Puedes volver a intentar o cargar a mano el XML/ZIP de estos comprobantes.
+                  </p>
+                  <details className="tax-recovery-missing">
+                    <summary>Ver {recoveryMissingDocuments.length} comprobante(s) pendientes</summary>
+                    <ul>
+                      {recoveryMissingDocuments.map((document) => (
+                        <li key={document.id}>
+                          <strong>{DOCUMENT_TYPE_LABELS[document.docType] ?? document.docType}</strong>
+                          {' · '}{document.issueDate}
+                          {' · '}{document.counterpartyName ?? document.counterpartyIdentification ?? 'Sin proveedor'}
+                          {' · $'}{document.total}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </>
+              ) : null}
+              {xmlRecoveryQuery.data.status === 'COMPLETED' &&
+              xmlRecoveryQuery.data.totalCount === 0 ? (
+                <p className="fine-print">
+                  No se hallaron claves válidas para consultar. Carga los XML o un ZIP desde el SRI.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -674,7 +804,9 @@ export function TaxPage({ token }: { token: string }) {
             </>}
           >
             <p className="fine-print">
-              Valores con punto decimal y dos decimales, listos para copiar al formulario.
+              {summary.isPreliminary
+                ? 'Valores parciales de control. Completa los XML antes de copiar al formulario.'
+                : 'Valores con punto decimal y dos decimales, listos para copiar al formulario.'}
             </p>
             {generateAts.error ? (
               <p className="form-error" role="alert">{generateAts.error.message}</p>
@@ -736,6 +868,7 @@ export function TaxPage({ token }: { token: string }) {
             { header: 'Acción', cell: (field) => (<><ErpButton
                           variant="ghost"
                           aria-label={`Copiar campo ${field.fieldCode}`}
+                          disabled={summary.isPreliminary}
                           onClick={() => void copyValue(field.fieldCode, field.value)}
                         >
                           {copiedField === field.fieldCode ? 'Copiado' : 'Copiar'}
@@ -767,8 +900,10 @@ export function TaxPage({ token }: { token: string }) {
             <dl className="tax-summary">
               <div><dt>Ventas brutas</dt><dd>${summary.amounts.ventasBrutas ?? '0.00'}</dd></div>
               <div><dt>IVA generado</dt><dd>${summary.amounts.ivaGenerado ?? '0.00'}</dd></div>
-              <div><dt>Compras con IVA</dt><dd>${summary.amounts.comprasGravadasBase ?? '0.00'}</dd></div>
-              <div><dt>Compras sin IVA</dt><dd>${summary.amounts.comprasTarifaCeroBase ?? '0.00'}</dd></div>
+              <div><dt>Compras gravadas con IVA</dt><dd>${summary.amounts.comprasGravadasBase ?? '0.00'}</dd></div>
+              <div><dt>Compras con tarifa 0 %</dt><dd>${summary.amounts.comprasTarifaCeroBase ?? '0.00'}</dd></div>
+              <div><dt>Compras exentas de IVA</dt><dd>${summary.amounts.comprasExentasBase ?? '0.00'}</dd></div>
+              <div><dt>Compras no objeto de IVA</dt><dd>${summary.amounts.comprasNoObjetoBase ?? '0.00'}</dd></div>
               <div><dt>Crédito tributario</dt><dd>${summary.amounts.ivaCreditoTributario ?? '0.00'}</dd></div>
               {summary.pendingPurchaseCount > 0 ? (
                 <div className="tax-apart">

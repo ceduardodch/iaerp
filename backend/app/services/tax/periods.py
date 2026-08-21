@@ -96,15 +96,18 @@ async def get_period(
 async def refresh_period_statuses(
     session: AsyncSession,
     context: AuthContext,
+    *,
+    period_id: uuid.UUID | None = None,
 ) -> list[TaxPeriod]:
     """Actualiza estados derivados de la evidencia, sin reabrir declarados."""
+    query = select(TaxPeriod).where(
+        TaxPeriod.tenant_id == context.tenant_id,
+        TaxPeriod.status != "DECLARADO",
+    )
+    if period_id is not None:
+        query = query.where(TaxPeriod.id == period_id)
     periods = list(
-        await session.scalars(
-            select(TaxPeriod).where(
-                TaxPeriod.tenant_id == context.tenant_id,
-                TaxPeriod.status != "DECLARADO",
-            )
-        )
+        await session.scalars(query)
     )
     for period in periods:
         documents = list(

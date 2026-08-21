@@ -12,6 +12,7 @@ from app.services.social_campaigns import (
     CAMPAIGN_POLICY_EVENT,
     CAMPAIGN_PREPARATION_EVENT,
 )
+from app.services.tax.xml_recovery import RECOVERY_REQUESTED_EVENT
 from app.workers.campaigns import CONSUMER_NAME as CAMPAIGNS_CONSUMER
 from app.workers.campaigns import (
     handle_campaign_activation,
@@ -32,6 +33,7 @@ from app.workers.receivables import CONSUMER_NAME as RECEIVABLES_CONSUMER
 from app.workers.receivables import handle_credit_note_authorized, handle_invoice_authorized
 from app.workers.sri_transmission import CONSUMER_NAME as SRI_TRANSMISSION_CONSUMER
 from app.workers.sri_transmission import CREDIT_NOTE_AUTHORIZED_EVENT, handle_invoice_signed
+from app.workers.tax_xml_recovery import handle_recovery_requested
 
 # Un event loop por proceso del worker: asyncio.run crearia un loop nuevo por
 # task y las conexiones del pool asyncpg quedarian atadas a un loop cerrado
@@ -116,6 +118,9 @@ def consume_event(
         correlation_id=correlation_id,
         attempts=attempts,
     )
+    if event_type == RECOVERY_REQUESTED_EVENT:
+        _run(handle_recovery_requested(message))
+        return True
     consumer_name, handler = _resolve_consumer(event_type)
     return _run(
         consume_once(

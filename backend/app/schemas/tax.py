@@ -55,6 +55,25 @@ class IngestResultRead(APIModel):
     notes: list[str]
 
 
+class TaxXmlRecoveryItemRead(APIModel):
+    document_id: uuid.UUID = Field(validation_alias="fiscal_document_id")
+    status: str
+
+
+class TaxXmlRecoveryJobRead(APIModel):
+    id: uuid.UUID
+    tax_period_id: uuid.UUID
+    status: str
+    total_count: int
+    processed_count: int
+    recovered_count: int
+    unavailable_count: int
+    failed_count: int
+    items: list[TaxXmlRecoveryItemRead]
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class DossierRetentionRead(APIModel):
     access_key: str | None = None
     issue_date: date
