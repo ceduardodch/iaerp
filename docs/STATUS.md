@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Notas de crédito recibidas listas en el árbol local de `release`:
+- Notas de crédito recibidas publicadas en `main`:
   2026-08-21 `America/Guayaquil`. IAERP conserva el tipo y número del
   comprobante modificado, enlaza la nota con la compra por tenant, sentido,
   RUC del proveedor, tipo y serie, y funciona aunque se cargue antes o después
@@ -21,10 +21,13 @@ alcance y las decisiones.
   completa con `alembic check` y validación del XML sintético contra el XSD
   oficial del SRI. Dos revisiones independientes dieron GO. El listado real
   entregado contiene 23 notas válidas para enlazar, pero las 23 carecen de
-  importe total y siguen preliminares: tras publicar se debe reingerir el TXT y
+  importe total y siguen preliminares: se debe reingerir el TXT y
   cargar los XML autorizados para cerrar cifras y saldos. El usuario autorizó
-  commit, push y promoción `release -> main`; quedan CI, Coolify y comprobación
-  pública.
+  la promoción. PR `#46` quedó en `main` como `d7fae21`; CI
+  `32508035636`, despliegue Coolify y salud pública (`live`, `ready`,
+  `startup`, base, Redis, esquema y OIDC) terminaron bien. `main` y `release`
+  tienen el mismo árbol de archivos; los hashes difieren solo por el squash
+  del PR.
 
 - Alta rápida de maestros desde Nueva factura publicada en `main`:
   2026-08-20 `America/Guayaquil`. El usuario puede crear un cliente

@@ -63,7 +63,7 @@
 | Codex (este hilo, revisión masiva SRI) | 🚀 EN PROMOCIÓN | Selección múltiple accesible y caso de uso masivo para clasificar uso tributario, pago y tags sin borrar datos existentes; dos revisiones GO y publicación autorizada | 2026-08-18 |
 | Codex (este hilo, proveedor en RIDE) | ✅ EN MAIN | Muestra BTOB SAS y RUC del proveedor en RIDE nuevos; XML, firma y documentos históricos quedan intactos; PR #41, CI, Coolify y salud pública verdes | 2026-08-20 |
 | Codex (este hilo, alta rápida en factura) | ✅ EN MAIN | Nueva factura: crear cliente y producto sin salir; editar nombre/dirección fiscal desde factura y Empresa; PR #43, CI, Coolify y salud pública verdes | 2026-08-20 |
-| Codex (este hilo, notas de crédito recibidas) | 🚀 EN PROMOCIÓN | Enlace seguro XML/TXT con la factura modificada, rebaja CxP idempotente y notas tipo 04 válidas en IVA/ATS; dos revisiones GO y pruebas SQLite/PostgreSQL/XSD verdes; publicación a `main` autorizada | 2026-08-21 |
+| Codex (este hilo, notas de crédito recibidas) | ✅ EN MAIN | Enlace seguro XML/TXT con la factura modificada, rebaja CxP idempotente y notas tipo 04 válidas en IVA/ATS; PR #46, CI `32508035636`, Coolify y salud pública verdes | 2026-08-21 |
 
 > **Orden de migraciones:** resuelto. Campañas se integró después de CxP, así
 > que `e5f6a7b8c9d0` pasó a colgar de `e6f7a8b9c0d1` en vez de `da1e2f3a4b5c`.
