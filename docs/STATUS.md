@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Recuperación de XML recibidos desde el SRI lista en `release` local:
+- Recuperación de XML recibidos desde el SRI publicada en `main`:
   2026-08-21 `America/Guayaquil`. Tributario ofrece `Completar XML desde el
   SRI` para las compras preliminares que ya tienen una clave válida del listado
   mensual. La solicitud crea un trabajo durable y auditable; el worker consulta
@@ -25,8 +25,10 @@ alcance y las decisiones.
   `alembic check` en PostgreSQL 17. Ruff, mypy, contratos, lint/build, 109
   pruebas fiscales y 36 recorridos Playwright de Tributario en escritorio/móvil están
   verdes; incluye replay idempotente, scope/tenant, lease, reintento técnico y
-  nota de crédito que reduce la CxP. Dos revisiones independientes dieron GO;
-  publicación hacia `main` autorizada y en curso.
+  nota de crédito que reduce la CxP. Dos revisiones independientes dieron GO.
+  PR #50 quedó en `main` como `e6b2b23`; CI `32525550098`, despliegue Coolify
+  y salud pública (`live`, `ready`, `startup`) quedaron verdes. El OpenAPI y
+  el paquete web productivos ya exponen la recuperación desde el SRI.
 
 - Claridad de compras para la declaración IVA lista en `release` local:
   2026-08-21 `America/Guayaquil`. Tributario ya no presenta cifras parciales
