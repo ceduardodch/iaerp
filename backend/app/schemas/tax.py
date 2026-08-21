@@ -3,6 +3,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import Field
 
@@ -250,9 +251,34 @@ class CurrentMonthTaxRead(APIModel):
     needs_accounting_review: bool
 
 
+class AnnualFiscalMonthRead(APIModel):
+    month: int
+    sales_base: str
+    deductible_purchases_base: str
+    income_tax_withheld: str
+
+
+class AnnualFiscalRead(APIModel):
+    year: int
+    sales_base: str
+    deductible_purchases_base: str
+    non_deductible_purchases_base: str
+    pending_review_purchases_base: str
+    result_before_adjustments: str
+    income_tax_withheld: str
+    iva_withheld: str
+    pending_review_document_count: int
+    preliminary_document_count: int
+    refund_status: Literal["REVIEW_AT_ANNUAL_CLOSE", "NO_RECORDED_CREDIT"]
+    refund_message: str
+    limitations: list[str]
+    months: list[AnnualFiscalMonthRead]
+
+
 class DashboardTaxRead(APIModel):
     trend: list[MonthlySalesTrendRead]
     current_month: CurrentMonthTaxRead
+    annual: AnnualFiscalRead
 
 
 class TaxFormFieldRead(APIModel):

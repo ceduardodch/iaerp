@@ -20,6 +20,8 @@ from app.models.payables import Payable
 from app.models.platform import Tenant
 from app.models.tax import FiscalDocument, SRIValidationIssue, TaxAnnex
 from app.schemas.tax import (
+    AnnualFiscalMonthRead,
+    AnnualFiscalRead,
     BulkItemRead,
     BulkResultRead,
     CurrentMonthTaxRead,
@@ -71,7 +73,7 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 @router.get(
     "/dashboard",
     response_model=DashboardTaxRead,
-    summary="Ver evolución mensual y corte documental de IVA",
+    summary="Ver evolución mensual, corte de IVA y avance fiscal anual",
 )
 async def get_tax_dashboard(
     session: Session,
@@ -79,7 +81,7 @@ async def get_tax_dashboard(
     months: Annotated[int, Query(ge=6, le=24)] = 12,
     as_of: Annotated[date | None, Query()] = None,
 ) -> DashboardTaxRead:
-    """Evolución de ventas y corte documental de IVA del mes."""
+    """Evolución mensual y avance fiscal acumulado hasta el mes elegido."""
     report = await reporting_service.dashboard_tax_report(
         session,
         context,
@@ -87,6 +89,7 @@ async def get_tax_dashboard(
         months=months,
     )
     current = report.current_month
+    annual = report.annual
     return DashboardTaxRead(
         trend=[
             MonthlySalesTrendRead(
@@ -115,6 +118,32 @@ async def get_tax_dashboard(
             is_preliminary=current.is_preliminary,
             preliminary_reasons=current.preliminary_reasons,
             needs_accounting_review=current.needs_accounting_review,
+        ),
+        annual=AnnualFiscalRead(
+            year=annual.year,
+            sales_base=format_amount(annual.sales_base),
+            deductible_purchases_base=format_amount(annual.deductible_purchases_base),
+            non_deductible_purchases_base=format_amount(annual.non_deductible_purchases_base),
+            pending_review_purchases_base=format_amount(annual.pending_review_purchases_base),
+            result_before_adjustments=format_amount(annual.result_before_adjustments),
+            income_tax_withheld=format_amount(annual.income_tax_withheld),
+            iva_withheld=format_amount(annual.iva_withheld),
+            pending_review_document_count=annual.pending_review_document_count,
+            preliminary_document_count=annual.preliminary_document_count,
+            refund_status=annual.refund_status,
+            refund_message=annual.refund_message,
+            limitations=annual.limitations,
+            months=[
+                AnnualFiscalMonthRead(
+                    month=month.month,
+                    sales_base=format_amount(month.sales_base),
+                    deductible_purchases_base=format_amount(
+                        month.deductible_purchases_base
+                    ),
+                    income_tax_withheld=format_amount(month.income_tax_withheld),
+                )
+                for month in annual.months
+            ],
         ),
     )
 

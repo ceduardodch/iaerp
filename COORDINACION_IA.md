@@ -66,7 +66,8 @@
 | Codex (este hilo, notas de crédito recibidas) | ✅ EN MAIN | Enlace seguro XML/TXT con la factura modificada, rebaja CxP idempotente y notas tipo 04 válidas en IVA/ATS; PR #46, CI `32508035636`, Coolify y salud pública verdes | 2026-08-21 |
 | Codex (este hilo, compras IVA desde TXT) | ✅ EN MAIN | Comprobantes TXT sin desglose quedan preliminares; IAERP muestra el total pendiente sin inventar casilleros. PR #48, CI `32517346780`, Coolify y salud pública verdes | 2026-08-21 |
 | Codex (este hilo, desglose IVA + recuperación XML SRI) | ✅ EN MAIN | Tributario bloquea cifras parciales, separa bases por tarifa y completa XML por clave con el SRI; PR #50, CI `32525550098`, Coolify, salud y paquete web públicos verdes | 2026-08-21 |
-| Codex (este hilo, recuperación SRI persona natural) | 🟡 LISTA PARA PROMOCIÓN | Homologa cédula del receptor con el RUC del tenant solo para persona natural válida; cubre factura, nota de crédito y retención desde reportes múltiples; validación local y dos revisiones GO, sin publicar | 2026-08-21 |
+| Codex (este hilo, recuperación SRI persona natural) | ✅ EN MAIN | Homologa cédula del receptor con el RUC del tenant solo para persona natural válida; cubre factura, nota de crédito y retención desde reportes múltiples; PR #52, CI, Coolify y salud pública verdes | 2026-08-21 |
+| Codex (este hilo, avance fiscal anual) | 🚀 EN PROMOCIÓN | Tributario en pestañas; avance acumulado hasta el mes elegido, compras clasificadas y retenciones separadas, con avisos de respaldo; 34 pruebas fiscales, UI móvil/teclado y dos revisiones independientes GO; publicación autorizada hacia `main` | 2026-08-21 |
 
 > **Orden de migraciones:** resuelto. Campañas se integró después de CxP, así
 > que `e5f6a7b8c9d0` pasó a colgar de `e6f7a8b9c0d1` en vez de `da1e2f3a4b5c`.

@@ -6,13 +6,15 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
 from app.models.billing import SalesDocument
-from app.models.tax import FiscalDocument, FiscalDocumentTax, TaxPeriod
+from app.models.payables import Payable
+from app.models.tax import FiscalDocument, FiscalDocumentTax, FiscalRetention, TaxPeriod
 from app.services.tax.completeness import missing_tax_detail_document_ids
 from app.services.tax.iva import compute_iva
 
@@ -76,9 +78,36 @@ class CurrentMonthSnapshot:
 
 
 @dataclass(frozen=True)
+class AnnualFiscalMonth:
+    month: int
+    sales_base: Decimal
+    deductible_purchases_base: Decimal
+    income_tax_withheld: Decimal
+
+
+@dataclass(frozen=True)
+class AnnualFiscalSnapshot:
+    year: int
+    sales_base: Decimal
+    deductible_purchases_base: Decimal
+    non_deductible_purchases_base: Decimal
+    pending_review_purchases_base: Decimal
+    result_before_adjustments: Decimal
+    income_tax_withheld: Decimal
+    iva_withheld: Decimal
+    pending_review_document_count: int
+    preliminary_document_count: int
+    refund_status: Literal["REVIEW_AT_ANNUAL_CLOSE", "NO_RECORDED_CREDIT"]
+    refund_message: str
+    limitations: list[str]
+    months: list[AnnualFiscalMonth]
+
+
+@dataclass(frozen=True)
 class DashboardTaxReport:
     trend: list[SalesTrendPoint]
     current_month: CurrentMonthSnapshot
+    annual: AnnualFiscalSnapshot
 
 
 def _month_start(value: date) -> date:
@@ -96,6 +125,234 @@ def _signed_amount(document: FiscalDocument) -> Decimal:
     if document.doc_type in _ADDITIVE_DOCUMENT_TYPES:
         return document.total
     return Decimal("0.00")
+
+
+def _signed_subtotal(document: FiscalDocument) -> Decimal:
+    if document.doc_type == "NOTA_CREDITO":
+        return -document.subtotal
+    if document.doc_type in _ADDITIVE_DOCUMENT_TYPES:
+        return document.subtotal
+    return Decimal("0.00")
+
+
+async def _annual_fiscal_snapshot(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    as_of: date,
+    sales_documents: list[SalesDocument],
+) -> AnnualFiscalSnapshot:
+    """Resume el año hasta el mes elegido, sin simular una declaración anual."""
+    year = as_of.year
+    year_start = date(year, 1, 1)
+    cutoff = _shift_month(_month_start(as_of), 1)
+    annual_sales = [
+        document
+        for document in sales_documents
+        if year_start <= document.issue_date < cutoff
+    ]
+    purchase_documents = list(
+        await session.scalars(
+            select(FiscalDocument).where(
+                FiscalDocument.tenant_id == context.tenant_id,
+                FiscalDocument.direction == "RECIBIDO",
+                FiscalDocument.doc_type.in_(_PURCHASE_DOCUMENT_TYPES),
+                FiscalDocument.issue_date >= year_start,
+                FiscalDocument.issue_date < cutoff,
+            )
+        )
+    )
+    source_keys = {
+        document.related_access_key
+        for document in purchase_documents
+        if document.doc_type == "NOTA_CREDITO" and document.related_access_key
+    }
+    source_documents = (
+        list(
+            await session.scalars(
+                select(FiscalDocument).where(
+                    FiscalDocument.tenant_id == context.tenant_id,
+                    FiscalDocument.access_key.in_(source_keys),
+                )
+            )
+        )
+        if source_keys
+        else []
+    )
+    source_by_key = {
+        document.access_key: document for document in source_documents if document.access_key
+    }
+    payable_document_ids = {
+        document.id for document in purchase_documents
+    } | {document.id for document in source_documents}
+    payables = (
+        list(
+            await session.scalars(
+                select(Payable).where(
+                    Payable.tenant_id == context.tenant_id,
+                    Payable.fiscal_document_id.in_(payable_document_ids),
+                )
+            )
+        )
+        if payable_document_ids
+        else []
+    )
+    payable_by_document = {
+        payable.fiscal_document_id: payable
+        for payable in payables
+        if payable.fiscal_document_id is not None
+    }
+
+    purchase_totals = {
+        "DEDUCTIBLE_CONFIRMED": Decimal("0.00"),
+        "NON_DEDUCTIBLE": Decimal("0.00"),
+        "DEDUCTIBLE_PENDING_REVIEW": Decimal("0.00"),
+    }
+    pending_count = 0
+    for document in purchase_documents:
+        payable = payable_by_document.get(document.id)
+        if payable is None and document.doc_type == "NOTA_CREDITO":
+            source = (
+                source_by_key.get(document.related_access_key)
+                if document.related_access_key
+                else None
+            )
+            if source is not None:
+                payable = payable_by_document.get(source.id)
+        classification = (
+            payable.tax_classification
+            if payable is not None
+            else "DEDUCTIBLE_PENDING_REVIEW"
+        )
+        if classification not in purchase_totals:
+            classification = "DEDUCTIBLE_PENDING_REVIEW"
+        purchase_totals[classification] += _signed_subtotal(document)
+        if classification == "DEDUCTIBLE_PENDING_REVIEW":
+            pending_count += 1
+
+    retention_rows = list(
+        await session.execute(
+            select(FiscalRetention, FiscalDocument)
+            .join(
+                FiscalDocument,
+                (FiscalDocument.id == FiscalRetention.fiscal_document_id)
+                & (FiscalDocument.tenant_id == FiscalRetention.tenant_id),
+            )
+            .where(
+                FiscalRetention.tenant_id == context.tenant_id,
+                FiscalDocument.direction == "RECIBIDO",
+                FiscalDocument.issue_date >= year_start,
+                FiscalDocument.issue_date < cutoff,
+            )
+        )
+    )
+    income_tax_withheld = sum(
+        (retention.retained_amount for retention, _ in retention_rows if retention.kind == "RENTA"),
+        Decimal("0.00"),
+    )
+    iva_withheld = sum(
+        (retention.retained_amount for retention, _ in retention_rows if retention.kind == "IVA"),
+        Decimal("0.00"),
+    )
+    deductible = purchase_totals["DEDUCTIBLE_CONFIRMED"]
+    sales_base = sum(
+        (
+            -document.subtotal
+            if document.document_type == "CREDIT_NOTE"
+            else document.subtotal
+            for document in annual_sales
+        ),
+        Decimal("0.00"),
+    )
+    monthly_sales = {month: Decimal("0.00") for month in range(1, 13)}
+    monthly_deductible = {month: Decimal("0.00") for month in range(1, 13)}
+    monthly_income_withheld = {month: Decimal("0.00") for month in range(1, 13)}
+    for sales_document in annual_sales:
+        monthly_sales[sales_document.issue_date.month] += (
+            -sales_document.subtotal
+            if sales_document.document_type == "CREDIT_NOTE"
+            else sales_document.subtotal
+        )
+    for document in purchase_documents:
+        payable = payable_by_document.get(document.id)
+        if payable is None and document.doc_type == "NOTA_CREDITO":
+            source = (
+                source_by_key.get(document.related_access_key)
+                if document.related_access_key
+                else None
+            )
+            if source is not None:
+                payable = payable_by_document.get(source.id)
+        if payable is not None and payable.tax_classification == "DEDUCTIBLE_CONFIRMED":
+            monthly_deductible[document.issue_date.month] += _signed_subtotal(document)
+    for retention, retention_document in retention_rows:
+        if retention.kind == "RENTA":
+            monthly_income_withheld[retention_document.issue_date.month] += (
+                retention.retained_amount
+            )
+
+    refund_status: Literal["REVIEW_AT_ANNUAL_CLOSE", "NO_RECORDED_CREDIT"]
+    if income_tax_withheld > Decimal("0.00"):
+        refund_status = "REVIEW_AT_ANNUAL_CLOSE"
+        refund_message = (
+            "Hay retenciones de renta registradas como crédito. Solo existe un posible "
+            "saldo a favor si, al declarar el año, superan el impuesto causado."
+        )
+    else:
+        refund_status = "NO_RECORDED_CREDIT"
+        refund_message = "No hay retenciones de renta registradas para evaluar un saldo a favor."
+
+    limitations = [
+        "El resultado no incluye conciliación tributaria, participación laboral, "
+        "depreciaciones ni otros ajustes contables.",
+        "IAERP no calcula una tarifa de renta hasta tener el perfil fiscal y los "
+        "ajustes del cierre.",
+    ]
+    if pending_count:
+        limitations.insert(
+            0,
+            f"Hay {pending_count} compra(s) pendientes de confirmar como deducibles "
+            "o no deducibles.",
+        )
+    preliminary_retention_ids = {
+        retention_document.id
+        for _, retention_document in retention_rows
+        if retention_document.is_preliminary
+    }
+    preliminary_count = (
+        sum(1 for document in purchase_documents if document.is_preliminary)
+        + len(preliminary_retention_ids)
+    )
+    if preliminary_count:
+        limitations.insert(
+            0,
+            f"Hay {preliminary_count} comprobante(s) preliminar(es) sin respaldo completo.",
+        )
+
+    return AnnualFiscalSnapshot(
+        year=year,
+        sales_base=sales_base,
+        deductible_purchases_base=deductible,
+        non_deductible_purchases_base=purchase_totals["NON_DEDUCTIBLE"],
+        pending_review_purchases_base=purchase_totals["DEDUCTIBLE_PENDING_REVIEW"],
+        result_before_adjustments=sales_base - deductible,
+        income_tax_withheld=income_tax_withheld,
+        iva_withheld=iva_withheld,
+        pending_review_document_count=pending_count,
+        preliminary_document_count=preliminary_count,
+        refund_status=refund_status,
+        refund_message=refund_message,
+        limitations=limitations,
+        months=[
+            AnnualFiscalMonth(
+                month=month,
+                sales_base=monthly_sales[month],
+                deductible_purchases_base=monthly_deductible[month],
+                income_tax_withheld=monthly_income_withheld[month],
+            )
+            for month in range(1, 13)
+        ],
+    )
 
 
 def _document_number(document: FiscalDocument) -> str | None:
@@ -194,15 +451,23 @@ async def dashboard_tax_report(
     current_start = _month_start(as_of)
     range_start = _shift_month(current_start, -(months - 1))
     range_end = _shift_month(current_start, 1)
+    sales_range_start = min(range_start, date(as_of.year, 1, 1))
+    sales_range_end = range_end
     sales_documents = list(
         await session.scalars(
             select(SalesDocument).where(
                 SalesDocument.tenant_id == context.tenant_id,
                 SalesDocument.status.in_(("AUTHORIZED", "HISTORICAL_ISSUED")),
-                SalesDocument.issue_date >= range_start,
-                SalesDocument.issue_date < range_end,
+                SalesDocument.issue_date >= sales_range_start,
+                SalesDocument.issue_date < sales_range_end,
             )
         )
+    )
+    annual = await _annual_fiscal_snapshot(
+        session,
+        context,
+        as_of=as_of,
+        sales_documents=sales_documents,
     )
     trend_by_month = {
         (point.year, point.month): point
@@ -226,6 +491,8 @@ async def dashboard_tax_report(
         for key, point in trend_by_month.items()
     }
     for document in sales_documents:
+        if not (range_start <= document.issue_date < range_end):
+            continue
         values = mutable_trend[(document.issue_date.year, document.issue_date.month)]
         if document.document_type == "CREDIT_NOTE":
             values["total"] = Decimal(str(values["total"])) - document.total
@@ -291,7 +558,7 @@ async def dashboard_tax_report(
             ],
             needs_accounting_review=False,
         )
-        return DashboardTaxReport(trend=trend, current_month=current)
+        return DashboardTaxReport(trend=trend, current_month=current, annual=annual)
 
     fiscal_documents = list(
         await session.scalars(
@@ -352,10 +619,12 @@ async def dashboard_tax_report(
         preliminary_reasons=reasons,
         needs_accounting_review=needs_accounting_review,
     )
-    return DashboardTaxReport(trend=trend, current_month=current)
+    return DashboardTaxReport(trend=trend, current_month=current, annual=annual)
 
 
 __all__ = [
+    "AnnualFiscalMonth",
+    "AnnualFiscalSnapshot",
     "CurrentMonthSnapshot",
     "DashboardTaxReport",
     "PurchaseRecord",
