@@ -19,6 +19,7 @@ from app.services.tax.ats import (
     AtsPurchase,
     AtsSale,
 )
+from app.services.tax.completeness import missing_tax_detail_document_ids
 
 _ADD = {"FACTURA", "LIQUIDACION", "NOTA_DEBITO"}
 _CREDIT_NOTES = {"NOTA_CREDITO"}
@@ -99,6 +100,9 @@ def build_ats_input(
     by_document: dict[object, list[FiscalDocumentTax]] = defaultdict(list)
     for tax in taxes:
         by_document[tax.fiscal_document_id].append(tax)
+    missing_tax_detail_ids = missing_tax_detail_document_ids(
+        documents, {tax.fiscal_document_id for tax in taxes}
+    )
 
     missing: list[str] = []
     purchases: list[AtsPurchase] = []
@@ -123,6 +127,12 @@ def build_ats_input(
             missing.append(
                 f"{document.doc_type} del {_date(document.issue_date)} está preliminar; "
                 "carga su XML autorizado."
+            )
+            continue
+        if document.id in missing_tax_detail_ids:
+            missing.append(
+                f"{document.doc_type} del {_date(document.issue_date)} no tiene "
+                "desglose tributario por tarifa; carga su XML autorizado."
             )
             continue
         doc_codes = (

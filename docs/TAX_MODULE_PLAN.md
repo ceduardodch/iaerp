@@ -78,8 +78,11 @@ estructura. Lo aprendido:
 2. **El nombre de la carpeta miente.** Un archivo dentro de "Diciembre 2025"
    contenia facturas emitidas el 11/11 y el 30/11. El periodo SIEMPRE sale de la
    fecha de emision del comprobante.
-3. **El TXT no trae valores de las retenciones** (columnas vacias): esas filas se
-   marcan `is_preliminary` con motivo y se pide el XML. No se inventan cifras.
+3. **El TXT no trae el desglose tributario por tarifa.** Puede incluir subtotal,
+   IVA y total de facturas, pero no separa base gravada, tarifa 0 %, exenta y no
+   objeto; las retenciones tampoco traen su detalle. Todo comprobante TXT queda
+   `is_preliminary` y se pide el XML autorizado. Los totales generales se muestran
+   como control pendiente, pero no alimentan casilleros del formulario 104.
 4. **En la retencion, `codigo` distingue el concepto:** `1` = RENTA, `2` = IVA.
    Confirmado en un comprobante real (renta 2.75% cod. 3440 e IVA 70% cod. 2
    sobre la misma factura sustento).

@@ -177,14 +177,17 @@ def test_txt_rows_use_real_issue_date_not_folder_name() -> None:
     assert all(row.issue_date.month == 11 for row in invoices)
 
 
-def test_txt_invoice_values_are_read() -> None:
+def test_txt_invoice_values_are_read_but_remain_preliminary_without_tax_breakdown() -> None:
     rows = parse_received_txt(read_fixture("recibidos_portal.txt"))
     invoice = next(row for row in rows if row.access_key.endswith("2795212911"))
 
     assert invoice.subtotal == Decimal("13.13")
     assert invoice.tax_total == Decimal("1.97")
     assert invoice.total == Decimal("15.1")
-    assert invoice.is_preliminary is False
+    assert invoice.is_preliminary is True
+    assert invoice.preliminary_reason is not None
+    assert "desglose" in invoice.preliminary_reason
+    assert "XML" in invoice.preliminary_reason
 
 
 def test_txt_retention_without_values_is_marked_preliminary() -> None:

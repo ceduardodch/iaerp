@@ -770,6 +770,12 @@ export function TaxPage({ token }: { token: string }) {
               <div><dt>Compras con IVA</dt><dd>${summary.amounts.comprasGravadasBase ?? '0.00'}</dd></div>
               <div><dt>Compras sin IVA</dt><dd>${summary.amounts.comprasTarifaCeroBase ?? '0.00'}</dd></div>
               <div><dt>Crédito tributario</dt><dd>${summary.amounts.ivaCreditoTributario ?? '0.00'}</dd></div>
+              {summary.pendingPurchaseCount > 0 ? (
+                <div className="tax-apart">
+                  <dt>Compras pendientes de XML ({summary.pendingPurchaseCount})</dt>
+                  <dd>${summary.pendingPurchaseTotal}</dd>
+                </div>
+              ) : null}
               <div><dt>Retenciones de IVA</dt><dd>${summary.amounts.retencionesIvaRecibidas ?? '0.00'}</dd></div>
               <div className="tax-apart">
                 <dt>Retenciones de renta (no entran al IVA)</dt>

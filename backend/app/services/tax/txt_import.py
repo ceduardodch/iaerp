@@ -148,10 +148,18 @@ def parse_received_txt(data: bytes) -> list[ParsedTxtRow]:
                 "La nota del TXT requiere su XML autorizado para aplicar el saldo "
                 "y el detalle tributario."
             )
-        elif total is None or subtotal is None:
+        elif doc_type == "RETENCION":
             preliminary_reason = (
-                "El TXT no trae los valores de este comprobante. "
-                "Carga el XML autorizado para obtener el detalle."
+                "La retención del TXT requiere su XML autorizado para obtener "
+                "el desglose de IVA y renta."
+            )
+        else:
+            # Aunque el portal incluya subtotal, IVA y total, el TXT no separa
+            # las bases por tarifa (gravada, 0 %, exenta o no objeto). Usar esos
+            # totales en el formulario 104 fingiría una clasificación fiscal.
+            preliminary_reason = (
+                "El TXT trae totales generales, pero no el desglose tributario "
+                "por tarifa. Carga el XML autorizado para calcular el IVA."
             )
 
         rows.append(

@@ -712,6 +712,10 @@ async def get_period_iva(
         document_count=summary.document_count,
         is_preliminary=summary.is_preliminary,
         preliminary_reasons=summary.preliminary_reasons,
+        pending_purchase_count=summary.pending_purchase_count,
+        pending_purchase_subtotal=format_amount(summary.pending_purchase_subtotal),
+        pending_purchase_tax_total=format_amount(summary.pending_purchase_tax_total),
+        pending_purchase_total=format_amount(summary.pending_purchase_total),
         # Las claves del motor son snake_case; se exponen en camelCase para
         # mantener una sola convencion en toda la API.
         amounts={to_camel(key): value for key, value in summary.as_dict().items()},

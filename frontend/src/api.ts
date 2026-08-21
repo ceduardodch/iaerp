@@ -1161,6 +1161,10 @@ export type TaxIvaSummary = {
   documentCount: number
   isPreliminary: boolean
   preliminaryReasons: string[]
+  pendingPurchaseCount: number
+  pendingPurchaseSubtotal: string
+  pendingPurchaseTaxTotal: string
+  pendingPurchaseTotal: string
   amounts: Record<string, string>
   fields: TaxFormField[]
 }

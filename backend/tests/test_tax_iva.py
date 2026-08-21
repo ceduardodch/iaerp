@@ -8,16 +8,17 @@ El flujo completo se ejercita por la API: subir evidencia -> ingerir -> calcular
 """
 
 import uuid
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.db.session import SessionFactory
 from app.models.payables import Payable, PayableMovement
-from app.models.tax import FiscalDocument
+from app.models.tax import FiscalDocument, TaxPeriod
 from app.services.tax import evidence as evidence_service
 from tests.fixtures.sri_documents import CREDIT_NOTE_RECEIVED_IVA15_XML
 
@@ -510,8 +511,8 @@ async def test_txt_only_period_is_reported_as_preliminary(client, stored_objects
     token = await token_for(client)
     result = await upload_and_ingest(client, token, "recibidos_portal.txt")
 
-    # Las retenciones del TXT llegan sin valores: se marcan preliminares.
-    assert result["preliminary"] >= 1
+    # El TXT trae totales generales, pero no el desglose fiscal por tarifa.
+    assert result["preliminary"] == 3
 
     period = await find_period(client, token, 2025, 12)
     assert period["status"] == "EVIDENCIA_INCOMPLETA"
@@ -521,6 +522,92 @@ async def test_txt_only_period_is_reported_as_preliminary(client, stored_objects
 
     assert body["isPreliminary"] is True
     assert any("XML" in reason for reason in body["preliminaryReasons"])
+
+
+async def test_txt_purchase_totals_without_tax_breakdown_do_not_fill_iva_fields(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "recibidos_portal.txt")
+
+    period = await find_period(client, token, 2025, 11)
+    assert period["status"] == "EVIDENCIA_INCOMPLETA"
+    body = (
+        await client.get(f"/api/v1/tax/periods/{period['id']}/iva", headers=auth(token))
+    ).json()
+
+    assert body["documentCount"] == 2
+    assert body["isPreliminary"] is True
+    assert any(
+        "2 comprobante(s) sin desglose tributario por tarifa" in reason
+        for reason in body["preliminaryReasons"]
+    )
+    assert body["pendingPurchaseCount"] == 2
+    assert body["pendingPurchaseSubtotal"] == "289.43"
+    assert body["pendingPurchaseTaxTotal"] == "1.97"
+    assert body["pendingPurchaseTotal"] == "291.40"
+    fields = {field["fieldCode"]: field for field in body["fields"]}
+    for code in ("500", "507", "510", "517", "564"):
+        assert fields[code]["value"] == "0.00"
+        assert fields[code]["documentCount"] == 0
+
+    purchases = await client.get(
+        "/api/v1/tax/purchases",
+        headers=auth(token),
+        params={"year": 2025, "month": 11},
+    )
+    assert purchases.status_code == 200
+    assert len(purchases.json()) == 2
+    assert all(item["isPreliminary"] for item in purchases.json())
+    assert all(item["taxes"] == [] for item in purchases.json())
+
+
+async def test_legacy_txt_purchase_without_tax_rows_is_detected_at_read_time(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "recibidos_portal.txt")
+
+    # Reproduce el estado que ya quedó guardado en producción antes del fix:
+    # facturas TXT sin filas FiscalDocumentTax, marcadas como confirmadas.
+    async with SessionFactory() as session:
+        await session.execute(
+            update(FiscalDocument)
+            .where(
+                FiscalDocument.tenant_id == TENANT_A,
+                FiscalDocument.issue_date >= date(2025, 11, 1),
+                FiscalDocument.issue_date < date(2025, 12, 1),
+            )
+            .values(is_preliminary=False)
+        )
+        await session.execute(
+            update(TaxPeriod)
+            .where(
+                TaxPeriod.tenant_id == TENANT_A,
+                TaxPeriod.year == 2025,
+                TaxPeriod.month == 11,
+            )
+            .values(status="LISTO_REVISAR")
+        )
+        await session.commit()
+
+    period = await find_period(client, token, 2025, 11)
+    body = (
+        await client.get(f"/api/v1/tax/periods/{period['id']}/iva", headers=auth(token))
+    ).json()
+    assert body["isPreliminary"] is True
+    assert any(
+        "2 comprobante(s) sin desglose tributario por tarifa" in reason
+        for reason in body["preliminaryReasons"]
+    )
+
+    purchases = await client.get(
+        "/api/v1/tax/purchases",
+        headers=auth(token),
+        params={"year": 2025, "month": 11},
+    )
+    assert purchases.status_code == 200
+    assert all(item["isPreliminary"] for item in purchases.json())
 
 
 async def test_empty_period_reports_missing_evidence(client, stored_objects) -> None:

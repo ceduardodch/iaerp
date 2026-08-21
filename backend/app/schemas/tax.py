@@ -258,6 +258,11 @@ class IvaSummaryRead(APIModel):
     document_count: int
     is_preliminary: bool
     preliminary_reasons: list[str]
+    # Totales generales visibles en el TXT, solo como control hasta cargar XML.
+    pending_purchase_count: int
+    pending_purchase_subtotal: str
+    pending_purchase_tax_total: str
+    pending_purchase_total: str
     # Todas las cifras del motor, formateadas.
     amounts: dict[str, str]
     # Campos del formulario listos para copiar/controlar.
