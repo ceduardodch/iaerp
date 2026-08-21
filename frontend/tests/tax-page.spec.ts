@@ -68,6 +68,52 @@ const summary = {
   ],
 }
 
+const annualDashboard = {
+  trend: [],
+  currentMonth: {
+    year: 2025,
+    month: 11,
+    authorizedSalesTotal: '1836.00',
+    authorizedSalesCount: 1,
+    evidencedSalesTotal: '1836.00',
+    evidencedSalesCount: 1,
+    purchasesTotal: '315.18',
+    purchaseCount: 3,
+    ivaGenerated: '275.40',
+    ivaCredit: '1.97',
+    retainedIva: '32.80',
+    ivaPayable: '240.63',
+    ivaCreditBalance: '0.00',
+    isPreliminary: true,
+    preliminaryReasons: [],
+    needsAccountingReview: true,
+  },
+  annual: {
+    year: 2025,
+    salesBase: '12000.00',
+    deductiblePurchasesBase: '4300.00',
+    nonDeductiblePurchasesBase: '250.00',
+    pendingReviewPurchasesBase: '276.30',
+    resultBeforeAdjustments: '7700.00',
+    incomeTaxWithheld: '860.25',
+    ivaWithheld: '320.80',
+    pendingReviewDocumentCount: 1,
+    preliminaryDocumentCount: 1,
+    refundStatus: 'REVIEW_AT_ANNUAL_CLOSE',
+    refundMessage: 'Hay retenciones de renta registradas como crédito. Solo existe un posible saldo a favor si, al declarar el año, superan el impuesto causado.',
+    limitations: [
+      'Hay 1 compra(s) pendientes de confirmar como deducibles o no deducibles.',
+      'IAERP no calcula una tarifa de renta hasta tener el perfil fiscal y los ajustes del cierre.',
+    ],
+    months: Array.from({ length: 12 }, (_, index) => ({
+      month: index + 1,
+      salesBase: index === 10 ? '1836.00' : '0.00',
+      deductiblePurchasesBase: index === 10 ? '13.13' : '0.00',
+      incomeTaxWithheld: index === 10 ? '8.59' : '0.00',
+    })),
+  },
+}
+
 async function mockApi(page: Page) {
   let historicalApproved = false
   let recoveryStarted = false
@@ -75,6 +121,7 @@ async function mockApi(page: Page) {
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
   await mockDashboardEndpoints(page)
+  await page.route('**/api/v1/tax/dashboard**', (route) => route.fulfill({ json: annualDashboard }))
   await page.route('**/api/v1/context', (route) => route.fulfill({
     json: {
       tenantId: '11111111-1111-4111-8111-111111111111',
@@ -216,6 +263,87 @@ test('muestra los periodos agrupados por año', async ({ page }) => {
   await expect(page.getByText('2025', { exact: true })).toBeVisible()
   await expect(page.getByText('2024', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /Noviembre/ })).toBeVisible()
+})
+
+test('organiza Tributario en pestañas accesibles y permite usar el teclado', async ({ page }) => {
+  const monthTab = page.getByRole('tab', { name: 'Mes y declaración' })
+  const yearTab = page.getByRole('tab', { name: 'Año fiscal' })
+  const retentionsTab = page.getByRole('tab', { name: 'Retenciones' })
+  await expect(monthTab).toHaveAttribute('aria-selected', 'true')
+  await expect(monthTab).toHaveAttribute('aria-controls', 'tax-panel-month')
+  await expect(yearTab).toHaveAttribute('aria-controls', 'tax-panel-year')
+  await expect(retentionsTab).toHaveAttribute('aria-controls', 'tax-panel-retentions')
+  await expect(page.locator('#tax-panel-month')).toHaveCount(1)
+  await expect(page.locator('#tax-panel-year')).toHaveCount(1)
+  await expect(page.locator('#tax-panel-retentions')).toHaveCount(1)
+  await monthTab.focus()
+  await monthTab.press('ArrowRight')
+  await expect(yearTab).toBeFocused()
+  await expect(yearTab).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tabpanel', { name: 'Año fiscal' })).toBeVisible()
+  await yearTab.press('End')
+  await expect(retentionsTab).toBeFocused()
+  await retentionsTab.press('Home')
+  await expect(monthTab).toBeFocused()
+  await monthTab.press('ArrowLeft')
+  await expect(retentionsTab).toBeFocused()
+  await retentionsTab.press('Tab')
+  const retentionsPanel = page.locator('#tax-panel-retentions')
+  await expect(retentionsPanel).toBeFocused()
+  expect(await retentionsPanel.evaluate((panel) => getComputedStyle(panel).outlineStyle))
+    .not.toBe('none')
+})
+
+test('muestra el avance anual sin presentar una declaración definitiva', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Año fiscal' }).click()
+  const panel = page.getByRole('tabpanel', { name: 'Año fiscal' })
+  await expect(panel).toContainText('Ventas netas del año')
+  await expect(panel).toContainText('$12.000,00')
+  await expect(panel).toContainText('Compras por revisar')
+  await expect(panel).toContainText('No reemplaza la declaración anual')
+  await expect(panel.getByLabel('Avance mensual del año fiscal 2025')).toBeVisible()
+})
+
+test('explica el posible saldo a favor sin afirmar que ya procede una devolución', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Retenciones' }).click()
+  const panel = page.getByRole('tabpanel', { name: 'Retenciones' })
+  await expect(panel).toContainText('Retenciones de renta acumuladas')
+  await expect(panel).toContainText('$860,25')
+  await expect(panel).toContainText('Revisar al cierre anual')
+  await expect(panel).toContainText('posible saldo a favor')
+  await expect(panel.getByRole('alert')).toContainText('1 comprobante(s)')
+  await expect(panel.getByRole('alert')).toContainText('Carga sus XML')
+})
+
+test('las pestañas y la vista anual funcionan en celular sin fallas de accesibilidad', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('tab', { name: 'Año fiscal' }).click()
+  const panel = page.getByRole('tabpanel', { name: 'Año fiscal' })
+  await expect(panel).toBeVisible()
+  const salesCell = panel.locator('td[data-label="Ventas"]').first()
+  await expect(salesCell).toHaveAttribute('data-label', 'Ventas')
+  await expect(panel.locator('td[data-label="Compras deducibles"]').first())
+    .toHaveAttribute('data-label', 'Compras deducibles')
+  await expect(panel.locator('td[data-label="Retención de renta"]').first())
+    .toHaveAttribute('data-label', 'Retención de renta')
+  expect(await salesCell.evaluate((cell) => getComputedStyle(cell, '::before').content))
+    .toContain('Ventas')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  const results = await new AxeBuilder({ page }).include('.tax-tabs').include('#tax-panel-year').analyze()
+  expect(results.violations).toEqual([])
+})
+
+test('muestra el error del tablero también dentro de Retenciones', async ({ page }) => {
+  await page.unroute('**/api/v1/tax/dashboard**')
+  await page.route('**/api/v1/tax/dashboard**', (route) => route.fulfill({
+    status: 500,
+    json: { detail: 'No se pudo calcular el tablero tributario.' },
+  }))
+  await page.reload()
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await navigateToSection(page, 'Tributario')
+  await page.getByRole('tab', { name: 'Retenciones' }).click()
+  await expect(page.locator('#tax-panel-retentions').getByRole('alert')).toBeVisible()
 })
 
 test('muestra los valores del formulario con dos decimales', async ({ page }) => {

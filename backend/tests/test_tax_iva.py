@@ -24,6 +24,7 @@ from tests.fixtures.sri_documents import CREDIT_NOTE_RECEIVED_IVA15_XML
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sri"
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
+TENANT_B = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 TAX_SCOPES = ["tax:read", "tax:write"]
 
 # RUC del tenant demo: los comprobantes de los fixtures van dirigidos a el, asi
@@ -438,6 +439,170 @@ async def test_dashboard_marks_purchase_credit_as_accounting_review(
     assert current["needsAccountingReview"] is True
     assert current["isPreliminary"] is True
     assert any("campo 564" in reason for reason in current["preliminaryReasons"])
+    annual = response.json()["annual"]
+    assert annual["pendingReviewPurchasesBase"] == "13.13"
+    assert annual["pendingReviewDocumentCount"] == 1
+    assert annual["deductiblePurchasesBase"] == "0.00"
+
+    async with SessionFactory.begin() as session:
+        payable = await session.scalar(select(Payable))
+        assert payable is not None
+        payable.tax_classification = "DEDUCTIBLE_CONFIRMED"
+
+    confirmed = await client.get(
+        "/api/v1/tax/dashboard",
+        headers=auth(token),
+        params={"as_of": "2025-11-30"},
+    )
+    confirmed_annual = confirmed.json()["annual"]
+    assert confirmed_annual["deductiblePurchasesBase"] == "13.13"
+    assert confirmed_annual["pendingReviewPurchasesBase"] == "0.00"
+    assert confirmed_annual["resultBeforeAdjustments"] == "-13.13"
+
+
+@pytest.mark.parametrize(
+    ("classification", "annual_key"),
+    [
+        ("DEDUCTIBLE_CONFIRMED", "deductiblePurchasesBase"),
+        ("NON_DEDUCTIBLE", "nonDeductiblePurchasesBase"),
+    ],
+)
+async def test_annual_credit_note_inherits_source_purchase_classification(
+    client,
+    stored_objects,
+    classification: str,
+    annual_key: str,
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+    await upload_and_ingest(
+        client,
+        token,
+        "nota_credito.xml",
+        content=CREDIT_NOTE_RECEIVED_IVA15_XML,
+    )
+    async with SessionFactory.begin() as session:
+        payable = await session.scalar(select(Payable))
+        assert payable is not None
+        payable.tax_classification = classification
+
+    response = await client.get(
+        "/api/v1/tax/dashboard",
+        headers=auth(token),
+        params={"as_of": "2025-11-30"},
+    )
+
+    assert response.status_code == 200, response.text
+    annual = response.json()["annual"]
+    assert annual[annual_key] == "8.13"
+    assert annual["pendingReviewPurchasesBase"] == "0.00"
+    assert annual["months"][10]["deductiblePurchasesBase"] == (
+        "8.13" if classification == "DEDUCTIBLE_CONFIRMED" else "0.00"
+    )
+
+
+async def test_annual_unlinked_credit_note_stays_pending(client, stored_objects) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+    unsupported_relation = CREDIT_NOTE_RECEIVED_IVA15_XML.replace(
+        b"<codDocModificado>01</codDocModificado>",
+        b"<codDocModificado>07</codDocModificado>",
+    )
+    await upload_and_ingest(
+        client,
+        token,
+        "nota_credito_sin_enlace.xml",
+        content=unsupported_relation,
+    )
+    async with SessionFactory.begin() as session:
+        invoice = await session.scalar(
+            select(FiscalDocument).where(FiscalDocument.doc_type == "FACTURA")
+        )
+        assert invoice is not None
+        payable = await session.scalar(
+            select(Payable).where(Payable.fiscal_document_id == invoice.id)
+        )
+        assert payable is not None
+        payable.tax_classification = "DEDUCTIBLE_CONFIRMED"
+
+    response = await client.get(
+        "/api/v1/tax/dashboard",
+        headers=auth(token),
+        params={"as_of": "2025-11-30"},
+    )
+
+    annual = response.json()["annual"]
+    assert annual["deductiblePurchasesBase"] == "13.13"
+    assert annual["pendingReviewPurchasesBase"] == "-5.00"
+    assert annual["pendingReviewDocumentCount"] == 1
+
+
+async def test_annual_dashboard_is_tenant_scoped_and_stops_at_selected_month(client) -> None:
+    async with SessionFactory.begin() as session:
+        session.add_all(
+            [
+                FiscalDocument(
+                    tenant_id=TENANT_B,
+                    direction="RECIBIDO",
+                    doc_type="FACTURA",
+                    access_key="0111202501000000000200120010010000000011234567811",
+                    issue_date=date(2025, 11, 1),
+                    subtotal=Decimal("999.00"),
+                    tax_total=Decimal("0.00"),
+                    total=Decimal("999.00"),
+                    payment_methods=[],
+                    is_preliminary=False,
+                ),
+                FiscalDocument(
+                    tenant_id=TENANT_A,
+                    direction="RECIBIDO",
+                    doc_type="FACTURA",
+                    access_key="0112202501000000000100120010010000000011234567811",
+                    issue_date=date(2025, 12, 1),
+                    subtotal=Decimal("50.00"),
+                    tax_total=Decimal("0.00"),
+                    total=Decimal("50.00"),
+                    payment_methods=[],
+                    is_preliminary=False,
+                ),
+            ]
+        )
+
+    token_a = await token_for(client)
+    token_b_response = await client.post(
+        "/api/v1/dev/token",
+        json={
+            "email": "b@iaerp.local",
+            "tenantId": str(TENANT_B),
+            "scopes": TAX_SCOPES,
+        },
+    )
+    token_b = token_b_response.json()["accessToken"]
+    november_a = (
+        await client.get(
+            "/api/v1/tax/dashboard",
+            headers=auth(token_a),
+            params={"as_of": "2025-11-30"},
+        )
+    ).json()["annual"]
+    december_a = (
+        await client.get(
+            "/api/v1/tax/dashboard",
+            headers=auth(token_a),
+            params={"as_of": "2025-12-31"},
+        )
+    ).json()["annual"]
+    november_b = (
+        await client.get(
+            "/api/v1/tax/dashboard",
+            headers=auth(token_b),
+            params={"as_of": "2025-11-30"},
+        )
+    ).json()["annual"]
+
+    assert november_a["pendingReviewPurchasesBase"] == "0.00"
+    assert december_a["pendingReviewPurchasesBase"] == "50.00"
+    assert november_b["pendingReviewPurchasesBase"] == "999.00"
 
 
 async def test_purchase_and_dashboard_reads_require_tax_read_scope(client) -> None:
@@ -468,6 +633,16 @@ async def test_retention_feeds_609_and_keeps_income_tax_apart(client, stored_obj
     field_609 = next(field for field in body["fields"] if field["fieldCode"] == "609")
     assert field_609["value"] == "32.80"
     assert field_609["isPaste"] is True
+
+    dashboard = await client.get(
+        "/api/v1/tax/dashboard",
+        headers=auth(token),
+        params={"as_of": "2025-11-30"},
+    )
+    annual = dashboard.json()["annual"]
+    assert annual["incomeTaxWithheld"] == "8.59"
+    assert annual["ivaWithheld"] == "32.80"
+    assert annual["refundStatus"] == "REVIEW_AT_ANNUAL_CLOSE"
     # La retencion de renta NO alimenta ningun campo del IVA mensual.
     assert all(field["value"] != "8.59" for field in body["fields"])
 

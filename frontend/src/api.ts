@@ -1152,6 +1152,31 @@ export type CurrentMonthTax = {
 export type DashboardTax = {
   trend: MonthlySalesTrend[]
   currentMonth: CurrentMonthTax
+  annual: AnnualFiscalTax
+}
+
+export type AnnualFiscalMonth = {
+  month: number
+  salesBase: string
+  deductiblePurchasesBase: string
+  incomeTaxWithheld: string
+}
+
+export type AnnualFiscalTax = {
+  year: number
+  salesBase: string
+  deductiblePurchasesBase: string
+  nonDeductiblePurchasesBase: string
+  pendingReviewPurchasesBase: string
+  resultBeforeAdjustments: string
+  incomeTaxWithheld: string
+  ivaWithheld: string
+  pendingReviewDocumentCount: number
+  preliminaryDocumentCount: number
+  refundStatus: 'REVIEW_AT_ANNUAL_CLOSE' | 'NO_RECORDED_CREDIT'
+  refundMessage: string
+  limitations: string[]
+  months: AnnualFiscalMonth[]
 }
 
 export type TaxFormField = {

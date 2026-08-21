@@ -89,6 +89,7 @@ export function ErpDataTable<T>({
     header: ReactNode
     cell: (row: T) => ReactNode
     className?: string
+    mobileLabel?: string
   }>
   rows: readonly T[]
   /** Recibe el índice porque hay listados sin identificador estable. */
@@ -113,7 +114,11 @@ export function ErpDataTable<T>({
           {rows.map((row, index) => (
             <tr key={rowKey(row, index)}>
               {columns.map((column, index) => (
-                <td key={index} className={column.className}>
+                <td
+                  key={index}
+                  className={column.className}
+                  data-label={column.mobileLabel}
+                >
                   {column.cell(row)}
                 </td>
               ))}
@@ -138,22 +143,29 @@ export function ErpTabs<T extends string>({
   value,
   onChange,
   ariaLabel,
+  idPrefix = 'tab',
+  panelIdPrefix,
 }: {
   tabs: ReadonlyArray<{ value: T; label: string }>
   value: T
   onChange: (value: T) => void
   ariaLabel: string
+  idPrefix?: string
+  panelIdPrefix?: string
 }) {
   function move(event: React.KeyboardEvent<HTMLDivElement>) {
-    const paso = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
-    if (!paso) return
-    event.preventDefault()
     const actual = tabs.findIndex((tab) => tab.value === value)
-    // Circular: desde la última la flecha derecha vuelve a la primera.
-    const destino = tabs[(actual + paso + tabs.length) % tabs.length]
+    let destinationIndex: number | null = null
+    if (event.key === 'ArrowRight') destinationIndex = (actual + 1) % tabs.length
+    if (event.key === 'ArrowLeft') destinationIndex = (actual - 1 + tabs.length) % tabs.length
+    if (event.key === 'Home') destinationIndex = 0
+    if (event.key === 'End') destinationIndex = tabs.length - 1
+    if (destinationIndex === null) return
+    event.preventDefault()
+    const destino = tabs[destinationIndex]
     if (!destino) return
     onChange(destino.value)
-    document.getElementById(`tab-${destino.value}`)?.focus()
+    document.getElementById(`${idPrefix}-${destino.value}`)?.focus()
   }
 
   return (
@@ -161,10 +173,11 @@ export function ErpTabs<T extends string>({
       {tabs.map((tab) => (
         <button
           key={tab.value}
-          id={`tab-${tab.value}`}
+          id={`${idPrefix}-${tab.value}`}
           type="button"
           role="tab"
           aria-selected={tab.value === value}
+          aria-controls={panelIdPrefix ? `${panelIdPrefix}-${tab.value}` : undefined}
           tabIndex={tab.value === value ? 0 : -1}
           className={`erp-tab${tab.value === value ? ' erp-tab-active' : ''}`}
           onClick={() => onChange(tab.value)}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   apiRequest,
   idempotencyKey,
+  type DashboardTax,
   type TaxBulkResult,
   type AnalyticClassification,
   type TaxDocumentDossier,
@@ -14,7 +15,7 @@ import {
   type TaxPeriod,
   type TaxXmlRecoveryJob,
 } from '../../api'
-import { ErpButton, ErpDataTable, ErpEmptyState, ErpPageHeader, ErpPanel, ErpStatusBadge } from '../erp'
+import { ErpButton, ErpDataTable, ErpEmptyState, ErpMetricGrid, ErpPageHeader, ErpPanel, ErpStatusBadge, ErpTabs } from '../erp'
 import './TaxPage.css'
 
 const MONTHS = [
@@ -42,6 +43,16 @@ function monthName(month: number): string {
   return MONTHS[month - 1] ?? String(month)
 }
 
+function formatDashboardCurrency(value: string): string {
+  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value)
+  if (!match) return `$${value}`
+  const sign = match[1] ?? ''
+  const integer = match[2] ?? '0'
+  const decimal = match[3] ?? ''
+  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${sign}$${grouped},${decimal.padEnd(2, '0')}`
+}
+
 const MOVEMENT_LABELS: Record<string, string> = {
   PAYMENT: 'Cobro',
   RETENTION: 'Retención aplicada',
@@ -57,6 +68,14 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   NOTA_DEBITO: 'Nota de débito',
   LIQUIDACION: 'Liquidación',
 }
+
+const TAX_TABS = [
+  { id: 'month', label: 'Mes y declaración' },
+  { id: 'year', label: 'Año fiscal' },
+  { id: 'retentions', label: 'Retenciones' },
+] as const
+
+type TaxTab = (typeof TAX_TABS)[number]['id']
 
 type HistoricalTaxCandidate = {
   id: string
@@ -157,6 +176,7 @@ export function TaxPage({ token }: { token: string }) {
   const [openDossierId, setOpenDossierId] = useState<string | null>(null)
   const [exceptionEvidence, setExceptionEvidence] = useState<Record<string, string>>({})
   const [groupByClassificationId, setGroupByClassificationId] = useState('')
+  const [activeTab, setActiveTab] = useState<TaxTab>('month')
   const evidenceInputRef = useRef<HTMLInputElement>(null)
 
   const periodsQuery = useQuery({
@@ -170,6 +190,17 @@ export function TaxPage({ token }: { token: string }) {
   )
   const activePeriodId = selectedPeriodId ?? periods[0]?.id ?? null
   const activePeriod = periods.find((period) => period.id === activePeriodId) ?? null
+
+  const dashboardAsOf = activePeriod
+    ? `${activePeriod.year}-${String(activePeriod.month).padStart(2, '0')}-01`
+    : undefined
+  const dashboardQuery = useQuery({
+    queryKey: ['tax', 'dashboard', dashboardAsOf],
+    queryFn: () => apiRequest<DashboardTax>(
+      token,
+      `/tax/dashboard${dashboardAsOf ? `?as_of=${dashboardAsOf}` : ''}`,
+    ),
+  })
 
   const ivaQuery = useQuery({
     queryKey: ['tax', 'iva', activePeriodId],
@@ -452,8 +483,28 @@ export function TaxPage({ token }: { token: string }) {
       <ErpPageHeader
         eyebrow="Obligaciones SRI"
         title="Tributario"
-        subtitle="Carga la evidencia del SRI y obtén los valores listos para declarar."
+        subtitle="Carga y revisa la evidencia tributaria registrada."
       />
+
+      <nav className="tax-tabs" aria-label="Vistas de Tributario">
+        <ErpTabs
+          tabs={TAX_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
+          value={activeTab}
+          onChange={setActiveTab}
+          ariaLabel="Panel tributario"
+          idPrefix="tax-tab"
+          panelIdPrefix="tax-panel"
+        />
+      </nav>
+
+      <div
+        id="tax-panel-month"
+        role="tabpanel"
+        aria-labelledby="tax-tab-month"
+        className="tax-tab-panel"
+        tabIndex={0}
+        hidden={activeTab !== 'month'}
+      >
 
       <ErpPanel title="Cargar comprobantes del SRI">
         <div className="tax-upload">
@@ -1037,6 +1088,84 @@ export function TaxPage({ token }: { token: string }) {
           </ErpPanel>
         </>
       ) : null}
+      </div>
+
+        <div id="tax-panel-year" role="tabpanel" aria-labelledby="tax-tab-year" className="tax-tab-panel" tabIndex={0} hidden={activeTab !== 'year'}>
+          <ErpPanel title={`Año fiscal ${dashboardQuery.data?.annual.year ?? activePeriod?.year ?? ''}`}>
+            {dashboardQuery.isPending ? <p className="fine-print">Calculando el avance anual…</p> : null}
+            {dashboardQuery.error ? <p className="form-error" role="alert">{dashboardQuery.error.message}</p> : null}
+            {dashboardQuery.data?.annual ? (
+              <>
+                <p className="fine-print">
+                  Corte de gestión con documentos registrados. No reemplaza la declaración anual ni la conciliación tributaria.
+                </p>
+                <ErpMetricGrid ariaLabel="Resumen del año fiscal">
+                  <article className="metric-card"><span>Ventas netas del año</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.salesBase)}</strong></article>
+                  <article className="metric-card"><span>Compras deducibles confirmadas</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.deductiblePurchasesBase)}</strong></article>
+                  <article className="metric-card"><span>Compras no deducibles</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.nonDeductiblePurchasesBase)}</strong></article>
+                  <article className="metric-card"><span>Resultado antes de ajustes</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.resultBeforeAdjustments)}</strong></article>
+                  <article className="metric-card tax-annual-attention">
+                    <span>Compras por revisar</span>
+                    <strong>{formatDashboardCurrency(dashboardQuery.data.annual.pendingReviewPurchasesBase)}</strong>
+                    <p>{dashboardQuery.data.annual.pendingReviewDocumentCount} documento(s)</p>
+                  </article>
+                </ErpMetricGrid>
+                <ErpDataTable
+                  ariaLabel={`Avance mensual del año fiscal ${dashboardQuery.data.annual.year}`}
+                  rows={dashboardQuery.data.annual.months}
+                  rowKey={(month) => String(month.month)}
+                  columns={[
+                    { header: 'Mes', mobileLabel: 'Mes', cell: (month) => <>{monthName(month.month)}</> },
+                    { header: 'Ventas', mobileLabel: 'Ventas', cell: (month) => <>{formatDashboardCurrency(month.salesBase)}</> },
+                    { header: 'Compras deducibles', mobileLabel: 'Compras deducibles', cell: (month) => <>{formatDashboardCurrency(month.deductiblePurchasesBase)}</> },
+                    { header: 'Retención de renta', mobileLabel: 'Retención de renta', cell: (month) => <>{formatDashboardCurrency(month.incomeTaxWithheld)}</> },
+                  ]}
+                />
+                <div className="tax-annual-limitations" role="note" aria-label="Límites del cálculo anual">
+                  <strong>Qué falta para estimar el impuesto</strong>
+                  <ul>{dashboardQuery.data.annual.limitations.map((item) => <li key={item}>{item}</li>)}</ul>
+                </div>
+              </>
+            ) : null}
+          </ErpPanel>
+        </div>
+
+        <div id="tax-panel-retentions" role="tabpanel" aria-labelledby="tax-tab-retentions" className="tax-tab-panel tax-retention-panel" tabIndex={0} hidden={activeTab !== 'retentions'}>
+          <ErpPanel title="Retenciones y posible saldo a favor">
+            {dashboardQuery.isPending ? <p className="fine-print">Revisando retenciones…</p> : null}
+            {dashboardQuery.error ? <p className="form-error" role="alert">{dashboardQuery.error.message}</p> : null}
+            {dashboardQuery.data?.annual ? (
+              <>
+                <ErpMetricGrid ariaLabel="Retenciones acumuladas">
+                  <article className="metric-card"><span>Retenciones de renta acumuladas</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.incomeTaxWithheld)}</strong></article>
+                  <article className="metric-card"><span>Retenciones de IVA acumuladas</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.ivaWithheld)}</strong></article>
+                </ErpMetricGrid>
+                <div className="tax-refund-guidance" role="status">
+                  <ErpStatusBadge tone={dashboardQuery.data.annual.refundStatus === 'REVIEW_AT_ANNUAL_CLOSE' ? 'warning' : 'neutral'}>
+                    {dashboardQuery.data.annual.refundStatus === 'REVIEW_AT_ANNUAL_CLOSE' ? 'Revisar al cierre anual' : 'Sin crédito registrado'}
+                  </ErpStatusBadge>
+                  <p>{dashboardQuery.data.annual.refundMessage}</p>
+                </div>
+                {dashboardQuery.data.annual.preliminaryDocumentCount > 0 ? (
+                  <p className="form-warning" role="alert">
+                    Cálculo incompleto: {dashboardQuery.data.annual.preliminaryDocumentCount} comprobante(s)
+                    preliminar(es) aún no tienen respaldo completo. Carga sus XML antes de evaluar un saldo a favor.
+                  </p>
+                ) : null}
+                <div className="tax-refund-steps">
+                  <article>
+                    <strong>Renta</strong>
+                    <p>Las retenciones son crédito contra el impuesto anual. Si exceden el impuesto causado, podría existir pago en exceso.</p>
+                  </article>
+                  <article>
+                    <strong>IVA</strong>
+                    <p>Se revisa por separado. La devolución depende de que el crédito por retenciones no pueda compensarse y de los respaldos exigidos.</p>
+                  </article>
+                </div>
+              </>
+            ) : null}
+          </ErpPanel>
+        </div>
     </>
   )
 }

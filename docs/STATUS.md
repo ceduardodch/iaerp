@@ -7,8 +7,28 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Correctivo de recuperación SRI para persona natural listo en `release`
-  local: 2026-08-21 `America/Guayaquil`. Algunos XML autorizados identifican al
+- Avance anual tributario listo para promoción desde `release`: 2026-08-21
+  `America/Guayaquil`. Tributario usa una sola página con pestañas para mes y
+  declaración, año fiscal y retenciones. El año muestra ventas netas, compras
+  deducibles confirmadas, no deducibles y pendientes, resultado antes de
+  ajustes, doce cortes mensuales hasta el mes elegido y retenciones de renta e
+  IVA separadas. No
+  inventa una tarifa ni afirma una devolución: explica que el saldo a favor de
+  renta solo puede evaluarse contra el impuesto causado al cierre y que el IVA
+  tiene otro trámite. Las notas de crédito restan y heredan la clasificación de
+  su factura sustento cuando está enlazada; una nota sin enlace queda pendiente.
+  La vista avisa cuando hay documentos preliminares y pide sus XML antes de
+  evaluar un saldo a favor. Pasan Ruff, mypy, lint, build, 34 pruebas fiscales
+  dirigidas y los recorridos críticos Playwright de teclado, foco visible,
+  móvil, reflow, errores y axe. La base completa de 500 pruebas backend estaba
+  verde antes del cierre y los cambios fiscales posteriores quedaron cubiertos
+  por la suite dirigida. Los 46 recorridos Playwright de Tributario pasaron en
+  serie en escritorio y móvil. Dos revisiones independientes (fiscal/backend y
+  UI/UX/accesibilidad) dieron GO. El usuario autorizó commit, push y promoción
+  a producción mediante el flujo `release -> PR -> main`.
+
+- Correctivo de recuperación SRI para persona natural publicado en `main`:
+  2026-08-21 `America/Guayaquil`. Algunos XML autorizados identifican al
   receptor con su cédula de 10 dígitos aunque el tenant use el RUC natural de
   13 dígitos. La recuperación acepta esa equivalencia solo cuando el RUC
   termina en `001`, su base es una cédula válida y los primeros 10 dígitos son
@@ -18,8 +38,8 @@ alcance y las decisiones.
   los XML. Las pruebas confirman factura, nota de crédito con ajuste de CxP y
   retención con IVA y renta separadas. Pasan Ruff, mypy, 95 pruebas dirigidas,
   lint/build y 36 recorridos Playwright de Tributario en escritorio/móvil. Dos
-  revisiones independientes dieron GO. El cambio aún no se publicó ni se
-  ejecutó contra producción.
+  revisiones independientes dieron GO. PR #52 quedó en `main` como `e09b467`;
+  CI `32531454470`, despliegue Coolify y salud pública quedaron verdes.
 
 - Recuperación de XML recibidos desde el SRI publicada en `main`:
   2026-08-21 `America/Guayaquil`. Tributario ofrece `Completar XML desde el

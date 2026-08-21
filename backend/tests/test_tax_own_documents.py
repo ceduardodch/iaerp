@@ -295,6 +295,10 @@ async def test_dashboard_compares_documented_month(
     assert current["ivaGenerated"] == "46.86"
     assert current["ivaPayable"] == "46.86"
     assert current["isPreliminary"] is False
+    annual = body["annual"]
+    assert annual["salesBase"] == "312.38"
+    assert annual["resultBeforeAdjustments"] == "312.38"
+    assert annual["months"][10]["salesBase"] == "312.38"
 
 
 async def test_dashboard_reports_missing_tax_sales_without_inventing_iva(
@@ -354,6 +358,9 @@ async def test_dashboard_sales_trend_subtracts_authorized_credit_notes(
     assert point["total"] == "347.74"
     assert point["invoiceCount"] == 1
     assert point["creditNoteCount"] == 1
+    annual = response.json()["annual"]
+    assert annual["salesBase"] == "302.38"
+    assert annual["months"][10]["salesBase"] == "302.38"
 
 
 async def test_importing_twice_does_not_duplicate(client, stored_objects) -> None:
