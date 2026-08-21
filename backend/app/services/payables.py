@@ -781,13 +781,22 @@ async def sync_fiscal_document(
         if source is None:
             return None
         payable = await session.scalar(
-            select(Payable).where(
+            select(Payable)
+            .where(
                 Payable.tenant_id == context.tenant_id,
                 Payable.fiscal_document_id == source.id,
             )
+            .with_for_update()
         )
         if payable is None:
             return None
+        if payable.status == "VOID":
+            return payable
+        # El TXT del portal permite enlazar la nota, pero no siempre trae su
+        # importe total ni el desglose. Solo el XML autorizado puede generar
+        # un movimiento contable; un cero tampoco es una aplicacion valida.
+        if document.is_preliminary or document.total <= Decimal("0.00"):
+            return payable
         duplicate = await session.scalar(
             select(PayableMovement.id).where(
                 PayableMovement.tenant_id == context.tenant_id,

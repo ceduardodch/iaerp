@@ -40,6 +40,22 @@ async def generate_ats(
         )
     )
     document_ids = [document.id for document in documents]
+    related_keys = {
+        document.related_access_key
+        for document in documents
+        if document.doc_type in {"NOTA_CREDITO", "NOTA_DEBITO"}
+        and document.related_access_key
+    }
+    related_documents: list[FiscalDocument] = []
+    if related_keys:
+        related_documents = list(
+            await session.scalars(
+                select(FiscalDocument).where(
+                    FiscalDocument.tenant_id == context.tenant_id,
+                    FiscalDocument.access_key.in_(related_keys),
+                )
+            )
+        )
     taxes: list[FiscalDocumentTax] = []
     retentions: list[FiscalRetention] = []
     if document_ids:
@@ -66,6 +82,7 @@ async def generate_ats(
         documents=documents,
         taxes=taxes,
         retentions=retentions,
+        related_documents=related_documents,
     )
     if result.missing:
         raise HTTPException(

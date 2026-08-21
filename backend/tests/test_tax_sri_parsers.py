@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 from app.services.tax.sri_xml import parse_authorized_document
 from app.services.tax.txt_import import decode_portal_text, parse_received_txt
+from tests.fixtures.sri_documents import CREDIT_NOTE_RECEIVED_IVA15_XML
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sri"
 
@@ -61,6 +62,20 @@ def test_parses_invoice_with_iva_15() -> None:
     assert tax.rate == Decimal("15.00")
     assert tax.base_amount == Decimal("13.13")
     assert tax.tax_amount == Decimal("1.97")
+
+
+def test_parses_received_credit_note_and_modified_invoice() -> None:
+    document = parse_authorized_document(CREDIT_NOTE_RECEIVED_IVA15_XML)
+
+    assert document.doc_type == "NOTA_CREDITO"
+    assert document.issue_date == date(2025, 11, 21)
+    assert document.modified_document == "001-002-000019877"
+    assert document.modified_document_type == "FACTURA"
+    assert document.subtotal == Decimal("5.00")
+    assert document.tax_total == Decimal("0.75")
+    assert document.total == Decimal("5.75")
+    assert document.payment_methods == []
+    assert document.taxes[0].rate == Decimal("15.00")
 
 
 def test_parses_retention_separating_iva_from_renta() -> None:

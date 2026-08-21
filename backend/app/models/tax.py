@@ -173,6 +173,13 @@ class FiscalDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Bas
         ),
         Index("ix_fiscal_documents_tenant_issue_date", "tenant_id", "issue_date"),
         Index("ix_fiscal_documents_tenant_period", "tenant_id", "tax_period_id"),
+        Index(
+            "ix_fiscal_documents_credit_note_source",
+            "tenant_id",
+            "direction",
+            "counterparty_identification",
+            "related_document_number",
+        ),
     )
 
     tax_period_id: Mapped[uuid.UUID | None]
@@ -199,6 +206,11 @@ class FiscalDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Bas
     is_preliminary: Mapped[bool] = mapped_column(Boolean, default=False)
     # Documento que sustenta esta nota de credito/debito o retencion.
     related_access_key: Mapped[str | None] = mapped_column(String(49))
+    related_document_type: Mapped[str | None] = mapped_column(String(20))
+    # Numero visible del comprobante modificado (001-001-000000001). El TXT
+    # del portal y el XML de una nota lo traen aunque no incluyan la clave de
+    # acceso de la factura; se conserva para resolver el enlace sin adivinar.
+    related_document_number: Mapped[str | None] = mapped_column(String(30))
     # Emitido propio: enlace al comprobante que IAERP ya genero.
     sales_document_id: Mapped[uuid.UUID | None]
     evidence_id: Mapped[uuid.UUID | None]

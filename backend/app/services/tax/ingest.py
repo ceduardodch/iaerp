@@ -17,6 +17,7 @@ consultables. Reglas que aplica:
 from __future__ import annotations
 
 import io
+import re
 import uuid
 import zipfile
 from dataclasses import dataclass, field
@@ -36,6 +37,7 @@ from app.services.tax.txt_import import ParsedTxtRow, parse_received_txt
 # desde Finder. Ignorarlas evita procesar basura (y es el mismo motivo por el que
 # un ZIP hecho asi es rechazado por el SRI: ver `ats.py`).
 _IGNORED_ZIP_PREFIXES = ("__MACOSX/", ".")
+_RELATED_SOURCE_TYPES = {"FACTURA", "LIQUIDACION", "NOTA_DEBITO"}
 
 
 @dataclass
@@ -47,6 +49,107 @@ class IngestResult:
     skipped: int = 0
     preliminary: int = 0
     notes: list[str] = field(default_factory=list)
+
+
+def normalize_sri_document_number(value: str | None) -> str | None:
+    """Normaliza ``001001000000001`` o su variante con guiones.
+
+    Un numero distinto de los 15 digitos del SRI queda sin resolver: enlazarlo
+    por aproximacion podria aplicar una nota a una compra equivocada.
+    """
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) != 15:
+        return None
+    return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+
+
+async def _resolve_related_access_key(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    document: FiscalDocument,
+) -> None:
+    if document.doc_type != "NOTA_CREDITO" or not document.related_document_number:
+        return
+    normalized = normalize_sri_document_number(document.related_document_number)
+    document.related_document_number = normalized
+    if normalized is None or not document.counterparty_identification:
+        document.related_access_key = None
+        return
+    if (
+        not document.is_preliminary
+        and document.related_document_type not in _RELATED_SOURCE_TYPES
+    ):
+        # El XML autorizado debe indicar codDocModificado. Solo el TXT, que es
+        # preliminar y no trae ese código, puede usar la búsqueda amplia.
+        document.related_access_key = None
+        return
+    establishment, emission_point, sequential = normalized.split("-")
+    source_types: set[str] = (
+        {document.related_document_type}
+        if document.related_document_type in _RELATED_SOURCE_TYPES
+        else _RELATED_SOURCE_TYPES
+    )
+    matches = list(
+        await session.scalars(
+            select(FiscalDocument)
+            .where(
+                FiscalDocument.tenant_id == context.tenant_id,
+                FiscalDocument.direction == document.direction,
+                FiscalDocument.doc_type.in_(source_types),
+                FiscalDocument.counterparty_identification
+                == document.counterparty_identification,
+                FiscalDocument.establishment_code == establishment,
+                FiscalDocument.emission_point_code == emission_point,
+                FiscalDocument.sequential == sequential,
+            )
+            .limit(2)
+        )
+    )
+    document.related_access_key = matches[0].access_key if len(matches) == 1 else None
+
+
+async def _sync_related_credit_notes(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    source: FiscalDocument,
+) -> None:
+    if source.doc_type not in _RELATED_SOURCE_TYPES or not source.access_key:
+        return
+    number = normalize_sri_document_number(
+        "-".join(
+            part
+            for part in (
+                source.establishment_code,
+                source.emission_point_code,
+                source.sequential,
+            )
+            if part
+        )
+    )
+    if number is None or not source.counterparty_identification:
+        return
+    notes = list(
+        await session.scalars(
+            select(FiscalDocument).where(
+                FiscalDocument.tenant_id == context.tenant_id,
+                FiscalDocument.direction == source.direction,
+                FiscalDocument.doc_type == "NOTA_CREDITO",
+                FiscalDocument.counterparty_identification
+                == source.counterparty_identification,
+                FiscalDocument.related_document_number == number,
+            )
+        )
+    )
+    if not notes:
+        return
+    from app.services import payables
+
+    for note in notes:
+        await _resolve_related_access_key(session, context, document=note)
+        if note.related_access_key == source.access_key:
+            await payables.sync_fiscal_document(session, context, document=note)
 
 
 def _direction_for(document_identification: str, tenant_ruc: str) -> str:
@@ -97,6 +200,20 @@ async def upsert_parsed_document(
         )
     )
     created = existing is None
+    if existing is not None and not existing.is_preliminary and parsed.doc_type == "NOTA_CREDITO":
+        parsed_number = normalize_sri_document_number(parsed.modified_document)
+        relationship_changed = (
+            existing.related_document_number is not None
+            and existing.related_document_number != parsed_number
+        ) or (
+            existing.related_document_type is not None
+            and existing.related_document_type != parsed.modified_document_type
+        )
+        if relationship_changed:
+            raise HTTPException(
+                status_code=409,
+                detail="An authorized credit note cannot change its modified document",
+            )
     document = existing or FiscalDocument(
         tenant_id=context.tenant_id,
         access_key=parsed.access_key,
@@ -122,6 +239,11 @@ async def upsert_parsed_document(
     document.tax_total = parsed.tax_total
     document.total = parsed.total
     document.payment_methods = list(parsed.payment_methods)
+    normalized_modified = normalize_sri_document_number(parsed.modified_document)
+    if normalized_modified != document.related_document_number:
+        document.related_access_key = None
+    document.related_document_number = normalized_modified
+    document.related_document_type = parsed.modified_document_type
     # El XML trae el detalle completo: deja de ser preliminar.
     document.is_preliminary = False
     if evidence_id is not None:
@@ -176,7 +298,9 @@ async def upsert_parsed_document(
     await session.flush()
     from app.services import payables
 
+    await _resolve_related_access_key(session, context, document=document)
     await payables.sync_fiscal_document(session, context, document=document)
+    await _sync_related_credit_notes(session, context, source=document)
     return document, created
 
 
@@ -229,6 +353,11 @@ async def _upsert_txt_row(
     document.tax_total = row.tax_total or document.tax_total
     document.total = row.total or document.total
     document.is_preliminary = row.is_preliminary
+    normalized_modified = normalize_sri_document_number(row.modified_document)
+    if normalized_modified != document.related_document_number:
+        document.related_access_key = None
+    document.related_document_number = normalized_modified
+    document.related_document_type = None
     if evidence_id is not None:
         document.evidence_id = evidence_id
 
@@ -242,7 +371,9 @@ async def _upsert_txt_row(
     await session.flush()
     from app.services import payables
 
+    await _resolve_related_access_key(session, context, document=document)
     await payables.sync_fiscal_document(session, context, document=document)
+    await _sync_related_credit_notes(session, context, source=document)
     return created, False
 
 
@@ -328,5 +459,6 @@ __all__ = [
     "IngestResult",
     "extract_xml_members",
     "ingest_evidence",
+    "normalize_sri_document_number",
     "upsert_parsed_document",
 ]

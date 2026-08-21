@@ -33,13 +33,14 @@ def _purchase(
     base: Decimal,
     iva: Decimal,
     payment_methods: list[str],
+    doc_type: str = "FACTURA",
 ) -> tuple[FiscalDocument, FiscalDocumentTax]:
     """Compra recibida con todo lo que el ATS exige, salvo lo que se prueba."""
     document = FiscalDocument(
         id=uuid.uuid4(),
         tenant_id=TENANT,
         direction="RECIBIDO",
-        doc_type="FACTURA",
+        doc_type=doc_type,
         authorization_number="1107202601179999999900110010000086031234567819",
         issue_date=date(2026, 7, 11),
         establishment_code="001",
@@ -153,6 +154,93 @@ def test_purchase_under_threshold_without_payment_method_is_allowed() -> None:
     ])
 
     assert result.missing == []
+
+
+def test_received_credit_note_is_reported_as_ats_code_04_with_positive_values() -> None:
+    source = _purchase(
+        sequential="000008608",
+        base=Decimal("100.00"),
+        iva=Decimal("15.00"),
+        payment_methods=["20"],
+    )
+    note = _purchase(
+        sequential="000008609",
+        base=Decimal("5.00"),
+        iva=Decimal("0.75"),
+        payment_methods=[],
+        doc_type="NOTA_CREDITO",
+    )
+    source[0].access_key = "1" * 49
+    source[0].authorization_number = "1" * 49
+    note[0].related_access_key = source[0].access_key
+    note[0].related_document_number = "001-010-000008608"
+    # La factura modificada puede pertenecer a otro período: se usa para los
+    # campos obligatorios del tipo 04, pero no se suma como compra de este mes.
+    result = build_ats_input(
+        period=_period(),
+        identification="1799999999001",
+        legal_name="EMPRESA DEMO",
+        documents=[note[0]],
+        taxes=[note[1]],
+        retentions=[],
+        related_documents=[source[0]],
+    )
+
+    assert result.missing == []
+    purchase = next(
+        item for item in result.data.purchases if item.document_type == "04"
+    )
+    assert purchase.document_type == "04"
+    assert purchase.base_taxed == Decimal("5.00")
+    assert purchase.iva_amount == Decimal("0.75")
+    root = fromstring(build_ats_xml(result.data))
+    xml_note = next(
+        item
+        for item in root.findall("compras/detalleCompras")
+        if item.findtext("tipoComprobante") == "04"
+    )
+    assert xml_note.findtext("docModificado") == "01"
+    assert xml_note.findtext("estabModificado") == "001"
+    assert xml_note.findtext("ptoEmiModificado") == "010"
+    assert xml_note.findtext("secModificado") == "000008608"
+    assert xml_note.findtext("autModificado") == "1" * 49
+    tags = [child.tag for child in xml_note]
+    assert tags.index("pagoExterior") < tags.index("docModificado")
+
+
+def test_emitted_credit_note_has_positive_detail_and_net_sales_header() -> None:
+    invoice = _sale()
+    note = _sale()
+    note[0].doc_type = "NOTA_CREDITO"
+    note[0].sequential = "706768648"
+    note[0].subtotal = Decimal("100.00")
+    note[0].tax_total = Decimal("15.00")
+    note[0].total = Decimal("115.00")
+    note[1].base_amount = Decimal("100.00")
+    note[1].tax_amount = Decimal("15.00")
+
+    result = _build([invoice, note])
+    root = fromstring(build_ats_xml(result.data))
+    credit = next(
+        item
+        for item in root.findall("ventas/detalleVentas")
+        if item.findtext("tipoComprobante") == "04"
+    )
+
+    assert credit.findtext("baseImpGrav") == "100.00"
+    assert credit.findtext("montoIva") == "15.00"
+    assert root.findtext("totalVentas") == "5669.00"
+    assert root.findtext("ventasEstablecimiento/ventaEst/ventasEstab") == "5669.00"
+
+
+def test_ats_blocks_negative_net_sales_from_credit_notes() -> None:
+    note = _sale()
+    note[0].doc_type = "NOTA_CREDITO"
+
+    result = _build([note])
+
+    assert any("superan las ventas del período" in item for item in result.missing)
+    assert any("establecimiento 001" in item for item in result.missing)
 
 
 def test_threshold_is_exclusive_at_the_exact_amount() -> None:
