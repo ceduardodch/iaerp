@@ -26,7 +26,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - [x] Servicio de empleados: alta, edición y baja
 - [x] Servicio de periodos: generar borrador idempotente y aprobar
 - [x] Endpoints `/payroll/*` con `execute_idempotent` y scopes `payroll:read` / `payroll:write`
-- [ ] Registrar los scopes en `KNOWN_SCOPES`, `iaerp-realm.json` y `configure-staging.sh`
+- [x] Registrar los scopes en `KNOWN_SCOPES`, `iaerp-realm.json` y `configure-staging.sh`
 - [ ] `run_payroll_scheduler()` en el `TaskGroup` de `workers/dispatcher.py`
 - [ ] Tipos y cliente en `frontend/src/api.ts`
 - [ ] Pantalla `PayrollPage.tsx` con pestañas Empleados y Roles
@@ -105,3 +105,20 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   descartar causa en el código (arranca limpio, expone las rutas nuevas) y el
   rerun del job de despliegue quedó verde, confirmando que fue un blip
   transitorio de Coolify y no del cambio.
+- Scopes `payroll:read`/`payroll:write` fuera de los endpoints, commit
+  `240507f`: `SERVICE_ACCOUNT_ALLOWED_SCOPES` en `schemas/platform.py` (sin
+  esto, un agente MCP no podía pedir un token con scope `payroll:*`, lo
+  rechazaba con 422), más las mismas dos entradas en `iaerp-realm.json`
+  (catálogo de client-scopes y `defaultClientScopes` de `iaerp-web`) y en el
+  loop de `configure-staging.sh`. Tres pruebas nuevas en
+  `test_payroll_scopes_registration.py`, verificadas en rojo antes del
+  cambio: crear una cuenta de servicio con esos scopes devolvía 422, y los
+  dos archivos de Keycloak no contenían las cadenas `payroll:read`/
+  `payroll:write`. Esta corrida encontró en paralelo un push directo de otra
+  sesión (`3f66ca9`, fix del baseline de detect-secrets sobre mi propio
+  commit, mergeado a `main` como `a6ff867` vía PR #58) que canceló mi primer
+  run de CI a mitad de los tests de `Backend`; en vez de asumir verde por la
+  lógica de "sin cambios de backend desde el commit anterior" que usa
+  `Detect change impact` (que por eso saltó el job `Backend` en el run del
+  merge), disparé un `workflow_dispatch` limpio sobre `main` para forzar una
+  corrida completa — quedó verde (`Backend` 16m, resto de jobs OK).
