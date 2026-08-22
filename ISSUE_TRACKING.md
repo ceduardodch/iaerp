@@ -26,6 +26,14 @@
 > pruebas backend y 30 recorridos Playwright escritorio/móvil, WCAG y zoom
 > 400 % pasan. Falta autorización para commit, push y promoción.
 
+> Corte 2026-08-22: correctivo local de la edición masiva. Se confirmó en la
+> pantalla productiva que las 36 fallidas eran compras de enero a junio, todas
+> en periodos declarados, con uso tributario `No deducible` y control interno
+> pendiente. El lote ya no descarta la corrección interna cuando protege el uso
+> tributario: guarda control interno y tags, conserva lo declarado y explica el
+> resultado por motivo. Ruff, mypy, 25 pruebas backend, lint/build y recorridos
+> escritorio/móvil con WCAG pasan. Pendiente promoción.
+
 > Corte 2026-08-02: conciliación bancaria por período lista y validada. Un
 > abono respaldado puede sustituir un cobro manual sin referencia solo cuando
 > factura y retenciones cuadran completas; el original se conserva con reverso.

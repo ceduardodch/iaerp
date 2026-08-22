@@ -416,6 +416,7 @@ test('Compras selecciona y edita varias compras ya creadas', async ({ page }) =>
     const retry = requestBodies.length === 2
     await route.fulfill({ status: 200, json: {
       updatedCount: 1,
+      fiscalProtectedCount: 0,
       failedCount: retry ? 0 : 1,
       items: retry
         ? [{ payableId: secondPayable.id, status: 'UPDATED', detail: 'Compra actualizada' }]
@@ -437,7 +438,7 @@ test('Compras selecciona y edita varias compras ya creadas', async ({ page }) =>
   await page.getByLabel('Control interno').selectOption('REAL')
   await page.getByRole('button', { name: 'Guardar cambios en 2' }).click()
 
-  await expect(page.locator('.purchase-review-status')).toHaveText('1 compra actualizada · 1 no pudo guardarse.')
+  await expect(page.locator('.purchase-review-status')).toHaveText('1 compra actualizada · 1 compra: Periodo declarado.')
   expect(requestBodies[0]).toMatchObject({
     payableIds: [firstPayable.id, secondPayable.id],
     taxClassification: 'DEDUCTIBLE_CONFIRMED',
@@ -452,6 +453,55 @@ test('Compras selecciona y edita varias compras ya creadas', async ({ page }) =>
   await expect(page.locator('.purchase-review-status')).toHaveText('1 compra actualizada.')
   expect(requestBodies[1]).toMatchObject({ payableIds: [secondPayable.id], internalClassification: 'REAL' })
   expect(requestKeys[1]).not.toBe(requestKeys[0])
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(results.violations).toEqual([])
+})
+
+test('Compras guarda el control interno aunque el uso tributario esté protegido', async ({ page }) => {
+  const firstPayable = {
+    id: 'aaaaaaaa-2222-4333-8444-555555555550', supplierId: null,
+    supplierName: purchases[0].supplierName, fiscalDocumentId: purchases[0].id,
+    description: 'Compra enero', category: 'Sin clasificar', documentType: 'INVOICE',
+    documentNumber: purchases[0].documentNumber, issueDate: '2026-01-15', dueDate: null,
+    total: '115.00', openAmount: '0.00', currency: 'USD', status: 'SETTLED',
+    taxClassification: 'NON_DEDUCTIBLE', internalClassification: 'PENDING_REVIEW',
+    evidenceStatus: 'FISCAL_XML', supportReference: purchases[0].accessKey, analyticAssignments: [],
+  }
+  const secondPayable = {
+    ...firstPayable,
+    id: 'aaaaaaaa-2222-4333-8444-555555555555',
+    description: 'Compra febrero', documentNumber: purchases[1].documentNumber,
+    issueDate: '2026-02-15', total: '230.00', supportReference: purchases[1].accessKey,
+  }
+  await page.route('**/api/v1/payables', (route) => route.fulfill({ json: [firstPayable, secondPayable] }))
+  await page.route('**/api/v1/payables/classifications/bulk', async (route) => {
+    await route.fulfill({ status: 200, json: {
+      updatedCount: 2,
+      fiscalProtectedCount: 2,
+      failedCount: 0,
+      items: [firstPayable, secondPayable].map((payable) => ({
+        payableId: payable.id,
+        status: 'UPDATED',
+        detail: 'El uso tributario no cambió porque la compra pertenece a un periodo declarado',
+        fiscalUseProtected: true,
+      })),
+    } })
+  })
+
+  await navigateToSection(page, 'Compras')
+  await page.getByRole('checkbox', { name: 'Seleccionar las 2 compras visibles' }).check()
+  await page.getByRole('button', { name: 'Editar selección' }).click()
+  await page.getByLabel('Uso tributario ante el SRI').selectOption('DEDUCTIBLE_CONFIRMED')
+  await page.getByLabel('Motivo del cambio').fill('Revisión conjunta de compras')
+  await page.getByLabel('Control interno').selectOption('REAL')
+  await page.getByRole('button', { name: 'Guardar cambios en 2' }).click()
+
+  await expect(page.locator('.purchase-review-status')).toHaveText(
+    '2 compras actualizadas · 2 conservaron el uso tributario porque el periodo ya está declarado.',
+  )
+  await expect(page.getByRole('button', { name: 'Editar selección' })).toHaveCount(0)
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze()

@@ -7,6 +7,16 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Correctivo de edición masiva de compras listo localmente: 2026-08-22
+  `America/Guayaquil`. En producción quedaron seleccionadas 36 compras de enero
+  a junio, todas con uso tributario `No deducible`, control interno pendiente y
+  periodos ya declarados. El lote bloqueaba primero el cambio fiscal y por eso
+  tampoco guardaba la marca interna permitida. Ahora conserva el uso tributario
+  del periodo declarado, pero sí aplica `Gasto real`, `Solo tributario` y tags;
+  el resultado indica cuántas compras quedaron protegidas y muestra el motivo
+  exacto de cualquier fallo. Pasan Ruff, mypy, 25 pruebas de CxP, lint, build y
+  los recorridos dirigidos en escritorio/móvil con WCAG. Pendiente promoción.
+
 - Edición masiva de compras publicada en `main`: 2026-08-22
   `America/Guayaquil`. La vista Compras permite seleccionar hasta 100 filas
   visibles y cambiar en un solo guardado el uso tributario, el control interno
