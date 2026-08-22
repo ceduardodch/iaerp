@@ -166,4 +166,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   componentes React (solo Playwright). Verificación equivalente a la del
   pendiente anterior de tipos: `tsc --noEmit`, `oxlint` y `vite build`
   limpios; `PayrollPage` queda fuera del bundle (no se importa aún) igual
-  que pasó con los tipos de `api.ts`.
+  que pasó con los tipos de `api.ts`. Commit `8407daf` (main+release), CI
+  del run `32601781683` verde (`Frontend` 7m10s, `Deploy production to
+  Coolify` 4m45s; `Backend`/migraciones/OIDC se saltaron por no haber
+  cambios de esa área).
