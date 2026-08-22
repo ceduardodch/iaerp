@@ -138,6 +138,41 @@ class PayableClassificationUpdate(APIModel):
     analytic_value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
 
 
+class PayableBulkClassificationUpdate(APIModel):
+    payable_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+    tax_classification: Literal["DEDUCTIBLE_CONFIRMED", "NON_DEDUCTIBLE"] | None = None
+    internal_classification: Literal["REAL", "DECLARATION_ONLY"] | None = None
+    reason: str | None = Field(default=None, min_length=3, max_length=300)
+    analytic_change: Literal["KEEP_EXISTING", "REPLACE"] = "KEEP_EXISTING"
+    analytic_value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_bulk_classification(self) -> PayableBulkClassificationUpdate:
+        if len(set(self.payable_ids)) != len(self.payable_ids):
+            raise ValueError("payableIds must be unique")
+        if (
+            self.tax_classification is None
+            and self.internal_classification is None
+            and self.analytic_change == "KEEP_EXISTING"
+        ):
+            raise ValueError("Select at least one bulk change")
+        if self.tax_classification is not None and not self.reason:
+            raise ValueError("reason is required when changing fiscal use in bulk")
+        return self
+
+
+class PayableBulkClassificationItemRead(APIModel):
+    payable_id: uuid.UUID
+    status: Literal["UPDATED", "FAILED"]
+    detail: str
+
+
+class PayableBulkClassificationRead(APIModel):
+    updated_count: int = Field(ge=0)
+    failed_count: int = Field(ge=0)
+    items: list[PayableBulkClassificationItemRead]
+
+
 class PayablePaymentCreate(APIModel):
     amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
     payment_date: date

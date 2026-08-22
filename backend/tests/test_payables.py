@@ -317,6 +317,89 @@ async def test_payable_fiscal_use_cannot_change_after_period_is_declared(client)
     assert internal_change.json()["internalClassification"] == "REAL"
 
 
+async def test_payables_can_be_classified_in_bulk_and_replayed(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:read", "payables:write"],
+    )
+    first = await _create_payable(client, token, timing="PAY_LATER", total="35.00")
+    second = await _create_payable(
+        client,
+        token,
+        timing="PAY_LATER",
+        total="65.00",
+        tax_classification="NON_DEDUCTIBLE",
+    )
+    payload = {
+        "payableIds": [first["id"], second["id"]],
+        "taxClassification": "DEDUCTIBLE_CONFIRMED",
+        "internalClassification": "REAL",
+        "reason": "Revisión conjunta de compras",
+        "analyticChange": "REPLACE",
+        "analyticValueIds": [],
+    }
+
+    updated = await client.put(
+        "/api/v1/payables/classifications/bulk",
+        headers=auth(token, "payable-bulk-classification-0001"),
+        json=payload,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["updatedCount"] == 2
+    assert updated.json()["failedCount"] == 0
+    assert {item["status"] for item in updated.json()["items"]} == {"UPDATED"}
+
+    replay = await client.put(
+        "/api/v1/payables/classifications/bulk",
+        headers=auth(token, "payable-bulk-classification-0001"),
+        json=payload,
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json() == updated.json()
+
+    different_payload = await client.put(
+        "/api/v1/payables/classifications/bulk",
+        headers=auth(token, "payable-bulk-classification-0001"),
+        json={
+            **payload,
+            "payableIds": [first["id"]],
+            "internalClassification": "DECLARATION_ONLY",
+        },
+    )
+    assert different_payload.status_code == 409
+    assert "different request" in different_payload.json()["detail"]
+
+    for payable_id in (first["id"], second["id"]):
+        item = await client.get(f"/api/v1/payables/{payable_id}", headers=auth(token))
+        assert item.json()["taxClassification"] == "DEDUCTIBLE_CONFIRMED"
+        assert item.json()["internalClassification"] == "REAL"
+
+
+async def test_bulk_internal_change_does_not_require_resolving_pending_fiscal_use(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:read", "payables:write"],
+    )
+    payable = await _create_payable(client, token, timing="PAY_LATER", total="40.00")
+    updated = await client.put(
+        "/api/v1/payables/classifications/bulk",
+        headers=auth(token, "payable-bulk-internal-only-0001"),
+        json={
+            "payableIds": [payable["id"]],
+            "internalClassification": "DECLARATION_ONLY",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["updatedCount"] == 1
+    item = await client.get(f"/api/v1/payables/{payable['id']}", headers=auth(token))
+    assert item.json()["taxClassification"] == "DEDUCTIBLE_PENDING_REVIEW"
+    assert item.json()["internalClassification"] == "DECLARATION_ONLY"
+
+
 async def test_sri_review_requires_both_extract_and_write_scopes(client) -> None:
     token = await token_for(
         client,

@@ -389,6 +389,75 @@ test('Compras filtra y corrige el uso fiscal e interno sin salir del listado', a
   expect(results.violations).toEqual([])
 })
 
+test('Compras selecciona y edita varias compras ya creadas', async ({ page }) => {
+  const firstPayable = {
+    id: '99999999-2222-4333-8444-555555555555', supplierId: null,
+    supplierName: 'PROVEEDOR DEMO CIA. LTDA.', fiscalDocumentId: purchases[0].id,
+    description: 'Compra 001-001-000000123', category: 'Sin clasificar', documentType: 'INVOICE',
+    documentNumber: purchases[0].documentNumber, issueDate: purchases[0].issueDate, dueDate: null,
+    total: '115.00', openAmount: '115.00', currency: 'USD', status: 'OPEN',
+    taxClassification: 'DEDUCTIBLE_CONFIRMED', internalClassification: 'REAL',
+    evidenceStatus: 'FISCAL_XML', supportReference: purchases[0].accessKey, analyticAssignments: [],
+  }
+  const secondPayable = {
+    ...firstPayable,
+    id: 'aaaaaaaa-2222-4333-8444-555555555555', supplierName: purchases[1].supplierName,
+    fiscalDocumentId: purchases[1].id, description: 'Compra 001-001-000000124',
+    documentNumber: purchases[1].documentNumber, issueDate: purchases[1].issueDate,
+    total: '230.00', openAmount: '230.00', taxClassification: 'NON_DEDUCTIBLE',
+    internalClassification: 'DECLARATION_ONLY', supportReference: purchases[1].accessKey,
+  }
+  const requestBodies: Record<string, unknown>[] = []
+  const requestKeys: string[] = []
+  await page.route('**/api/v1/payables', (route) => route.fulfill({ json: [firstPayable, secondPayable] }))
+  await page.route('**/api/v1/payables/classifications/bulk', async (route) => {
+    requestBodies.push(route.request().postDataJSON() as Record<string, unknown>)
+    requestKeys.push(route.request().headers()['idempotency-key'])
+    const retry = requestBodies.length === 2
+    await route.fulfill({ status: 200, json: {
+      updatedCount: 1,
+      failedCount: retry ? 0 : 1,
+      items: retry
+        ? [{ payableId: secondPayable.id, status: 'UPDATED', detail: 'Compra actualizada' }]
+        : [
+          { payableId: firstPayable.id, status: 'UPDATED', detail: 'Compra actualizada' },
+          { payableId: secondPayable.id, status: 'FAILED', detail: 'Periodo declarado' },
+        ],
+    } })
+  })
+
+  await navigateToSection(page, 'Compras')
+  await page.getByRole('checkbox', { name: 'Seleccionar las 2 compras visibles' }).check()
+  await expect(page.getByRole('status')).toContainText('2 seleccionadas')
+  await expect(page.getByRole('status')).toContainText('Total $345,00')
+  await page.getByRole('button', { name: 'Editar selección' }).click()
+  await expect(page.getByLabel('Edición masiva de 2 compras')).toBeFocused()
+  await page.getByLabel('Uso tributario').selectOption('DEDUCTIBLE_CONFIRMED')
+  await page.getByLabel('Motivo del cambio').fill('Revisión conjunta de compras')
+  await page.getByLabel('Control interno').selectOption('REAL')
+  await page.getByRole('button', { name: 'Guardar cambios en 2' }).click()
+
+  await expect(page.locator('.purchase-review-status')).toHaveText('1 compra actualizada · 1 no pudo guardarse.')
+  expect(requestBodies[0]).toMatchObject({
+    payableIds: [firstPayable.id, secondPayable.id],
+    taxClassification: 'DEDUCTIBLE_CONFIRMED',
+    internalClassification: 'REAL',
+    reason: 'Revisión conjunta de compras',
+    analyticChange: 'KEEP_EXISTING',
+  })
+  await page.getByRole('button', { name: 'Editar selección' }).click()
+  await expect(page.getByLabel('Edición masiva de 1 compra')).toBeFocused()
+  await page.getByLabel('Control interno').selectOption('REAL')
+  await page.getByRole('button', { name: 'Guardar cambios en 1' }).click()
+  await expect(page.locator('.purchase-review-status')).toHaveText('1 compra actualizada.')
+  expect(requestBodies[1]).toMatchObject({ payableIds: [secondPayable.id], internalClassification: 'REAL' })
+  expect(requestKeys[1]).not.toBe(requestKeys[0])
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  expect(results.violations).toEqual([])
+})
+
 test('Compras revisa un comprobante SRI con pago y tag en un solo guardado', async ({ page }) => {
   await navigateToSection(page, 'Compras')
   await page.getByRole('tab', { name: 'Pendientes SRI (1)' }).click()
