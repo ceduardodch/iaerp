@@ -23,7 +23,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - [x] Parámetros por año (SBU y tasas) y pruebas de reglas legales
 - [x] Cálculo puro del rol en `services/payroll/calculations.py`
 - [x] Modelos `payroll_employees`, `payroll_periods`, `payroll_entries` y migración
-- [ ] Servicio de empleados: alta, edición y baja
+- [x] Servicio de empleados: alta, edición y baja
 - [ ] Servicio de periodos: generar borrador idempotente y aprobar
 - [ ] Endpoints `/payroll/*` con `execute_idempotent` y scopes `payroll:read` / `payroll:write`
 - [ ] Registrar los scopes en `KNOWN_SCOPES`, `iaerp-realm.json` y `configure-staging.sh`
@@ -63,3 +63,12 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   `db0a7b0`, run 32580761487) quedó verde — primera confirmación real del
   fix de detect-secrets, cuyo propio run se había cancelado antes por un
   push posterior.
+- Servicio de empleados (alta, edición, baja) en `services/payroll/employees.py`,
+  commit `ab41b9a`. `create_employee`/`update_employee` devuelven 409 claro
+  ante identificación duplicada por tenant (constraint único, verificado
+  contra Postgres real porque sqlite no expone `sqlstate` igual). La baja
+  (`deactivate_employee`) es una transición de estado propia: fija
+  `fecha_salida` y `active=False`, con 422 si la fecha es anterior al
+  ingreso. `list_employees` excluye a los dados de baja. CI del run
+  32581785053 quedó verde (Backend 14m4s, resto de jobs OK o gateados sin
+  cambios en su área).
