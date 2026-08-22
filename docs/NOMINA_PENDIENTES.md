@@ -25,7 +25,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - [x] Modelos `payroll_employees`, `payroll_periods`, `payroll_entries` y migración
 - [x] Servicio de empleados: alta, edición y baja
 - [x] Servicio de periodos: generar borrador idempotente y aprobar
-- [ ] Endpoints `/payroll/*` con `execute_idempotent` y scopes `payroll:read` / `payroll:write`
+- [x] Endpoints `/payroll/*` con `execute_idempotent` y scopes `payroll:read` / `payroll:write`
 - [ ] Registrar los scopes en `KNOWN_SCOPES`, `iaerp-realm.json` y `configure-staging.sh`
 - [ ] `run_payroll_scheduler()` en el `TaskGroup` de `workers/dispatcher.py`
 - [ ] Tipos y cliente en `frontend/src/api.ts`
@@ -87,3 +87,21 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   paró sin tocar `main` para no pisarlo. El humano ya integró `release` a
   `main` vía PR (#55/#56, merge `6593487`), así que `facc794` está en ambas
   ramas — sin acción pendiente de esta IA.
+- Endpoints `/payroll/*` (`app/api/payroll.py`), commit `dda63b9`. Reutiliza
+  los servicios ya probados sin tocar su lógica; las escrituras (alta/edición/
+  baja de empleado, generar borrador, aprobar periodo) pasan por
+  `execute_idempotent` igual que `payables.py`. `periods.py` ganó
+  `list_periods`/`list_entries` porque no existía forma de leer periodos ni
+  roles calculados y los `GET` los necesitan. Sumé `payroll:read`/
+  `payroll:write` a `ALL_DEV_SCOPES` en `router.py`: sin eso el token de
+  desarrollo no puede emitirlos y toda prueba HTTP falla en 403 al pedir el
+  token, no en el endpoint. 10 pruebas nuevas en `test_payroll_api.py`
+  (scopes, replay de `Idempotency-Key`, 409 por identificación duplicada y
+  por regenerar un periodo aprobado), verificadas en rojo desregistrando el
+  router del `main.py` (fallan en 404) antes de confirmarlas en verde. CI del
+  run 32590851310 quedó verde tras un reintento: el primer intento falló solo
+  en "Deploy production to Coolify" (el job de `Backend` con tests/ruff/mypy
+  ya había quedado verde); construí y corrí la imagen Docker local para
+  descartar causa en el código (arranca limpio, expone las rutas nuevas) y el
+  rerun del job de despliegue quedó verde, confirmando que fue un blip
+  transitorio de Coolify y no del cambio.
