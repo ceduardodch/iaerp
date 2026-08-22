@@ -17,6 +17,15 @@
 > build y 28 recorridos escritorio/móvil están verdes. El usuario autorizó la
 > publicación por `release -> PR -> main`.
 
+> Corte 2026-08-22: se separaron el tratamiento tributario y el control interno.
+> `Gasto real`, `Solo tributario` y pendiente son marcas internas independientes
+> de deducible/no deducible; los tags asignan proyecto. Dashboard y Compras
+> filtran ambos ejes y corrigen en línea. Solo un cambio fiscal exige motivo y
+> queda bloqueado en un periodo `DECLARADO`; el interno sigue editable sin
+> alterar IVA, ATS ni renta. Migración PostgreSQL completa, Ruff, mypy, 47
+> pruebas backend y 30 recorridos Playwright escritorio/móvil, WCAG y zoom
+> 400 % pasan. Falta autorización para commit, push y promoción.
+
 > Corte 2026-08-02: conciliación bancaria por período lista y validada. Un
 > abono respaldado puede sustituir un cobro manual sin referencia solo cuando
 > factura y retenciones cuadran completas; el original se conserva con reverso.

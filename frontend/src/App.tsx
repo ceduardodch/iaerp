@@ -323,6 +323,9 @@ function Overview({
   onOpenAnnualTax: () => void
 }) {
   const canReadTax = context.scopes.includes('tax:read')
+  const [annualPurchaseView, setAnnualPurchaseView] = useState<
+    'DEDUCTIBLE' | 'NON_DEDUCTIBLE' | 'PENDING' | 'INTERNAL_REAL' | 'INTERNAL_DECLARATION_ONLY' | 'INTERNAL_PENDING'
+  >('DEDUCTIBLE')
   const [invoicesQuery, receivablesQuery, leadsQuery, taxDashboardQuery, agingQuery, historyQuery] = useQueries({
     queries: [
       { queryKey: ['invoices', 'overview'], queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices') },
@@ -369,6 +372,38 @@ function Overview({
 
   const currentTax = taxDashboard?.currentMonth
   const annualTax = taxDashboard?.annual
+  const annualPurchaseMetric = annualTax ? {
+    DEDUCTIBLE: {
+      label: 'Compras para declaración',
+      value: annualTax.deductiblePurchasesBase,
+      note: 'Deducibles confirmadas y restadas del resultado fiscal.',
+    },
+    NON_DEDUCTIBLE: {
+      label: 'Compras no deducibles',
+      value: annualTax.nonDeductiblePurchasesBase,
+      note: 'No deducibles; no reducen el resultado fiscal.',
+    },
+    PENDING: {
+      label: 'Compras tributarias por revisar',
+      value: annualTax.pendingReviewPurchasesBase,
+      note: `${annualTax.pendingReviewDocumentCount} documento(s) pendientes.`,
+    },
+    INTERNAL_REAL: {
+      label: 'Gastos reales internos',
+      value: annualTax.internalRealExpensesTotal,
+      note: `${annualTax.internalRealExpenseCount} gasto(s), incluido IVA. Usa los tags para verlos por proyecto.`,
+    },
+    INTERNAL_DECLARATION_ONLY: {
+      label: 'Solo tributarios',
+      value: annualTax.internalDeclarationOnlyExpensesTotal,
+      note: `${annualTax.internalDeclarationOnlyExpenseCount} gasto(s) excluidos del control interno.`,
+    },
+    INTERNAL_PENDING: {
+      label: 'Control interno por revisar',
+      value: annualTax.internalPendingExpensesTotal,
+      note: `${annualTax.internalPendingExpenseCount} gasto(s) aún sin decidir.`,
+    },
+  }[annualPurchaseView] : null
   const trendPoints = taxDashboard?.trend ?? []
   // El año en curso es lo que se compara contra metas; la ventana móvil de 12
   // meses arrancaba en septiembre del año pasado y confundía la lectura.
@@ -455,16 +490,16 @@ function Overview({
             <ErpPanel
               title={annualTax ? `Año fiscal ${annualTax.year}` : 'Año fiscal'}
               className="dash-annual-panel"
-              actions={(
-                <ErpButton variant="ghost" onClick={onOpenAnnualTax}>
-                  Ver detalle anual
-                </ErpButton>
-              )}
+              actions={<div className="dash-annual-actions">
+                <label>Ver compras<select value={annualPurchaseView} onChange={(event) => setAnnualPurchaseView(event.target.value as typeof annualPurchaseView)}><optgroup label="Tributario"><option value="DEDUCTIBLE">Para declaración · deducibles</option><option value="NON_DEDUCTIBLE">No deducibles</option><option value="PENDING">Pendientes tributarios</option></optgroup><optgroup label="Control interno"><option value="INTERNAL_REAL">Gastos reales</option><option value="INTERNAL_DECLARATION_ONLY">Solo tributarios</option><option value="INTERNAL_PENDING">Pendientes internos</option></optgroup></select></label>
+                <ErpButton variant="ghost" onClick={onOpenAnnualTax}>Ver detalle anual</ErpButton>
+              </div>}
             >
               {taxDashboardQuery.isPending ? <p aria-busy="true">Calculando avance anual…</p> : null}
               {taxDashboardQuery.error ? <p className="form-error" role="alert">No se pudo cargar el avance anual.</p> : null}
               {annualTax ? (
                 <div className="dash-annual-summary" aria-label={`Resumen tributario del año ${annualTax.year}`}>
+                  {annualPurchaseMetric ? <div aria-live="polite"><span>{annualPurchaseMetric.label}</span><strong>${formatAmount(Number(annualPurchaseMetric.value))}</strong><small>{annualPurchaseMetric.note}</small></div> : null}
                   <div>
                     <span>Resultado antes de ajustes</span>
                     <strong>${formatAmount(Number(annualTax.resultBeforeAdjustments))}</strong>
@@ -474,11 +509,6 @@ function Overview({
                     <span>Retenciones de renta</span>
                     <strong>${formatAmount(Number(annualTax.incomeTaxWithheld))}</strong>
                     <small>Acumuladas para revisar al cierre anual.</small>
-                  </div>
-                  <div>
-                    <span>Compras por revisar</span>
-                    <strong>${formatAmount(Number(annualTax.pendingReviewPurchasesBase))}</strong>
-                    <small>{annualTax.pendingReviewDocumentCount} documento(s) pendientes.</small>
                   </div>
                 </div>
               ) : null}

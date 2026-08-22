@@ -264,6 +264,12 @@ class AnnualFiscalRead(APIModel):
     deductible_purchases_base: str
     non_deductible_purchases_base: str
     pending_review_purchases_base: str
+    internal_real_expenses_total: str
+    internal_real_expense_count: int
+    internal_declaration_only_expenses_total: str
+    internal_declaration_only_expense_count: int
+    internal_pending_expenses_total: str
+    internal_pending_expense_count: int
     result_before_adjustments: str
     income_tax_withheld: str
     iva_withheld: str

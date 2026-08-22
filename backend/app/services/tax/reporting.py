@@ -92,6 +92,12 @@ class AnnualFiscalSnapshot:
     deductible_purchases_base: Decimal
     non_deductible_purchases_base: Decimal
     pending_review_purchases_base: Decimal
+    internal_real_expenses_total: Decimal
+    internal_real_expense_count: int
+    internal_declaration_only_expenses_total: Decimal
+    internal_declaration_only_expense_count: int
+    internal_pending_expenses_total: Decimal
+    internal_pending_expense_count: int
     result_before_adjustments: Decimal
     income_tax_withheld: Decimal
     iva_withheld: Decimal
@@ -202,6 +208,52 @@ async def _annual_fiscal_snapshot(
         for payable in payables
         if payable.fiscal_document_id is not None
     }
+    annual_operational_payables = list(
+        await session.scalars(
+            select(Payable).where(
+                Payable.tenant_id == context.tenant_id,
+                Payable.issue_date >= year_start,
+                Payable.issue_date < cutoff,
+                Payable.status != "VOID",
+            )
+        )
+    )
+    internal_real_expenses_total = sum(
+        (
+            payable.total
+            for payable in annual_operational_payables
+            if payable.internal_classification == "REAL"
+        ),
+        Decimal("0.00"),
+    )
+    internal_real_expense_count = sum(
+        payable.internal_classification == "REAL"
+        for payable in annual_operational_payables
+    )
+    internal_declaration_only_expenses_total = sum(
+        (
+            payable.total
+            for payable in annual_operational_payables
+            if payable.internal_classification == "DECLARATION_ONLY"
+        ),
+        Decimal("0.00"),
+    )
+    internal_declaration_only_expense_count = sum(
+        payable.internal_classification == "DECLARATION_ONLY"
+        for payable in annual_operational_payables
+    )
+    internal_pending_expenses_total = sum(
+        (
+            payable.total
+            for payable in annual_operational_payables
+            if payable.internal_classification == "PENDING_REVIEW"
+        ),
+        Decimal("0.00"),
+    )
+    internal_pending_expense_count = sum(
+        payable.internal_classification == "PENDING_REVIEW"
+        for payable in annual_operational_payables
+    )
 
     purchase_totals = {
         "DEDUCTIBLE_CONFIRMED": Decimal("0.00"),
@@ -335,6 +387,16 @@ async def _annual_fiscal_snapshot(
         deductible_purchases_base=deductible,
         non_deductible_purchases_base=purchase_totals["NON_DEDUCTIBLE"],
         pending_review_purchases_base=purchase_totals["DEDUCTIBLE_PENDING_REVIEW"],
+        internal_real_expenses_total=internal_real_expenses_total,
+        internal_real_expense_count=internal_real_expense_count,
+        internal_declaration_only_expenses_total=(
+            internal_declaration_only_expenses_total
+        ),
+        internal_declaration_only_expense_count=(
+            internal_declaration_only_expense_count
+        ),
+        internal_pending_expenses_total=internal_pending_expenses_total,
+        internal_pending_expense_count=internal_pending_expense_count,
         result_before_adjustments=sales_base - deductible,
         income_tax_withheld=income_tax_withheld,
         iva_withheld=iva_withheld,

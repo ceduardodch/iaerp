@@ -11,6 +11,7 @@
 .purchase-payment-choice { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; padding: 1rem; border: 1px solid var(--border-card); border-radius: var(--radius-md); }
 .purchase-payment-choice legend { padding: 0 .35rem; font-weight: 700; }
 .purchase-payment-choice label { display: flex; align-items: center; gap: .45rem; }
+.purchase-tag-editor { display: grid; gap: 1rem; padding: 1rem 0; }
 /* Cuatro columnas fijas dejaban cada cifra sin ancho y partían el monto
    ("$59.242, 11"). Con auto-fit se acomodan a lo que haya. */
 .purchase-sri-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: .75rem; margin: 0; padding: 1rem; background: var(--surface-inset); border-radius: var(--radius-md); }

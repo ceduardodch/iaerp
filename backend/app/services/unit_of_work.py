@@ -85,6 +85,7 @@ async def execute_idempotent(
     callback: Callable[[], Awaitable[tuple[str, dict[str, Any]]]],
     event_type: str | None = None,
     event_payload: dict[str, Any] | None = None,
+    audit_details: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     request_hash = canonical_hash(request_payload)
     correlation_id = str(uuid.uuid4())
@@ -141,7 +142,7 @@ async def execute_idempotent(
             entity_id=entity_id,
             correlation_id=correlation_id,
             idempotency_key=idempotency_key,
-            details={"request_hash": request_hash},
+            details={"request_hash": request_hash, **(audit_details or {})},
         )
         session.add(
             OutboxEvent(

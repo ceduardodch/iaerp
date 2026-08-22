@@ -15,7 +15,7 @@ from app.models.payables import (
     SupplierPaymentSchedule,
 )
 from app.models.platform import AuditEvent, OutboxEvent
-from app.models.tax import FiscalDocument
+from app.models.tax import FiscalDocument, TaxPeriod
 from tests.test_bank_statement_import import _row, _statement
 from tests.test_billing_api import TENANT_A, TENANT_B, auth, token_for
 from tests.test_receivables_payments_api import _create_receivable_via_event
@@ -190,6 +190,131 @@ async def test_sri_review_can_schedule_non_deductible_expense(client) -> None:
     assert schedule is not None
     assert schedule.scheduled_date == date(2026, 8, 31)
     assert schedule.amount == Decimal("115.00")
+
+
+async def test_payable_fiscal_use_can_be_corrected_with_reason_and_audit(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    document_id = await _create_fiscal_purchase(sequential="810000020")
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-review-correction-source-0001"),
+        json={
+            "documentId": str(document_id),
+            "taxClassification": "NON_DEDUCTIBLE",
+            "internalClassification": "DECLARATION_ONLY",
+            "paymentState": "UNCONFIRMED",
+        },
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    payable_id = reviewed.json()["id"]
+    payload = {
+        "taxClassification": "DEDUCTIBLE_CONFIRMED",
+        "internalClassification": "REAL",
+        "reason": "Se confirmó que corresponde al servicio contratado",
+        "analyticValueIds": [],
+    }
+
+    corrected = await client.put(
+        f"/api/v1/payables/{payable_id}/classification",
+        headers=auth(token, "payable-fiscal-correction-0001"),
+        json=payload,
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["taxClassification"] == "DEDUCTIBLE_CONFIRMED"
+    assert corrected.json()["internalClassification"] == "REAL"
+    replay = await client.put(
+        f"/api/v1/payables/{payable_id}/classification",
+        headers=auth(token, "payable-fiscal-correction-0001"),
+        json=payload,
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json() == corrected.json()
+
+    async with SessionFactory() as session:
+        audit_events = list(
+            await session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.tenant_id == TENANT_A,
+                    AuditEvent.action == "payable.classification_updated",
+                    AuditEvent.entity_id == payable_id,
+                )
+            )
+        )
+    assert len(audit_events) == 1
+    assert audit_events[0].details["reason"] == payload["reason"]
+    assert (
+        audit_events[0].details["tax_classification"]
+        == "DEDUCTIBLE_CONFIRMED"
+    )
+    assert audit_events[0].details["internal_classification"] == "REAL"
+
+
+async def test_payable_fiscal_use_cannot_change_after_period_is_declared(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    document_id = await _create_fiscal_purchase(
+        sequential="810000021",
+        issue_date=date(2024, 11, 10),
+    )
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-review-declared-source-0001"),
+        json={
+            "documentId": str(document_id),
+            "taxClassification": "NON_DEDUCTIBLE",
+            "internalClassification": "DECLARATION_ONLY",
+            "paymentState": "UNCONFIRMED",
+        },
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    async with SessionFactory.begin() as session:
+        period = TaxPeriod(
+            tenant_id=TENANT_A,
+            year=2024,
+            month=11,
+            obligation_type="IVA",
+            status="DECLARADO",
+        )
+        session.add(period)
+        await session.flush()
+        document = await session.get(FiscalDocument, document_id)
+        assert document is not None
+        document.tax_period_id = period.id
+
+    blocked = await client.put(
+        f"/api/v1/payables/{reviewed.json()['id']}/classification",
+        headers=auth(token, "payable-fiscal-declared-0001"),
+        json={
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "reason": "Corrección posterior",
+            "analyticValueIds": [],
+        },
+    )
+    assert blocked.status_code == 409
+    assert "periodo declarado" in blocked.json()["detail"]
+
+    internal_change = await client.put(
+        f"/api/v1/payables/{reviewed.json()['id']}/classification",
+        headers=auth(token, "payable-internal-declared-0001"),
+        json={
+            "taxClassification": "NON_DEDUCTIBLE",
+            "internalClassification": "REAL",
+            "reason": None,
+            "analyticValueIds": [],
+        },
+    )
+    assert internal_change.status_code == 200, internal_change.text
+    assert internal_change.json()["taxClassification"] == "NON_DEDUCTIBLE"
+    assert internal_change.json()["internalClassification"] == "REAL"
 
 
 async def test_sri_review_requires_both_extract_and_write_scopes(client) -> None:

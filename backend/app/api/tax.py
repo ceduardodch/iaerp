@@ -123,9 +123,23 @@ async def get_tax_dashboard(
             year=annual.year,
             sales_base=format_amount(annual.sales_base),
             deductible_purchases_base=format_amount(annual.deductible_purchases_base),
-            non_deductible_purchases_base=format_amount(annual.non_deductible_purchases_base),
-            pending_review_purchases_base=format_amount(annual.pending_review_purchases_base),
-            result_before_adjustments=format_amount(annual.result_before_adjustments),
+                non_deductible_purchases_base=format_amount(annual.non_deductible_purchases_base),
+                pending_review_purchases_base=format_amount(annual.pending_review_purchases_base),
+                internal_real_expenses_total=format_amount(
+                    annual.internal_real_expenses_total
+                ),
+                internal_real_expense_count=annual.internal_real_expense_count,
+                internal_declaration_only_expenses_total=format_amount(
+                    annual.internal_declaration_only_expenses_total
+                ),
+                internal_declaration_only_expense_count=(
+                    annual.internal_declaration_only_expense_count
+                ),
+                internal_pending_expenses_total=format_amount(
+                    annual.internal_pending_expenses_total
+                ),
+                internal_pending_expense_count=annual.internal_pending_expense_count,
+                result_before_adjustments=format_amount(annual.result_before_adjustments),
             income_tax_withheld=format_amount(annual.income_tax_withheld),
             iva_withheld=format_amount(annual.iva_withheld),
             pending_review_document_count=annual.pending_review_document_count,

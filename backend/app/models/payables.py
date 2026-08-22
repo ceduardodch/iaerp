@@ -52,6 +52,11 @@ class Payable(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
             name="payables_tax_classification_valid",
         ),
         CheckConstraint(
+            "internal_classification IN ('PENDING_REVIEW', 'REAL', "
+            "'DECLARATION_ONLY')",
+            name="payables_internal_classification_valid",
+        ),
+        CheckConstraint(
             "evidence_status IN ('NONE', 'ATTACHED', 'PRELIMINARY', 'FISCAL_XML')",
             name="payables_evidence_status_valid",
         ),
@@ -75,6 +80,9 @@ class Payable(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     status: Mapped[str] = mapped_column(String(20), default="OPEN")
     tax_classification: Mapped[str] = mapped_column(
         String(40), default="DEDUCTIBLE_PENDING_REVIEW"
+    )
+    internal_classification: Mapped[str] = mapped_column(
+        String(30), default="PENDING_REVIEW"
     )
     evidence_status: Mapped[str] = mapped_column(String(20), default="NONE")
     support_reference: Mapped[str | None] = mapped_column(String(300))

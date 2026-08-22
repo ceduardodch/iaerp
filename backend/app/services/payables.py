@@ -17,10 +17,11 @@ from app.models.payables import (
     PayableMovement,
     SupplierPaymentSchedule,
 )
-from app.models.tax import FiscalDocument
+from app.models.tax import FiscalDocument, TaxPeriod
 from app.schemas.payables import (
     ExpenseRuleCreate,
     PayableAdjustmentCreate,
+    PayableClassificationUpdate,
     PayableCreate,
     PayableDocumentBulkReviewCreate,
     PayableDocumentReviewCreate,
@@ -118,6 +119,7 @@ async def to_read(session: AsyncSession, *, tenant_id: uuid.UUID, payable: Payab
         currency=payable.currency,
         status=_public_status(payable, open_amount),
         tax_classification=payable.tax_classification,
+        internal_classification=payable.internal_classification,
         evidence_status=payable.evidence_status,
         support_reference=payable.support_reference,
         analytic_assignments=await analytics.list_assignments(
@@ -212,6 +214,7 @@ async def create_payable(
         currency="USD",
         status="OPEN",
         tax_classification=data.tax_classification,
+        internal_classification=data.internal_classification,
         evidence_status=data.evidence_status,
         support_reference=data.support_reference,
     )
@@ -283,6 +286,53 @@ async def update_payable_analytic_assignments(
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
 
 
+async def update_payable_classification(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    payable_id: uuid.UUID,
+    data: PayableClassificationUpdate,
+) -> PayableRead:
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    classification_changed = payable.tax_classification != data.tax_classification
+    if classification_changed and not data.reason:
+        raise HTTPException(status_code=422, detail="Indica por qué cambias el uso fiscal")
+    if classification_changed and payable.fiscal_document_id is not None:
+        declared_period = await session.scalar(
+            select(TaxPeriod)
+            .join(
+                FiscalDocument,
+                (FiscalDocument.tax_period_id == TaxPeriod.id)
+                & (FiscalDocument.tenant_id == TaxPeriod.tenant_id),
+            )
+            .where(
+                TaxPeriod.tenant_id == context.tenant_id,
+                TaxPeriod.status == "DECLARADO",
+                FiscalDocument.id == payable.fiscal_document_id,
+            )
+        )
+        if declared_period is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Esta compra pertenece a un periodo declarado. Corrige primero la "
+                    "declaración antes de cambiar su uso fiscal"
+                ),
+            )
+    payable.tax_classification = data.tax_classification
+    if data.internal_classification is not None:
+        payable.internal_classification = data.internal_classification
+    await analytics.replace_assignments(
+        session,
+        context,
+        target_type="PAYABLE",
+        target_id=payable.id,
+        value_ids=data.analytic_value_ids,
+    )
+    await session.flush()
+    return await to_read(session, tenant_id=context.tenant_id, payable=payable)
+
+
 async def create_from_fiscal_document(
     session: AsyncSession,
     context: AuthContext,
@@ -345,9 +395,11 @@ async def review_fiscal_document(
                 detail="Keep the existing payment when reviewing a payable with movements",
             )
         payable.tax_classification = data.tax_classification
+        payable.internal_classification = data.internal_classification
         await session.flush()
         return await to_read(session, tenant_id=context.tenant_id, payable=payable)
     payable.tax_classification = data.tax_classification
+    payable.internal_classification = data.internal_classification
     await analytics.replace_assignments(
         session,
         context,
@@ -492,6 +544,7 @@ async def prepare_bulk_fiscal_review(
             tax_classification=(
                 payable.tax_classification if already_reviewed else data.tax_classification
             ),
+            internal_classification=data.internal_classification,
             analytic_value_ids=analytic_value_ids,
             payment_state=payment_state,
             payment_date=data.payment_date if payment_state == "PAID" else None,
