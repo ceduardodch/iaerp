@@ -139,6 +139,40 @@ async def generate_draft_period(
     return period, entries
 
 
+async def list_periods(
+    session: AsyncSession,
+    context: AuthContext,
+) -> list[PayrollPeriod]:
+    return list(
+        (
+            await session.scalars(
+                select(PayrollPeriod)
+                .where(PayrollPeriod.tenant_id == context.tenant_id)
+                .order_by(PayrollPeriod.anio.desc(), PayrollPeriod.mes.desc())
+            )
+        ).all()
+    )
+
+
+async def list_entries(
+    session: AsyncSession,
+    context: AuthContext,
+    period_id: uuid.UUID,
+) -> list[PayrollEntry]:
+    return list(
+        (
+            await session.scalars(
+                select(PayrollEntry)
+                .where(
+                    PayrollEntry.tenant_id == context.tenant_id,
+                    PayrollEntry.period_id == period_id,
+                )
+                .order_by(PayrollEntry.employee_id)
+            )
+        ).all()
+    )
+
+
 async def approve_period(
     session: AsyncSession,
     context: AuthContext,
@@ -176,4 +210,9 @@ async def approve_period(
     return period
 
 
-__all__ = ["approve_period", "generate_draft_period"]
+__all__ = [
+    "approve_period",
+    "generate_draft_period",
+    "list_entries",
+    "list_periods",
+]

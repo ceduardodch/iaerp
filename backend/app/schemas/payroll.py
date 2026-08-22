@@ -38,10 +38,45 @@ class PayrollEmployeeTerminate(APIModel):
     fecha_salida: date
 
 
+class PayrollPeriodDraftCreate(APIModel):
+    """Mes a procesar: genera o regenera el borrador de rol de pagos."""
+
+    anio: int = Field(ge=2000, le=2100)
+    mes: int = Field(ge=1, le=12)
+
+
+class PayrollPeriodRead(APIModel):
+    id: uuid.UUID
+    anio: int
+    mes: int
+    status: str
+
+
+class PayrollEntryRead(APIModel):
+    id: uuid.UUID
+    period_id: uuid.UUID
+    employee_id: uuid.UUID
+    dias_trabajados: int
+    imponible: Decimal
+    decimo_tercero: Decimal
+    decimo_cuarto: Decimal
+    fondos_reserva: Decimal
+    total_ingresos: Decimal
+    aporte_iess: Decimal
+    total_descuentos: Decimal
+    liquido: Decimal
+    sbu_aplicado: Decimal
+    tasa_iess_aplicada: Decimal
+    tasa_fondos_aplicada: Decimal
+
+
 __all__ = [
     "PayrollEmployeeCreate",
     "PayrollEmployeeFields",
     "PayrollEmployeeRead",
     "PayrollEmployeeTerminate",
     "PayrollEmployeeUpdate",
+    "PayrollEntryRead",
+    "PayrollPeriodDraftCreate",
+    "PayrollPeriodRead",
 ]
