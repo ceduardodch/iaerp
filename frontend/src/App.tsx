@@ -100,6 +100,10 @@ const TaxPage = lazy(() =>
 const PurchasesPage = lazy(() =>
   import('./components/purchases').then((module) => ({ default: module.PurchasesPage })),
 )
+// Nómina la usa quien tiene personal en planilla, no todos los tenants: mismo criterio de code-splitting.
+const PayrollPage = lazy(() =>
+  import('./components/payroll').then((module) => ({ default: module.PayrollPage })),
+)
 // Bandeja de acción: revisión agregada de cobranza + prospección, poco usada
 // frente al arranque normal, misma razón de code-splitting que las de arriba.
 const ActionQueuePage = lazy(() =>
@@ -4648,6 +4652,13 @@ function Workspace() {
           </ErrorBoundary>
         ) : null}
         {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
+        {section === 'payroll' ? (
+          <ErrorBoundary label="Nómina">
+            <Suspense fallback={<SectionLoadingSkeleton label="Cargando nómina…" />}>
+              <PayrollPage token={token} />
+            </Suspense>
+          </ErrorBoundary>
+        ) : null}
         {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} partyFilterId={partyFilterId} /> : null}
         {section === 'contracts' ? <ContractsPage key={contractPartyId ?? 'all-contracts'} parties={parties} products={products} taxes={taxesQuery.data ?? []} establishments={establishmentsQuery.data ?? []} emissionPoints={emissionPointsQuery.data ?? []} token={token} initialPartyId={contractPartyId} /> : null}
         {section === 'crm' ? (

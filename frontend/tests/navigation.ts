@@ -11,6 +11,7 @@ const sectionGroups: Record<string, string> = {
   Tributario: 'Operaciones',
   Catálogos: 'Administración',
   Empresa: 'Administración',
+  Nómina: 'Administración',
 }
 
 /** Navega por la cabecera agrupada en desktop o por el panel lateral en móvil. */

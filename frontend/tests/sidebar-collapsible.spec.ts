@@ -5,7 +5,7 @@ import { mockDashboardEndpoints } from './dashboard-mocks'
 const navigationGroups = [
   { label: 'Comercial', items: ['CRM', 'Contactos', 'Contratos'] },
   { label: 'Operaciones', items: ['Facturas', 'Cartera', 'Compras', 'Tributario'] },
-  { label: 'Administración', items: ['Catálogos', 'Empresa'] },
+  { label: 'Administración', items: ['Catálogos', 'Empresa', 'Nómina'] },
 ]
 const navigationLabels = ['Resumen', ...navigationGroups.flatMap((group) => group.items)]
 

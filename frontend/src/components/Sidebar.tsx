@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth'
 import { ErpModal } from './erp/ErpModal'
 
-export type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'purchases' | 'receivables' | 'organization' | 'contracts' | 'crm' | 'tax' | 'action-queue'
+export type Section = 'overview' | 'parties' | 'catalogs' | 'invoices' | 'purchases' | 'receivables' | 'organization' | 'contracts' | 'crm' | 'tax' | 'action-queue' | 'payroll'
 
 type NavigationItem = { id: Section; label: string }
 type NavigationGroup = { id: string; label: string; items: NavigationItem[] }
@@ -38,6 +38,7 @@ const navigationGroups: NavigationGroup[] = [
     items: [
       { id: 'catalogs', label: 'Catálogos' },
       { id: 'organization', label: 'Empresa' },
+      { id: 'payroll', label: 'Nómina' },
     ],
   },
 ]
