@@ -45,6 +45,7 @@ from app.models.payables import (
     PayableMovement,
     SupplierPaymentSchedule,
 )
+from app.models.payroll import PayrollEmployee, PayrollEntry, PayrollPeriod
 from app.models.platform import (
     AuditEvent,
     AutomationRateWindow,
@@ -125,6 +126,9 @@ __all__ = [
     "Payable",
     "PayableInstallment",
     "PayableMovement",
+    "PayrollEmployee",
+    "PayrollEntry",
+    "PayrollPeriod",
     "Product",
     "Receivable",
     "ReceivableInstallment",
