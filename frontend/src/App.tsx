@@ -316,9 +316,11 @@ function SectionHeading({ index, title, subtitle }: { index: number; title: stri
 function Overview({
   context,
   token,
+  onOpenAnnualTax,
 }: {
   context: TenantContext
   token: string
+  onOpenAnnualTax: () => void
 }) {
   const canReadTax = context.scopes.includes('tax:read')
   const [invoicesQuery, receivablesQuery, leadsQuery, taxDashboardQuery, agingQuery, historyQuery] = useQueries({
@@ -366,6 +368,7 @@ function Overview({
   }))
 
   const currentTax = taxDashboard?.currentMonth
+  const annualTax = taxDashboard?.annual
   const trendPoints = taxDashboard?.trend ?? []
   // El año en curso es lo que se compara contra metas; la ventana móvil de 12
   // meses arrancaba en septiembre del año pasado y confundía la lectura.
@@ -449,6 +452,42 @@ function Overview({
         <>
           <SectionHeading index={2} title="Tributario" subtitle="¿Qué debo declarar?" />
           <section className="dash-grid-2">
+            <ErpPanel
+              title={annualTax ? `Año fiscal ${annualTax.year}` : 'Año fiscal'}
+              className="dash-annual-panel"
+              actions={(
+                <ErpButton variant="ghost" onClick={onOpenAnnualTax}>
+                  Ver detalle anual
+                </ErpButton>
+              )}
+            >
+              {taxDashboardQuery.isPending ? <p aria-busy="true">Calculando avance anual…</p> : null}
+              {taxDashboardQuery.error ? <p className="form-error" role="alert">No se pudo cargar el avance anual.</p> : null}
+              {annualTax ? (
+                <div className="dash-annual-summary" aria-label={`Resumen tributario del año ${annualTax.year}`}>
+                  <div>
+                    <span>Resultado antes de ajustes</span>
+                    <strong>${formatAmount(Number(annualTax.resultBeforeAdjustments))}</strong>
+                    <small>Ventas menos compras deducibles confirmadas.</small>
+                  </div>
+                  <div>
+                    <span>Retenciones de renta</span>
+                    <strong>${formatAmount(Number(annualTax.incomeTaxWithheld))}</strong>
+                    <small>Acumuladas para revisar al cierre anual.</small>
+                  </div>
+                  <div>
+                    <span>Compras por revisar</span>
+                    <strong>${formatAmount(Number(annualTax.pendingReviewPurchasesBase))}</strong>
+                    <small>{annualTax.pendingReviewDocumentCount} documento(s) pendientes.</small>
+                  </div>
+                </div>
+              ) : null}
+              {annualTax?.preliminaryDocumentCount ? (
+                <p className="dash-annual-warning" role="status">
+                  Avance preliminar: faltan respaldos completos en {annualTax.preliminaryDocumentCount} comprobante(s).
+                </p>
+              ) : null}
+            </ErpPanel>
             <ErpPanel
               title={currentTax ? `IVA estimado · ${monthLabel(currentTax.year, currentTax.month, 'long')}` : 'IVA estimado'}
               actions={currentTax ? <ErpStatusBadge tone={currentTax.isPreliminary ? 'warning' : 'success'}>{currentTax.isPreliminary ? 'Preliminar' : 'Respaldado'}</ErpStatusBadge> : undefined}
@@ -4477,6 +4516,7 @@ function Workspace() {
   // Contacto por el que vienen filtradas facturas, cartera o compras al llegar
   // desde su ficha. Se limpia al navegar a cualquier otra parte.
   const [partyFilterId, setPartyFilterId] = useState<string | undefined>()
+  const [taxInitialTab, setTaxInitialTab] = useState<'month' | 'year'>('month')
   const tokenQuery = useQueries({
     queries: [{
       queryKey: ['auth-token'],
@@ -4515,6 +4555,7 @@ function Workspace() {
         currentSection={section}
         onNavigate={(newSection) => {
           if (newSection !== 'contracts') setContractPartyId(undefined)
+          if (newSection === 'tax') setTaxInitialTab('month')
           setPartyFilterId(undefined)
           startTransition(() => {
             setSection(newSection)
@@ -4538,7 +4579,20 @@ function Workspace() {
             </ErpButton>
           </p>
         ) : null}
-        {section === 'overview' ? <Overview context={contextQuery.data} token={token} /> : null}
+        {section === 'overview' ? (
+          <Overview
+            context={contextQuery.data}
+            token={token}
+            onOpenAnnualTax={() => {
+              setTaxInitialTab('year')
+              startTransition(() => {
+                setSection('tax')
+                setNavigationVersion((current) => current + 1)
+              })
+              window.requestAnimationFrame(() => document.getElementById('main-content')?.focus())
+            }}
+          />
+        ) : null}
         {section === 'parties' ? <PartiesPage parties={parties} token={token} onOpenContracts={(partyId) => { setContractPartyId(partyId); startTransition(() => setSection('contracts')) }} onOpenPartySection={(partyId, destino) => { setPartyFilterId(partyId); startTransition(() => setSection(destino)) }} /> : null}
         {section === 'catalogs' ? <ProductsPage products={products} taxes={taxesQuery.data ?? []} token={token} /> : null}
         {section === 'invoices' ? (
@@ -4589,7 +4643,7 @@ function Workspace() {
         {section === 'tax' ? (
           <ErrorBoundary label="el módulo tributario">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando Tributario…" />}>
-              <TaxPage token={token} />
+              <TaxPage token={token} initialTab={taxInitialTab} />
             </Suspense>
           </ErrorBoundary>
         ) : null}

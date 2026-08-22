@@ -7,7 +7,17 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Avance anual tributario listo para promoción desde `release`: 2026-08-21
+- Corrección del avance anual en el dashboard principal lista localmente:
+  2026-08-21 `America/Guayaquil`. La API ya entregaba el acumulado anual, pero
+  el dashboard solo mostraba el IVA y las compras del mes; por eso el usuario
+  no encontraba lo publicado. Ahora el bloque Tributario muestra resultado
+  antes de ajustes, retenciones de renta, compras pendientes y el aviso de
+  respaldos incompletos. `Ver detalle anual` abre directamente la pestaña Año
+  fiscal. Pasa lint, build, 28 recorridos Playwright del archivo afectado y la
+  prueba dirigida en escritorio/móvil. El usuario autorizó commit, push y
+  promoción por `release -> PR -> main`.
+
+- Avance anual tributario publicado en `main`: 2026-08-21
   `America/Guayaquil`. Tributario usa una sola página con pestañas para mes y
   declaración, año fiscal y retenciones. El año muestra ventas netas, compras
   deducibles confirmadas, no deducibles y pendientes, resultado antes de
@@ -24,8 +34,8 @@ alcance y las decisiones.
   verde antes del cierre y los cambios fiscales posteriores quedaron cubiertos
   por la suite dirigida. Los 46 recorridos Playwright de Tributario pasaron en
   serie en escritorio y móvil. Dos revisiones independientes (fiscal/backend y
-  UI/UX/accesibilidad) dieron GO. El usuario autorizó commit, push y promoción
-  a producción mediante el flujo `release -> PR -> main`.
+  UI/UX/accesibilidad) dieron GO. PR #53 quedó en `main` como `f2be77d`; CI
+  `32538361277`, Coolify, salud pública y paquete web terminaron en verde.
 
 - Correctivo de recuperación SRI para persona natural publicado en `main`:
   2026-08-21 `America/Guayaquil`. Algunos XML autorizados identifican al

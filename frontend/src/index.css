@@ -1262,6 +1262,14 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
 .dash-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .dash-grid-2 .erp-panel { min-width: 0; }
 .dash-panel-note { color: var(--text-muted); font-size: var(--text-xs); }
+.dash-annual-panel { grid-column: 1 / -1; }
+.dash-annual-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; padding: 16px 20px; }
+.dash-annual-summary > div { display: grid; gap: 4px; padding: 0 20px; border-left: 1px solid var(--border-divider); }
+.dash-annual-summary > div:first-child { padding-left: 0; border-left: 0; }
+.dash-annual-summary > div:last-child { padding-right: 0; }
+.dash-annual-summary span, .dash-annual-summary small { color: var(--text-muted); font-size: var(--text-xs); }
+.dash-annual-summary strong { color: var(--text-heading); font-size: var(--text-xl); font-weight: var(--weight-semibold); }
+.dash-annual-warning { margin: 0; padding: 10px 20px; border-top: 1px solid var(--amber-200); color: var(--warning-text); background: var(--amber-50); font-size: var(--text-xs); }
 
 .dash-tax { display: flex; align-items: center; gap: 20px; padding: 16px 20px; flex-wrap: wrap; }
 .dash-tax-figure { margin: 0; }
@@ -1288,6 +1296,10 @@ main#main-content { width: min(100%, var(--page-max-width)); margin: 0 auto; pad
 
 @media (max-width: 900px) {
   .dash-hero-row, .dash-grid-2 { grid-template-columns: 1fr; }
+  .dash-annual-summary { grid-template-columns: 1fr; }
+  .dash-annual-summary > div { padding: 12px 0; border-top: 1px solid var(--border-divider); border-left: 0; }
+  .dash-annual-summary > div:first-child { padding-top: 0; border-top: 0; }
+  .dash-annual-summary > div:last-child { padding-bottom: 0; }
   .dash-tiles { grid-template-columns: 1fr; }
   .dash-hero-value { font-size: 36px; }
   .campaign-card-grid { grid-template-columns: 1fr; }

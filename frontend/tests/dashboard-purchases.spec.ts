@@ -26,6 +26,22 @@ const dashboard = {
     preliminaryReasons: ['El crédito de IVA debe validarse con el campo 564 y su respaldo contable.'],
     needsAccountingReview: true,
   },
+  annual: {
+    year: 2026,
+    salesBase: '3690.26',
+    deductiblePurchasesBase: '1800.00',
+    nonDeductiblePurchasesBase: '125.00',
+    pendingReviewPurchasesBase: '450.00',
+    resultBeforeAdjustments: '1890.26',
+    incomeTaxWithheld: '320.00',
+    ivaWithheld: '95.00',
+    pendingReviewDocumentCount: 3,
+    preliminaryDocumentCount: 2,
+    refundStatus: 'REVIEW_AT_ANNUAL_CLOSE',
+    refundMessage: 'Las retenciones se revisan contra el impuesto causado al cierre anual.',
+    limitations: [],
+    months: [],
+  },
 }
 
 const aging = [
@@ -104,7 +120,8 @@ async function mockApi(page: Page) {
   await page.route('**/api/v1/receivables/collections/monthly**', (route) => route.fulfill({
     json: { months: collectionMonths },
   }))
-  await page.route('**/api/v1/tax/dashboard', (route) => route.fulfill({ json: dashboard }))
+  await page.route('**/api/v1/tax/dashboard**', (route) => route.fulfill({ json: dashboard }))
+  await page.route('**/api/v1/tax/periods**', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/tax/purchases', (route) => route.fulfill({ json: purchases }))
   await page.route('**/api/v1/analytic-classifications', (route) => route.fulfill({ json: [{
     id: '33333333-4444-4555-8666-777777777777',
@@ -229,6 +246,19 @@ test('dashboard muestra evolución y corte mensual documentado', async ({ page }
   await expect(page.getByText('$61,99')).toBeVisible()
   await expect(page.getByText('a pagar')).toBeVisible()
   await expect(page.getByRole('alert')).toContainText('campo 564')
+})
+
+test('dashboard muestra el avance anual y abre su detalle directo', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: 'Año fiscal 2026' })).toBeVisible()
+  const annualSummary = page.getByLabel('Resumen tributario del año 2026')
+  await expect(annualSummary).toContainText('Resultado antes de ajustes')
+  await expect(annualSummary).toContainText('$1.890,26')
+  await expect(annualSummary).toContainText('$320,00')
+  await expect(annualSummary).toContainText('3 documento(s) pendientes')
+  await expect(page.getByText(/faltan respaldos completos en 2 comprobante/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Ver detalle anual' }).click()
+  await expect(page.getByRole('tab', { name: 'Año fiscal' })).toHaveAttribute('aria-selected', 'true')
 })
 
 test('la sección de caja separa el dinero de las retenciones', async ({ page }) => {
