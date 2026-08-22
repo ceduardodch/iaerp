@@ -59,4 +59,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   único por tenant/periodo/empleado) en commit `176c4d4`, con fix de
   detect-secrets en `2e76127`. Esta corrida solo verificó (migración aplica
   contra Postgres real, 19 pruebas verdes, ruff y mypy limpios) y marcó la
-  casilla que había quedado sin actualizar.
+  casilla que había quedado sin actualizar. CI de esta corrida (commit
+  `db0a7b0`, run 32580761487) quedó verde — primera confirmación real del
+  fix de detect-secrets, cuyo propio run se había cancelado antes por un
+  push posterior.
