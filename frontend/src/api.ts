@@ -1158,6 +1158,8 @@ export type DashboardTax = {
 
 export type AnnualFiscalMonth = {
   month: number
+  status: string
+  isDeclared: boolean
   salesBase: string
   deductiblePurchasesBase: string
   incomeTaxWithheld: string
@@ -1178,6 +1180,18 @@ export type AnnualFiscalTax = {
   resultBeforeAdjustments: string
   incomeTaxWithheld: string
   ivaWithheld: string
+  declaredSalesBase: string
+  declaredDeductiblePurchasesBase: string
+  declaredResultBeforeAdjustments: string
+  declaredIncomeTaxWithheld: string
+  declaredMonthCount: number
+  lastDeclaredMonth?: number | null
+  estimatedIncomeTaxRate: string | null
+  declaredEstimatedIncomeTax: string | null
+  projectedEstimatedIncomeTax: string | null
+  declaredEstimatedBalance: string | null
+  projectedEstimatedBalance: string | null
+  estimateReason: string
   pendingReviewDocumentCount: number
   preliminaryDocumentCount: number
   refundStatus: 'REVIEW_AT_ANNUAL_CLOSE' | 'NO_RECORDED_CREDIT'

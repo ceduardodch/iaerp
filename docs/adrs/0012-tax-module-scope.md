@@ -53,6 +53,12 @@ Reglas vinculantes del modulo:
    control" para no pisar los valores que el SRI autocalcula.
 9. **Formato de salida fijo** para copiar al formulario: punto decimal, dos
    decimales, sin separador de miles (`1234.56`).
+10. **IVA presentado y proyección no se mezclan.** `DECLARADO` es el estado del
+    periodo IVA: permite mostrar un corte documental de esos meses, pero no
+    prueba una declaración anual de renta ni congela sus cifras. La evidencia de
+    meses abiertos alimenta una proyección separada. Una referencia de impuesto
+    a la renta exige que el usuario elija el escenario y debe indicar tarifa,
+    supuestos y ajustes no incluidos; nunca se infiere la tarifa por el RUC.
 
 Alcance por etapas: fundacion + ingesta + IVA + ATS primero; RDEP y ADI despues.
 **RDEP queda bloqueado** hasta definir el origen de los datos de nomina/IESS,

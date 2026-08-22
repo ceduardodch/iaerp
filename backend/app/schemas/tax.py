@@ -253,6 +253,8 @@ class CurrentMonthTaxRead(APIModel):
 
 class AnnualFiscalMonthRead(APIModel):
     month: int
+    status: str
+    is_declared: bool
     sales_base: str
     deductible_purchases_base: str
     income_tax_withheld: str
@@ -273,6 +275,18 @@ class AnnualFiscalRead(APIModel):
     result_before_adjustments: str
     income_tax_withheld: str
     iva_withheld: str
+    declared_sales_base: str
+    declared_deductible_purchases_base: str
+    declared_result_before_adjustments: str
+    declared_income_tax_withheld: str
+    declared_month_count: int
+    last_declared_month: int | None
+    estimated_income_tax_rate: str | None
+    declared_estimated_income_tax: str | None
+    projected_estimated_income_tax: str | None
+    declared_estimated_balance: str | None
+    projected_estimated_balance: str | None
+    estimate_reason: str
     pending_review_document_count: int
     preliminary_document_count: int
     refund_status: Literal["REVIEW_AT_ANNUAL_CLOSE", "NO_RECORDED_CREDIT"]

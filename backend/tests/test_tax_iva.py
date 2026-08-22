@@ -465,6 +465,68 @@ async def test_dashboard_marks_purchase_credit_as_accounting_review(
     assert confirmed_annual["internalRealExpenseCount"] == 1
 
 
+async def test_annual_dashboard_separates_declared_actual_from_open_projection(
+    client, stored_objects
+) -> None:
+    token = await token_for(client)
+    await upload_and_ingest(client, token, "factura_recibida_iva15.xml")
+    period = await find_period(client, token, 2025, 11)
+
+    async with SessionFactory.begin() as session:
+        payable = await session.scalar(select(Payable))
+        tax_period = await session.get(TaxPeriod, uuid.UUID(period["id"]))
+        assert payable is not None
+        assert tax_period is not None
+        payable.tax_classification = "DEDUCTIBLE_CONFIRMED"
+
+    open_period = (
+        await client.get(
+            "/api/v1/tax/dashboard",
+            headers=auth(token),
+            params={"as_of": "2025-11-30"},
+        )
+    ).json()["annual"]
+    assert open_period["deductiblePurchasesBase"] == "13.13"
+    assert open_period["declaredDeductiblePurchasesBase"] == "0.00"
+    assert open_period["declaredMonthCount"] == 0
+    assert open_period["months"][10]["isDeclared"] is False
+
+    async with SessionFactory.begin() as session:
+        tax_period = await session.get(TaxPeriod, uuid.UUID(period["id"]))
+        assert tax_period is not None
+        tax_period.status = "DECLARADO"
+
+    declared = (
+        await client.get(
+            "/api/v1/tax/dashboard",
+            headers=auth(token),
+            params={"as_of": "2025-11-30"},
+        )
+    ).json()["annual"]
+    assert declared["declaredDeductiblePurchasesBase"] == "13.13"
+    assert declared["declaredResultBeforeAdjustments"] == "-13.13"
+    assert declared["declaredMonthCount"] == 1
+    assert declared["lastDeclaredMonth"] == 11
+    assert declared["estimatedIncomeTaxRate"] is None
+    assert declared["declaredEstimatedIncomeTax"] is None
+    assert "no infiere" in declared["estimateReason"]
+    assert declared["months"][10]["isDeclared"] is True
+    assert declared["months"][10]["status"] == "DECLARADO"
+
+    scenario = (
+        await client.get(
+            "/api/v1/tax/dashboard",
+            headers=auth(token),
+            params={"as_of": "2025-11-30", "income_tax_rate": "25.126"},
+        )
+    ).json()["annual"]
+    assert scenario["estimatedIncomeTaxRate"] == "25.13"
+    assert scenario["declaredEstimatedIncomeTax"] == "0.00"
+    assert scenario["projectedEstimatedIncomeTax"] == "0.00"
+    assert scenario["projectedEstimatedBalance"] == "0.00"
+    assert "Escenario manual al 25.13" in scenario["estimateReason"]
+
+
 @pytest.mark.parametrize(
     ("classification", "annual_key"),
     [
