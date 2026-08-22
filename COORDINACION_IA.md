@@ -69,6 +69,7 @@
 | Codex (este hilo, recuperación SRI persona natural) | ✅ EN MAIN | Homologa cédula del receptor con el RUC del tenant solo para persona natural válida; cubre factura, nota de crédito y retención desde reportes múltiples; PR #52, CI, Coolify y salud pública verdes | 2026-08-21 |
 | Codex (este hilo, avance fiscal anual) | ✅ EN MAIN | Tributario en pestañas; avance acumulado hasta el mes elegido, compras clasificadas y retenciones separadas, con avisos de respaldo; PR #53, CI, Coolify y salud pública verdes | 2026-08-21 |
 | Codex (este hilo, anual en dashboard) | 🚀 EN PROMOCIÓN | Corrige la omisión del resumen anual en el dashboard principal; muestra resultado, retenciones y compras pendientes, y abre directo el detalle anual; lint/build y 28 recorridos escritorio/móvil verdes; publicación a `main` autorizada | 2026-08-22 |
+| Claude (tarea programada `nomina-loop`) | ✅ COMPLETA | Solo tocó `backend/app/{schemas,services/payroll}/`; servicio de empleados (alta/edición/baja) con 409 por identificación duplicada y baja como transición de estado propia; commit `ab41b9a` (main+release), CI `32581785053` verde. No tocó archivos de otra sesión (CxP/Tributario) que colisionaron en el mismo checkout durante la corrida | 2026-08-22 |
 
 > **Orden de migraciones:** resuelto. Campañas se integró después de CxP, así
 > que `e5f6a7b8c9d0` pasó a colgar de `e6f7a8b9c0d1` en vez de `da1e2f3a4b5c`.
