@@ -22,7 +22,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 
 - [x] Parámetros por año (SBU y tasas) y pruebas de reglas legales
 - [x] Cálculo puro del rol en `services/payroll/calculations.py`
-- [ ] Modelos `payroll_employees`, `payroll_periods`, `payroll_entries` y migración
+- [x] Modelos `payroll_employees`, `payroll_periods`, `payroll_entries` y migración
 - [ ] Servicio de empleados: alta, edición y baja
 - [ ] Servicio de periodos: generar borrador idempotente y aprobar
 - [ ] Endpoints `/payroll/*` con `execute_idempotent` y scopes `payroll:read` / `payroll:write`
@@ -54,3 +54,9 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - Parámetros y pruebas legales: SBU por año en `services/payroll/parameters.py`,
   con prueba que falla si el año en curso no está registrado.
 - Cálculo puro del rol, con las cinco reglas legales cubiertas.
+- Modelos y migración: `payroll_employees`, `payroll_periods` (único por
+  tenant/año/mes) y `payroll_entries` (mapeo directo de `RolCalculado`,
+  único por tenant/periodo/empleado) en commit `176c4d4`, con fix de
+  detect-secrets en `2e76127`. Esta corrida solo verificó (migración aplica
+  contra Postgres real, 19 pruebas verdes, ruff y mypy limpios) y marcó la
+  casilla que había quedado sin actualizar.
