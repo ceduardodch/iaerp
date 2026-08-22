@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Correctivo de edición masiva de compras listo localmente: 2026-08-22
+- Correctivo de edición masiva de compras publicado en `main`: 2026-08-22
   `America/Guayaquil`. En producción quedaron seleccionadas 36 compras de enero
   a junio, todas con uso tributario `No deducible`, control interno pendiente y
   periodos ya declarados. El lote bloqueaba primero el cambio fiscal y por eso
@@ -15,7 +15,9 @@ alcance y las decisiones.
   del periodo declarado, pero sí aplica `Gasto real`, `Solo tributario` y tags;
   el resultado indica cuántas compras quedaron protegidas y muestra el motivo
   exacto de cualquier fallo. Pasan Ruff, mypy, 25 pruebas de CxP, lint, build y
-  los recorridos dirigidos en escritorio/móvil con WCAG. Pendiente promoción.
+  34 recorridos Playwright en escritorio/móvil con WCAG y zoom. PR #60, CI de
+  producción `32598659878`, Coolify, salud pública, OpenAPI y paquete web
+  terminaron verdes.
 
 - Edición masiva de compras publicada en `main`: 2026-08-22
   `America/Guayaquil`. La vista Compras permite seleccionar hasta 100 filas
