@@ -320,6 +320,17 @@ async def _ensure_fiscal_use_can_change(
     *,
     payable: Payable,
 ) -> None:
+    detail = await _fiscal_use_change_block_detail(session, context, payable=payable)
+    if detail is not None:
+        raise HTTPException(status_code=409, detail=detail)
+
+
+async def _fiscal_use_change_block_detail(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    payable: Payable,
+) -> str | None:
     if payable.fiscal_document_id is not None:
         declared_period = await session.scalar(
             select(TaxPeriod)
@@ -335,13 +346,11 @@ async def _ensure_fiscal_use_can_change(
             )
         )
         if declared_period is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Esta compra pertenece a un periodo declarado. Corrige primero la "
-                    "declaración antes de cambiar su uso fiscal"
-                ),
+            return (
+                "El uso tributario no cambió porque la compra pertenece a un periodo "
+                "declarado"
             )
+    return None
 
 
 async def update_payable_bulk_classification(
@@ -350,13 +359,19 @@ async def update_payable_bulk_classification(
     *,
     payable_id: uuid.UUID,
     data: PayableBulkClassificationUpdate,
-) -> PayableRead:
+) -> tuple[PayableRead, str | None]:
     payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    fiscal_protection_detail: str | None = None
     if data.tax_classification is not None:
         classification_changed = payable.tax_classification != data.tax_classification
         if classification_changed:
-            await _ensure_fiscal_use_can_change(session, context, payable=payable)
-        payable.tax_classification = data.tax_classification
+            fiscal_protection_detail = await _fiscal_use_change_block_detail(
+                session, context, payable=payable
+            )
+        if fiscal_protection_detail is None:
+            payable.tax_classification = data.tax_classification
+        elif data.internal_classification is None and data.analytic_change == "KEEP_EXISTING":
+            raise HTTPException(status_code=409, detail=fiscal_protection_detail)
     if data.internal_classification is not None:
         payable.internal_classification = data.internal_classification
     if data.analytic_change == "REPLACE":
@@ -368,7 +383,10 @@ async def update_payable_bulk_classification(
             value_ids=data.analytic_value_ids,
         )
     await session.flush()
-    return await to_read(session, tenant_id=context.tenant_id, payable=payable)
+    return (
+        await to_read(session, tenant_id=context.tenant_id, payable=payable),
+        fiscal_protection_detail,
+    )
 
 
 async def create_from_fiscal_document(

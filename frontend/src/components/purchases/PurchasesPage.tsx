@@ -72,11 +72,13 @@ interface BulkReviewResult {
 
 interface BulkClassificationResult {
   updatedCount: number
+  fiscalProtectedCount: number
   failedCount: number
   items: Array<{
     payableId: string
     status: 'UPDATED' | 'FAILED'
     detail: string
+    fiscalUseProtected: boolean
   }>
 }
 
@@ -601,9 +603,9 @@ function PayableBulkClassificationEditor({ token, payables, requestKey, onSaved,
         <div><dt>Total seleccionado</dt><dd>${formatAmount(total)}</dd></div>
       </dl>
       <p className="fine-print">Elige solo lo que quieres cambiar. Los campos en “No cambiar” conservan el valor de cada compra.</p>
-      <label>Uso tributario<select value={taxClassification} onChange={(event) => setTaxClassification(event.target.value as typeof taxClassification)}><option value="">No cambiar</option><option value="DEDUCTIBLE_CONFIRMED">Para declaración · deducible</option><option value="NON_DEDUCTIBLE">No deducible</option></select></label>
+      <label>Uso tributario ante el SRI<select value={taxClassification} onChange={(event) => setTaxClassification(event.target.value as typeof taxClassification)}><option value="">No cambiar (recomendado)</option><option value="DEDUCTIBLE_CONFIRMED">Para declaración · deducible</option><option value="NON_DEDUCTIBLE">No deducible</option></select></label>
       {taxClassification ? <label>Motivo del cambio<input value={reason} onChange={(event) => setReason(event.target.value)} required minLength={3} maxLength={300} placeholder="Ej. Se revisó el uso de estas compras" /></label> : null}
-      <label>Control interno<select value={internalClassification} onChange={(event) => setInternalClassification(event.target.value as typeof internalClassification)}><option value="">No cambiar</option><option value="REAL">Gasto real del negocio</option><option value="DECLARATION_ONLY">Solo tributario</option></select></label>
+      <label>Control interno<select value={internalClassification} onChange={(event) => setInternalClassification(event.target.value as typeof internalClassification)}><option value="">No cambiar</option><option value="REAL">Gasto real del negocio</option><option value="DECLARATION_ONLY">Solo tributario</option></select><small>Esta marca sí puede corregirse aunque el mes ya esté declarado.</small></label>
       <fieldset className="purchase-review-options">
         <legend>Tags</legend>
         <label><input type="radio" name="bulkPayableTags" checked={analyticChange === 'KEEP_EXISTING'} onChange={() => setAnalyticChange('KEEP_EXISTING')} /><span><strong>No cambiar</strong><small>Cada compra conserva sus tags actuales</small></span></label>
@@ -852,11 +854,17 @@ export function PurchasesPage({
 
   function handleBulkClassificationResult(result: BulkClassificationResult) {
     const failedIds = result.items.filter((item) => item.status === 'FAILED').map((item) => item.payableId)
+    const failedReasons = Array.from(result.items.reduce((groups, item) => {
+      if (item.status === 'FAILED') groups.set(item.detail, (groups.get(item.detail) ?? 0) + 1)
+      return groups
+    }, new Map<string, number>()).entries()).map(([detail, count]) => `${count} ${count === 1 ? 'compra' : 'compras'}: ${detail}`)
+    const fiscalProtectedCount = result.fiscalProtectedCount ?? 0
     setBulkClassificationOpen(false)
     setSelectedPayableIds(failedIds)
     setReviewNotice([
       result.updatedCount ? `${result.updatedCount} ${result.updatedCount === 1 ? 'compra actualizada' : 'compras actualizadas'}` : '',
-      result.failedCount ? `${result.failedCount} no ${result.failedCount === 1 ? 'pudo' : 'pudieron'} guardarse` : '',
+      fiscalProtectedCount ? `${fiscalProtectedCount} ${fiscalProtectedCount === 1 ? 'conservó' : 'conservaron'} el uso tributario porque el periodo ya está declarado` : '',
+      ...failedReasons,
     ].filter(Boolean).join(' · ') + '.')
     // El siguiente intento ya es otro lote cuando conservamos solo los fallidos.
     // La clave actual queda reservada al request que acaba de responder.

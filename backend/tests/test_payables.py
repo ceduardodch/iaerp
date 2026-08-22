@@ -317,6 +317,81 @@ async def test_payable_fiscal_use_cannot_change_after_period_is_declared(client)
     assert internal_change.json()["internalClassification"] == "REAL"
 
 
+async def test_bulk_keeps_declared_fiscal_use_and_applies_internal_change(client) -> None:
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["payables:extract", "payables:read", "payables:write"],
+    )
+    document_id = await _create_fiscal_purchase(
+        sequential="810000022",
+        issue_date=date(2024, 10, 10),
+    )
+    reviewed = await client.post(
+        "/api/v1/payables/from-document/review",
+        headers=auth(token, "sri-review-bulk-declared-0001"),
+        json={
+            "documentId": str(document_id),
+            "taxClassification": "NON_DEDUCTIBLE",
+            "internalClassification": "PENDING_REVIEW",
+            "paymentState": "UNCONFIRMED",
+        },
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    async with SessionFactory.begin() as session:
+        period = TaxPeriod(
+            tenant_id=TENANT_A,
+            year=2024,
+            month=10,
+            obligation_type="IVA",
+            status="DECLARADO",
+        )
+        session.add(period)
+        await session.flush()
+        document = await session.get(FiscalDocument, document_id)
+        assert document is not None
+        document.tax_period_id = period.id
+
+    result = await client.put(
+        "/api/v1/payables/classifications/bulk",
+        headers=auth(token, "payable-bulk-declared-partial-0001"),
+        json={
+            "payableIds": [reviewed.json()["id"]],
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "internalClassification": "REAL",
+            "reason": "Revisión conjunta de compras",
+        },
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["updatedCount"] == 1
+    assert result.json()["fiscalProtectedCount"] == 1
+    assert result.json()["failedCount"] == 0
+    assert result.json()["items"][0]["fiscalUseProtected"] is True
+    assert "periodo declarado" in result.json()["items"][0]["detail"]
+
+    payable = await client.get(
+        f"/api/v1/payables/{reviewed.json()['id']}", headers=auth(token)
+    )
+    assert payable.json()["taxClassification"] == "NON_DEDUCTIBLE"
+    assert payable.json()["internalClassification"] == "REAL"
+
+    tax_only = await client.put(
+        "/api/v1/payables/classifications/bulk",
+        headers=auth(token, "payable-bulk-declared-tax-only-0001"),
+        json={
+            "payableIds": [reviewed.json()["id"]],
+            "taxClassification": "DEDUCTIBLE_CONFIRMED",
+            "reason": "Revisión tributaria posterior",
+        },
+    )
+    assert tax_only.status_code == 200, tax_only.text
+    assert tax_only.json()["updatedCount"] == 0
+    assert tax_only.json()["fiscalProtectedCount"] == 0
+    assert tax_only.json()["failedCount"] == 1
+    assert "periodo declarado" in tax_only.json()["items"][0]["detail"]
+
+
 async def test_payables_can_be_classified_in_bulk_and_replayed(client) -> None:
     token = await token_for(
         client,

@@ -165,10 +165,12 @@ class PayableBulkClassificationItemRead(APIModel):
     payable_id: uuid.UUID
     status: Literal["UPDATED", "FAILED"]
     detail: str
+    fiscal_use_protected: bool = False
 
 
 class PayableBulkClassificationRead(APIModel):
     updated_count: int = Field(ge=0)
+    fiscal_protected_count: int = Field(ge=0)
     failed_count: int = Field(ge=0)
     items: list[PayableBulkClassificationItemRead]
 

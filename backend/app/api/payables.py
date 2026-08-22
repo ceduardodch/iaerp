@@ -194,19 +194,34 @@ async def put_payable_bulk_classification(
         )
         item_payload = {**base_payload, "payableIds": [str(payable_id)]}
 
+        item_audit_details: dict[str, object] = {
+            "bulk": True,
+            "reason": data.reason,
+            "requested_tax_classification": data.tax_classification,
+            "internal_classification": data.internal_classification,
+            "analytic_change": data.analytic_change,
+        }
+
         async def update_item(
             current_payable_id: uuid.UUID = payable_id,
+            current_audit_details: dict[str, object] = item_audit_details,
         ) -> tuple[str, dict[str, object]]:
-            item = await payables.update_payable_bulk_classification(
+            item, fiscal_protection_detail = await payables.update_payable_bulk_classification(
                 session,
                 context,
                 payable_id=current_payable_id,
                 data=data,
             )
+            fiscal_use_protected = fiscal_protection_detail is not None
+            current_audit_details["fiscal_use_protected"] = fiscal_use_protected
+            current_audit_details["applied_tax_classification"] = (
+                None if fiscal_use_protected else data.tax_classification
+            )
             return str(item.id), {
                 "payableId": str(item.id),
                 "status": "UPDATED",
-                "detail": "Compra actualizada",
+                "detail": fiscal_protection_detail or "Compra actualizada",
+                "fiscalUseProtected": fiscal_use_protected,
             }
 
         try:
@@ -219,13 +234,7 @@ async def put_payable_bulk_classification(
                 action="payable.classification_updated",
                 entity_type="payable",
                 callback=update_item,
-                audit_details={
-                    "bulk": True,
-                    "reason": data.reason,
-                    "tax_classification": data.tax_classification,
-                    "internal_classification": data.internal_classification,
-                    "analytic_change": data.analytic_change,
-                },
+                audit_details=item_audit_details,
             )
             results.append(PayableBulkClassificationItemRead.model_validate(response))
         except HTTPException as exc:
@@ -239,6 +248,7 @@ async def put_payable_bulk_classification(
 
     return PayableBulkClassificationRead(
         updated_count=sum(item.status == "UPDATED" for item in results),
+        fiscal_protected_count=sum(item.fiscal_use_protected for item in results),
         failed_count=sum(item.status == "FAILED" for item in results),
         items=results,
     )
