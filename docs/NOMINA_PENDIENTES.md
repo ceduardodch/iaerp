@@ -28,7 +28,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - [x] Endpoints `/payroll/*` con `execute_idempotent` y scopes `payroll:read` / `payroll:write`
 - [x] Registrar los scopes en `KNOWN_SCOPES`, `iaerp-realm.json` y `configure-staging.sh`
 - [x] `run_payroll_scheduler()` en el `TaskGroup` de `workers/dispatcher.py`
-- [ ] Tipos y cliente en `frontend/src/api.ts`
+- [x] Tipos y cliente en `frontend/src/api.ts`
 - [ ] Pantalla `PayrollPage.tsx` con pestañas Empleados y Roles
 - [ ] Sección `payroll` en `Sidebar.tsx`, `App.tsx` y `tests/navigation.ts`
 - [ ] E2E `frontend/tests/payroll.spec.ts`
@@ -135,3 +135,16 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   las pruebas. 4 pruebas nuevas en `test_payroll_scheduler.py`, 56 pruebas
   del área verdes, ruff y mypy limpios. CI del run `32595873806` quedó verde
   (`Backend` 11m, `Deploy production to Coolify` 4m46s).
+- Tipos `PayrollEmployee(Input)`, `PayrollPeriod(DraftInput)` y `PayrollEntry`
+  en `frontend/src/api.ts`, commit `1958de7` (main+release). Espejo en
+  camelCase de `app/schemas/payroll.py` (decimales y fechas como `string`,
+  igual que `Payable`/`AccountItem`). Sin funciones cliente por entidad: el
+  patrón del repo es que los componentes llamen `apiRequest<T>(...)`
+  directo — `Payable` tampoco tiene wrappers propios, solo `fetchAllLeads`
+  los necesita por la paginación del CRM. Al ser tipos puros sin lógica no
+  hay comportamiento que probar en rojo/verde; la verificación fue
+  `tsc --noEmit`, `oxlint` y `vite build` limpios (sin componente que los
+  consuma todavía — eso es el siguiente pendiente, `PayrollPage.tsx`). CI del
+  run `32598659878` quedó verde (`Frontend` 7m9s, `Deploy production to
+  Coolify` 4m59s; `Backend`/migraciones/OIDC se saltaron por no haber cambios
+  de esa área).
