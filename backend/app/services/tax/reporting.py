@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
 from sqlalchemy import select
@@ -20,6 +20,7 @@ from app.services.tax.iva import compute_iva
 
 _PURCHASE_DOCUMENT_TYPES = ("FACTURA", "NOTA_CREDITO", "NOTA_DEBITO", "LIQUIDACION")
 _ADDITIVE_DOCUMENT_TYPES = ("FACTURA", "NOTA_DEBITO", "LIQUIDACION")
+_MONEY_QUANTUM = Decimal("0.01")
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,8 @@ class CurrentMonthSnapshot:
 @dataclass(frozen=True)
 class AnnualFiscalMonth:
     month: int
+    status: str
+    is_declared: bool
     sales_base: Decimal
     deductible_purchases_base: Decimal
     income_tax_withheld: Decimal
@@ -101,6 +104,18 @@ class AnnualFiscalSnapshot:
     result_before_adjustments: Decimal
     income_tax_withheld: Decimal
     iva_withheld: Decimal
+    declared_sales_base: Decimal
+    declared_deductible_purchases_base: Decimal
+    declared_result_before_adjustments: Decimal
+    declared_income_tax_withheld: Decimal
+    declared_month_count: int
+    last_declared_month: int | None
+    estimated_income_tax_rate: Decimal | None
+    declared_estimated_income_tax: Decimal | None
+    projected_estimated_income_tax: Decimal | None
+    declared_estimated_balance: Decimal | None
+    projected_estimated_balance: Decimal | None
+    estimate_reason: str
     pending_review_document_count: int
     preliminary_document_count: int
     refund_status: Literal["REVIEW_AT_ANNUAL_CLOSE", "NO_RECORDED_CREDIT"]
@@ -141,17 +156,42 @@ def _signed_subtotal(document: FiscalDocument) -> Decimal:
     return Decimal("0.00")
 
 
+def _estimate_income_tax(base: Decimal, rate: Decimal) -> Decimal:
+    return (max(base, Decimal("0.00")) * rate / Decimal("100")).quantize(
+        _MONEY_QUANTUM,
+        rounding=ROUND_HALF_UP,
+    )
+
+
 async def _annual_fiscal_snapshot(
     session: AsyncSession,
     context: AuthContext,
     *,
     as_of: date,
     sales_documents: list[SalesDocument],
+    income_tax_rate: Decimal | None,
 ) -> AnnualFiscalSnapshot:
     """Resume el año hasta el mes elegido, sin simular una declaración anual."""
     year = as_of.year
     year_start = date(year, 1, 1)
     cutoff = _shift_month(_month_start(as_of), 1)
+    periods = list(
+        await session.scalars(
+            select(TaxPeriod).where(
+                TaxPeriod.tenant_id == context.tenant_id,
+                TaxPeriod.year == year,
+                TaxPeriod.month <= as_of.month,
+                TaxPeriod.obligation_type == "IVA",
+            )
+        )
+    )
+    period_status_by_month = {period.month: period.status for period in periods}
+    declared_period_ids = {
+        period.id for period in periods if period.status == "DECLARADO"
+    }
+    declared_months = {
+        period.month for period in periods if period.status == "DECLARADO"
+    }
     annual_sales = [
         document
         for document in sales_documents
@@ -167,6 +207,20 @@ async def _annual_fiscal_snapshot(
                 FiscalDocument.issue_date < cutoff,
             )
         )
+    )
+    declared_sales_documents = (
+        list(
+            await session.scalars(
+                select(FiscalDocument).where(
+                    FiscalDocument.tenant_id == context.tenant_id,
+                    FiscalDocument.direction == "EMITIDO",
+                    FiscalDocument.doc_type != "RETENCION",
+                    FiscalDocument.tax_period_id.in_(declared_period_ids),
+                )
+            )
+        )
+        if declared_period_ids
+        else []
     )
     source_keys = {
         document.related_access_key
@@ -343,11 +397,69 @@ async def _annual_fiscal_snapshot(
                 retention.retained_amount
             )
 
+    declared_purchase_documents = [
+        document
+        for document in purchase_documents
+        if document.tax_period_id in declared_period_ids
+    ]
+    declared_deductible = Decimal("0.00")
+    for document in declared_purchase_documents:
+        payable = payable_by_document.get(document.id)
+        if payable is None and document.doc_type == "NOTA_CREDITO":
+            source = (
+                source_by_key.get(document.related_access_key)
+                if document.related_access_key
+                else None
+            )
+            if source is not None:
+                payable = payable_by_document.get(source.id)
+        if payable is not None and payable.tax_classification == "DEDUCTIBLE_CONFIRMED":
+            declared_deductible += _signed_subtotal(document)
+
+    declared_sales_base = sum(
+        (_signed_subtotal(document) for document in declared_sales_documents),
+        Decimal("0.00"),
+    )
+    declared_income_tax_withheld = sum(
+        (
+            retention.retained_amount
+            for retention, retention_document in retention_rows
+            if retention.kind == "RENTA"
+            and retention_document.tax_period_id in declared_period_ids
+        ),
+        Decimal("0.00"),
+    )
+    declared_result = declared_sales_base - declared_deductible
+    projected_result = sales_base - deductible
+    estimated_rate = (
+        income_tax_rate.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if income_tax_rate is not None
+        else None
+    )
+    if estimated_rate is None:
+        declared_estimated_tax = None
+        projected_estimated_tax = None
+        declared_estimated_balance = None
+        projected_estimated_balance = None
+        estimate_reason = (
+            "Selecciona un escenario de tarifa en pantalla para aproximar la renta. "
+            "IAERP no infiere el régimen ni la tarifa a partir del RUC."
+        )
+    else:
+        declared_estimated_tax = _estimate_income_tax(declared_result, estimated_rate)
+        projected_estimated_tax = _estimate_income_tax(projected_result, estimated_rate)
+        declared_estimated_balance = declared_estimated_tax - declared_income_tax_withheld
+        projected_estimated_balance = projected_estimated_tax - income_tax_withheld
+        estimate_reason = (
+            f"Escenario manual al {estimated_rate.normalize()} %. No incluye conciliación "
+            "tributaria ni ajustes del cierre y no es una liquidación del SRI."
+        )
+
     refund_status: Literal["REVIEW_AT_ANNUAL_CLOSE", "NO_RECORDED_CREDIT"]
     if income_tax_withheld > Decimal("0.00"):
         refund_status = "REVIEW_AT_ANNUAL_CLOSE"
         refund_message = (
-            "Hay retenciones de renta registradas como crédito. Solo existe un posible "
+            "Hay retenciones de renta registradas en el año. Solo existe un posible "
             "saldo a favor si, al declarar el año, superan el impuesto causado."
         )
     else:
@@ -357,8 +469,7 @@ async def _annual_fiscal_snapshot(
     limitations = [
         "El resultado no incluye conciliación tributaria, participación laboral, "
         "depreciaciones ni otros ajustes contables.",
-        "IAERP no calcula una tarifa de renta hasta tener el perfil fiscal y los "
-        "ajustes del cierre.",
+        estimate_reason,
     ]
     if pending_count:
         limitations.insert(
@@ -397,9 +508,21 @@ async def _annual_fiscal_snapshot(
         ),
         internal_pending_expenses_total=internal_pending_expenses_total,
         internal_pending_expense_count=internal_pending_expense_count,
-        result_before_adjustments=sales_base - deductible,
+        result_before_adjustments=projected_result,
         income_tax_withheld=income_tax_withheld,
         iva_withheld=iva_withheld,
+        declared_sales_base=declared_sales_base,
+        declared_deductible_purchases_base=declared_deductible,
+        declared_result_before_adjustments=declared_result,
+        declared_income_tax_withheld=declared_income_tax_withheld,
+        declared_month_count=len(declared_months),
+        last_declared_month=max(declared_months) if declared_months else None,
+        estimated_income_tax_rate=estimated_rate,
+        declared_estimated_income_tax=declared_estimated_tax,
+        projected_estimated_income_tax=projected_estimated_tax,
+        declared_estimated_balance=declared_estimated_balance,
+        projected_estimated_balance=projected_estimated_balance,
+        estimate_reason=estimate_reason,
         pending_review_document_count=pending_count,
         preliminary_document_count=preliminary_count,
         refund_status=refund_status,
@@ -408,6 +531,8 @@ async def _annual_fiscal_snapshot(
         months=[
             AnnualFiscalMonth(
                 month=month,
+                status=period_status_by_month.get(month, "SIN_PERIODO"),
+                is_declared=month in declared_months,
                 sales_base=monthly_sales[month],
                 deductible_purchases_base=monthly_deductible[month],
                 income_tax_withheld=monthly_income_withheld[month],
@@ -508,6 +633,7 @@ async def dashboard_tax_report(
     *,
     as_of: date,
     months: int,
+    income_tax_rate: Decimal | None = None,
 ) -> DashboardTaxReport:
     """Arma la evolución operativa y el corte tributario del mes actual."""
     current_start = _month_start(as_of)
@@ -530,6 +656,7 @@ async def dashboard_tax_report(
         context,
         as_of=as_of,
         sales_documents=sales_documents,
+        income_tax_rate=income_tax_rate,
     )
     trend_by_month = {
         (point.year, point.month): point

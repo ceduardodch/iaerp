@@ -286,40 +286,99 @@
   background: var(--surface-inset);
 }
 
-.tax-tabs {
-  overflow-x: auto;
-  margin: 0 0 1rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.tax-tabs [role='tablist'] {
+.tax-onepage-nav {
+  position: sticky;
+  z-index: 5;
+  top: .5rem;
   display: flex;
-  min-width: max-content;
-  gap: .25rem;
+  gap: .35rem;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 1rem;
+  padding: .3rem;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: .65rem;
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  box-shadow: 0 6px 20px rgb(15 23 42 / 8%);
 }
 
-.tax-tabs [role='tab'] {
-  min-height: 2.75rem;
-  padding: .65rem 1rem;
-  border: 0;
-  border-bottom: 3px solid transparent;
-  background: transparent;
+.tax-onepage-nav a {
+  min-height: 44px;
+  padding: .7rem .9rem;
+  border-radius: .45rem;
   color: var(--muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: .86rem;
+  font-size: .82rem;
   font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.tax-tabs [role='tab'][aria-selected='true'] {
-  border-bottom-color: var(--navy);
+.tax-onepage-nav a:hover,
+.tax-onepage-nav a:focus-visible {
+  background: var(--surface-inset);
   color: var(--ink);
 }
 
-.tax-tabs [role='tab']:focus-visible {
-  border-radius: .35rem .35rem 0 0;
-  outline: 3px solid var(--focus-ring, #7aa2d6);
-  outline-offset: -3px;
+.tax-income-pulse,
+.tax-onepage-section {
+  scroll-margin-top: 5rem;
+}
+
+.tax-onepage-section {
+  margin-top: 1.5rem;
+}
+
+.tax-section-title {
+  margin: 0 0 .7rem;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.tax-income-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .75rem;
+}
+
+.tax-income-heading > div {
+  display: grid;
+  gap: .2rem;
+}
+
+.tax-income-heading > label {
+  display: grid;
+  gap: .25rem;
+  min-width: 12rem;
+}
+
+.tax-income-heading span {
+  color: var(--muted);
+  font-size: .75rem;
+}
+
+.tax-income-projection {
+  border-left: 4px solid var(--amber-200);
+}
+
+.tax-income-formula {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-top: 1rem;
+  padding: .8rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+  background: var(--surface-inset);
+  font-size: .8rem;
+}
+
+.tax-income-formula strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .tax-annual-attention {
@@ -327,21 +386,25 @@
   background: var(--amber-50);
 }
 
-.tax-tab-panel .metric-grid {
+.tax-onepage-section .metric-grid,
+.tax-income-pulse .metric-grid {
   margin: 1rem 0;
 }
 
-.tax-tab-panel .metric-card span {
+.tax-onepage-section .metric-card span,
+.tax-income-pulse .metric-card span {
   color: var(--muted);
   font-size: .72rem;
   font-weight: 700;
 }
 
-.tax-tab-panel .metric-card {
+.tax-onepage-section .metric-card,
+.tax-income-pulse .metric-card {
   animation: none;
 }
 
-.tax-tab-panel .metric-card strong {
+.tax-onepage-section .metric-card strong,
+.tax-income-pulse .metric-card strong {
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
@@ -393,8 +456,18 @@
     grid-template-columns: 1fr;
   }
 
-  .tax-tabs [role='tab'] {
-    min-height: 3rem;
+  .tax-onepage-nav {
+    top: .25rem;
+    width: 100%;
+  }
+
+  .tax-income-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tax-income-heading > label {
+    min-width: 0;
   }
 
   .tax-readiness {

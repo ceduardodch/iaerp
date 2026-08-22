@@ -326,12 +326,13 @@ function Overview({
   const [annualPurchaseView, setAnnualPurchaseView] = useState<
     'DEDUCTIBLE' | 'NON_DEDUCTIBLE' | 'PENDING' | 'INTERNAL_REAL' | 'INTERNAL_DECLARATION_ONLY' | 'INTERNAL_PENDING'
   >('DEDUCTIBLE')
+  const [incomeTaxScenario, setIncomeTaxScenario] = useState<'NONE' | '25'>('NONE')
   const [invoicesQuery, receivablesQuery, leadsQuery, taxDashboardQuery, agingQuery, historyQuery] = useQueries({
     queries: [
       { queryKey: ['invoices', 'overview'], queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices') },
       { queryKey: ['receivables', 'overview'], queryFn: () => apiRequest<AccountItem[]>(token, '/receivables') },
       { queryKey: ['crm', 'leads', 'overview'], queryFn: () => fetchAllLeads(token) },
-      { queryKey: ['tax', 'dashboard'], queryFn: () => apiRequest<DashboardTax>(token, '/tax/dashboard'), enabled: canReadTax },
+      { queryKey: ['tax', 'dashboard', incomeTaxScenario], queryFn: () => apiRequest<DashboardTax>(token, `/tax/dashboard${incomeTaxScenario === '25' ? '?income_tax_rate=25' : ''}`), enabled: canReadTax },
       { queryKey: ['receivables', 'aging'], queryFn: () => apiRequest<AgingSummary>(token, '/receivables/aging') },
       { queryKey: ['receivables', 'collections', 'monthly'], queryFn: () => apiRequest<CollectionsHistory>(token, '/receivables/collections/monthly?months=12') },
     ],
@@ -374,9 +375,9 @@ function Overview({
   const annualTax = taxDashboard?.annual
   const annualPurchaseMetric = annualTax ? {
     DEDUCTIBLE: {
-      label: 'Compras para declaración',
-      value: annualTax.deductiblePurchasesBase,
-      note: 'Deducibles confirmadas y restadas del resultado fiscal.',
+      label: 'Compras deducibles · IVA presentado',
+      value: annualTax.declaredDeductiblePurchasesBase,
+      note: `${annualTax.declaredMonthCount} mes(es) con IVA presentado; el corte se recalcula con los documentos.`,
     },
     NON_DEDUCTIBLE: {
       label: 'Compras no deducibles',
@@ -492,6 +493,7 @@ function Overview({
               className="dash-annual-panel"
               actions={<div className="dash-annual-actions">
                 <label>Ver compras<select value={annualPurchaseView} onChange={(event) => setAnnualPurchaseView(event.target.value as typeof annualPurchaseView)}><optgroup label="Tributario"><option value="DEDUCTIBLE">Para declaración · deducibles</option><option value="NON_DEDUCTIBLE">No deducibles</option><option value="PENDING">Pendientes tributarios</option></optgroup><optgroup label="Control interno"><option value="INTERNAL_REAL">Gastos reales</option><option value="INTERNAL_DECLARATION_ONLY">Solo tributarios</option><option value="INTERNAL_PENDING">Pendientes internos</option></optgroup></select></label>
+                <label>Escenario renta<select value={incomeTaxScenario} onChange={(event) => setIncomeTaxScenario(event.target.value as 'NONE' | '25')}><option value="NONE">Sin tarifa</option><option value="25">25 % referencial</option></select></label>
                 <ErpButton variant="ghost" onClick={onOpenAnnualTax}>Ver detalle anual</ErpButton>
               </div>}
             >
@@ -501,14 +503,14 @@ function Overview({
                 <div className="dash-annual-summary" aria-label={`Resumen tributario del año ${annualTax.year}`}>
                   {annualPurchaseMetric ? <div aria-live="polite"><span>{annualPurchaseMetric.label}</span><strong>${formatAmount(Number(annualPurchaseMetric.value))}</strong><small>{annualPurchaseMetric.note}</small></div> : null}
                   <div>
-                    <span>Resultado antes de ajustes</span>
-                    <strong>${formatAmount(Number(annualTax.resultBeforeAdjustments))}</strong>
-                    <small>Ventas menos compras deducibles confirmadas.</small>
+                    <span>Resultado parcial · IVA presentado</span>
+                    <strong>${formatAmount(Number(annualTax.declaredResultBeforeAdjustments))}</strong>
+                    <small>No es la declaración anual de renta y puede cambiar con los documentos.</small>
                   </div>
                   <div>
-                    <span>Retenciones de renta</span>
-                    <strong>${formatAmount(Number(annualTax.incomeTaxWithheld))}</strong>
-                    <small>Acumuladas para revisar al cierre anual.</small>
+                    <span>Renta estimada del año</span>
+                    <strong>{annualTax.projectedEstimatedIncomeTax === null ? 'Elige una tarifa' : `$${formatAmount(Number(annualTax.projectedEstimatedIncomeTax))}`}</strong>
+                    <small>{annualTax.estimateReason}</small>
                   </div>
                 </div>
               ) : null}

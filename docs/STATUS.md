@@ -7,6 +7,20 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Dashboard tributario one-page y escenario de renta listos localmente:
+  2026-08-22 `America/Guayaquil`. El estado `DECLARADO` de un periodo IVA solo
+  identifica los documentos de meses cuyo IVA se marcó como presentado; no se
+  confunde con una declaración anual de renta ni con un cierre inmutable. Los
+  meses abiertos quedan separados en la proyección. IAERP no infiere el régimen
+  ni la tarifa por el RUC: el usuario puede elegir un escenario manual al 25 %,
+  que el backend calcula con `Decimal` y rotula como referencia antes de
+  conciliación. Tributario usa una sola página
+  con accesos a renta, mes/declaración, detalle anual y retenciones. El dashboard
+  principal muestra el corte de compras y resultado de meses con IVA presentado,
+  junto con el escenario manual. Pasan las pruebas dirigidas de backend y UI;
+  la suite completa conserva fallos ajenos por la clave Fernet local y un caso
+  de nómina de otra sesión. Pendiente promoción por CI.
+
 - Dashboard y clasificación tributaria/interna de compras listos localmente:
   2026-08-22 `America/Guayaquil`. El tratamiento tributario queda separado del
   control interno: una compra puede ser deducible o no deducible ante el SRI y,

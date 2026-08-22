@@ -41,6 +41,18 @@ const dashboard = {
     resultBeforeAdjustments: '1890.26',
     incomeTaxWithheld: '320.00',
     ivaWithheld: '95.00',
+    declaredSalesBase: '3000.00',
+    declaredDeductiblePurchasesBase: '1500.00',
+    declaredResultBeforeAdjustments: '1500.00',
+    declaredIncomeTaxWithheld: '300.00',
+    declaredMonthCount: 7,
+    lastDeclaredMonth: 7,
+    estimatedIncomeTaxRate: null,
+    declaredEstimatedIncomeTax: null,
+    projectedEstimatedIncomeTax: null,
+    declaredEstimatedBalance: null,
+    projectedEstimatedBalance: null,
+    estimateReason: 'Selecciona un escenario de tarifa en pantalla; IAERP no infiere la tarifa por el RUC.',
     pendingReviewDocumentCount: 3,
     preliminaryDocumentCount: 2,
     refundStatus: 'REVIEW_AT_ANNUAL_CLOSE',
@@ -128,7 +140,23 @@ async function mockApi(page: Page) {
   await page.route('**/api/v1/receivables/collections/monthly**', (route) => route.fulfill({
     json: { months: collectionMonths },
   }))
-  await page.route('**/api/v1/tax/dashboard**', (route) => route.fulfill({ json: dashboard }))
+  await page.route('**/api/v1/tax/dashboard**', (route) => {
+    const hasScenario = new URL(route.request().url()).searchParams.get('income_tax_rate') === '25'
+    return route.fulfill({
+      json: hasScenario ? {
+        ...dashboard,
+        annual: {
+          ...dashboard.annual,
+          estimatedIncomeTaxRate: '25.00',
+          declaredEstimatedIncomeTax: '375.00',
+          projectedEstimatedIncomeTax: '472.57',
+          declaredEstimatedBalance: '75.00',
+          projectedEstimatedBalance: '152.57',
+          estimateReason: 'Escenario manual al 25 %. No incluye conciliación tributaria ni ajustes del cierre y no es una liquidación del SRI.',
+        },
+      } : dashboard,
+    })
+  })
   await page.route('**/api/v1/tax/periods**', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/tax/purchases', (route) => route.fulfill({ json: purchases }))
   await page.route('**/api/v1/analytic-classifications', (route) => route.fulfill({ json: [{
@@ -268,11 +296,14 @@ test('dashboard muestra evolución y corte mensual documentado', async ({ page }
 test('dashboard muestra el avance anual y abre su detalle directo', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Año fiscal 2026' })).toBeVisible()
   const annualSummary = page.getByLabel('Resumen tributario del año 2026')
-  await expect(annualSummary).toContainText('Compras para declaración')
-  await expect(annualSummary).toContainText('$1.800,00')
-  await expect(annualSummary).toContainText('Resultado antes de ajustes')
-  await expect(annualSummary).toContainText('$1.890,26')
-  await expect(annualSummary).toContainText('$320,00')
+  await expect(annualSummary).toContainText('Compras deducibles · IVA presentado')
+  await expect(annualSummary).toContainText('$1.500,00')
+  await expect(annualSummary).toContainText('Resultado parcial · IVA presentado')
+  await expect(annualSummary).toContainText('Renta estimada')
+  await expect(annualSummary).toContainText('Elige una tarifa')
+  await page.getByLabel('Escenario renta').selectOption('25')
+  await expect(annualSummary).toContainText('$472,57')
+  await expect(annualSummary).toContainText('Escenario manual al 25 %')
   await page.getByLabel('Ver compras').selectOption('PENDING')
   await expect(annualSummary).toContainText('Compras tributarias por revisar')
   await expect(annualSummary).toContainText('$450,00')
@@ -287,7 +318,7 @@ test('dashboard muestra el avance anual y abre su detalle directo', async ({ pag
   await expect(page.getByText(/faltan respaldos completos en 2 comprobante/)).toBeVisible()
 
   await page.getByRole('button', { name: 'Ver detalle anual' }).click()
-  await expect(page.getByRole('tab', { name: 'Año fiscal' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('heading', { name: 'Detalle del año fiscal' })).toBeVisible()
 })
 
 test('la sección de caja separa el dinero de las retenciones', async ({ page }) => {

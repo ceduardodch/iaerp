@@ -6,6 +6,7 @@ Etapa E1: periodos y carga de evidencia. La lectura del contenido (crear
 
 import uuid
 from datetime import date
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
@@ -80,13 +81,15 @@ async def get_tax_dashboard(
     context: Annotated[AuthContext, Depends(require_scopes("tax:read"))],
     months: Annotated[int, Query(ge=6, le=24)] = 12,
     as_of: Annotated[date | None, Query()] = None,
+    income_tax_rate: Annotated[Decimal | None, Query(gt=0, le=100)] = None,
 ) -> DashboardTaxRead:
-    """Evolución mensual y avance fiscal acumulado hasta el mes elegido."""
+    """Evolución mensual y escenario fiscal acumulado hasta el mes elegido."""
     report = await reporting_service.dashboard_tax_report(
         session,
         context,
         as_of=as_of or today_in_fiscal_timezone(),
         months=months,
+        income_tax_rate=income_tax_rate,
     )
     current = report.current_month
     annual = report.annual
@@ -142,6 +145,44 @@ async def get_tax_dashboard(
                 result_before_adjustments=format_amount(annual.result_before_adjustments),
             income_tax_withheld=format_amount(annual.income_tax_withheld),
             iva_withheld=format_amount(annual.iva_withheld),
+            declared_sales_base=format_amount(annual.declared_sales_base),
+            declared_deductible_purchases_base=format_amount(
+                annual.declared_deductible_purchases_base
+            ),
+            declared_result_before_adjustments=format_amount(
+                annual.declared_result_before_adjustments
+            ),
+            declared_income_tax_withheld=format_amount(
+                annual.declared_income_tax_withheld
+            ),
+            declared_month_count=annual.declared_month_count,
+            last_declared_month=annual.last_declared_month,
+            estimated_income_tax_rate=(
+                format_amount(annual.estimated_income_tax_rate)
+                if annual.estimated_income_tax_rate is not None
+                else None
+            ),
+            declared_estimated_income_tax=(
+                format_amount(annual.declared_estimated_income_tax)
+                if annual.declared_estimated_income_tax is not None
+                else None
+            ),
+            projected_estimated_income_tax=(
+                format_amount(annual.projected_estimated_income_tax)
+                if annual.projected_estimated_income_tax is not None
+                else None
+            ),
+            declared_estimated_balance=(
+                format_amount(annual.declared_estimated_balance)
+                if annual.declared_estimated_balance is not None
+                else None
+            ),
+            projected_estimated_balance=(
+                format_amount(annual.projected_estimated_balance)
+                if annual.projected_estimated_balance is not None
+                else None
+            ),
+            estimate_reason=annual.estimate_reason,
             pending_review_document_count=annual.pending_review_document_count,
             preliminary_document_count=annual.preliminary_document_count,
             refund_status=annual.refund_status,
@@ -150,6 +191,8 @@ async def get_tax_dashboard(
             months=[
                 AnnualFiscalMonthRead(
                     month=month.month,
+                    status=month.status,
+                    is_declared=month.is_declared,
                     sales_base=format_amount(month.sales_base),
                     deductible_purchases_base=format_amount(
                         month.deductible_purchases_base

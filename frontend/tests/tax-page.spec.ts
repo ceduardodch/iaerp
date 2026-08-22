@@ -97,6 +97,18 @@ const annualDashboard = {
     resultBeforeAdjustments: '7700.00',
     incomeTaxWithheld: '860.25',
     ivaWithheld: '320.80',
+    declaredSalesBase: '10000.00',
+    declaredDeductiblePurchasesBase: '3500.00',
+    declaredResultBeforeAdjustments: '6500.00',
+    declaredIncomeTaxWithheld: '700.00',
+    declaredMonthCount: 10,
+    lastDeclaredMonth: 10,
+    estimatedIncomeTaxRate: null,
+    declaredEstimatedIncomeTax: null,
+    projectedEstimatedIncomeTax: null,
+    declaredEstimatedBalance: null,
+    projectedEstimatedBalance: null,
+    estimateReason: 'Selecciona un escenario de tarifa en pantalla; IAERP no infiere la tarifa por el RUC.',
     pendingReviewDocumentCount: 1,
     preliminaryDocumentCount: 1,
     refundStatus: 'REVIEW_AT_ANNUAL_CLOSE',
@@ -107,6 +119,8 @@ const annualDashboard = {
     ],
     months: Array.from({ length: 12 }, (_, index) => ({
       month: index + 1,
+      status: index < 10 ? 'DECLARADO' : index === 10 ? 'LISTO_REVISAR' : 'SIN_PERIODO',
+      isDeclared: index < 10,
       salesBase: index === 10 ? '1836.00' : '0.00',
       deductiblePurchasesBase: index === 10 ? '13.13' : '0.00',
       incomeTaxWithheld: index === 10 ? '8.59' : '0.00',
@@ -121,7 +135,23 @@ async function mockApi(page: Page) {
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
   await mockDashboardEndpoints(page)
-  await page.route('**/api/v1/tax/dashboard**', (route) => route.fulfill({ json: annualDashboard }))
+  await page.route('**/api/v1/tax/dashboard**', (route) => {
+    const hasScenario = new URL(route.request().url()).searchParams.get('income_tax_rate') === '25'
+    return route.fulfill({
+      json: hasScenario ? {
+        ...annualDashboard,
+        annual: {
+          ...annualDashboard.annual,
+          estimatedIncomeTaxRate: '25.00',
+          declaredEstimatedIncomeTax: '1625.00',
+          projectedEstimatedIncomeTax: '1925.00',
+          declaredEstimatedBalance: '925.00',
+          projectedEstimatedBalance: '1064.75',
+          estimateReason: 'Escenario manual al 25 %. No incluye conciliación tributaria ni ajustes del cierre y no es una liquidación del SRI.',
+        },
+      } : annualDashboard,
+    })
+  })
   await page.route('**/api/v1/context', (route) => route.fulfill({
     json: {
       tenantId: '11111111-1111-4111-8111-111111111111',
@@ -265,49 +295,40 @@ test('muestra los periodos agrupados por año', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Noviembre/ })).toBeVisible()
 })
 
-test('organiza Tributario en pestañas accesibles y permite usar el teclado', async ({ page }) => {
-  const monthTab = page.getByRole('tab', { name: 'Mes y declaración' })
-  const yearTab = page.getByRole('tab', { name: 'Año fiscal' })
-  const retentionsTab = page.getByRole('tab', { name: 'Retenciones' })
-  await expect(monthTab).toHaveAttribute('aria-selected', 'true')
-  await expect(monthTab).toHaveAttribute('aria-controls', 'tax-panel-month')
-  await expect(yearTab).toHaveAttribute('aria-controls', 'tax-panel-year')
-  await expect(retentionsTab).toHaveAttribute('aria-controls', 'tax-panel-retentions')
-  await expect(page.locator('#tax-panel-month')).toHaveCount(1)
-  await expect(page.locator('#tax-panel-year')).toHaveCount(1)
-  await expect(page.locator('#tax-panel-retentions')).toHaveCount(1)
-  await monthTab.focus()
-  await monthTab.press('ArrowRight')
-  await expect(yearTab).toBeFocused()
-  await expect(yearTab).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('tabpanel', { name: 'Año fiscal' })).toBeVisible()
-  await yearTab.press('End')
-  await expect(retentionsTab).toBeFocused()
-  await retentionsTab.press('Home')
-  await expect(monthTab).toBeFocused()
-  await monthTab.press('ArrowLeft')
-  await expect(retentionsTab).toBeFocused()
-  await retentionsTab.press('Tab')
-  const retentionsPanel = page.locator('#tax-panel-retentions')
-  await expect(retentionsPanel).toBeFocused()
-  expect(await retentionsPanel.evaluate((panel) => getComputedStyle(panel).outlineStyle))
-    .not.toBe('none')
+test('organiza Tributario en una sola página con accesos por sección', async ({ page }) => {
+  const navigation = page.getByRole('navigation', { name: 'Secciones de Tributario' })
+  await expect(navigation.getByRole('link', { name: 'Renta del año' }))
+    .toHaveAttribute('href', '#tax-income-pulse')
+  await expect(navigation.getByRole('link', { name: 'Mes y declaración' }))
+    .toHaveAttribute('href', '#tax-section-month')
+  await expect(navigation.getByRole('link', { name: 'Detalle anual' }))
+    .toHaveAttribute('href', '#tax-section-year')
+  await expect(navigation.getByRole('link', { name: 'Retenciones' }))
+    .toHaveAttribute('href', '#tax-section-retentions')
+  await expect(page.locator('#tax-section-month')).toBeVisible()
+  await expect(page.locator('#tax-section-year')).toBeVisible()
+  await expect(page.locator('#tax-section-retentions')).toBeVisible()
+  await navigation.getByRole('link', { name: 'Renta del año' }).focus()
+  await expect(navigation.getByRole('link', { name: 'Renta del año' })).toBeFocused()
 })
 
 test('muestra el avance anual sin presentar una declaración definitiva', async ({ page }) => {
-  await page.getByRole('tab', { name: 'Año fiscal' }).click()
-  const panel = page.getByRole('tabpanel', { name: 'Año fiscal' })
-  await expect(panel).toContainText('Ventas netas del año')
-  await expect(panel).toContainText('$12.000,00')
+  const panel = page.locator('#tax-section-year')
+  await expect(panel).toContainText('Ventas · meses con IVA presentado')
+  await expect(panel).toContainText('$10.000,00')
+  await expect(panel).toContainText('Compras deducibles · meses con IVA presentado')
+  await expect(panel).toContainText('$3.500,00')
   await expect(panel).toContainText('Compras por revisar')
-  await expect(panel).toContainText('No reemplaza la declaración anual')
+  await expect(panel).toContainText('no sustituye la declaración anual de renta')
   await expect(panel.getByLabel('Avance mensual del año fiscal 2025')).toBeVisible()
+  await page.getByLabel('Escenario de renta').selectOption('25')
+  await expect(page.locator('#tax-income-pulse')).toContainText('Escenario manual al 25 %')
+  await expect(page.locator('#tax-income-pulse')).toContainText('Saldo estimado del año')
 })
 
 test('explica el posible saldo a favor sin afirmar que ya procede una devolución', async ({ page }) => {
-  await page.getByRole('tab', { name: 'Retenciones' }).click()
-  const panel = page.getByRole('tabpanel', { name: 'Retenciones' })
-  await expect(panel).toContainText('Retenciones de renta acumuladas')
+  const panel = page.locator('#tax-section-retentions')
+  await expect(panel).toContainText('Retenciones de renta registradas en el año')
   await expect(panel).toContainText('$860,25')
   await expect(panel).toContainText('Revisar al cierre anual')
   await expect(panel).toContainText('posible saldo a favor')
@@ -315,10 +336,9 @@ test('explica el posible saldo a favor sin afirmar que ya procede una devolució
   await expect(panel.getByRole('alert')).toContainText('Carga sus XML')
 })
 
-test('las pestañas y la vista anual funcionan en celular sin fallas de accesibilidad', async ({ page }) => {
+test('la vista one-page anual funciona en celular sin fallas de accesibilidad', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('tab', { name: 'Año fiscal' }).click()
-  const panel = page.getByRole('tabpanel', { name: 'Año fiscal' })
+  const panel = page.locator('#tax-section-year')
   await expect(panel).toBeVisible()
   const salesCell = panel.locator('td[data-label="Ventas"]').first()
   await expect(salesCell).toHaveAttribute('data-label', 'Ventas')
@@ -329,7 +349,7 @@ test('las pestañas y la vista anual funcionan en celular sin fallas de accesibi
   expect(await salesCell.evaluate((cell) => getComputedStyle(cell, '::before').content))
     .toContain('Ventas')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  const results = await new AxeBuilder({ page }).include('.tax-tabs').include('#tax-panel-year').analyze()
+  const results = await new AxeBuilder({ page }).include('.tax-onepage-nav').include('#tax-section-year').analyze()
   expect(results.violations).toEqual([])
 })
 
@@ -342,8 +362,7 @@ test('muestra el error del tablero también dentro de Retenciones', async ({ pag
   await page.reload()
   await page.getByRole('button', { name: 'Continuar' }).click()
   await navigateToSection(page, 'Tributario')
-  await page.getByRole('tab', { name: 'Retenciones' }).click()
-  await expect(page.locator('#tax-panel-retentions').getByRole('alert')).toBeVisible()
+  await expect(page.locator('#tax-section-retentions').getByRole('alert')).toBeVisible()
 })
 
 test('muestra los valores del formulario con dos decimales', async ({ page }) => {
@@ -365,7 +384,7 @@ test('separa los campos para pegar de los que el SRI autocalcula', async ({ page
 })
 
 test('advierte cuando los datos son preliminares', async ({ page }) => {
-  const warning = page.getByRole('alert')
+  const warning = page.locator('#tax-section-month').getByRole('alert')
   await expect(warning).toContainText('Aún no está listo para declarar')
   await expect(warning).toContainText('carga su XML autorizado antes de declarar')
   await expect(page.getByRole('button', { name: 'Copiar campo 401' })).toBeDisabled()
@@ -457,7 +476,7 @@ test('separa cada comprobante y muestra su ID IAERP', async ({ page }) => {
 
 test('genera el ATS y ofrece su descarga privada', async ({ page }) => {
   await page.getByRole('button', { name: 'Generar ATS' }).click()
-  await expect(page.getByRole('status')).toContainText('ATS v1 generado')
+  await expect(page.locator('#tax-section-month').getByRole('status')).toContainText('ATS v1 generado')
   await expect(page.getByRole('link', { name: 'Descargar ZIP' })).toHaveAttribute(
     'href',
     'https://private.example/AT112025.zip',

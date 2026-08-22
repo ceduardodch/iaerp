@@ -15,7 +15,7 @@ import {
   type TaxPeriod,
   type TaxXmlRecoveryJob,
 } from '../../api'
-import { ErpButton, ErpDataTable, ErpEmptyState, ErpMetricGrid, ErpPageHeader, ErpPanel, ErpStatusBadge, ErpTabs } from '../erp'
+import { ErpButton, ErpDataTable, ErpEmptyState, ErpMetricGrid, ErpPageHeader, ErpPanel, ErpStatusBadge } from '../erp'
 import './TaxPage.css'
 
 const MONTHS = [
@@ -69,13 +69,7 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   LIQUIDACION: 'Liquidación',
 }
 
-const TAX_TABS = [
-  { id: 'month', label: 'Mes y declaración' },
-  { id: 'year', label: 'Año fiscal' },
-  { id: 'retentions', label: 'Retenciones' },
-] as const
-
-type TaxTab = (typeof TAX_TABS)[number]['id']
+type TaxTab = 'month' | 'year' | 'retentions'
 
 type HistoricalTaxCandidate = {
   id: string
@@ -182,7 +176,7 @@ export function TaxPage({
   const [openDossierId, setOpenDossierId] = useState<string | null>(null)
   const [exceptionEvidence, setExceptionEvidence] = useState<Record<string, string>>({})
   const [groupByClassificationId, setGroupByClassificationId] = useState('')
-  const [activeTab, setActiveTab] = useState<TaxTab>(initialTab)
+  const [incomeTaxScenario, setIncomeTaxScenario] = useState<'NONE' | '25'>('NONE')
   const evidenceInputRef = useRef<HTMLInputElement>(null)
 
   const periodsQuery = useQuery({
@@ -200,13 +194,24 @@ export function TaxPage({
   const dashboardAsOf = activePeriod
     ? `${activePeriod.year}-${String(activePeriod.month).padStart(2, '0')}-01`
     : undefined
+  const dashboardParameters = new URLSearchParams()
+  if (dashboardAsOf) dashboardParameters.set('as_of', dashboardAsOf)
+  if (incomeTaxScenario === '25') dashboardParameters.set('income_tax_rate', '25')
+  const dashboardQueryString = dashboardParameters.toString()
   const dashboardQuery = useQuery({
-    queryKey: ['tax', 'dashboard', dashboardAsOf],
+    queryKey: ['tax', 'dashboard', dashboardAsOf, incomeTaxScenario],
     queryFn: () => apiRequest<DashboardTax>(
       token,
-      `/tax/dashboard${dashboardAsOf ? `?as_of=${dashboardAsOf}` : ''}`,
+      `/tax/dashboard${dashboardQueryString ? `?${dashboardQueryString}` : ''}`,
     ),
   })
+
+  useEffect(() => {
+    if (initialTab !== 'year' || dashboardQuery.isPending) return
+    window.requestAnimationFrame(() => {
+      document.querySelector('#tax-section-year')?.scrollIntoView({ block: 'start' })
+    })
+  }, [dashboardQuery.isPending, initialTab])
 
   const ivaQuery = useQuery({
     queryKey: ['tax', 'iva', activePeriodId],
@@ -489,28 +494,76 @@ export function TaxPage({
       <ErpPageHeader
         eyebrow="Obligaciones SRI"
         title="Tributario"
-        subtitle="Carga y revisa la evidencia tributaria registrada."
+        subtitle="Separa los documentos de meses con IVA presentado de los meses aún abiertos."
       />
 
-      <nav className="tax-tabs" aria-label="Vistas de Tributario">
-        <ErpTabs
-          tabs={TAX_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
-          value={activeTab}
-          onChange={setActiveTab}
-          ariaLabel="Panel tributario"
-          idPrefix="tax-tab"
-          panelIdPrefix="tax-panel"
-        />
+      <nav className="tax-onepage-nav" aria-label="Secciones de Tributario">
+        <a href="#tax-income-pulse">Renta del año</a>
+        <a href="#tax-section-month">Mes y declaración</a>
+        <a href="#tax-section-year">Detalle anual</a>
+        <a href="#tax-section-retentions">Retenciones</a>
       </nav>
 
-      <div
-        id="tax-panel-month"
-        role="tabpanel"
-        aria-labelledby="tax-tab-month"
-        className="tax-tab-panel"
-        tabIndex={0}
-        hidden={activeTab !== 'month'}
-      >
+      <section id="tax-income-pulse" className="tax-income-pulse" aria-label="Renta estimada">
+        <ErpPanel title={`Renta estimada · ${dashboardQuery.data?.annual.year ?? activePeriod?.year ?? ''}`}>
+          {dashboardQuery.isPending ? <p className="fine-print" aria-busy="true">Calculando el avance anual…</p> : null}
+          {dashboardQuery.error ? <p className="form-error" role="alert">{dashboardQuery.error.message}</p> : null}
+          {dashboardQuery.data?.annual ? (
+            <>
+              <div className="tax-income-heading">
+                <div>
+                  <span>Corte documental</span>
+                  <strong>{dashboardQuery.data.annual.declaredMonthCount} mes(es) con IVA presentado</strong>
+                </div>
+                <ErpStatusBadge tone={dashboardQuery.data.annual.declaredMonthCount > 0 ? 'success' : 'warning'}>
+                  {dashboardQuery.data.annual.lastDeclaredMonth
+                    ? `Hasta ${monthName(dashboardQuery.data.annual.lastDeclaredMonth)}`
+                    : 'Sin IVA presentado'}
+                </ErpStatusBadge>
+                <label>
+                  Escenario de renta
+                  <select value={incomeTaxScenario} onChange={(event) => setIncomeTaxScenario(event.target.value as 'NONE' | '25')}>
+                    <option value="NONE">Sin tarifa</option>
+                    <option value="25">25 % referencial</option>
+                  </select>
+                </label>
+              </div>
+              <ErpMetricGrid ariaLabel="Corte documental y proyección anual">
+                <article className="metric-card">
+                  <span>Resultado parcial de meses con IVA presentado</span>
+                  <strong>{formatDashboardCurrency(dashboardQuery.data.annual.declaredResultBeforeAdjustments)}</strong>
+                  <p>Ventas menos compras deducibles de esos meses; es un cálculo vivo, no la declaración anual de renta.</p>
+                </article>
+                <article className="metric-card">
+                  <span>Impuesto referencial sobre meses con IVA presentado</span>
+                  <strong>{dashboardQuery.data.annual.declaredEstimatedIncomeTax === null ? 'Elige una tarifa' : formatDashboardCurrency(dashboardQuery.data.annual.declaredEstimatedIncomeTax)}</strong>
+                  <p>{dashboardQuery.data.annual.estimateReason}</p>
+                </article>
+                <article className="metric-card tax-income-projection">
+                  <span>{dashboardQuery.data.annual.projectedEstimatedBalance === null ? 'Resultado proyectado antes de ajustes' : 'Saldo estimado del año'}</span>
+                  <strong>{dashboardQuery.data.annual.projectedEstimatedBalance === null
+                    ? formatDashboardCurrency(dashboardQuery.data.annual.resultBeforeAdjustments)
+                    : formatDashboardCurrency(dashboardQuery.data.annual.projectedEstimatedBalance)}</strong>
+                  <p>{dashboardQuery.data.annual.projectedEstimatedBalance === null
+                    ? 'Incluye meses abiertos; falta elegir una tarifa y hacer la conciliación.'
+                    : 'Impuesto del escenario menos retenciones registradas. Positivo: posible pago; negativo: posible saldo a favor.'}</p>
+                </article>
+              </ErpMetricGrid>
+              <div className="tax-income-formula" role="note">
+                <span>Meses con IVA presentado</span>
+                <strong>{formatDashboardCurrency(dashboardQuery.data.annual.declaredSalesBase)}</strong>
+                <span>ventas −</span>
+                <strong>{formatDashboardCurrency(dashboardQuery.data.annual.declaredDeductiblePurchasesBase)}</strong>
+                <span>compras deducibles =</span>
+                <strong>{formatDashboardCurrency(dashboardQuery.data.annual.declaredResultBeforeAdjustments)}</strong>
+              </div>
+            </>
+          ) : null}
+        </ErpPanel>
+      </section>
+
+      <section id="tax-section-month" className="tax-onepage-section" aria-labelledby="tax-month-title">
+        <h2 id="tax-month-title" className="tax-section-title">Mes y declaración</h2>
 
       <ErpPanel title="Cargar comprobantes del SRI">
         <div className="tax-upload">
@@ -1094,22 +1147,22 @@ export function TaxPage({
           </ErpPanel>
         </>
       ) : null}
-      </div>
+      </section>
 
-        <div id="tax-panel-year" role="tabpanel" aria-labelledby="tax-tab-year" className="tax-tab-panel" tabIndex={0} hidden={activeTab !== 'year'}>
+        <section id="tax-section-year" className="tax-onepage-section" aria-labelledby="tax-year-title">
+          <h2 id="tax-year-title" className="tax-section-title">Detalle del año fiscal</h2>
           <ErpPanel title={`Año fiscal ${dashboardQuery.data?.annual.year ?? activePeriod?.year ?? ''}`}>
             {dashboardQuery.isPending ? <p className="fine-print">Calculando el avance anual…</p> : null}
             {dashboardQuery.error ? <p className="form-error" role="alert">{dashboardQuery.error.message}</p> : null}
             {dashboardQuery.data?.annual ? (
               <>
-                <p className="fine-print">
-                  Corte de gestión con documentos registrados. No reemplaza la declaración anual ni la conciliación tributaria.
-                </p>
+                <p className="fine-print">Este corte usa documentos de meses con IVA marcado como presentado. Se recalcula si cambian los documentos o su clasificación y no sustituye la declaración anual de renta.</p>
                 <ErpMetricGrid ariaLabel="Resumen del año fiscal">
-                  <article className="metric-card"><span>Ventas netas del año</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.salesBase)}</strong></article>
-                  <article className="metric-card"><span>Compras deducibles confirmadas</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.deductiblePurchasesBase)}</strong></article>
+                  <article className="metric-card"><span>Ventas · meses con IVA presentado</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.declaredSalesBase)}</strong></article>
+                  <article className="metric-card"><span>Compras deducibles · meses con IVA presentado</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.declaredDeductiblePurchasesBase)}</strong></article>
+                  <article className="metric-card"><span>Impuesto del escenario</span><strong>{dashboardQuery.data.annual.declaredEstimatedIncomeTax === null ? 'Elige una tarifa' : formatDashboardCurrency(dashboardQuery.data.annual.declaredEstimatedIncomeTax)}</strong></article>
+                  <article className="metric-card"><span>Proyección del resultado</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.resultBeforeAdjustments)}</strong></article>
                   <article className="metric-card"><span>Compras no deducibles</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.nonDeductiblePurchasesBase)}</strong></article>
-                  <article className="metric-card"><span>Resultado antes de ajustes</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.resultBeforeAdjustments)}</strong></article>
                   <article className="metric-card tax-annual-attention">
                     <span>Compras por revisar</span>
                     <strong>{formatDashboardCurrency(dashboardQuery.data.annual.pendingReviewPurchasesBase)}</strong>
@@ -1122,6 +1175,7 @@ export function TaxPage({
                   rowKey={(month) => String(month.month)}
                   columns={[
                     { header: 'Mes', mobileLabel: 'Mes', cell: (month) => <>{monthName(month.month)}</> },
+                    { header: 'Estado', mobileLabel: 'Estado', cell: (month) => <ErpStatusBadge tone={month.isDeclared ? 'success' : 'neutral'}>{month.isDeclared ? 'IVA presentado' : 'Mes abierto'}</ErpStatusBadge> },
                     { header: 'Ventas', mobileLabel: 'Ventas', cell: (month) => <>{formatDashboardCurrency(month.salesBase)}</> },
                     { header: 'Compras deducibles', mobileLabel: 'Compras deducibles', cell: (month) => <>{formatDashboardCurrency(month.deductiblePurchasesBase)}</> },
                     { header: 'Retención de renta', mobileLabel: 'Retención de renta', cell: (month) => <>{formatDashboardCurrency(month.incomeTaxWithheld)}</> },
@@ -1134,16 +1188,17 @@ export function TaxPage({
               </>
             ) : null}
           </ErpPanel>
-        </div>
+        </section>
 
-        <div id="tax-panel-retentions" role="tabpanel" aria-labelledby="tax-tab-retentions" className="tax-tab-panel tax-retention-panel" tabIndex={0} hidden={activeTab !== 'retentions'}>
+        <section id="tax-section-retentions" className="tax-onepage-section tax-retention-panel" aria-labelledby="tax-retentions-title">
+          <h2 id="tax-retentions-title" className="tax-section-title">Retenciones</h2>
           <ErpPanel title="Retenciones y posible saldo a favor">
             {dashboardQuery.isPending ? <p className="fine-print">Revisando retenciones…</p> : null}
             {dashboardQuery.error ? <p className="form-error" role="alert">{dashboardQuery.error.message}</p> : null}
             {dashboardQuery.data?.annual ? (
               <>
                 <ErpMetricGrid ariaLabel="Retenciones acumuladas">
-                  <article className="metric-card"><span>Retenciones de renta acumuladas</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.incomeTaxWithheld)}</strong></article>
+                  <article className="metric-card"><span>Retenciones de renta registradas en el año</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.incomeTaxWithheld)}</strong></article>
                   <article className="metric-card"><span>Retenciones de IVA acumuladas</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.ivaWithheld)}</strong></article>
                 </ErpMetricGrid>
                 <div className="tax-refund-guidance" role="status">
@@ -1171,7 +1226,7 @@ export function TaxPage({
               </>
             ) : null}
           </ErpPanel>
-        </div>
+        </section>
     </>
   )
 }
