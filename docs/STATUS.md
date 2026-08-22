@@ -7,6 +7,18 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Edición masiva de compras lista localmente: 2026-08-22
+  `America/Guayaquil`. La vista Compras permite seleccionar hasta 100 filas
+  visibles y cambiar en un solo guardado el uso tributario, el control interno
+  y los tags. Cada campo puede quedar en `No cambiar`, por lo que el lote no
+  pisa datos distintos por accidente; también permite reemplazar o limpiar los
+  tags. Un cambio tributario exige motivo y conserva el bloqueo de periodos ya
+  declarados. El servidor procesa cada compra con idempotencia y auditoría,
+  guarda las válidas y devuelve las fallidas para reintento. Pasan Ruff, las 24
+  pruebas de CxP, lint, build y los 32 recorridos Playwright del módulo en
+  escritorio y móvil, incluidos WCAG y reflow. El usuario autorizó la
+  promoción por `release -> PR -> main`; pendiente CI, Coolify y salud pública.
+
 - Dashboard tributario one-page y escenario de renta listos localmente:
   2026-08-22 `America/Guayaquil`. El estado `DECLARADO` de un periodo IVA solo
   identifica los documentos de meses cuyo IVA se marcó como presentado; no se

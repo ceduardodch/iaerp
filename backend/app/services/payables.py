@@ -21,6 +21,7 @@ from app.models.tax import FiscalDocument, TaxPeriod
 from app.schemas.payables import (
     ExpenseRuleCreate,
     PayableAdjustmentCreate,
+    PayableBulkClassificationUpdate,
     PayableClassificationUpdate,
     PayableCreate,
     PayableDocumentBulkReviewCreate,
@@ -297,7 +298,29 @@ async def update_payable_classification(
     classification_changed = payable.tax_classification != data.tax_classification
     if classification_changed and not data.reason:
         raise HTTPException(status_code=422, detail="Indica por qué cambias el uso fiscal")
-    if classification_changed and payable.fiscal_document_id is not None:
+    if classification_changed:
+        await _ensure_fiscal_use_can_change(session, context, payable=payable)
+    payable.tax_classification = data.tax_classification
+    if data.internal_classification is not None:
+        payable.internal_classification = data.internal_classification
+    await analytics.replace_assignments(
+        session,
+        context,
+        target_type="PAYABLE",
+        target_id=payable.id,
+        value_ids=data.analytic_value_ids,
+    )
+    await session.flush()
+    return await to_read(session, tenant_id=context.tenant_id, payable=payable)
+
+
+async def _ensure_fiscal_use_can_change(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    payable: Payable,
+) -> None:
+    if payable.fiscal_document_id is not None:
         declared_period = await session.scalar(
             select(TaxPeriod)
             .join(
@@ -319,16 +342,31 @@ async def update_payable_classification(
                     "declaración antes de cambiar su uso fiscal"
                 ),
             )
-    payable.tax_classification = data.tax_classification
+
+
+async def update_payable_bulk_classification(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    payable_id: uuid.UUID,
+    data: PayableBulkClassificationUpdate,
+) -> PayableRead:
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    if data.tax_classification is not None:
+        classification_changed = payable.tax_classification != data.tax_classification
+        if classification_changed:
+            await _ensure_fiscal_use_can_change(session, context, payable=payable)
+        payable.tax_classification = data.tax_classification
     if data.internal_classification is not None:
         payable.internal_classification = data.internal_classification
-    await analytics.replace_assignments(
-        session,
-        context,
-        target_type="PAYABLE",
-        target_id=payable.id,
-        value_ids=data.analytic_value_ids,
-    )
+    if data.analytic_change == "REPLACE":
+        await analytics.replace_assignments(
+            session,
+            context,
+            target_type="PAYABLE",
+            target_id=payable.id,
+            value_ids=data.analytic_value_ids,
+        )
     await session.flush()
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
 

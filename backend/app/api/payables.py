@@ -19,6 +19,9 @@ from app.schemas.payables import (
     ExpenseRuleCreate,
     ExpenseRuleRead,
     PayableAdjustmentCreate,
+    PayableBulkClassificationItemRead,
+    PayableBulkClassificationRead,
+    PayableBulkClassificationUpdate,
     PayableClassificationUpdate,
     PayableCreate,
     PayableDocumentBulkReviewCreate,
@@ -146,6 +149,98 @@ async def put_payable_classification(
             "tax_classification": data.tax_classification,
             "internal_classification": data.internal_classification,
         },
+    )
+
+
+@router.put(
+    "/payables/classifications/bulk",
+    response_model=PayableBulkClassificationRead,
+    summary="Editar la clasificación de varias compras",
+)
+async def put_payable_bulk_classification(
+    data: PayableBulkClassificationUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("payables:write"))],
+) -> PayableBulkClassificationRead:
+    results: list[PayableBulkClassificationItemRead] = []
+    base_payload = data.model_dump(mode="json")
+
+    async def register_manifest() -> tuple[str, dict[str, object]]:
+        manifest_id = hashlib.sha256(
+            ":".join(sorted(str(payable_id) for payable_id in data.payable_ids)).encode()
+        ).hexdigest()
+        return manifest_id, {"accepted": True}
+
+    # La clave que envía el cliente pertenece al lote completo. Este manifiesto
+    # hace que reutilizarla con otros IDs o decisiones falle antes de escribir;
+    # las claves hijas conservan el replay y el resultado independiente por CxP.
+    await execute_idempotent(
+        session,
+        context=context,
+        operation="payables.classification.bulk_manifest",
+        idempotency_key=idempotency_key,
+        request_payload=base_payload,
+        action="payable.bulk_classification_started",
+        entity_type="payable_bulk",
+        callback=register_manifest,
+        audit_details={"payable_ids": [str(item) for item in data.payable_ids]},
+    )
+
+    for payable_id in data.payable_ids:
+        child_key = (
+            "payable-bulk-classification:"
+            + hashlib.sha256(f"{idempotency_key}:{payable_id}".encode()).hexdigest()
+        )
+        item_payload = {**base_payload, "payableIds": [str(payable_id)]}
+
+        async def update_item(
+            current_payable_id: uuid.UUID = payable_id,
+        ) -> tuple[str, dict[str, object]]:
+            item = await payables.update_payable_bulk_classification(
+                session,
+                context,
+                payable_id=current_payable_id,
+                data=data,
+            )
+            return str(item.id), {
+                "payableId": str(item.id),
+                "status": "UPDATED",
+                "detail": "Compra actualizada",
+            }
+
+        try:
+            response = await execute_idempotent(
+                session,
+                context=context,
+                operation="payables.classification.bulk_item",
+                idempotency_key=child_key,
+                request_payload=item_payload,
+                action="payable.classification_updated",
+                entity_type="payable",
+                callback=update_item,
+                audit_details={
+                    "bulk": True,
+                    "reason": data.reason,
+                    "tax_classification": data.tax_classification,
+                    "internal_classification": data.internal_classification,
+                    "analytic_change": data.analytic_change,
+                },
+            )
+            results.append(PayableBulkClassificationItemRead.model_validate(response))
+        except HTTPException as exc:
+            results.append(
+                PayableBulkClassificationItemRead(
+                    payable_id=payable_id,
+                    status="FAILED",
+                    detail=str(exc.detail),
+                )
+            )
+
+    return PayableBulkClassificationRead(
+        updated_count=sum(item.status == "UPDATED" for item in results),
+        failed_count=sum(item.status == "FAILED" for item in results),
+        items=results,
     )
 
 
