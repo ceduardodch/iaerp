@@ -6,7 +6,7 @@
 > "SKIPPED" mientras otra sesión lo completaba, y tests borrados/debilitados
 > para forzar el CI en verde. Este doc evita que se repita.
 
-**Última actualización:** 2026-08-21 (America/Guayaquil)
+**Última actualización:** 2026-08-22 (America/Guayaquil)
 
 > **Estado actual (2026-07-23):** plan UI/UX (Sprints 1-9) **completo**; además
 > cliente **SRI real** (`SoapSRIClient`) e integración **Gmail** listos en código.
@@ -69,6 +69,7 @@
 | Codex (este hilo, recuperación SRI persona natural) | ✅ EN MAIN | Homologa cédula del receptor con el RUC del tenant solo para persona natural válida; cubre factura, nota de crédito y retención desde reportes múltiples; PR #52, CI, Coolify y salud pública verdes | 2026-08-21 |
 | Codex (este hilo, avance fiscal anual) | ✅ EN MAIN | Tributario en pestañas; avance acumulado hasta el mes elegido, compras clasificadas y retenciones separadas, con avisos de respaldo; PR #53, CI, Coolify y salud pública verdes | 2026-08-21 |
 | Codex (este hilo, anual en dashboard) | 🚀 EN PROMOCIÓN | Corrige la omisión del resumen anual en el dashboard principal; muestra resultado, retenciones y compras pendientes, y abre directo el detalle anual; lint/build y 28 recorridos escritorio/móvil verdes; publicación a `main` autorizada | 2026-08-22 |
+| Codex (este hilo, uso fiscal dinámico) | 🟡 LISTA PARA REVISIÓN | Separa deducible/no deducible ante SRI de gasto real/solo tributario interno; dashboard y Compras filtran ambos, usan tags por proyecto y corrigen en línea sin alterar periodos declarados; migración PostgreSQL, backend, móvil, WCAG y zoom verdes; falta autorización para publicar | 2026-08-22 |
 
 > **Orden de migraciones:** resuelto. Campañas se integró después de CxP, así
 > que `e5f6a7b8c9d0` pasó a colgar de `e6f7a8b9c0d1` en vez de `da1e2f3a4b5c`.

@@ -483,6 +483,7 @@ export type Payable = {
   currency: 'USD'
   status: PayableStatus
   taxClassification: 'DEDUCTIBLE_PENDING_REVIEW' | 'DEDUCTIBLE_CONFIRMED' | 'NON_DEDUCTIBLE'
+  internalClassification: 'PENDING_REVIEW' | 'REAL' | 'DECLARATION_ONLY'
   evidenceStatus: 'NONE' | 'ATTACHED' | 'PRELIMINARY' | 'FISCAL_XML'
   supportReference?: string | null
   analyticAssignments: AnalyticAssignment[]
@@ -1168,6 +1169,12 @@ export type AnnualFiscalTax = {
   deductiblePurchasesBase: string
   nonDeductiblePurchasesBase: string
   pendingReviewPurchasesBase: string
+  internalRealExpensesTotal: string
+  internalRealExpenseCount: number
+  internalDeclarationOnlyExpensesTotal: string
+  internalDeclarationOnlyExpenseCount: number
+  internalPendingExpensesTotal: string
+  internalPendingExpenseCount: number
   resultBeforeAdjustments: string
   incomeTaxWithheld: string
   ivaWithheld: string

@@ -7,6 +7,20 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Dashboard y clasificación tributaria/interna de compras listos localmente:
+  2026-08-22 `America/Guayaquil`. El tratamiento tributario queda separado del
+  control interno: una compra puede ser deducible o no deducible ante el SRI y,
+  de forma independiente, ser `Gasto real`, `Solo tributario` o quedar pendiente
+  de revisión interna. El dashboard alterna ambos ejes; Compras filtra por cada
+  uno y agrupa los gastos reales por sus tags de proyecto. `Editar
+  clasificación` corrige las dos marcas sin salir del listado. Un cambio fiscal
+  exige motivo y se bloquea si el periodo está `DECLARADO`; la marca interna sí
+  puede corregirse luego porque no cambia IVA, ATS ni renta. La migración pasó
+  upgrade, validación, downgrade, re-upgrade y `alembic check` en PostgreSQL.
+  Pasan Ruff, mypy, 47 pruebas backend y 30 recorridos Playwright en
+  escritorio/móvil, con WCAG y zoom al 400 %. Pendiente autorización para
+  commit, push y promoción.
+
 - Corrección del avance anual en el dashboard principal lista localmente:
   2026-08-21 `America/Guayaquil`. La API ya entregaba el acumulado anual, pero
   el dashboard solo mostraba el IVA y las compras del mes; por eso el usuario

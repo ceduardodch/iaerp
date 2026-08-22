@@ -19,6 +19,7 @@ from app.schemas.payables import (
     ExpenseRuleCreate,
     ExpenseRuleRead,
     PayableAdjustmentCreate,
+    PayableClassificationUpdate,
     PayableCreate,
     PayableDocumentBulkReviewCreate,
     PayableDocumentBulkReviewItemRead,
@@ -107,6 +108,44 @@ async def put_payable_analytic_assignments(
         action="payable.analytic_assignments_updated",
         entity_type="payable",
         callback=update,
+    )
+
+
+@router.put(
+    "/payables/{payable_id}/classification",
+    response_model=PayableRead,
+    summary="Corregir el uso fiscal y las clasificaciones de una CxP",
+)
+async def put_payable_classification(
+    payable_id: uuid.UUID,
+    data: PayableClassificationUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("payables:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        item = await payables.update_payable_classification(
+            session,
+            context,
+            payable_id=payable_id,
+            data=data,
+        )
+        return str(item.id), item.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="payables.classification.update",
+        idempotency_key=idempotency_key,
+        request_payload={"payable_id": str(payable_id), **data.model_dump(mode="json")},
+        action="payable.classification_updated",
+        entity_type="payable",
+        callback=update,
+        audit_details={
+            "reason": data.reason,
+            "tax_classification": data.tax_classification,
+            "internal_classification": data.internal_classification,
+        },
     )
 
 

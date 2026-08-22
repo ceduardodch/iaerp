@@ -443,11 +443,14 @@ async def test_dashboard_marks_purchase_credit_as_accounting_review(
     assert annual["pendingReviewPurchasesBase"] == "13.13"
     assert annual["pendingReviewDocumentCount"] == 1
     assert annual["deductiblePurchasesBase"] == "0.00"
+    assert annual["internalPendingExpensesTotal"] == "15.10"
+    assert annual["internalPendingExpenseCount"] == 1
 
     async with SessionFactory.begin() as session:
         payable = await session.scalar(select(Payable))
         assert payable is not None
         payable.tax_classification = "DEDUCTIBLE_CONFIRMED"
+        payable.internal_classification = "REAL"
 
     confirmed = await client.get(
         "/api/v1/tax/dashboard",
@@ -458,6 +461,8 @@ async def test_dashboard_marks_purchase_credit_as_accounting_review(
     assert confirmed_annual["deductiblePurchasesBase"] == "13.13"
     assert confirmed_annual["pendingReviewPurchasesBase"] == "0.00"
     assert confirmed_annual["resultBeforeAdjustments"] == "-13.13"
+    assert confirmed_annual["internalRealExpensesTotal"] == "15.10"
+    assert confirmed_annual["internalRealExpenseCount"] == 1
 
 
 @pytest.mark.parametrize(

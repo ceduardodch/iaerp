@@ -17,6 +17,7 @@ TaxClassification = Literal[
     "DEDUCTIBLE_CONFIRMED",
     "NON_DEDUCTIBLE",
 ]
+InternalClassification = Literal["PENDING_REVIEW", "REAL", "DECLARATION_ONLY"]
 EvidenceStatus = Literal["NONE", "ATTACHED", "PRELIMINARY", "FISCAL_XML"]
 
 
@@ -37,6 +38,7 @@ class PayableCreate(APIModel):
     installments: list[PayableInstallmentInput] = Field(default_factory=list)
     total: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
     tax_classification: TaxClassification = "DEDUCTIBLE_PENDING_REVIEW"
+    internal_classification: InternalClassification = "PENDING_REVIEW"
     evidence_status: EvidenceStatus = "NONE"
     support_reference: str | None = Field(default=None, max_length=300)
     payment_timing: Literal["PAID_NOW", "PAY_LATER"] = "PAY_LATER"
@@ -63,6 +65,7 @@ class PayableFromDocumentCreate(APIModel):
 class PayableDocumentReviewCreate(APIModel):
     document_id: uuid.UUID
     tax_classification: Literal["DEDUCTIBLE_CONFIRMED", "NON_DEDUCTIBLE"]
+    internal_classification: InternalClassification = "PENDING_REVIEW"
     analytic_value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
     payment_state: Literal["PAID", "SCHEDULED", "UNCONFIRMED", "KEEP_EXISTING"]
     payment_date: date | None = None
@@ -87,6 +90,7 @@ class PayableBulkAnalyticChange(APIModel):
 class PayableDocumentBulkReviewCreate(APIModel):
     document_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
     tax_classification: Literal["DEDUCTIBLE_CONFIRMED", "NON_DEDUCTIBLE"]
+    internal_classification: InternalClassification = "PENDING_REVIEW"
     analytic_change: PayableBulkAnalyticChange = Field(default_factory=PayableBulkAnalyticChange)
     payment_action: Literal["KEEP_EXISTING_OR_UNCONFIRMED", "PAID", "SCHEDULED"] = (
         "KEEP_EXISTING_OR_UNCONFIRMED"
@@ -125,6 +129,13 @@ class PayableDocumentBulkReviewRead(APIModel):
     skipped_count: int = Field(ge=0)
     failed_count: int = Field(ge=0)
     items: list[PayableDocumentBulkReviewItemRead]
+
+
+class PayableClassificationUpdate(APIModel):
+    tax_classification: Literal["DEDUCTIBLE_CONFIRMED", "NON_DEDUCTIBLE"]
+    internal_classification: Literal["REAL", "DECLARATION_ONLY"] | None = None
+    reason: str | None = Field(default=None, min_length=3, max_length=300)
+    analytic_value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
 
 
 class PayablePaymentCreate(APIModel):
@@ -168,6 +179,7 @@ class PayableRead(APIModel):
     currency: Literal["USD"] = "USD"
     status: PayableStatus
     tax_classification: TaxClassification
+    internal_classification: InternalClassification
     evidence_status: EvidenceStatus
     support_reference: str | None
     analytic_assignments: list[AnalyticAssignmentRead] = Field(default_factory=list)
