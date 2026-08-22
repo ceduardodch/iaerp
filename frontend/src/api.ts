@@ -936,6 +936,67 @@ export type OrganizationProfile = {
   defaultPaymentTermsDays: number
 }
 
+export type PayrollEmployee = {
+  id: string
+  fullName: string
+  identificationNumber: string
+  position?: string | null
+  sueldoMensual: string
+  fechaIngreso: string
+  fechaSalida?: string | null
+  active: boolean
+  decimoTerceroMensualizado: boolean
+  decimoCuartoMensualizado: boolean
+  fondosReservaMensualizados: boolean
+}
+
+export type PayrollEmployeeInput = {
+  fullName: string
+  identificationNumber: string
+  position?: string | null
+  sueldoMensual: string
+  fechaIngreso: string
+  decimoTerceroMensualizado: boolean
+  decimoCuartoMensualizado: boolean
+  fondosReservaMensualizados: boolean
+}
+
+export type PayrollEmployeeTerminateInput = {
+  fechaSalida: string
+}
+
+export type PayrollPeriodStatus = 'DRAFT' | 'APPROVED'
+
+export type PayrollPeriod = {
+  id: string
+  anio: number
+  mes: number
+  status: PayrollPeriodStatus
+}
+
+export type PayrollPeriodDraftInput = {
+  anio: number
+  mes: number
+}
+
+export type PayrollEntry = {
+  id: string
+  periodId: string
+  employeeId: string
+  diasTrabajados: number
+  imponible: string
+  decimoTercero: string
+  decimoCuarto: string
+  fondosReserva: string
+  totalIngresos: string
+  aporteIess: string
+  totalDescuentos: string
+  liquido: string
+  sbuAplicado: string
+  tasaIessAplicada: string
+  tasaFondosAplicada: string
+}
+
 export class ApiError extends Error {
   readonly status: number
 
