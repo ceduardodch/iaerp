@@ -7,17 +7,20 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Edición masiva de compras lista localmente: 2026-08-22
+- Edición masiva de compras publicada en `main`: 2026-08-22
   `America/Guayaquil`. La vista Compras permite seleccionar hasta 100 filas
   visibles y cambiar en un solo guardado el uso tributario, el control interno
   y los tags. Cada campo puede quedar en `No cambiar`, por lo que el lote no
   pisa datos distintos por accidente; también permite reemplazar o limpiar los
   tags. Un cambio tributario exige motivo y conserva el bloqueo de periodos ya
   declarados. El servidor procesa cada compra con idempotencia y auditoría,
-  guarda las válidas y devuelve las fallidas para reintento. Pasan Ruff, las 24
-  pruebas de CxP, lint, build y los 32 recorridos Playwright del módulo en
-  escritorio y móvil, incluidos WCAG y reflow. El usuario autorizó la
-  promoción por `release -> PR -> main`; pendiente CI, Coolify y salud pública.
+  guarda las válidas, conserva las fallidas y las reintenta con una clave nueva.
+  Pasan Ruff, mypy, las 24 pruebas de CxP, lint, build y los 32 recorridos
+  Playwright del módulo en escritorio y móvil, incluidos WCAG y reflow. Dos
+  revisiones independientes dieron GO. PR #57 quedó en `main`; el workflow
+  manual `32594481883`, Coolify y la salud pública (`live`, `ready`, `startup`)
+  terminaron verdes. El OpenAPI y el paquete web públicos ya exponen la edición
+  masiva.
 
 - Dashboard tributario one-page y escenario de renta listos localmente:
   2026-08-22 `America/Guayaquil`. El estado `DECLARADO` de un periodo IVA solo
