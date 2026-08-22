@@ -29,7 +29,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - [x] Registrar los scopes en `KNOWN_SCOPES`, `iaerp-realm.json` y `configure-staging.sh`
 - [x] `run_payroll_scheduler()` en el `TaskGroup` de `workers/dispatcher.py`
 - [x] Tipos y cliente en `frontend/src/api.ts`
-- [ ] Pantalla `PayrollPage.tsx` con pestañas Empleados y Roles
+- [x] Pantalla `PayrollPage.tsx` con pestañas Empleados y Roles
 - [ ] Sección `payroll` en `Sidebar.tsx`, `App.tsx` y `tests/navigation.ts`
 - [ ] E2E `frontend/tests/payroll.spec.ts`
 
@@ -148,3 +148,22 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   run `32598659878` quedó verde (`Frontend` 7m9s, `Deploy production to
   Coolify` 4m59s; `Backend`/migraciones/OIDC se saltaron por no haber cambios
   de esa área).
+- `PayrollPage.tsx` (`frontend/src/components/payroll/`), con pestañas
+  Empleados y Roles sobre `ErpTabs`, siguiendo el mismo armado que
+  `PurchasesPage.tsx` (`ErpPanel`/`ErpFormPanel`/`ErpDataTable`/
+  `ErpConfirmDialog`). Empleados: alta/edición en formulario de página
+  completa y baja en un `ErpConfirmDialog` con la fecha de salida (mínimo
+  la fecha de ingreso); la lista solo trae activos porque así responde
+  `GET /payroll/employees`. Roles: formulario para generar/regenerar el
+  borrador de un mes, listado de periodos con badge Borrador/Aprobado, y al
+  abrir "Ver roles" una tabla de `PayrollEntry` con el nombre del empleado
+  resuelto contra la lista de activos (si el empleado ya fue dado de baja
+  se muestra "Empleado dado de baja", porque el endpoint de empleados no
+  lo devuelve). Aprobar pasa por el mismo `ErpConfirmDialog` avisando que
+  ya no se puede regenerar. Sin pruebas nuevas: el componente no tiene
+  aún ruta ni entrada de menú (siguiente pendiente), por lo que ningún
+  E2E puede alcanzarlo todavía, y el repo no tiene test unitario de
+  componentes React (solo Playwright). Verificación equivalente a la del
+  pendiente anterior de tipos: `tsc --noEmit`, `oxlint` y `vite build`
+  limpios; `PayrollPage` queda fuera del bundle (no se importa aún) igual
+  que pasó con los tipos de `api.ts`.
