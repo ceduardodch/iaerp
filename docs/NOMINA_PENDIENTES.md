@@ -24,7 +24,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - [x] Cálculo puro del rol en `services/payroll/calculations.py`
 - [x] Modelos `payroll_employees`, `payroll_periods`, `payroll_entries` y migración
 - [x] Servicio de empleados: alta, edición y baja
-- [ ] Servicio de periodos: generar borrador idempotente y aprobar
+- [x] Servicio de periodos: generar borrador idempotente y aprobar
 - [ ] Endpoints `/payroll/*` con `execute_idempotent` y scopes `payroll:read` / `payroll:write`
 - [ ] Registrar los scopes en `KNOWN_SCOPES`, `iaerp-realm.json` y `configure-staging.sh`
 - [ ] `run_payroll_scheduler()` en el `TaskGroup` de `workers/dispatcher.py`
@@ -72,3 +72,13 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   ingreso. `list_employees` excluye a los dados de baja. CI del run
   32581785053 quedó verde (Backend 14m4s, resto de jobs OK o gateados sin
   cambios en su área).
+- Servicio de periodos (`services/payroll/periods.py`), commit `facc794`.
+  `generate_draft_period` filtra empleados vigentes por fecha (no por
+  `active`), para que quien sale a mitad de mes siga cobrando su
+  proporcional ese mes y desaparezca el siguiente. Cada llamada borra y
+  reinserta las entradas del periodo, así que repetirla no duplica filas
+  (verificado revirtiendo el borrado: sin él, la segunda llamada rompe el
+  único `tenant/periodo/empleado`). `approve_period` cierra el periodo;
+  `generate_draft_period` rechaza regenerar uno ya aprobado con 409
+  (verificado revirtiendo el guard). 39 pruebas del área verdes contra
+  Postgres real (`TEST_DATABASE_URL=iaerp_test`), ruff y mypy limpios.
