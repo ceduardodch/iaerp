@@ -82,3 +82,8 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   `generate_draft_period` rechaza regenerar uno ya aprobado con 409
   (verificado revirtiendo el guard). 39 pruebas del área verdes contra
   Postgres real (`TEST_DATABASE_URL=iaerp_test`), ruff y mypy limpios.
+  Publicado en `origin/release`. Esta corrida detectó un `git merge
+  origin/main` en curso del humano en el mismo checkout (commit `382967e`) y
+  paró sin tocar `main` para no pisarlo. El humano ya integró `release` a
+  `main` vía PR (#55/#56, merge `6593487`), así que `facc794` está en ambas
+  ramas — sin acción pendiente de esta IA.
