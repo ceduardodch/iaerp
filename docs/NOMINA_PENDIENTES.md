@@ -30,7 +30,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - [x] `run_payroll_scheduler()` en el `TaskGroup` de `workers/dispatcher.py`
 - [x] Tipos y cliente en `frontend/src/api.ts`
 - [x] Pantalla `PayrollPage.tsx` con pestañas Empleados y Roles
-- [ ] Sección `payroll` en `Sidebar.tsx`, `App.tsx` y `tests/navigation.ts`
+- [x] Sección `payroll` en `Sidebar.tsx`, `App.tsx` y `tests/navigation.ts`
 - [ ] E2E `frontend/tests/payroll.spec.ts`
 
 ## Reglas de cada corrida
@@ -170,3 +170,17 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   del run `32601781683` verde (`Frontend` 7m10s, `Deploy production to
   Coolify` 4m45s; `Backend`/migraciones/OIDC se saltaron por no haber
   cambios de esa área).
+- Sección `payroll` cableada: nueva entrada "Nómina" en el grupo
+  Administración de `Sidebar.tsx` (junto a Catálogos y Empresa, porque es
+  una función interna, no comercial), `PayrollPage` cargada bajo demanda en
+  `App.tsx` con `ErrorBoundary`+`Suspense` igual que Compras/Tributario/CRM,
+  y `Nómina: 'Administración'` en `tests/navigation.ts` para que
+  `navigateToSection` la encuentre. Prueba primero: agregué "Nómina" a los
+  grupos de `sidebar-collapsible.spec.ts` (que ya enumera todos los módulos
+  del menú) y confirmé rojo — 4 pruebas fallaban porque el botón no existía
+  — antes de tocar `Sidebar.tsx`/`App.tsx`; en verde tras el cambio, y las
+  254 pruebas E2E completas también verdes. Commit `47db0aa` (main+release),
+  CI del run `32604527269` verde (`Frontend`, `Deploy production to
+  Coolify` 4m45s; `Backend`/migraciones/OIDC se saltaron por no haber
+  cambios de esa área). Queda pendiente el E2E dedicado `payroll.spec.ts`,
+  siguiente en la lista.
