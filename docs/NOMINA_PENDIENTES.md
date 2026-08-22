@@ -27,7 +27,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - [x] Servicio de periodos: generar borrador idempotente y aprobar
 - [x] Endpoints `/payroll/*` con `execute_idempotent` y scopes `payroll:read` / `payroll:write`
 - [x] Registrar los scopes en `KNOWN_SCOPES`, `iaerp-realm.json` y `configure-staging.sh`
-- [ ] `run_payroll_scheduler()` en el `TaskGroup` de `workers/dispatcher.py`
+- [x] `run_payroll_scheduler()` en el `TaskGroup` de `workers/dispatcher.py`
 - [ ] Tipos y cliente en `frontend/src/api.ts`
 - [ ] Pantalla `PayrollPage.tsx` con pestañas Empleados y Roles
 - [ ] Sección `payroll` en `Sidebar.tsx`, `App.tsx` y `tests/navigation.ts`
@@ -122,3 +122,16 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   `Detect change impact` (que por eso saltó el job `Backend` en el run del
   merge), disparé un `workflow_dispatch` limpio sobre `main` para forzar una
   corrida completa — quedó verde (`Backend` 16m, resto de jobs OK).
+- `run_payroll_scheduler()` en `services/payroll/tasks.py`, sumado al
+  `TaskGroup` de `workers/dispatcher.py`, commit `4bc6b05` (main+release).
+  Por cada tenant con al menos un empleado, abre el borrador del mes en
+  curso (hora `America/Guayaquil`) reutilizando `generate_draft_period` tal
+  cual; si el periodo ya fue aprobado, ese servicio responde 409 y el
+  scheduler lo ignora por tenant en vez de tumbar el resto de la corrida
+  (verificado en rojo quitando el `try/except` del 409: la prueba de periodo
+  aprobado fallaba con `HTTPException` sin capturar). Nunca aprueba nada —
+  sigue siendo acción humana. `today` es inyectable (`date | None = None`,
+  patrón ya usado en `workers/outbox.py`) para no depender del reloj real en
+  las pruebas. 4 pruebas nuevas en `test_payroll_scheduler.py`, 56 pruebas
+  del área verdes, ruff y mypy limpios. CI del run `32595873806` quedó verde
+  (`Backend` 11m, `Deploy production to Coolify` 4m46s).
