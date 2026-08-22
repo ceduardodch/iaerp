@@ -9,6 +9,14 @@
 > de lint, build, Playwright, WCAG AA y reflow móvil pasaron localmente; queda
 > esperar CI remoto tras el push.
 
+> Corte 2026-08-21: detectada y corregida localmente la ausencia del avance
+> fiscal anual en el dashboard principal. Los datos ya llegaban desde
+> `/tax/dashboard`, pero la vista solo pintaba el corte mensual. El dashboard
+> muestra ahora resultado antes de ajustes, retenciones de renta, compras por
+> revisar y evidencia incompleta; el acceso abre directo Año fiscal. Lint,
+> build y 28 recorridos escritorio/móvil están verdes. El usuario autorizó la
+> publicación por `release -> PR -> main`.
+
 > Corte 2026-08-02: conciliación bancaria por período lista y validada. Un
 > abono respaldado puede sustituir un cobro manual sin referencia solo cuando
 > factura y retenciones cuadran completas; el original se conserva con reverso.

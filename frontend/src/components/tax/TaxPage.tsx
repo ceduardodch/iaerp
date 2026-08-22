@@ -166,7 +166,13 @@ function DossierView({ dossier }: { dossier: TaxDocumentDossier }) {
  * para copiar al formulario. Nada se calcula en el cliente; todo viene del
  * servidor con la trazabilidad de los documentos que respaldan cada cifra.
  */
-export function TaxPage({ token }: { token: string }) {
+export function TaxPage({
+  token,
+  initialTab = 'month',
+}: {
+  token: string
+  initialTab?: TaxTab
+}) {
   const queryClient = useQueryClient()
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
@@ -176,7 +182,7 @@ export function TaxPage({ token }: { token: string }) {
   const [openDossierId, setOpenDossierId] = useState<string | null>(null)
   const [exceptionEvidence, setExceptionEvidence] = useState<Record<string, string>>({})
   const [groupByClassificationId, setGroupByClassificationId] = useState('')
-  const [activeTab, setActiveTab] = useState<TaxTab>('month')
+  const [activeTab, setActiveTab] = useState<TaxTab>(initialTab)
   const evidenceInputRef = useRef<HTMLInputElement>(null)
 
   const periodsQuery = useQuery({
