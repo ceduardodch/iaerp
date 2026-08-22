@@ -112,6 +112,8 @@ SERVICE_ACCOUNT_ALLOWED_SCOPES = frozenset(
         "leads:read",
         "leads:write",
         "leads:capture",
+        "payroll:read",
+        "payroll:write",
     }
 )
 

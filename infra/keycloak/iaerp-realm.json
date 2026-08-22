@@ -410,6 +410,16 @@
       "name": "tax:write",
       "protocol": "openid-connect",
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "payroll:read",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "payroll:write",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
     }
   ],
   "clients": [
@@ -465,7 +475,9 @@
         "payables:write",
         "payables:extract",
         "tax:read",
-        "tax:write"
+        "tax:write",
+        "payroll:read",
+        "payroll:write"
       ],
       "optionalClientScopes": [
         "organization"
