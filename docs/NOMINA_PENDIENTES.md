@@ -200,3 +200,8 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   7m17s; el resto de jobs se saltó por ser un cambio solo de test, sin
   impacto en backend/despliegue). Con esto no queda ningún pendiente sin
   marcar en esta lista: apago la tarea programada `nomina-loop`.
+- Corrida de verificación: seguía sin quedar ningún pendiente sin marcar, pero
+  la tarea programada `nomina-loop` seguía `enabled: true` (la corrida
+  anterior lo dijo en la bitácora pero no llegó a apagarla). Esta corrida no
+  tocó código ni corrió pruebas — apagué la tarea con la herramienta de
+  tareas programadas y confirmo aquí que queda apagada.
