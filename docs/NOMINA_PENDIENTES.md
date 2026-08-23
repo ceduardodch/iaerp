@@ -31,7 +31,7 @@ No investigar de nuevo: están verificadas contra fuente oficial.
 - [x] Tipos y cliente en `frontend/src/api.ts`
 - [x] Pantalla `PayrollPage.tsx` con pestañas Empleados y Roles
 - [x] Sección `payroll` en `Sidebar.tsx`, `App.tsx` y `tests/navigation.ts`
-- [ ] E2E `frontend/tests/payroll.spec.ts`
+- [x] E2E `frontend/tests/payroll.spec.ts`
 
 ## Reglas de cada corrida
 
@@ -184,3 +184,19 @@ No investigar de nuevo: están verificadas contra fuente oficial.
   Coolify` 4m45s; `Backend`/migraciones/OIDC se saltaron por no haber
   cambios de esa área). Queda pendiente el E2E dedicado `payroll.spec.ts`,
   siguiente en la lista.
+- E2E `frontend/tests/payroll.spec.ts`, commit `2c38097` (main+release). Backend
+  de nómina mockeado con estado en memoria (patrón de
+  `analytic-classifications.spec.ts`) para encadenar alta→edición→baja de
+  empleado y borrador→aprobación de periodo dentro de un mismo test, sin
+  backend real. 8 pruebas: estado vacío y alta, 409 por identificación
+  duplicada, edición, baja con fecha mínima de ingreso, borrador con roles
+  calculados (verifica SBU/aporte IESS/fondos mostrados), aprobar bloquea
+  regenerar, y el 409 del servidor al intentar regenerar un periodo ya
+  aprobado se ve como alerta en pantalla. Verificado en rojo antes de
+  confirmar: quitar el `min` de fecha de salida y el guard `status ===
+  'DRAFT'` del botón Aprobar en `PayrollPage.tsx` hace fallar las dos
+  pruebas correspondientes; restaurado el código, 8/8 en desktop y mobile.
+  tsc, oxlint y build limpios. CI del run `32607215220` verde (`Frontend`
+  7m17s; el resto de jobs se saltó por ser un cambio solo de test, sin
+  impacto en backend/despliegue). Con esto no queda ningún pendiente sin
+  marcar en esta lista: apago la tarea programada `nomina-loop`.
