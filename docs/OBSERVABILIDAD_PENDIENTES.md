@@ -49,7 +49,7 @@ seguridad de todo el bucle.
 
 ### Fase 1 — Ver los errores
 
-- [ ] 1. `GET /ops/failures` (scope `operations:read`): lista paginada de
+- [x] 1. `GET /ops/failures` (scope `operations:read`): lista paginada de
       `dead_letters`, con filtro por estado y fecha. Solo lectura,
       tenant-scoped. Schema en `schemas/platform.py`.
       **`dead_letters` es la fuente canónica y completa: NO unir con
@@ -136,6 +136,19 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
 
 ## Bitácora
 
+- Pendiente 1 (`GET /ops/failures`), commit `4bb8c4b`, **publicado solo en
+  `release`** (CI run `33252196358` verde: Backend 15m31s, Security y YAML
+  contracts OK; el job de despliegue no corre en `release`, que es justo lo
+  buscado). Falta autorización humana para promover a `main`.
+  `services/ops_failures.py` consulta solo `dead_letters` y no une
+  `outbox_events`: el dispatcher escribe en las dos tablas, así que el join
+  duplicaría todos sus fallos. Se verificó en rojo agregando el join —
+  `test_dead_lettered_outbox_event_appears_once` falla mostrando la fila
+  repetida — y se restauró reescribiendo, sin `git checkout`. El
+  `correlation_id` y los `aggregate_*` se aplanan desde el `payload` que
+  escriben los workers, con lectura defensiva (`_payload_text`) porque su forma
+  varía por `event_type` y una clave ausente no debe tumbar el listado entero.
+  7 pruebas nuevas + 18 del área verdes, ruff y mypy limpios.
 - 2026-08-29: lista creada tras auditar el repo. Confirmado que no hay ninguna
   herramienta de observabilidad instalada (solo intención en docs) y que los
   guardrails de agente (`AutomationSettings`, `AutomationRateWindow`,
