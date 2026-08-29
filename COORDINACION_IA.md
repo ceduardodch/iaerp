@@ -41,7 +41,7 @@
 
 | Sesión / IA | Estado | Área / archivos | Desde |
 | --- | --- | --- | --- |
-| Claude (orquestador) | 🟢 ACTIVA | Calidad de tests a11y RESTAURADA; próximo: Sprint 4 (facturas) | 2026-07-21 |
+| Claude (orquestador) | ⚪ obsoleta (2026-08-29) | Calidad de tests a11y RESTAURADA; Sprint 4 se completó después por Codex. Fila marcada 🟢 durante más de un mes con decenas de sesiones cerradas encima: ya no bloquea a nadie | 2026-07-21 |
 | Codex (GPT-5.6, vía Claude) | ⚪ detenido | Se colgó por `approval_mode="approve"` en modo no interactivo; para usarlo hay que invocarlo con `--full-auto`/`-a never`. Alcanzó a hacer 2 mejoras menores (auth.tsx, ErpModal.tsx) que se conservaron | 2026-07-21 |
 | Codex (este hilo) | ✅ COMPLETA | Conciliación bancaria por período: evidencia subida reemplaza cobro manual sin referencia mediante reverso auditable; julio primero | 2026-08-02 |
 | Codex (este hilo, consolidación final) | ✅ COMPLETA | Contratos simples + tolerancia documental de 0.01 + remitente Gmail por alias, unidos y validados para `main` | 2026-08-02 |
@@ -79,6 +79,8 @@
 | Claude (tarea programada `nomina-loop`) | ✅ COMPLETA | `PayrollPage.tsx` (`frontend/src/components/payroll/`) con pestañas Empleados y Roles, mismo patrón `Erp*` que `PurchasesPage.tsx`; sin ruta ni entrada de menú todavía (siguiente pendiente es el cableado en Sidebar/App/navigation, y después el E2E). Commit `8407daf` (main+release), CI del run `32601781683` verde | 2026-08-22 |
 | Claude (tarea programada `nomina-loop`) | ✅ COMPLETA | Sección `payroll` cableada: entrada "Nómina" en el grupo Administración de `Sidebar.tsx`, carga bajo demanda en `App.tsx` (`ErrorBoundary`+`Suspense`) y `tests/navigation.ts` actualizado; probado primero en rojo agregando "Nómina" a `sidebar-collapsible.spec.ts`. Commit `47db0aa` (main+release), CI del run `32604527269` verde. Falta el E2E dedicado `payroll.spec.ts` | 2026-08-22 |
 | Claude (tarea programada `nomina-loop`) | 🛑 TAREA APAGADA | `frontend/tests/payroll.spec.ts`: 8 pruebas E2E de Nómina (alta/edición/baja de empleado, borrador→aprobación de periodo, 409 por identificación duplicada y por regenerar periodo aprobado), con backend de nómina mockeado en memoria; verificadas en rojo revirtiendo dos guards reales de `PayrollPage.tsx` antes de confirmar. Commit `2c38097` (main+release), CI `32607215220` verde. Era el último pendiente de `docs/NOMINA_PENDIENTES.md`: apagué la tarea programada `nomina-loop`, no queda trabajo de nómina en cola | 2026-08-22 |
+
+| Claude (tarea programada `observabilidad-loop`) | 🟢 ACTIVA | Observabilidad y bucle de autorresolución de fallos. Cola en `docs/OBSERVABILIDAD_PENDIENTES.md`. Área: `app/api/ops.py`, `app/services/ops_failures.py`, `app/main.py` (handlers/logging), `components/action-queue/`, `main.tsx`, `ErrorBoundary.tsx`. **Se apaga sola** al cerrar la Fase 2: la Fase 3 (agente con escritura) exige autorización humana explícita | 2026-08-29 |
 
 > **Orden de migraciones:** resuelto. Campañas se integró después de CxP, así
 > que `e5f6a7b8c9d0` pasó a colgar de `e6f7a8b9c0d1` en vez de `da1e2f3a4b5c`.

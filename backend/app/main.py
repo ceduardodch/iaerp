@@ -12,6 +12,7 @@ from starlette.responses import Response
 
 from app.api.analytics import router as analytics_router
 from app.api.crm import router as crm_router
+from app.api.ops import router as ops_router
 from app.api.payables import router as payables_router
 from app.api.payroll import router as payroll_router
 from app.api.router import router
@@ -48,6 +49,7 @@ app.include_router(payables_router, prefix=settings.API_PREFIX)
 app.include_router(payroll_router, prefix=settings.API_PREFIX)
 app.include_router(analytics_router, prefix=settings.API_PREFIX)
 app.include_router(tax_router, prefix=settings.API_PREFIX)
+app.include_router(ops_router, prefix=settings.API_PREFIX)
 
 if settings.SRI_SIMULATOR_ENABLED:
     from app.integrations.sri.simulator import router as sri_simulator_router
