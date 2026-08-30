@@ -87,7 +87,7 @@ seguridad de todo el bucle.
 
 ### Fase 2 — Enterarse
 
-- [ ] 9. Integración con Sentry o GlitchTip **gateada por variable de entorno**:
+- [x] 9. Integración con Sentry o GlitchTip **gateada por variable de entorno**:
       `IAERP_ERROR_DSN` vacío = desactivado, que es el default. Tags:
       correlation_id, tenant, versión. Backend y frontend. Sin DSN configurado
       el código no debe cambiar de comportamiento ni fallar.
@@ -366,3 +366,53 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   (docs/OBSERVABILIDAD_PENDIENTES.md). Sigue el pendiente 9 (Fase 2, Sentry/
   GlitchTip gateado por `IAERP_ERROR_DSN`); la Fase 3 sigue esperando
   autorización humana explícita antes de tocarla.
+- Pendiente 9 (Sentry/GlitchTip gateado por `IAERP_ERROR_DSN`), commit
+  `3883783`, **publicado solo en `release`** (CI run `33301101716` verde:
+  Security 1m16s, Frontend 8m52s, Backend 15m32s, OIDC y full stack 2m53s;
+  despliegue a Coolify `skipped`, esperado en esta rama). Falta autorización
+  humana para promover a `main`.
+  `app/core/observability.py` es el único punto que importa `sentry_sdk`:
+  `init_error_tracking()` no llama a `sentry_sdk.init` si `IAERP_ERROR_DSN`
+  está vacío (default), y `capture_exception()` es no-op mientras ese init
+  no haya corrido -- ninguna de las dos cambia de comportamiento sin DSN.
+  Se conecta desde `unhandled_exception_handler` (`app/main.py`, pendiente 2)
+  reusando el mismo `correlation_id`/`tenant_hash`/`actor` que ya arma para
+  el log JSON, así el evento de Sentry y la línea de log se pueden cruzar
+  por correlation_id. En frontend, `src/errorReporting.ts` hace lo mismo con
+  `@sentry/browser`, gateado por `VITE_ERROR_DSN` (prefijo que Vite expone al
+  bundle, igual que `VITE_API_URL`); decisión documentada en el código: no
+  tagea tenant porque el frontend nunca decodifica el JWT (es opaco, solo se
+  usa vía `getToken()`) y agregar esa decodificación solo para un tag de
+  Sentry no valía la complejidad -- el `correlation_id` ya permite cruzar el
+  evento del frontend con el del backend, que sí lleva el tenant
+  pseudonimizado.
+  Verificado en rojo dos veces: (1) backend, comentando la llamada a
+  `capture_exception()` en `unhandled_exception_handler` --
+  `test_unhandled_exception_reports_to_error_tracking` (nueva, en
+  `test_unhandled_exception_handler.py`) falla con `captured == []`; (2)
+  frontend, reemplazando temporalmente el gate `VITE_ERROR_DSN` por un DSN
+  fijo en `errorReporting.ts` -- el nuevo E2E `sin VITE_ERROR_DSN no sale
+  ninguna llamada a un backend de error tracking externo` falla mostrando 3
+  requests reales a `ingest.sentry.io` (el envelope que el SDK intenta
+  mandar), confirmando que el gate es lo único que lo bloquea y que la
+  integración sí dispara tráfico real cuando está activa. Ambas veces se
+  restauró reescribiendo, sin `git checkout`.
+  No hay framework de pruebas unitarias en frontend (solo Playwright E2E,
+  ver `playwright.config.ts`), así que la cobertura de la lógica de gateo en
+  sí (no solo la ausencia de red) vive en el backend
+  (`backend/tests/test_observability.py`, 5 pruebas nuevas con
+  `sentry_sdk.init`/`new_scope`/`capture_exception` mockeados). Mismo tipo de
+  decisión de alcance que ya documentó el pendiente 5 para no forzar
+  herramientas nuevas por una sola pieza sin lógica de negocio propia.
+  Backend: 5 pruebas nuevas de `test_observability.py` + 1 nueva de
+  `test_unhandled_exception_handler.py` (3/3 de ese archivo) verdes; suite
+  completa 589 pasan/36 skip, mismos 2 fallos preexistentes y ajenos
+  (`test_health` por Redis apagado, duplicado de identificación en nómina);
+  ruff y mypy limpios. Frontend: 1 E2E nuevo + 3 existentes de
+  `frontend-error-capture.spec.ts` (4/4) verdes, más 46 E2E de los otros
+  specs mockeados sin regresiones; `tsc --noEmit`, `oxlint` (mismos 3
+  warnings preexistentes) y `npm run build` limpios.
+  Con esto se cierra la Fase 2 completa. La Fase 3 (pendientes 10-12, tools
+  MCP de reintento automático) sigue esperando autorización humana explícita
+  antes de tocarla: le da a un agente capacidad de escritura sobre datos de
+  producción.
