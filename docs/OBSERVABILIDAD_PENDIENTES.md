@@ -78,7 +78,7 @@ seguridad de todo el bucle.
       (`components/action-queue/`): lista los fallos abiertos, muestra causa y
       correlation ID, y permite reintentar los `AUTO_RETRY`. Los `NEEDS_HUMAN`
       se muestran con su motivo y sin botón de reintento.
-- [ ] 7. Captura de errores de frontend: `window.onerror` y
+- [x] 7. Captura de errores de frontend: `window.onerror` y
       `unhandledrejection` en `main.tsx`, más el `componentDidCatch` de
       `ErrorBoundary.tsx` (hoy solo hace `console.error`). Reportar con el
       correlation ID de la última request.
@@ -286,3 +286,42 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   de identificación en nómina). Frontend: 5 E2E nuevos + 6 existentes de
   `action-queue.spec.ts` verdes (11/11), `tsc --noEmit`, `oxlint` (mismos 3
   warnings preexistentes) y `npm run build` limpios.
+- Pendiente 7 (captura de errores de frontend), commits `628ce9f` (captura)
+  y `caca137` (fix del E2E en CI), **publicado solo en `release`** (CI run
+  `33296811532` verde: Frontend 7m22s, Security OK; Backend/OIDC/
+  migraciones/YAML/Coolify quedaron `skipped` por no tocar esas rutas,
+  esperado en esta rama). Falta autorización humana para promover a `main`.
+  Punto único de reporte en `src/errorReporting.ts`, llamado desde tres
+  sitios: `window.addEventListener('error'|'unhandledrejection')` en
+  `main.tsx` y `componentDidCatch` en `ErrorBoundary.tsx` (que antes solo
+  hacía `console.error`). El correlation ID sale de
+  `api.ts::getLastCorrelationId()`, una variable de módulo que `apiRequest`
+  actualiza desde el header `X-Correlation-Id` de cada respuesta del
+  pendiente 2 (`app/main.py`) — no se limpia si la respuesta no trae el
+  header, para no perder el último conocido en llamadas intermedias sin
+  ese dato. Sin `IAERP_ERROR_DSN` (pendiente 9) el destino sigue siendo la
+  consola, en JSON estructurado listo para un envío futuro a Sentry.
+  E2E nuevo (`frontend-error-capture.spec.ts`, 3 pruebas × 2 proyectos)
+  verificado en rojo revirtiendo cada uno de los tres puntos de captura
+  antes de confirmar. El caso de `ErrorBoundary` no fuerza un throw
+  artificial: aborta la petición de red del chunk JS de Nómina
+  (`page.route` sobre `resourceType() === 'script'`), reproduciendo un
+  fallo real de carga diferida (`React.lazy`) que React resuelve a través
+  del `ErrorBoundary` que envuelve su `Suspense` en `App.tsx` — mismo
+  mecanismo que un fallo de red o un deploy con chunks obsoletos en
+  producción.
+  El primer push (`628ce9f`) quedó rojo en CI (run `33296364260`): local
+  no hay backend real corriendo, así que los mocks de `page.route` bastan;
+  en CI sí hay un backend real detrás del proxy de Vite, y alguna llamada
+  del arranque del tablero que mis mocks no cubrían explícitamente escapó a
+  ese backend, que siempre pone su propio `X-Correlation-Id` — pisó el
+  correlation ID fijo que el test esperaba. Fix (`caca137`): ruta catch-all
+  `**/api/v1/**` registrada primero (menor prioridad en Playwright, las
+  rutas específicas siguen ganando para sus paths) que responde con el
+  mismo correlation ID conocido para cualquier endpoint no mockeado
+  explícitamente, sin dejar que nada llegue a la red real. Confirmado
+  verde en el segundo push sin tocar el código de producción, solo el test.
+  `tsc --noEmit`, `oxlint` (mismos 3 warnings preexistentes) y
+  `npm run build` limpios; 45 E2E de specs mockeados sin backend real
+  (`crm-kanban`, `action-queue`, `payroll`, `sidebar-collapsible`, el nuevo)
+  verdes en local sin regresiones.
