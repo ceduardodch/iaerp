@@ -830,6 +830,37 @@ export type ActionQueueRead = {
   prospecting: ActionQueueProspectingCandidate[]
 }
 
+/**
+ * Fallo operativo terminal (`GET /ops/failures`, `POST
+ * /ops/failures/{id}/retry`), espejo camelCase de
+ * `app/schemas/platform.py::OpsFailureRead`. `correlationId` y
+ * `aggregate*` vienen aplanados desde el `payload` del worker que lo
+ * originó y pueden faltar en datos viejos o malformados.
+ *
+ * `classification` es el resultado de `classify_failure()` en el backend
+ * (lista blanca por `event_type`, default deny): el panel de Incidencias lo
+ * usa para decidir si ofrece el botón de reintento, sin duplicar esa lista
+ * blanca aquí.
+ */
+export type OpsFailureStatus = 'OPEN' | 'RESOLVED'
+export type OpsFailureClassification = 'AUTO_RETRY' | 'NEEDS_HUMAN'
+
+export type OpsFailure = {
+  id: string
+  sourceType: string
+  sourceId: string
+  eventType: string
+  error: string
+  attempts: number
+  status: OpsFailureStatus
+  classification: OpsFailureClassification
+  correlationId?: string | null
+  aggregateType?: string | null
+  aggregateId?: string | null
+  createdAt: string
+  resolvedAt?: string | null
+}
+
 export type EvolutionWhatsAppIntegration = {
   connected: boolean
   displayPhoneNumber?: string | null
@@ -1036,6 +1067,14 @@ export function configureApiTokenProvider(provider: TokenProvider | null) {
   tokenProvider = provider
 }
 
+/** Correlation ID de la última respuesta del backend (`X-Correlation-Id`,
+ *  ver `app/main.py`), para adjuntarlo a los reportes de error de frontend. */
+let lastCorrelationId: string | null = null
+
+export function getLastCorrelationId(): string | null {
+  return lastCorrelationId
+}
+
 export async function apiRequest<T>(
   token: string,
   path: string,
@@ -1055,6 +1094,8 @@ export async function apiRequest<T>(
   if (response.status === 401 && tokenProvider) {
     response = await send(true)
   }
+
+  lastCorrelationId = response.headers.get('X-Correlation-Id') ?? lastCorrelationId
 
   if (!response.ok) {
     const body = await response.json().catch(() => null) as unknown

@@ -133,6 +133,7 @@ ALL_DEV_SCOPES = {
     "automation:read",
     "automation:write",
     "operations:read",
+    "operations:write",
     "parties:read",
     "parties:write",
     "products:read",

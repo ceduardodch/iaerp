@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { reportFrontendError } from '../errorReporting'
 
 type ErrorBoundaryProps = {
   children: ReactNode
@@ -23,9 +24,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo) {
-    // Deja rastro en consola para diagnóstico; en producción esto podría
-    // enviarse a un servicio de observabilidad.
-    console.error('ErrorBoundary capturó un error:', error, info.componentStack)
+    reportFrontendError(error, 'error-boundary', info.componentStack ?? undefined)
   }
 
   handleReset = () => {

@@ -1,7 +1,10 @@
+import hashlib
+import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,17 +15,22 @@ from starlette.responses import Response
 
 from app.api.analytics import router as analytics_router
 from app.api.crm import router as crm_router
+from app.api.ops import router as ops_router
 from app.api.payables import router as payables_router
 from app.api.payroll import router as payroll_router
 from app.api.router import router
 from app.api.tax import router as tax_router
 from app.core.config import get_settings
+from app.core.observability import capture_exception, init_error_tracking
 from app.db.integrity import integrity_sqlstate, is_unique_violation
 from app.health import readiness, startup_readiness
 from app.mcp.server import mcp, mcp_http_app
 
+APP_VERSION = "0.1.0"
+
 settings = get_settings()
 logger = logging.getLogger(__name__)
+init_error_tracking(settings, release=f"iaerp-backend@{APP_VERSION}")
 
 
 @asynccontextmanager
@@ -34,7 +42,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
 
 
-app = FastAPI(title=settings.PROJECT_NAME, version="0.1.0", lifespan=lifespan)
+app = FastAPI(title=settings.PROJECT_NAME, version=APP_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins(),
@@ -48,6 +56,7 @@ app.include_router(payables_router, prefix=settings.API_PREFIX)
 app.include_router(payroll_router, prefix=settings.API_PREFIX)
 app.include_router(analytics_router, prefix=settings.API_PREFIX)
 app.include_router(tax_router, prefix=settings.API_PREFIX)
+app.include_router(ops_router, prefix=settings.API_PREFIX)
 
 if settings.SRI_SIMULATOR_ENABLED:
     from app.integrations.sri.simulator import router as sri_simulator_router
@@ -93,6 +102,42 @@ async def integrity_error_handler(
         content={
             "code": "conflict",
             "message": "Ya existe un registro con esos datos",
+            "correlationId": correlation_id,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    correlation_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+    tenant_id = getattr(request.state, "tenant_id", None)
+    actor_id = getattr(request.state, "actor_id", None)
+    tenant_hash = (
+        hashlib.sha256(str(tenant_id).encode()).hexdigest()[:12] if tenant_id is not None else None
+    )
+    actor = str(actor_id) if actor_id is not None else None
+    logger.error(
+        json.dumps(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "level": "error",
+                "correlation_id": correlation_id,
+                "event": type(exc).__name__,
+                "path": request.url.path,
+                "tenant": tenant_hash,
+                "actor": actor,
+            }
+        )
+    )
+    capture_exception(exc, correlation_id=correlation_id, tenant_hash=tenant_hash, actor_id=actor)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "code": "internal_error",
+            "message": "Ocurrió un error inesperado",
             "correlationId": correlation_id,
         },
     )

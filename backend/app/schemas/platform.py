@@ -93,6 +93,8 @@ class MembershipRead(APIModel):
 SERVICE_ACCOUNT_ALLOWED_SCOPES = frozenset(
     {
         "context:read",
+        "operations:read",
+        "operations:write",
         "parties:read",
         "parties:write",
         "products:read",
@@ -169,3 +171,34 @@ class ErrorRead(APIModel):
     code: str
     message: str
     correlation_id: str
+
+
+class OpsFailureRead(APIModel):
+    """Fallo operativo terminal, tal como quedo en ``dead_letters``.
+
+    ``correlation_id`` y ``aggregate_*`` viven dentro del ``payload`` que
+    escriben los workers, no en columnas propias; se exponen aplanados porque
+    sin el correlation ID no hay forma de cruzar el fallo con los logs de la
+    request que lo origino.
+
+    ``classification`` es el resultado de
+    ``services/ops_failures.py::classify_failure(event_type)``: se expone
+    para que el panel de Incidencias del frontend decida si ofrece el botón
+    de reintento sin duplicar la lista blanca en TypeScript. El endpoint de
+    reintento manual (``POST /ops/failures/{id}/retry``) no exige esta
+    clasificación -- es solo una guia de UI para el humano.
+    """
+
+    id: uuid.UUID
+    source_type: str
+    source_id: uuid.UUID
+    event_type: str
+    error: str
+    attempts: int
+    status: str
+    classification: Literal["AUTO_RETRY", "NEEDS_HUMAN"]
+    correlation_id: str | None = None
+    aggregate_type: str | None = None
+    aggregate_id: str | None = None
+    created_at: datetime
+    resolved_at: datetime | None = None

@@ -93,6 +93,7 @@ for scope in \
   receivables:read receivables:write receivables:notify \
   payables:read payables:write payables:extract \
   payroll:read payroll:write \
+  operations:write \
   analytics:read analytics:write; do
   ensure_default_scope "$scope"
 done

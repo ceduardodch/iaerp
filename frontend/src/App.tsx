@@ -4673,6 +4673,7 @@ function Workspace() {
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando bandeja de acción…" />}>
               <ActionQueuePage
                 token={token}
+                scopes={contextQuery.data.scopes}
                 onGoToSettings={() => {
                   startTransition(() => {
                     setSection('organization')
