@@ -115,3 +115,32 @@ test('reporta con el correlation ID un fallo de render capturado por el ErrorBou
   expect(reports[0]).toContain('"source":"error-boundary"')
   expect(reports[0]).toContain(`"correlationId":"${KNOWN_CORRELATION_ID}"`)
 })
+
+test('sin VITE_ERROR_DSN no sale ninguna llamada a un backend de error tracking externo (pendiente 9)', async ({
+  page,
+  baseURL,
+}) => {
+  // Este servidor de pruebas arranca sin VITE_ERROR_DSN (default = desactivado,
+  // ver src/errorReporting.ts). Cualquier request fuera del origen de la app o
+  // de las rutas mockeadas de /api/v1 sería justo lo que Sentry.init() dispara
+  // si el gate se rompiera.
+  const appOrigin = new URL(baseURL ?? 'http://127.0.0.1:4173').origin
+  await mockApp(page)
+  const externalRequests: string[] = []
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.origin !== appOrigin) {
+      externalRequests.push(request.url())
+    }
+  })
+
+  await login(page)
+  await page.evaluate(() => {
+    window.setTimeout(() => {
+      throw new Error('Boom sin DSN')
+    }, 0)
+  })
+  await page.waitForTimeout(200)
+
+  expect(externalRequests).toEqual([])
+})

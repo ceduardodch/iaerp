@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     IAERP_SIGNING_CERT_PATH: str | None = None
     IAERP_SIGNING_CERT_PASSWORD: SecretStr | None = None
     IAERP_SECRETS_ENCRYPTION_KEY: SecretStr | None = None
+    # Pendiente 9 de docs/OBSERVABILIDAD_PENDIENTES.md (Sentry/GlitchTip). Vacío
+    # (default) = desactivado: app/core/observability.py no debe cambiar de
+    # comportamiento ni fallar sin este DSN.
+    IAERP_ERROR_DSN: str | None = None
     PUBLIC_APP_URL: str = "http://localhost:5173"
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: SecretStr | None = None

@@ -12,6 +12,7 @@ import logging
 
 import pytest_asyncio
 
+from app import main as app_main
 from app.services import ops_failures
 from tests.conftest import USER_A
 from tests.test_billing_api import TENANT_A, auth, token_for
@@ -83,3 +84,37 @@ async def test_unhandled_exception_logs_structured_json(
     # No debe filtrar el UUID crudo del tenant en el log.
     assert str(TENANT_A) not in payload["tenant"]
     assert "timestamp" in payload
+
+
+async def test_unhandled_exception_reports_to_error_tracking(
+    client_allow_500, monkeypatch
+) -> None:
+    """Pendiente 9: el handler global debe reenviar el fallo a
+    ``capture_exception`` (Sentry/GlitchTip) con el mismo correlation_id,
+    tenant pseudonimizado y actor que ya loguea en JSON.
+    """
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(ops_failures, "list_failures", _boom)
+
+    captured: list[dict] = []
+    monkeypatch.setattr(
+        app_main,
+        "capture_exception",
+        lambda exc, **kwargs: captured.append({"exc": exc, **kwargs}),
+    )
+
+    token = await token_for(client_allow_500, "a@iaerp.local", TENANT_A, ["operations:read"])
+    response = await client_allow_500.get(
+        "/api/v1/ops/failures",
+        headers={**auth(token), "X-Correlation-Id": "corr-sentry"},
+    )
+
+    assert response.status_code == 500, response.text
+    [call] = captured
+    assert isinstance(call["exc"], RuntimeError)
+    assert call["correlation_id"] == "corr-sentry"
+    assert call["tenant_hash"] == hashlib.sha256(str(TENANT_A).encode()).hexdigest()[:12]
+    assert call["actor_id"] == str(USER_A)
