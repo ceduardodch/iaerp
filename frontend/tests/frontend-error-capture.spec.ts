@@ -13,6 +13,13 @@ import { navigateToSection } from './navigation'
 const KNOWN_CORRELATION_ID = 'corr-frontend-error-test'
 
 async function mockApp(page: Page) {
+  // Red de seguridad: cualquier ruta de API que no esté mockeada abajo debe
+  // seguir devolviendo el correlation ID conocido en vez de escapar al
+  // backend real (que en CI sí está arriba y respondería con un UUID propio,
+  // pisando el que este test necesita para su aserción).
+  await page.route('**/api/v1/**', (route) =>
+    route.fulfill({ headers: { 'X-Correlation-Id': KNOWN_CORRELATION_ID }, json: {} }),
+  )
   await page.route('**/api/v1/dev/token', (route) => route.fulfill({ json: { accessToken: 'test-token' } }))
   await mockDashboardEndpoints(page)
   await page.route('**/api/v1/context', (route) =>
