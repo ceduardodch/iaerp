@@ -11,9 +11,10 @@ import {
   type LeadActivity,
   type LeadMessageCreate,
   type Operation,
+  type OpsFailure,
   type ReminderInput,
 } from '../../api'
-import { ErpButton, ErpEmptyState, ErpPageHeader, ErpPanel } from '../erp'
+import { ErpButton, ErpEmptyState, ErpPageHeader, ErpPanel, ErpStatusBadge } from '../erp'
 import './ActionQueuePage.css'
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
@@ -194,6 +195,57 @@ function ProspectingRow({
   )
 }
 
+function IncidentRow({
+  token,
+  failure,
+  canRetry,
+  onResolved,
+}: {
+  token: string
+  failure: OpsFailure
+  canRetry: boolean
+  onResolved: (failureId: string) => void
+}) {
+  const retry = useMutation({
+    mutationFn: () =>
+      apiRequest<OpsFailure>(token, `/ops/failures/${failure.id}/retry`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-ops-failure-retry') },
+      }),
+    onSuccess: () => onResolved(failure.id),
+  })
+
+  return (
+    <li className="action-queue-row">
+      <div className="action-queue-row-info">
+        <strong>{failure.eventType}</strong>
+        <span className="fine-print">
+          {failure.attempts} intento(s) · {formatDate(failure.createdAt)}
+          {failure.correlationId ? ` · ${failure.correlationId}` : ''}
+        </span>
+      </div>
+      <div className="action-queue-row-message">
+        Causa
+        <p className="fine-print">{failure.error}</p>
+      </div>
+      <div className="action-queue-row-actions">
+        {canRetry ? (
+          <ErpButton variant="primary" disabled={retry.isPending} onClick={() => retry.mutate()}>
+            {retry.isPending ? 'Reintentando…' : 'Reintentar'}
+          </ErpButton>
+        ) : (
+          <ErpStatusBadge tone="warning">Requiere revisión manual</ErpStatusBadge>
+        )}
+        {retry.error ? (
+          <p className="form-error" role="alert">
+            {retry.error.message}
+          </p>
+        ) : null}
+      </div>
+    </li>
+  )
+}
+
 /**
  * Bandeja de acción (Comercial → Bandeja de acción): un solo lugar para
  * revisar y aprobar los recordatorios de cobranza vencida y los mensajes de
@@ -203,14 +255,17 @@ function ProspectingRow({
  */
 export function ActionQueuePage({
   token,
+  scopes,
   onGoToSettings,
 }: {
   token: string
+  scopes: string[]
   onGoToSettings?: () => void
 }) {
   const queryClient = useQueryClient()
   const [sentReceivableIds, setSentReceivableIds] = useState<Set<string>>(new Set())
   const [sentLeadIds, setSentLeadIds] = useState<Set<string>>(new Set())
+  const [resolvedFailureIds, setResolvedFailureIds] = useState<Set<string>>(new Set())
 
   const queueQuery = useQuery({
     queryKey: ['crm', 'action-queue'],
@@ -219,6 +274,13 @@ export function ActionQueuePage({
   const integrationsQuery = useQuery({
     queryKey: ['crm', 'integrations'],
     queryFn: () => apiRequest<IntegrationStatus>(token, '/crm/integrations'),
+  })
+  const canReadFailures = scopes.includes('operations:read')
+  const canRetryFailures = scopes.includes('operations:write')
+  const failuresQuery = useQuery({
+    queryKey: ['ops', 'failures', 'open'],
+    queryFn: () => apiRequest<OpsFailure[]>(token, '/ops/failures?status=OPEN'),
+    enabled: canReadFailures,
   })
 
   function markReceivableSent(receivableId: string) {
@@ -229,6 +291,11 @@ export function ActionQueuePage({
   function markLeadSent(leadId: string) {
     setSentLeadIds((current) => new Set(current).add(leadId))
     void queryClient.invalidateQueries({ queryKey: ['crm', 'action-queue'] })
+  }
+
+  function markFailureResolved(failureId: string) {
+    setResolvedFailureIds((current) => new Set(current).add(failureId))
+    void queryClient.invalidateQueries({ queryKey: ['ops', 'failures', 'open'] })
   }
 
   const collections = (queueQuery.data?.collections ?? []).filter(
@@ -243,6 +310,8 @@ export function ActionQueuePage({
 
   const nothingPending =
     !queueQuery.isLoading && !queueQuery.error && collections.length === 0 && prospecting.length === 0
+
+  const failures = (failuresQuery.data ?? []).filter((failure) => !resolvedFailureIds.has(failure.id))
 
   return (
     <>
@@ -316,6 +385,35 @@ export function ActionQueuePage({
           </ErpPanel>
         </>
       )}
+
+      {canReadFailures ? (
+        <ErpPanel title="Incidencias" count={failures.length}>
+          {failuresQuery.error ? (
+            <p className="form-error" role="alert">
+              No se pudo cargar las incidencias: {failuresQuery.error.message}
+            </p>
+          ) : null}
+          {failuresQuery.isLoading ? <p className="fine-print">Cargando…</p> : null}
+          {!failuresQuery.isLoading && failures.length === 0 ? (
+            <ErpEmptyState
+              title="Sin incidencias abiertas"
+              description="No hay fallos operativos pendientes de resolver en este momento."
+            />
+          ) : (
+            <ul className="action-queue-list">
+              {failures.map((failure) => (
+                <IncidentRow
+                  key={failure.id}
+                  token={token}
+                  failure={failure}
+                  canRetry={canRetryFailures && failure.classification === 'AUTO_RETRY'}
+                  onResolved={markFailureResolved}
+                />
+              ))}
+            </ul>
+          )}
+        </ErpPanel>
+      ) : null}
     </>
   )
 }

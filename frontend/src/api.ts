@@ -836,8 +836,14 @@ export type ActionQueueRead = {
  * `app/schemas/platform.py::OpsFailureRead`. `correlationId` y
  * `aggregate*` vienen aplanados desde el `payload` del worker que lo
  * originó y pueden faltar en datos viejos o malformados.
+ *
+ * `classification` es el resultado de `classify_failure()` en el backend
+ * (lista blanca por `event_type`, default deny): el panel de Incidencias lo
+ * usa para decidir si ofrece el botón de reintento, sin duplicar esa lista
+ * blanca aquí.
  */
 export type OpsFailureStatus = 'OPEN' | 'RESOLVED'
+export type OpsFailureClassification = 'AUTO_RETRY' | 'NEEDS_HUMAN'
 
 export type OpsFailure = {
   id: string
@@ -847,6 +853,7 @@ export type OpsFailure = {
   error: string
   attempts: number
   status: OpsFailureStatus
+  classification: OpsFailureClassification
   correlationId?: string | null
   aggregateType?: string | null
   aggregateId?: string | null

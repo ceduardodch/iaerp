@@ -91,6 +91,7 @@ def _to_read(entity: DeadLetter) -> OpsFailureRead:
         error=entity.error,
         attempts=entity.attempts,
         status=entity.status,
+        classification=classify_failure(entity.event_type),
         correlation_id=_payload_text(entity.payload, "correlation_id"),
         aggregate_type=_payload_text(entity.payload, "aggregate_type"),
         aggregate_id=_payload_text(entity.payload, "aggregate_id"),

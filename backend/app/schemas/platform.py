@@ -180,6 +180,13 @@ class OpsFailureRead(APIModel):
     escriben los workers, no en columnas propias; se exponen aplanados porque
     sin el correlation ID no hay forma de cruzar el fallo con los logs de la
     request que lo origino.
+
+    ``classification`` es el resultado de
+    ``services/ops_failures.py::classify_failure(event_type)``: se expone
+    para que el panel de Incidencias del frontend decida si ofrece el botón
+    de reintento sin duplicar la lista blanca en TypeScript. El endpoint de
+    reintento manual (``POST /ops/failures/{id}/retry``) no exige esta
+    clasificación -- es solo una guia de UI para el humano.
     """
 
     id: uuid.UUID
@@ -189,6 +196,7 @@ class OpsFailureRead(APIModel):
     error: str
     attempts: int
     status: str
+    classification: Literal["AUTO_RETRY", "NEEDS_HUMAN"]
     correlation_id: str | None = None
     aggregate_type: str | None = None
     aggregate_id: str | None = None

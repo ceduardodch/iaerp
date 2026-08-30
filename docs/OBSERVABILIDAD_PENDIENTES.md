@@ -74,7 +74,7 @@ seguridad de todo el bucle.
       de nómina que se olvidó de esto rompió con 422; no repetirlo).
 - [x] 5. Tipos `OpsFailure` en `frontend/src/api.ts`, espejo camelCase del
       schema.
-- [ ] 6. Panel "Incidencias" en la bandeja de acción
+- [x] 6. Panel "Incidencias" en la bandeja de acción
       (`components/action-queue/`): lista los fallos abiertos, muestra causa y
       correlation ID, y permite reintentar los `AUTO_RETRY`. Los `NEEDS_HUMAN`
       se muestran con su motivo y sin botón de reintento.
@@ -248,3 +248,39 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   `npx tsc --noEmit`, `npm run lint` y `npm run build` limpios; los tres
   warnings de lint que aparecen en el run (`useKanban.ts`, `CrmKanban.tsx`,
   `Toast.tsx`) son preexistentes y ajenos a este archivo.
+- Pendiente 6 (panel "Incidencias" en `ActionQueuePage.tsx`), commit
+  pendiente de push a `release`.
+  Antes de tocar el frontend agregué un campo `classification` a
+  `OpsFailureRead` (`app/schemas/platform.py` + `_to_read` en
+  `app/services/ops_failures.py`), calculado con `classify_failure()`: sin
+  esto el panel habría tenido que reimplementar la lista blanca de
+  `event_type` en TypeScript, duplicando una decisión que ya vive en el
+  backend y que puede desincronizarse. El endpoint de reintento manual
+  (pendiente 4) sigue sin exigir esta clasificación -- es solo una guía de
+  UI para el humano, documentado explícitamente en el docstring del schema
+  para que no se confunda con un gate de seguridad.
+  El panel nuevo (`IncidentRow` + sección "Incidencias" en
+  `ActionQueuePage.tsx`) consulta `GET /ops/failures?status=OPEN` solo si
+  `scopes` incluye `operations:read` (prop nueva que `App.tsx` pasa desde
+  `contextQuery.data.scopes`, igual que ya hacía `InvoicesPage`); el botón
+  "Reintentar" solo aparece si además el fallo es `AUTO_RETRY` y el usuario
+  tiene `operations:write`. Los `NEEDS_HUMAN` muestran la insignia "Requiere
+  revisión manual" sin botón. Al reintentar, la fila se oculta localmente y
+  se invalida la query -- no se reabre optimísticamente porque el backend ya
+  marca el `DeadLetter` original como `RESOLVED`.
+  Se verificó en rojo dos veces: (1) quitando `classification` del schema
+  -- `test_list_failures_returns_dead_letters` y la nueva
+  `test_list_failures_exposes_needs_human_for_unknown_event_types` fallan
+  con `ValidationError: classification Field required`; (2) forzando
+  `canReadFailures`/`canRetryFailures`/`canRetry` a `true` en el componente
+  -- los E2E `sin el scope operations:read no se muestra el panel de
+  Incidencias` y `solo ofrece reintentar la incidencia AUTO_RETRY` fallan
+  mostrando el panel/botón que no debían. Ambas veces se restauró
+  reescribiendo, sin `git checkout`.
+  Backend: 2 pruebas nuevas + 19 del área (`test_ops_failures_api.py`,
+  `test_ops_failure_policy.py`, `test_unhandled_exception_handler.py`)
+  verdes, ruff y mypy limpios; suite completa 583 pasan/36 skip, mismos 2
+  fallos preexistentes y ajenos (`test_health` por Redis apagado, duplicado
+  de identificación en nómina). Frontend: 5 E2E nuevos + 6 existentes de
+  `action-queue.spec.ts` verdes (11/11), `tsc --noEmit`, `oxlint` (mismos 3
+  warnings preexistentes) y `npm run build` limpios.

@@ -55,15 +55,55 @@ const prospectingCandidate = {
   suggestedMessage: 'Hola Hotel Sur, gracias por tu interés en "Facturación Hotel Sur". ¿Tienes unos minutos esta semana?',
 }
 
+const autoRetryFailure = {
+  id: 'cccccccc-3333-4333-8333-333333333333',
+  sourceType: 'OUTBOX',
+  sourceId: 'source-1',
+  eventType: 'invoice.signed',
+  error: 'Timeout consultando al SRI',
+  attempts: 5,
+  status: 'OPEN' as const,
+  classification: 'AUTO_RETRY' as const,
+  correlationId: 'corr-auto-retry',
+  aggregateType: 'sales_document',
+  aggregateId: 'doc-1',
+  createdAt: '2026-08-28T09:00:00Z',
+  resolvedAt: null,
+}
+
+const needsHumanFailure = {
+  id: 'dddddddd-4444-4444-8444-444444444444',
+  sourceType: 'OUTBOX',
+  sourceId: 'source-2',
+  eventType: 'collection.reminder.due',
+  error: 'No se pudo enviar el recordatorio de cobranza',
+  attempts: 3,
+  status: 'OPEN' as const,
+  classification: 'NEEDS_HUMAN' as const,
+  correlationId: 'corr-needs-human',
+  aggregateType: 'receivable',
+  aggregateId: 'rec-1',
+  createdAt: '2026-08-27T09:00:00Z',
+  resolvedAt: null,
+}
+
 async function mockApi(
   page: Page,
-  options?: { collections?: unknown[]; prospecting?: unknown[]; integrations?: Record<string, unknown> },
+  options?: {
+    collections?: unknown[]
+    prospecting?: unknown[]
+    integrations?: Record<string, unknown>
+    scopes?: string[]
+    failures?: unknown[]
+  },
 ) {
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
   await mockDashboardEndpoints(page)
-  await page.route('**/api/v1/context', (route) => route.fulfill({ json: context }))
+  await page.route('**/api/v1/context', (route) =>
+    route.fulfill({ json: { ...context, scopes: options?.scopes ?? context.scopes } }),
+  )
   for (const path of ['parties', 'products', 'tax-categories', 'establishments', 'emission-points']) {
     await page.route(`**/api/v1/${path}`, (route) => route.fulfill({ json: [] }))
   }
@@ -77,6 +117,9 @@ async function mockApi(
         prospecting: options?.prospecting ?? [prospectingCandidate],
       },
     }),
+  )
+  await page.route('**/api/v1/ops/failures**', (route) =>
+    route.fulfill({ json: options?.failures ?? [autoRetryFailure, needsHumanFailure] }),
   )
 }
 
@@ -205,4 +248,70 @@ test('avisa cuando WhatsApp no está conectado en vez de dejar los botones sin e
 
   await page.getByRole('button', { name: 'Ir a Configuración' }).first().click()
   await expect(page.getByRole('heading', { name: 'Empresa', exact: true })).toBeVisible()
+})
+
+/**
+ * Panel "Incidencias" (pendiente 6, docs/OBSERVABILIDAD_PENDIENTES.md):
+ * lista `GET /ops/failures?status=OPEN` y permite reintentar solo los
+ * `AUTO_RETRY`. Gateado por el scope `operations:read`/`operations:write`
+ * porque no todo tenant/rol debe ver ni disparar reintentos operativos.
+ */
+
+test('sin el scope operations:read no se muestra el panel de Incidencias', async ({ page }) => {
+  await mockApi(page)
+  await openActionQueue(page)
+
+  await expect(page.getByRole('heading', { name: 'Incidencias' })).toHaveCount(0)
+})
+
+test('con operations:read muestra las incidencias abiertas, su causa y correlation ID', async ({ page }) => {
+  await mockApi(page, { scopes: [...context.scopes, 'operations:read', 'operations:write'] })
+  await openActionQueue(page)
+
+  await expect(page.getByRole('heading', { name: 'Incidencias' })).toBeVisible()
+  await expect(page.getByText('invoice.signed', { exact: true })).toBeVisible()
+  await expect(page.getByText('Timeout consultando al SRI')).toBeVisible()
+  await expect(page.getByText('corr-auto-retry', { exact: false })).toBeVisible()
+
+  await expect(page.getByText('collection.reminder.due', { exact: true })).toBeVisible()
+  await expect(page.getByText('No se pudo enviar el recordatorio de cobranza')).toBeVisible()
+})
+
+test('solo ofrece reintentar la incidencia AUTO_RETRY; la NEEDS_HUMAN no tiene botón', async ({ page }) => {
+  await mockApi(page, { scopes: [...context.scopes, 'operations:read', 'operations:write'] })
+  await openActionQueue(page)
+
+  const autoRetryRow = page.locator('.action-queue-row', { hasText: 'invoice.signed' })
+  await expect(autoRetryRow.getByRole('button', { name: 'Reintentar' })).toBeVisible()
+
+  const needsHumanRow = page.locator('.action-queue-row', { hasText: 'collection.reminder.due' })
+  await expect(needsHumanRow.getByRole('button', { name: 'Reintentar' })).toHaveCount(0)
+  await expect(needsHumanRow.getByText('Requiere revisión manual')).toBeVisible()
+})
+
+test('reintentar una incidencia AUTO_RETRY la quita de la lista de abiertas', async ({ page }) => {
+  await mockApi(page, { scopes: [...context.scopes, 'operations:read', 'operations:write'] })
+  let idempotencyKeyHeader: string | undefined
+  await page.route(`**/api/v1/ops/failures/${autoRetryFailure.id}/retry`, (route) => {
+    idempotencyKeyHeader = route.request().headers()['idempotency-key']
+    return route.fulfill({
+      json: { ...autoRetryFailure, status: 'RESOLVED', resolvedAt: '2026-08-29T10:00:00Z' },
+    })
+  })
+
+  await openActionQueue(page)
+
+  const autoRetryRow = page.locator('.action-queue-row', { hasText: 'invoice.signed' })
+  await autoRetryRow.getByRole('button', { name: 'Reintentar' }).click()
+
+  await expect(page.locator('.action-queue-row', { hasText: 'invoice.signed' })).toHaveCount(0)
+  expect(idempotencyKeyHeader).toBeTruthy()
+})
+
+test('sin incidencias abiertas muestra el estado vacío del panel', async ({ page }) => {
+  await mockApi(page, { scopes: [...context.scopes, 'operations:read'], failures: [] })
+  await openActionQueue(page)
+
+  await expect(page.getByRole('heading', { name: 'Incidencias', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Sin incidencias abiertas' })).toBeVisible()
 })

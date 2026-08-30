@@ -78,6 +78,24 @@ async def test_list_failures_returns_dead_letters(client) -> None:
     # El correlation ID vive dentro del payload que escriben los workers; sin
     # extraerlo no hay forma de cruzar el fallo con los logs de la request.
     assert item["correlationId"] == "corr-0001"
+    # "invoice.signed" es el unico event_type en la lista blanca de
+    # classify_failure(): el panel de Incidencias del frontend usa este campo
+    # para decidir si ofrece el boton de reintento, sin duplicar la lista
+    # blanca en TypeScript.
+    assert item["classification"] == "AUTO_RETRY"
+
+
+async def test_list_failures_exposes_needs_human_for_unknown_event_types(client) -> None:
+    """Cualquier event_type fuera de la lista blanca es NEEDS_HUMAN (default deny)."""
+    await _add_dead_letter(
+        tenant_id=TENANT_A, event_type="collection.reminder.due", correlation_id="corr-needs-human"
+    )
+
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["operations:read"])
+    response = await client.get("/api/v1/ops/failures", headers=auth(token))
+
+    assert response.status_code == 200, response.text
+    assert response.json()[0]["classification"] == "NEEDS_HUMAN"
 
 
 async def test_list_failures_is_tenant_scoped(client) -> None:
