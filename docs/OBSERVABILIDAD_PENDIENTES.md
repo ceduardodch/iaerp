@@ -72,7 +72,7 @@ seguridad de todo el bucle.
       Registrar el scope en `ALL_DEV_SCOPES`, `SERVICE_ACCOUNT_ALLOWED_SCOPES`,
       `infra/keycloak/iaerp-realm.json` y `configure-staging.sh` (el pendiente
       de nómina que se olvidó de esto rompió con 422; no repetirlo).
-- [ ] 5. Tipos `OpsFailure` en `frontend/src/api.ts`, espejo camelCase del
+- [x] 5. Tipos `OpsFailure` en `frontend/src/api.ts`, espejo camelCase del
       schema.
 - [ ] 6. Panel "Incidencias" en la bandeja de acción
       (`components/action-queue/`): lista los fallos abiertos, muestra causa y
@@ -234,3 +234,17 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   verdes; suite completa 582 pasan/36 skip, mismos 2 fallos preexistentes y
   ajenos (`test_health` por Redis apagado, duplicado de identificación en
   nómina); ruff y mypy limpios.
+- Pendiente 5 (tipos `OpsFailure` en `frontend/src/api.ts`), commit `b911ade`,
+  **publicado solo en `release`** (CI run `33289490530` verde: Frontend 6m41s,
+  Security OK; Backend/OIDC/migraciones/contratos YAML quedaron `skipped` por
+  no tocar esas rutas, y el despliegue a Coolify también `skipped`, esperado
+  en esta rama). Falta autorización humana para promover a `main`.
+  Es un cambio puramente de tipos, sin lógica: `OpsFailure`/`OpsFailureStatus`
+  espejan `OpsFailureRead` (`app/schemas/platform.py`) campo a campo en
+  camelCase, mismo patrón sin wrapper propio que `Payable` y
+  `PayrollEmployee` (commit `1958de7`, que tampoco llevó test dedicado por la
+  misma razón: no hay comportamiento que ejercitar hasta que el pendiente 6
+  consuma el tipo desde el panel de Incidencias). Verificado con
+  `npx tsc --noEmit`, `npm run lint` y `npm run build` limpios; los tres
+  warnings de lint que aparecen en el run (`useKanban.ts`, `CrmKanban.tsx`,
+  `Toast.tsx`) son preexistentes y ajenos a este archivo.
