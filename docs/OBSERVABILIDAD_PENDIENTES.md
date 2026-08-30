@@ -82,7 +82,7 @@ seguridad de todo el bucle.
       `unhandledrejection` en `main.tsx`, más el `componentDidCatch` de
       `ErrorBoundary.tsx` (hoy solo hace `console.error`). Reportar con el
       correlation ID de la última request.
-- [ ] 8. E2E `frontend/tests/ops-failures.spec.ts` con backend mockeado en
+- [x] 8. E2E `frontend/tests/ops-failures.spec.ts` con backend mockeado en
       memoria (patrón de `payroll.spec.ts`).
 
 ### Fase 2 — Enterarse
@@ -325,3 +325,44 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   `npm run build` limpios; 45 E2E de specs mockeados sin backend real
   (`crm-kanban`, `action-queue`, `payroll`, `sidebar-collapsible`, el nuevo)
   verdes en local sin regresiones.
+- Pendiente 8 (E2E `frontend/tests/ops-failures.spec.ts`), commit `6b5abf7`,
+  **publicado solo en `release`** (CI run `33298642264` verde: Frontend
+  7m49s, Security OK; Backend/OIDC/migraciones/YAML/Coolify quedaron
+  `skipped` por no tocar esas rutas, esperado en esta rama). Falta
+  autorización humana para promover a `main`. Sin cambio de aplicación: es un
+  archivo de test nuevo, así que la verificación en rojo se hizo rompiendo a
+  propósito el código real que cada prueba ejercita (y restaurándolo después
+  reescribiendo, sin `git checkout`), no revirtiendo un "arreglo" propio.
+  A diferencia de las 8 pruebas de Incidencias que ya viven en
+  `action-queue.spec.ts` (pendiente 6) -- que usan una lista estática y una
+  respuesta de reintento fija por `page.route` -- este archivo monta un
+  backend en memoria que aplica de verdad el filtro `status` de
+  `GET /ops/failures` y muta el `DeadLetter` al reintentar (404/409/422 y
+  éxito), replicando las reglas de `app/services/ops_failures.py::
+  retry_failure`. Los 4 casos nuevos y lo que cada uno verificó en rojo:
+  (1) el filtro por `status=OPEN` -- se rompió quitando el query param en
+  `ActionQueuePage.tsx`, la incidencia `RESOLVED` se colaba en la lista;
+  (2) que el reintento persiste en el backend y sobrevive a una recarga
+  completa de página (no solo un `Set` local en React) -- se rompió
+  cambiando la `mutationFn` de `IncidentRow` por un éxito falso sin llamar a
+  `apiRequest`, y tras `page.reload()` la incidencia reaparecía porque el
+  backend simulado nunca se enteró; (3) que un 422 por payload incompleto
+  (`aggregate_type`/`aggregate_id` ausentes, mismo caso que documentó el
+  pendiente 4) se explica en un `role="alert"` y no hace desaparecer la fila;
+  (4) que un fallo técnico transitorio (503) dos veces seguidas no bloquea
+  la incidencia: el botón se reactiva solo porque `retry.isPending` vuelve a
+  `false` al fallar la mutación, y un segundo click sí tiene éxito. (3) y (4)
+  se rompieron juntas quitando el bloque `retry.error ? <p role="alert">...`
+  de `IncidentRow`. La navegación tras `page.reload()` necesitó volver a
+  llamar `navigateToSection(page, 'Bandeja de acción')`: la sección activa
+  vive en estado de React, no en la URL, aunque el token en `sessionStorage`
+  sí sobrevive la recarga sin pasar por "Continuar" de nuevo.
+  `tsc --noEmit`, `oxlint` (mismos 3 warnings preexistentes) y `npm run build`
+  limpios; 49 E2E de specs mockeados sin backend real (`crm-kanban`,
+  `action-queue`, `payroll`, `sidebar-collapsible`,
+  `frontend-error-capture`, el nuevo `ops-failures`) verdes en local en
+  `chromium`, sin regresiones.
+  Con esto se cierra la Fase 1 completa
+  (docs/OBSERVABILIDAD_PENDIENTES.md). Sigue el pendiente 9 (Fase 2, Sentry/
+  GlitchTip gateado por `IAERP_ERROR_DSN`); la Fase 3 sigue esperando
+  autorización humana explícita antes de tocarla.
