@@ -59,7 +59,7 @@ seguridad de todo el bucle.
       (`workers/sri_transmission.py::_followup_or_dead_letter`) solo crea la
       fila. Unir ambas tablas duplicaría todos los fallos del dispatcher; el
       `UniqueConstraint(source_type, source_id)` ya garantiza una fila por fallo.
-- [ ] 2. Handler global de excepciones en `main.py` + logs JSON estructurados
+- [x] 2. Handler global de excepciones en `main.py` + logs JSON estructurados
       (timestamp, level, correlation_id, tenant pseudonimizado, actor, evento).
       Hoy un 500 que no sea `IntegrityError` se pierde en el traceback de
       uvicorn sin correlation ID.
@@ -153,3 +153,27 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   herramienta de observabilidad instalada (solo intención en docs) y que los
   guardrails de agente (`AutomationSettings`, `AutomationRateWindow`,
   idempotencia, auditoría) ya existen y son reutilizables tal cual.
+- Pendiente 2 (handler global de excepciones), commit `439ca63`, **publicado
+  solo en `release`** (CI run `33285077255` verde: Backend 15m11s, Security y
+  OIDC OK; el job de despliegue a Coolify quedó `skipped`, que es justo lo
+  buscado en esta rama). Falta autorización humana para promover a `main`.
+  El handler se registra con `@app.exception_handler(Exception)`, lo que en
+  Starlette lo instala en `ServerErrorMiddleware` (no en `ExceptionMiddleware`):
+  por eso solo intercepta excepciones que ningún otro handler capturó —
+  `HTTPException` y `IntegrityError` siguen su camino normal — y no compite con
+  el handler de `IntegrityError` ya existente. El `tenant_id`/`actor_id` se
+  guardan en `request.state` desde `get_auth_context`
+  (`app/core/auth.py::get_auth_context`) porque los exception handlers de
+  FastAPI solo reciben `(request, exc)` y no pueden usar `Depends`; el tenant
+  se loguea pseudonimizado con `sha256(...)[:12]`, nunca el UUID crudo. Se
+  verificó en rojo quitando el handler nuevo: las dos pruebas de
+  `test_unhandled_exception_handler.py` fallan (una con `JSONDecodeError` al
+  parsear el body plano de Starlette, otra sin ningún registro `app.main` en
+  `caplog`), y se restauró reescribiendo el bloque, sin `git checkout`. 2
+  pruebas nuevas + 27 del área (`test_ops_failures_api.py`,
+  `test_billing_api.py`) verdes, ruff y mypy limpios. La suite completa tiene
+  2 fallos preexistentes y ajenos a este cambio (confirmado corriéndolos en
+  `08f8d63` antes de tocar nada): `test_health` por Redis apagado (esperado) y
+  `test_payroll_employees_service.py::test_create_employee_rejects_duplicate_identification_within_tenant`
+  por un `IntegrityError` crudo que el servicio de nómina no atrapa — no es
+  parte de este pendiente.
