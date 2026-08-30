@@ -63,7 +63,7 @@ seguridad de todo el bucle.
       (timestamp, level, correlation_id, tenant pseudonimizado, actor, evento).
       Hoy un 500 que no sea `IntegrityError` se pierde en el traceback de
       uvicorn sin correlation ID.
-- [ ] 3. Servicio de política `services/ops_failures.py`:
+- [x] 3. Servicio de política `services/ops_failures.py`:
       `classify_failure()` decide `AUTO_RETRY` / `NEEDS_HUMAN` con **lista
       blanca explícita por `event_type`** (default deny). Su prueba
       `backend/tests/test_ops_failure_policy.py` es intocable (ver reglas).
@@ -177,3 +177,22 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   `test_payroll_employees_service.py::test_create_employee_rejects_duplicate_identification_within_tenant`
   por un `IntegrityError` crudo que el servicio de nómina no atrapa — no es
   parte de este pendiente.
+- Pendiente 3 (`classify_failure()`), commit `e94b7ce`, **publicado solo en
+  `release`** (CI run `33285961789` verde: Backend 15m53s, Security OK; el
+  despliegue a Coolify quedó `skipped`, esperado en esta rama). Falta
+  autorización humana para promover a `main`. La lista blanca solo tiene
+  `invoice.signed`: es el único handler (`workers/sri_transmission.py::
+  handle_invoice_signed`) que demuestra reconciliación idempotente antes de
+  reintentar — nunca retransmite una clave con `SRITransmission` en
+  `RECEIVED`/`PENDING_AUTHORIZATION`/`AUTHORIZED`, solo reconsulta
+  autorización, y ese es el mismo camino que ya usa su propio backoff
+  automático antes de agotar `OUTBOX_MAX_ATTEMPTS`. Se revisó cada otro
+  `event_type` real del sistema (`invoice.authorized`,
+  `credit_note.authorized`, `collection.reminder.due`, los cuatro de
+  `campaign.*`, `tax.xml_recovery.requested`) y ninguno tiene ese chequeo en
+  su handler, así que quedan `NEEDS_HUMAN` por default-deny. Se verificó en
+  rojo vaciando la lista blanca — `test_invoice_signed_is_auto_retry` falla
+  mostrando `NEEDS_HUMAN` — y se restauró reescribiendo, sin `git checkout`.
+  3 pruebas nuevas + 7 de `test_ops_failures_api.py` + 2 de
+  `test_unhandled_exception_handler.py` verdes, ruff y mypy limpios. No se
+  tocó el endpoint ni el schema: eso es pendiente 4 en adelante.
