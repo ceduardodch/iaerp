@@ -1,7 +1,10 @@
+import hashlib
+import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -95,6 +98,41 @@ async def integrity_error_handler(
         content={
             "code": "conflict",
             "message": "Ya existe un registro con esos datos",
+            "correlationId": correlation_id,
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    correlation_id = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+    tenant_id = getattr(request.state, "tenant_id", None)
+    actor_id = getattr(request.state, "actor_id", None)
+    logger.error(
+        json.dumps(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "level": "error",
+                "correlation_id": correlation_id,
+                "event": type(exc).__name__,
+                "path": request.url.path,
+                "tenant": (
+                    hashlib.sha256(str(tenant_id).encode()).hexdigest()[:12]
+                    if tenant_id is not None
+                    else None
+                ),
+                "actor": str(actor_id) if actor_id is not None else None,
+            }
+        )
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "code": "internal_error",
+            "message": "Ocurrió un error inesperado",
             "correlationId": correlation_id,
         },
     )

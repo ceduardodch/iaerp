@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, cast
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 from sqlalchemy import select
@@ -181,6 +181,7 @@ async def resolve_auth_context(
 
 
 async def get_auth_context(
+    request: Request,
     token: Annotated[str, Depends(oauth2_scheme)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> AuthContext:
@@ -192,7 +193,13 @@ async def get_auth_context(
             detail="Invalid access token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
-    return await resolve_auth_context(payload, session)
+    context = await resolve_auth_context(payload, session)
+    # El handler global de excepciones en app/main.py lee esto de request.state
+    # para loguear tenant/actor: no puede usar Depends(get_auth_context) porque
+    # los exception handlers de FastAPI solo reciben (request, exc).
+    request.state.tenant_id = context.tenant_id
+    request.state.actor_id = context.actor_id
+    return context
 
 
 def require_scopes(
