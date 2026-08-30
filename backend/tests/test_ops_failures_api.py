@@ -13,6 +13,8 @@ marca ``dead_lettered_at`` en el ``OutboxEvent`` *y ademas* inserta la fila de
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
+
 from app.db.session import SessionFactory
 from app.models.platform import DeadLetter, OutboxEvent
 from tests.test_billing_api import TENANT_A, TENANT_B, auth, token_for
@@ -163,3 +165,141 @@ async def test_list_failures_respects_limit(client) -> None:
 
     assert response.status_code == 200, response.text
     assert [item["correlationId"] for item in response.json()] == ["corr-0", "corr-1"]
+
+
+# --- POST /ops/failures/{id}/retry -----------------------------------------
+#
+# Reintento MANUAL disparado por un humano con el scope nuevo
+# ``operations:write``. A diferencia del futuro agente de la Fase 3
+# (pendiente 11, gateado por ``classify_failure() == AUTO_RETRY``), aquí un
+# humano ya ejerció su propio juicio al presionar el botón: el endpoint no
+# repite ese gate, solo exige que el fallo siga ``OPEN`` y pertenezca al
+# tenant. Encola un ``OutboxEvent`` FRESCO (id nuevo) en vez de reabrir el
+# original, siguiendo el mismo patrón ya probado en
+# ``workers/sri_transmission.py::_enqueue_followup``: reabrir el evento
+# original no sirve porque su ``InboxEvent`` puede seguir ``COMPLETED`` y
+# ``consume_once`` lo deduplicaría.
+
+
+async def test_retry_failure_requires_operations_write_scope(client) -> None:
+    failure_id = await _add_dead_letter(tenant_id=TENANT_A)
+
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["operations:read"])
+    response = await client.post(
+        f"/api/v1/ops/failures/{failure_id}/retry",
+        headers=auth(token, "retry-scope-0001-key"),
+    )
+    assert response.status_code == 403, response.text
+
+
+async def test_retry_failure_reopens_and_enqueues_fresh_outbox_event(client) -> None:
+    failure_id = await _add_dead_letter(
+        tenant_id=TENANT_A, event_type="invoice.signed", correlation_id="corr-retry"
+    )
+
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["operations:write"])
+    response = await client.post(
+        f"/api/v1/ops/failures/{failure_id}/retry",
+        headers=auth(token, "retry-ok-0001-key"),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["id"] == str(failure_id)
+    assert body["status"] == "RESOLVED"
+    assert body["resolvedAt"] is not None
+
+    async with SessionFactory() as session:
+        resolved = await session.get(DeadLetter, failure_id)
+        assert resolved is not None
+        assert resolved.status == "RESOLVED"
+
+        fresh_events = list(
+            (
+                await session.scalars(
+                    select(OutboxEvent).where(
+                        OutboxEvent.tenant_id == TENANT_A,
+                        OutboxEvent.event_type == "invoice.signed",
+                        OutboxEvent.aggregate_id == "doc-1",
+                    )
+                )
+            ).all()
+        )
+        assert len(fresh_events) == 1, "debe crear un OutboxEvent fresco para redisparar el handler"
+        fresh = fresh_events[0]
+        assert fresh.id != failure_id
+        assert fresh.attempts == 0
+        assert fresh.published_at is None
+        assert fresh.dead_lettered_at is None
+        assert fresh.correlation_id == "corr-retry"
+
+
+async def test_retry_failure_twice_returns_409(client) -> None:
+    failure_id = await _add_dead_letter(tenant_id=TENANT_A, correlation_id="corr-doble")
+
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["operations:write"])
+    first = await client.post(
+        f"/api/v1/ops/failures/{failure_id}/retry",
+        headers=auth(token, "retry-doble-0001-key"),
+    )
+    assert first.status_code == 200, first.text
+
+    second = await client.post(
+        f"/api/v1/ops/failures/{failure_id}/retry",
+        headers=auth(token, "retry-doble-0002-key"),
+    )
+    assert second.status_code == 409, second.text
+
+
+async def test_retry_failure_missing_id_returns_404(client) -> None:
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["operations:write"])
+    response = await client.post(
+        f"/api/v1/ops/failures/{uuid.uuid4()}/retry",
+        headers=auth(token, "retry-missing-0001-key"),
+    )
+    assert response.status_code == 404, response.text
+
+
+async def test_retry_failure_is_tenant_scoped(client) -> None:
+    failure_id = await _add_dead_letter(tenant_id=TENANT_B, correlation_id="corr-otro-tenant")
+
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["operations:write"])
+    response = await client.post(
+        f"/api/v1/ops/failures/{failure_id}/retry",
+        headers=auth(token, "retry-tenant-0001-key"),
+    )
+    assert response.status_code == 404, response.text
+
+
+async def test_retry_failure_idempotency_key_replay_does_not_duplicate_outbox_event(
+    client,
+) -> None:
+    failure_id = await _add_dead_letter(tenant_id=TENANT_A, correlation_id="corr-idem")
+
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["operations:write"])
+    first = await client.post(
+        f"/api/v1/ops/failures/{failure_id}/retry",
+        headers=auth(token, "retry-idem-0001-key"),
+    )
+    assert first.status_code == 200, first.text
+
+    second = await client.post(
+        f"/api/v1/ops/failures/{failure_id}/retry",
+        headers=auth(token, "retry-idem-0001-key"),
+    )
+    assert second.status_code == 200, second.text
+    assert first.json() == second.json()
+
+    async with SessionFactory() as session:
+        fresh_events = list(
+            (
+                await session.scalars(
+                    select(OutboxEvent).where(
+                        OutboxEvent.tenant_id == TENANT_A,
+                        OutboxEvent.aggregate_id == "doc-1",
+                        OutboxEvent.event_type == "invoice.signed",
+                    )
+                )
+            ).all()
+        )
+        assert len(fresh_events) == 1

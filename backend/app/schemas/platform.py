@@ -93,6 +93,8 @@ class MembershipRead(APIModel):
 SERVICE_ACCOUNT_ALLOWED_SCOPES = frozenset(
     {
         "context:read",
+        "operations:read",
+        "operations:write",
         "parties:read",
         "parties:write",
         "products:read",

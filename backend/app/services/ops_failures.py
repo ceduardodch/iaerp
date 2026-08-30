@@ -22,13 +22,15 @@ en esta bandeja son fallos tecnicos que agotaron su presupuesto de reintentos.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.platform import DeadLetter
+from app.core.auth import AuthContext
+from app.models.platform import DeadLetter, OutboxEvent
 from app.schemas.platform import OpsFailureRead
 
 FailureClassification = Literal["AUTO_RETRY", "NEEDS_HUMAN"]
@@ -115,3 +117,70 @@ async def list_failures(
 
     entities = (await session.scalars(query)).all()
     return [_to_read(entity) for entity in entities]
+
+
+async def retry_failure(
+    session: AsyncSession,
+    context: AuthContext,
+    failure_id: uuid.UUID,
+) -> OpsFailureRead:
+    """Reintento MANUAL de un fallo `dead_lettered`, disparado por un humano.
+
+    A diferencia del futuro agente de la Fase 3 (``ops.retry_failure``,
+    pendiente 11), este endpoint no pasa por ``classify_failure()``: un
+    humano ya ejerció su propio juicio al pedir el reintento. Solo exige que
+    el fallo siga ``OPEN`` y sea del tenant del actor.
+
+    Encola un ``OutboxEvent`` FRESCO (id nuevo) en vez de reabrir el
+    original, igual que ``workers/sri_transmission.py::_enqueue_followup``:
+    reabrir el evento original no sirve porque su ``InboxEvent`` puede seguir
+    ``COMPLETED`` y ``consume_once`` lo deduplicaría.
+    """
+
+    entity = await session.scalar(
+        select(DeadLetter)
+        .where(
+            DeadLetter.id == failure_id,
+            DeadLetter.tenant_id == context.tenant_id,
+        )
+        .with_for_update()
+    )
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Ops failure not found")
+    if entity.status != "OPEN":
+        raise HTTPException(
+            status_code=409,
+            detail="Ops failure is not open; it was already resolved",
+        )
+
+    aggregate_type = _payload_text(entity.payload, "aggregate_type")
+    aggregate_id = _payload_text(entity.payload, "aggregate_id")
+    if not aggregate_type or not aggregate_id:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Ops failure payload is missing aggregate_type/aggregate_id; "
+                "cannot retry"
+            ),
+        )
+    correlation_id = _payload_text(entity.payload, "correlation_id") or str(uuid.uuid4())
+
+    now = datetime.now(UTC)
+    session.add(
+        OutboxEvent(
+            tenant_id=entity.tenant_id,
+            event_type=entity.event_type,
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            payload=dict(entity.payload),
+            correlation_id=correlation_id,
+            attempts=0,
+            available_at=now,
+            published_at=None,
+            lease_until=None,
+        )
+    )
+    entity.status = "RESOLVED"
+    entity.resolved_at = now
+    await session.flush()
+    return _to_read(entity)
