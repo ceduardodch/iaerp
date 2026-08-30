@@ -1067,6 +1067,14 @@ export function configureApiTokenProvider(provider: TokenProvider | null) {
   tokenProvider = provider
 }
 
+/** Correlation ID de la última respuesta del backend (`X-Correlation-Id`,
+ *  ver `app/main.py`), para adjuntarlo a los reportes de error de frontend. */
+let lastCorrelationId: string | null = null
+
+export function getLastCorrelationId(): string | null {
+  return lastCorrelationId
+}
+
 export async function apiRequest<T>(
   token: string,
   path: string,
@@ -1086,6 +1094,8 @@ export async function apiRequest<T>(
   if (response.status === 401 && tokenProvider) {
     response = await send(true)
   }
+
+  lastCorrelationId = response.headers.get('X-Correlation-Id') ?? lastCorrelationId
 
   if (!response.ok) {
     const body = await response.json().catch(() => null) as unknown
