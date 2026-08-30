@@ -67,7 +67,7 @@ seguridad de todo el bucle.
       `classify_failure()` decide `AUTO_RETRY` / `NEEDS_HUMAN` con **lista
       blanca explícita por `event_type`** (default deny). Su prueba
       `backend/tests/test_ops_failure_policy.py` es intocable (ver reglas).
-- [ ] 4. `POST /ops/failures/{id}/retry` (scope `operations:write`, nuevo) con
+- [x] 4. `POST /ops/failures/{id}/retry` (scope `operations:write`, nuevo) con
       `execute_idempotent`: reintento **manual** disparado por un humano.
       Registrar el scope en `ALL_DEV_SCOPES`, `SERVICE_ACCOUNT_ALLOWED_SCOPES`,
       `infra/keycloak/iaerp-realm.json` y `configure-staging.sh` (el pendiente
@@ -196,3 +196,41 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   3 pruebas nuevas + 7 de `test_ops_failures_api.py` + 2 de
   `test_unhandled_exception_handler.py` verdes, ruff y mypy limpios. No se
   tocó el endpoint ni el schema: eso es pendiente 4 en adelante.
+- Pendiente 4 (`POST /ops/failures/{id}/retry`), commits `bc51ecb` (endpoint)
+  y `c82c3a3` (baseline de secretos), **publicado solo en `release`** (CI
+  disparado a mano con `gh workflow run` porque el push normal solo compara
+  contra el commit anterior y se saltaba `Backend`/`Frontend` al no tocar esas
+  rutas en el segundo commit; run `33287751676` verde: Backend, Frontend,
+  OIDC, migraciones, YAML contracts y Security checks OK, despliegue a
+  Coolify `skipped`, que es justo lo buscado en esta rama). Falta autorización
+  humana para promover a `main`.
+  Decisión de diseño explícita: a diferencia del agente de la Fase 3
+  (`ops.retry_failure`, pendiente 11, gateado por `classify_failure() ==
+  AUTO_RETRY`), este endpoint humano NO repite ese gate — acepta reintentar
+  cualquier fallo `OPEN` del tenant, porque quien lo dispara ya ejerció su
+  propio juicio al pedirlo explícitamente por el scope nuevo
+  `operations:write`. El pendiente lo describe así ("reintento manual
+  disparado por un humano") sin mencionar `classify_failure()`, a diferencia
+  del texto del pendiente 11 que sí lo exige para el agente; se documenta acá
+  por si un futuro pendiente decide que hace falta más fricción.
+  El reintento nunca reabre el `OutboxEvent` original: encola uno nuevo (id
+  fresco) con el mismo `event_type`/`aggregate_type`/`aggregate_id`/
+  `correlation_id` que trae el `payload` del `DeadLetter`, igual que
+  `workers/sri_transmission.py::_enqueue_followup` — reabrir el original no
+  sirve porque su `InboxEvent` puede seguir `COMPLETED` y `consume_once` lo
+  deduplicaría. Si el `payload` no trae `aggregate_type`/`aggregate_id`
+  (dato viejo o malformado), responde 422 en vez de violar el `NOT NULL` de
+  `OutboxEvent`. Reintentar un fallo que ya no está `OPEN` responde 409.
+  Registrado `operations:write` en las cuatro ubicaciones (`ALL_DEV_SCOPES`
+  en `api/router.py`, `SERVICE_ACCOUNT_ALLOWED_SCOPES` en
+  `schemas/platform.py`, `infra/keycloak/iaerp-realm.json` y
+  `configure-staging.sh`) para no repetir el 422 que ya rompió nómina.
+  Se verificó en rojo comentando el cambio de `status`/`resolved_at` en
+  `retry_failure()`: `test_retry_failure_reopens_and_enqueues_fresh_outbox_event`
+  y `test_retry_failure_twice_returns_409` fallan mostrando `OPEN` en vez de
+  `RESOLVED`, y se restauró reescribiendo, sin `git checkout`. 6 pruebas
+  nuevas + 7 de listado en `test_ops_failures_api.py`, más
+  `test_ops_failure_policy.py` (intocable) y `test_unhandled_exception_handler.py`
+  verdes; suite completa 582 pasan/36 skip, mismos 2 fallos preexistentes y
+  ajenos (`test_health` por Redis apagado, duplicado de identificación en
+  nómina); ruff y mypy limpios.
