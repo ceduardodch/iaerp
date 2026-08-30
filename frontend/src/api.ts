@@ -830,6 +830,30 @@ export type ActionQueueRead = {
   prospecting: ActionQueueProspectingCandidate[]
 }
 
+/**
+ * Fallo operativo terminal (`GET /ops/failures`, `POST
+ * /ops/failures/{id}/retry`), espejo camelCase de
+ * `app/schemas/platform.py::OpsFailureRead`. `correlationId` y
+ * `aggregate*` vienen aplanados desde el `payload` del worker que lo
+ * originó y pueden faltar en datos viejos o malformados.
+ */
+export type OpsFailureStatus = 'OPEN' | 'RESOLVED'
+
+export type OpsFailure = {
+  id: string
+  sourceType: string
+  sourceId: string
+  eventType: string
+  error: string
+  attempts: number
+  status: OpsFailureStatus
+  correlationId?: string | null
+  aggregateType?: string | null
+  aggregateId?: string | null
+  createdAt: string
+  resolvedAt?: string | null
+}
+
 export type EvolutionWhatsAppIntegration = {
   connected: boolean
   displayPhoneNumber?: string | null
