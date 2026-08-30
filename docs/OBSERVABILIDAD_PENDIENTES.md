@@ -249,7 +249,9 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   warnings de lint que aparecen en el run (`useKanban.ts`, `CrmKanban.tsx`,
   `Toast.tsx`) son preexistentes y ajenos a este archivo.
 - Pendiente 6 (panel "Incidencias" en `ActionQueuePage.tsx`), commit
-  pendiente de push a `release`.
+  `505b62a`, **publicado solo en `release`** (CI run `33292062927` verde:
+  Backend, Frontend y Security checks OK; despliegue a Coolify `skipped`,
+  esperado en esta rama). Falta autorización humana para promover a `main`.
   Antes de tocar el frontend agregué un campo `classification` a
   `OpsFailureRead` (`app/schemas/platform.py` + `_to_read` en
   `app/services/ops_failures.py`), calculado con `classify_failure()`: sin
