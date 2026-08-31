@@ -20,6 +20,7 @@ Referencias (ADR 0008, numeral 8.17 y formatos de factura/nota de credito):
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
@@ -78,6 +79,28 @@ def _sub(parent: etree._Element, tag: str, text: str | None = None) -> etree._El
     if text is not None:
         element.text = text
     return element
+
+
+def _sri_alphanumeric_name(value: str) -> str:
+    """Adapta una razón social a un subconjunto ASCII seguro para el SRI.
+
+    El nombre legal se conserva intacto en IAERP y en el RIDE. Solo el XML
+    translitera acentos y elimina signos ante el rechazo observado de
+    ``S.A.S.``. El filtro ASCII es deliberadamente más estricto que
+    ``str.isalnum()`` para no dejar pasar alfabetos o dígitos Unicode que no
+    estén probados contra el validador fiscal.
+    """
+
+    normalized = unicodedata.normalize("NFKD", value)
+    sanitized = "".join(
+        character
+        for character in normalized
+        if character.isascii() and (character.isalnum() or character.isspace())
+    )
+    result = " ".join(sanitized.split())[:300].rstrip()
+    if not result:
+        raise ValueError("SRI alphanumeric name must contain at least one letter or number")
+    return result
 
 
 def _build_tax_summary(lines: list[SalesDocumentLine]) -> etree._Element:
@@ -205,7 +228,7 @@ def build_invoice_xml(
     info_tributaria = _sub(root, "infoTributaria")
     _sub(info_tributaria, "ambiente", environment_code)
     _sub(info_tributaria, "tipoEmision", emission_type_code)
-    _sub(info_tributaria, "razonSocial", tenant_legal_name)
+    _sub(info_tributaria, "razonSocial", _sri_alphanumeric_name(tenant_legal_name))
     _sub(info_tributaria, "ruc", tenant_ruc)
     _sub(info_tributaria, "claveAcceso", document.access_key)
     _sub(info_tributaria, "codDoc", "01")
@@ -223,7 +246,7 @@ def build_invoice_xml(
         "tipoIdentificacionComprador",
         _buyer_identification_code(buyer.identification_type),
     )
-    _sub(info_factura, "razonSocialComprador", buyer.name)
+    _sub(info_factura, "razonSocialComprador", _sri_alphanumeric_name(buyer.name))
     _sub(
         info_factura,
         "identificacionComprador",
@@ -292,7 +315,7 @@ def build_credit_note_xml(
     info_tributaria = _sub(root, "infoTributaria")
     _sub(info_tributaria, "ambiente", environment_code)
     _sub(info_tributaria, "tipoEmision", emission_type_code)
-    _sub(info_tributaria, "razonSocial", tenant_legal_name)
+    _sub(info_tributaria, "razonSocial", _sri_alphanumeric_name(tenant_legal_name))
     _sub(info_tributaria, "ruc", tenant_ruc)
     _sub(info_tributaria, "claveAcceso", document.access_key)
     _sub(info_tributaria, "codDoc", "04")
@@ -309,7 +332,11 @@ def build_credit_note_xml(
         "tipoIdentificacionComprador",
         _buyer_identification_code(buyer.identification_type),
     )
-    _sub(info_nota_credito, "razonSocialComprador", buyer.name)
+    _sub(
+        info_nota_credito,
+        "razonSocialComprador",
+        _sri_alphanumeric_name(buyer.name),
+    )
     _sub(
         info_nota_credito,
         "identificacionComprador",

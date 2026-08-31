@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 
 from app.db.session import SessionFactory
 from app.models.platform import AutomationSettings, OutboxEvent, Tenant
-from app.models.tax import FiscalDocument
+from app.models.tax import FiscalDocument, TaxEvidence
 from app.services import access_key, storage
 from app.services.tax import evidence as evidence_service
 from app.services.tax import received_reports
@@ -109,6 +109,35 @@ async def _upload(client, token: str, filename: str, content: bytes) -> str:
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
+
+
+async def test_received_reports_preflight_blocks_crossed_service_account_before_evidence(
+    client,
+) -> None:
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["tax:write"])
+    response = await client.post(
+        "/api/v1/tax/received-reports/preflight",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"expectedRuc": "1799999999002"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "IAERP service account does not match SRI portal RUC"
+    )
+
+    async with SessionFactory() as session:
+        count = await session.scalar(select(func.count()).select_from(TaxEvidence))
+    assert count == 0
+
+
+async def test_received_reports_preflight_accepts_matching_service_account(client) -> None:
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["tax:write"])
+    response = await client.post(
+        "/api/v1/tax/received-reports/preflight",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"expectedRuc": "1799999999001"},
+    )
+    assert response.status_code == 204
 
 
 async def test_process_received_reports_imports_all_types_and_queues_one_recovery(

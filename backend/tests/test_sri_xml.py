@@ -20,7 +20,11 @@ from lxml import etree
 from app.models.billing import SalesDocument, SalesDocumentLine
 from app.models.masters import EmissionPoint, Establishment, Party
 from app.services.fiscal_policy import FISCAL_POLICY_V1, LineInput
-from app.services.sri_xml import build_credit_note_xml, build_invoice_xml
+from app.services.sri_xml import (
+    _sri_alphanumeric_name,
+    build_credit_note_xml,
+    build_invoice_xml,
+)
 
 _NAMESPACE_FREE = {}  # el esquema SRI factura no usa namespaces
 
@@ -226,6 +230,49 @@ def test_invoice_xml_structure_and_adr_0008_vector_3_rounding() -> None:
     assert parsed.findtext("infoTributaria/claveAcceso") == document.access_key
 
 
+def test_invoice_xml_sanitizes_sri_alphanumeric_legal_names_only() -> None:
+    document, lines = _build_document_and_lines()
+    establishment, emission_point = _establishment_and_point()
+    buyer = _buyer()
+    buyer.name = "CLIENTE DEMO S.A."
+
+    result = build_invoice_xml(
+        document=document,
+        lines=lines,
+        establishment=establishment,
+        emission_point=emission_point,
+        tenant_ruc="1799999999001",
+        tenant_legal_name="LEXCODE AUDIT S.A.S.",
+        tenant_commercial_address="Av. Amazonas N30",
+        buyer=buyer,
+        environment_code="1",
+    )
+
+    assert result.root.findtext("infoTributaria/razonSocial") == "LEXCODE AUDIT SAS"
+    assert result.root.findtext("infoFactura/razonSocialComprador") == "CLIENTE DEMO SA"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("José Núñez & Hijos S.A.", "Jose Nunez Hijos SA"),
+        ("LEXCODE AUDIT S.A.S.", "LEXCODE AUDIT SAS"),
+        ("公司 １２３ S.A.", "123 SA"),
+        ("A" * 301, "A" * 300),
+    ],
+)
+def test_sri_alphanumeric_name_uses_bounded_ascii_subset(
+    value: str,
+    expected: str,
+) -> None:
+    assert _sri_alphanumeric_name(value) == expected
+
+
+def test_sri_alphanumeric_name_rejects_values_without_ascii_letters_or_numbers() -> None:
+    with pytest.raises(ValueError, match="at least one letter or number"):
+        _sri_alphanumeric_name("公司 & ...")
+
+
 def test_invoice_xml_final_consumer_uses_generic_identification() -> None:
     document, lines = _build_document_and_lines()
     establishment, emission_point = _establishment_and_point()
@@ -252,6 +299,7 @@ def test_build_credit_note_xml_structure() -> None:
     document, lines = _build_document_and_lines(document_type="CREDIT_NOTE")
     establishment, emission_point = _establishment_and_point()
     buyer = _buyer()
+    buyer.name = "CLIENTE DEMO S.A."
 
     result = build_credit_note_xml(
         document=document,
@@ -271,8 +319,10 @@ def test_build_credit_note_xml_structure() -> None:
 
     root = result.root
     assert root.tag == "notaCredito"
+    assert root.findtext("infoTributaria/razonSocial") == "IAERP Demo SA"
     info_nc = root.find("infoNotaCredito")
     assert info_nc is not None
+    assert info_nc.findtext("razonSocialComprador") == "CLIENTE DEMO SA"
     assert info_nc.findtext("codDocModificado") == "01"
     assert info_nc.findtext("numDocModificado") == "001-001-000000042"
     assert info_nc.findtext("fechaEmisionDocSustento") == "15/03/2024"

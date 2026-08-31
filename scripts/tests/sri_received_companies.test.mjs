@@ -13,10 +13,10 @@ test("keeps DATA-CLIP as the safe default", () => {
   );
 });
 
-test("selects both companies explicitly", () => {
+test("selects all companies explicitly", () => {
   assert.deepEqual(
     selectSriReceivedCompanies(["--all"]).map((company) => company.id),
-    ["data-clip", "btob"],
+    ["data-clip", "btob", "lexcode"],
   );
 });
 
@@ -29,12 +29,18 @@ test("selects one company by id", () => {
 });
 
 test("uses separate secret services and browser profiles", () => {
-  const [dataClip, btob] = SRI_RECEIVED_COMPANIES;
-  assert.notEqual(dataClip.sriKeychainService, btob.sriKeychainService);
-  assert.notEqual(dataClip.iaerpKeychainService, btob.iaerpKeychainService);
-  assert.notEqual(dataClip.browserProfile, btob.browserProfile);
-  assert.equal(dataClip.sriUsernameAccount, "ruc");
-  assert.equal(btob.sriUsernameAccount, "ruc");
+  for (const field of [
+    "id",
+    "sriKeychainService",
+    "iaerpKeychainService",
+    "browserProfile",
+  ]) {
+    const values = SRI_RECEIVED_COMPANIES.map((company) => company[field]);
+    assert.equal(new Set(values).size, values.length, `${field} must be globally unique`);
+  }
+  for (const company of SRI_RECEIVED_COMPANIES) {
+    assert.equal(company.sriUsernameAccount, "ruc");
+  }
 });
 
 test("rejects unknown or ambiguous arguments", () => {

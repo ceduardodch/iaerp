@@ -10,7 +10,17 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
 from pydantic.alias_generators import to_camel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +50,7 @@ from app.schemas.tax import (
     OwnDocumentsResultRead,
     PurchaseDocumentRead,
     PurchaseTaxLineRead,
+    ReceivedReportsPreflight,
     ReceivedReportsProcess,
     ReceivedReportsProcessRead,
     SRIValidationIssueCreate,
@@ -419,6 +430,21 @@ async def _tenant_ruc(session: AsyncSession, context: AuthContext) -> str:
     if not ruc:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return str(ruc)
+
+
+@router.post("/received-reports/preflight", status_code=204)
+async def post_received_reports_preflight(
+    data: ReceivedReportsPreflight,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+) -> Response:
+    """Bloquea una cuenta IAERP enlazada a un RUC distinto antes de subir TXT."""
+    if data.expected_ruc != await _tenant_ruc(session, context):
+        raise HTTPException(
+            status_code=409,
+            detail="IAERP service account does not match SRI portal RUC",
+        )
+    return Response(status_code=204)
 
 
 @router.post("/evidence/{evidence_id}/ingest", response_model=IngestResultRead)

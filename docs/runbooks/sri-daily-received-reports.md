@@ -38,18 +38,27 @@ del portal.
 3. Calcular la fecha de ayer y seleccionar su año y mes, con el día en `Todos`.
 4. Consultar los cinco tipos, uno por uno, solo para ese mes.
 5. Descargar cada reporte que tenga filas.
-6. Subir cada TXT a `POST /api/v1/tax/evidence` con origen `PORTAL_SRI` y una
+6. Validar localmente que el receptor de todas las filas de todos los TXT
+   coincide con el RUC esperado. Para persona natural se acepta su cédula base
+   solo si el RUC es válido y termina en `001`. El lote completo se valida antes
+   de la primera subida, así una sesión persistente de otra empresa no guarda
+   evidencia cruzada.
+7. Antes de subir, llamar el preflight REST autenticado y confirmar que el RUC
+   del portal coincide con el tenant fijado por la cuenta IAERP. Un cruce corta
+   el flujo sin crear evidencia.
+8. Subir cada TXT a `POST /api/v1/tax/evidence` con origen `PORTAL_SRI` y una
    clave idempotente distinta por archivo.
-7. Llamar `tax.process_received_reports` por MCP con los IDs devueltos,
+9. Llamar `POST /api/v1/tax/received-reports/process` por REST con los IDs devueltos,
    `reportYear`, `reportMonth` y una clave idempotente estable para ese tenant,
    mes y fecha de ejecución.
-8. Mostrar solo conteos por tipo, creados, actualizados, omitidos, preliminares
+10. Mostrar solo conteos por tipo, creados, actualizados, omitidos, preliminares
    y estado del trabajo de recuperación. No registrar RUC, claves de acceso,
    nombres, importes ni el contenido de los TXT.
 
 ## Controles
 
-- El MCP obtiene el tenant del token y exige `tax:write`.
+- La API obtiene el tenant del token y exige `tax:write`; REST y MCP llaman el
+  mismo caso de uso de procesamiento.
 - La escritura exige que el tenant tenga habilitada su política de
   automatización.
 - Se aceptan de uno a cinco TXT distintos.
@@ -68,11 +77,13 @@ del portal.
 
 ## Programación local
 
-La tarea corre solo en este Mac a las 08:00 con `--all`. DATA-CLIP y BTOB SAS
-usan cuentas IAERP con `tax:write`, servicios de Llavero y perfiles de navegador
-distintos. La corrida real del 31 de agosto de 2026 terminó para ambas empresas:
-DATA-CLIP listó 468 comprobantes en tres reportes y BTOB SAS listó 18 en dos
-reportes. En ambos casos IAERP encoló la recuperación XML. Si una empresa falla,
-la tarea continúa con la otra, termina con error para pedir atención y no mezcla
-tenants. Si el SRI agrega CAPTCHA, MFA o cambia el formulario, la empresa queda
-en atención.
+La tarea corre solo en este Mac a las 08:00 con `--all`. DATA-CLIP, BTOB SAS y
+LEXCODE AUDIT S.A.S. usan cuentas IAERP con `tax:write`, servicios de Llavero y
+perfiles de navegador distintos. La corrida real del 31 de agosto de 2026
+terminó para las tres empresas: DATA-CLIP listó 468 comprobantes en tres
+reportes, BTOB SAS listó 18 en dos reportes y LEXCODE listó cuatro facturas en
+un reporte. IAERP encoló la recuperación XML en cada tenant. Una segunda corrida
+de LEXCODE conservó las mismas cuatro compras de agosto sin duplicarlas. Si una
+empresa falla, la tarea continúa con la otra, termina con error para pedir
+atención y no mezcla tenants. Si el SRI agrega CAPTCHA, MFA o cambia el
+formulario, la empresa queda en atención.
