@@ -16,7 +16,10 @@ alcance y las decisiones.
   cada campo antes de enviarlo para impedir que Chrome restaure otro acceso.
   La tarea está activa todos los días a las 08:00 con `--all`. Pasan las cinco
   pruebas de selección y aislamiento de empresas, `node --check` y
-  `git diff --check`. Promoción a `main` autorizada por PR.
+  `git diff --check`. El cambio llegó a `main` por el PR `#71`, merge
+  `b2154d9`; los CI `33420223753` de `main` y `33420362315` de la
+  sincronización de `release` terminaron verdes. No hubo despliegue Coolify
+  porque el cambio afecta solo scripts locales y documentación.
   El procedimiento de recuperación quedó en
   `docs/runbooks/sri-multicompany-recovery.md`, con el mapa de Llavero y
   perfiles, rotación de cuentas IAERP, pruebas por empresa y diagnóstico sin
