@@ -442,3 +442,50 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   MCP de reintento automático) sigue esperando autorización humana explícita
   antes de tocarla: le da a un agente capacidad de escritura sobre datos de
   producción.
+- 2026-08-31: pendiente 10 (`ops.list_failures`) implementado y verificado en
+  local, **sin commitear ni pushear**: a mitad de la corrida detecté que otra
+  sesión de IA está trabajando en vivo sobre el mismo working tree, tocando
+  exactamente los mismos archivos compartidos que necesito para registrar la
+  tool nueva (`backend/app/mcp/server.py`, `backend/app/mcp/
+  tool_fingerprints.py`, `contracts/mcp-tools.yaml`) para una tool distinta
+  (`tax.process_received_reports`, con sus propios `app/api/tax.py`,
+  `app/services/tax/received_reports.py`, `tests/test_mcp_tax.py`,
+  `tests/test_tax_received_reports.py` y `docs/runbooks/` sin commitear).
+  Confirmé la colisión con `stat -f "%Sm"` en esos archivos: ediciones de los
+  últimos ~7 minutos, mientras `git status` al arrancar esta corrida daba
+  árbol limpio. Regla 1 de `COORDINACION_IA.md` ("si ves señales de otra
+  sesión trabajando, PARA y coordina con el humano") aplica literalmente. Como
+  esta corrida es automática y sin humano presente para coordinar en el
+  momento, no hice ningún `git add`/`commit`/`push` ni toqué los archivos de
+  la otra sesión (`git checkout`/`restore`/`stash` habría arriesgado su
+  trabajo en curso) y me detuve sin marcar la casilla 10.
+  Lo que sí quedó completo y verificado en el working tree (útil para quien
+  retome esto): tool `ops.list_failures` (solo lectura, scope
+  `operations:read` ya registrado en las cuatro ubicaciones desde el
+  pendiente 4) en `mcp/server.py`, reutilizando `ops_failures.list_failures`
+  sin duplicar la consulta y devolviendo `classification` por fallo; huella
+  SHA-256 nueva en `tool_fingerprints.py`; entrada + `$defs.opsFailure` en
+  `contracts/mcp-tools.yaml` (`scripts/validate_contracts.py` pasa); test
+  nuevo `backend/tests/test_mcp_ops_failures.py` (6 pruebas: catálogo por
+  scope, aislamiento de tenant, equivalencia con `GET /ops/failures` incluida
+  la `classification`, filtro por `status`, no bloqueado por el kill switch
+  de automatización porque es solo lectura, y error exacto de scope
+  faltante), verificado en rojo forzando `status=None` en la tool (el test de
+  filtro por `status` falla mostrando ambos fallos) y restaurado reescribiendo
+  sin `git checkout`. `ruff check .` y `uv run mypy app` limpios. Suite
+  completa corrida en orden natural de archivos (`pytest tests/`, que es como
+  corre CI): 48/48 verdes en los archivos de MCP + ops; en la corrida de la
+  suite completa aparecieron fallos adicionales de nómina/salud que
+  desaparecen corriendo esos archivos solos, así que son de aislamiento entre
+  tests preexistente y no de este cambio (no investigado a fondo porque no es
+  el alcance de este pendiente).
+  Dejo la tarea programada **encendida**: esto no es un pendiente que falló
+  dos corridas seguidas, es una colisión externa con otra sesión que
+  presumiblemente termina y libera los archivos. La próxima corrida debe: (1)
+  `git status` primero como siempre: si sigue viendo cambios sin commitear
+  ajenos a nómina/pagos/CRM en `mcp/server.py` y compañía, asumir que la otra
+  sesión sigue activa y volver a pausarse; (2) si el árbol está limpio o solo
+  tiene los cuatro archivos de la tool de tax ya commiteados por su propia
+  sesión, reaplicar el mismo diseño descrito arriba para `ops.list_failures`
+  (no hay nada que rehacer en diseño, solo en mecánica de commit) y seguir el
+  flujo normal de publicación en `release`.
