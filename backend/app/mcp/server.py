@@ -41,7 +41,9 @@ from app.schemas.payables import (
 )
 from app.schemas.platform import OperationRead, TenantContextRead
 from app.schemas.receivables import AccountItemRead, AgingRead, PaymentInput, ReminderInput
+from app.schemas.tax import ReceivedReportsProcessRead, TaxXmlRecoveryJobRead
 from app.services import automation_rate, billing, crm, masters, payables, receivables
+from app.services.tax import received_reports, xml_recovery
 from app.services.unit_of_work import append_audit, execute_idempotent
 
 settings = get_settings()
@@ -65,9 +67,11 @@ MCP_SCOPES = [
     "payables:extract",
     "leads:read",
     "leads:write",
+    "tax:write",
 ]
 TOOL_REQUIRED_SCOPES = {
     "context.get": "context:read",
+    "tax.process_received_reports": "tax:write",
     "parties.search": "parties:read",
     "parties.create": "parties:write",
     "products.search": "products:read",
@@ -287,6 +291,75 @@ async def context_get() -> dict[str, object]:
             ),
             default_payment_terms_days=tenant.default_payment_terms_days,
         ).model_dump(mode="json", by_alias=True)
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="tax.process_received_reports")
+async def tax_process_received_reports(
+    evidenceIds: Annotated[list[uuid.UUID], Field(min_length=1, max_length=5)],
+    reportDate: date,
+    idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
+) -> dict[str, object]:
+    """Importar los reportes recibidos de un dia y pedir sus XML autorizados.
+
+    Los archivos deben haberse cargado antes como evidencia TXT. El tenant sale
+    del token; la tool no recibe RUC, credenciales ni contenido del portal.
+    Todas las filas deben corresponder a ``reportDate`` y la escritura respeta
+    politica, idempotencia, auditoria y outbox.
+    """
+    session, context = await _tool_context("tax:write", "tax.process_received_reports")
+    try:
+        await _require_automation_writes(session, context)
+        tenant = await masters.get_active_tenant(session, context.tenant_id)
+        tenant_ruc = str(tenant.ruc)
+
+        async def run() -> tuple[str, dict[str, object]]:
+            result = await received_reports.process_received_reports(
+                session,
+                context,
+                evidence_ids=evidenceIds,
+                report_date=reportDate,
+                tenant_ruc=tenant_ruc,
+            )
+            response = ReceivedReportsProcessRead(
+                report_date=result.report_date,
+                evidence_count=result.evidence_count,
+                listed_rows=result.listed_rows,
+                document_types=result.document_types,
+                created=result.created,
+                updated=result.updated,
+                skipped=result.skipped,
+                preliminary=result.preliminary,
+                recovery_job=TaxXmlRecoveryJobRead.model_validate(
+                    {**result.recovery_job.__dict__, "items": []}
+                ),
+            )
+            return (
+                str(result.recovery_job.id),
+                response.model_dump(mode="json", by_alias=True),
+            )
+
+        return await execute_idempotent(
+            session,
+            context=context,
+            operation="tax.received_reports.process",
+            idempotency_key=idempotencyKey,
+            request_payload={
+                "evidenceIds": [str(item) for item in evidenceIds],
+                "reportDate": reportDate.isoformat(),
+            },
+            action="tax.received_reports.processed",
+            entity_type="tax_xml_recovery_job",
+            event_type=xml_recovery.RECOVERY_REQUESTED_EVENT,
+            callback=run,
+            audit_details={
+                "report_date": reportDate.isoformat(),
+                "evidence_count": len(evidenceIds),
+            },
+        )
+    except HTTPException as exc:
+        raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
     finally:
         await session.close()
 

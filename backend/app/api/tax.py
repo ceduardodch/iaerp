@@ -39,6 +39,8 @@ from app.schemas.tax import (
     OwnDocumentsResultRead,
     PurchaseDocumentRead,
     PurchaseTaxLineRead,
+    ReceivedReportsProcess,
+    ReceivedReportsProcessRead,
     SRIValidationIssueCreate,
     SRIValidationIssueRead,
     TaxAnnexRead,
@@ -58,6 +60,7 @@ from app.services.tax import form_fields, historical_exception, own_documents, x
 from app.services.tax import ingest as ingest_service
 from app.services.tax import iva as iva_service
 from app.services.tax import periods as periods_service
+from app.services.tax import received_reports as received_reports_service
 from app.services.tax import reporting as reporting_service
 from app.services.tax.formatting import format_amount
 from app.services.unit_of_work import execute_idempotent
@@ -451,6 +454,63 @@ async def post_evidence_ingest(
         action="tax.evidence.ingested",
         entity_type="tax_evidence",
         callback=run,
+    )
+
+
+@router.post(
+    "/received-reports/process",
+    response_model=ReceivedReportsProcessRead,
+    status_code=201,
+)
+async def post_received_reports_process(
+    data: ReceivedReportsProcess,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+) -> dict[str, object]:
+    """Importa reportes diarios ya cargados y encola la recuperacion de XML."""
+    tenant_ruc = await _tenant_ruc(session, context)
+
+    async def run() -> tuple[str, dict[str, object]]:
+        result = await received_reports_service.process_received_reports(
+            session,
+            context,
+            evidence_ids=data.evidence_ids,
+            report_date=data.report_date,
+            tenant_ruc=tenant_ruc,
+        )
+        response = ReceivedReportsProcessRead(
+            report_date=result.report_date,
+            evidence_count=result.evidence_count,
+            listed_rows=result.listed_rows,
+            document_types=result.document_types,
+            created=result.created,
+            updated=result.updated,
+            skipped=result.skipped,
+            preliminary=result.preliminary,
+            recovery_job=TaxXmlRecoveryJobRead.model_validate(
+                {**result.recovery_job.__dict__, "items": []}
+            ),
+        )
+        return (
+            str(result.recovery_job.id),
+            response.model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax.received_reports.process",
+        idempotency_key=idempotency_key,
+        request_payload=data.model_dump(mode="json"),
+        action="tax.received_reports.processed",
+        entity_type="tax_xml_recovery_job",
+        event_type=xml_recovery.RECOVERY_REQUESTED_EVENT,
+        callback=run,
+        audit_details={
+            "report_date": data.report_date.isoformat(),
+            "evidence_count": len(data.evidence_ids),
+        },
     )
 
 

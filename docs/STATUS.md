@@ -7,6 +7,22 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Flujo diario de comprobantes recibidos listo para promoción: 2026-08-31
+  `America/Guayaquil`. El Mac consulta en el portal SRI el día anterior y los
+  cinco tipos de comprobante; no descarga reportes vacíos. IAERP expone el caso
+  de uso compartido por REST y MCP para importar de uno a cinco TXT ya
+  custodiados y crear un solo trabajo durable de recuperación XML. El servidor
+  deriva el tenant del token, exige `tax:write`, política de automatización,
+  idempotencia y auditoría, rechaza archivos que mezclen fechas y no devuelve
+  RUC, claves de acceso ni contenido fiscal. La sesión y contraseña del portal
+  se quedan en Chrome en el Mac. Ruff y mypy están verdes; las 8 pruebas
+  dirigidas de REST/MCP pasan, junto con el contrato YAML y las 22 huellas MCP.
+  La suite completa dejó 599 aprobadas y
+  36 omitidas; sus seis fallos locales son previos y ajenos (clave Fernet de
+  ejemplo, Redis apagado y contrato PostgreSQL de nómina). La repetición con
+  una clave Fernet sintética dejó solo el caso de nómina que SQLite no traduce.
+  PostgreSQL, CI, Coolify y verificación pública quedan en la promoción.
+
 - Correctivo de edición masiva de compras publicado en `main`: 2026-08-22
   `America/Guayaquil`. En producción quedaron seleccionadas 36 compras de enero
   a junio, todas con uso tributario `No deducible`, control interno pendiente y

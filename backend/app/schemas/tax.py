@@ -56,6 +56,27 @@ class IngestResultRead(APIModel):
     notes: list[str]
 
 
+class ReceivedReportsProcess(APIModel):
+    """Reportes diarios que el flujo local ya subio como evidencia."""
+
+    evidence_ids: list[uuid.UUID] = Field(min_length=1, max_length=5)
+    report_date: date
+
+
+class ReceivedReportsProcessRead(APIModel):
+    """Resumen seguro: no devuelve claves de acceso ni contenido fiscal."""
+
+    report_date: date
+    evidence_count: int
+    listed_rows: int
+    document_types: dict[str, int]
+    created: int
+    updated: int
+    skipped: int
+    preliminary: int
+    recovery_job: "TaxXmlRecoveryJobRead"
+
+
 class TaxXmlRecoveryItemRead(APIModel):
     document_id: uuid.UUID = Field(validation_alias="fiscal_document_id")
     status: str
