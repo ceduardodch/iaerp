@@ -1,28 +1,55 @@
-"""Caso de uso diario: importar reportes recibidos y pedir sus XML al SRI."""
+"""Caso de uso mensual: importar reportes recibidos y pedir sus XML al SRI."""
 
 from __future__ import annotations
 
 import uuid
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
+from app.models.platform import AutomationSettings
 from app.models.tax import TaxEvidence, TaxXmlRecoveryJob
-from app.services import storage
+from app.services import access_key, storage
 from app.services.tax import ingest, periods, xml_recovery
-from app.services.tax.txt_import import parse_received_txt
+from app.services.tax.identification import receiver_matches_tenant
+from app.services.tax.txt_import import ParsedTxtRow, parse_received_txt
 
-MAX_DAILY_REPORTS = 5
+MAX_MONTHLY_REPORTS = 5
+MAX_ROWS_PER_REPORT = 10_000
+
+_DOCUMENT_CODES = {
+    "FACTURA": "01",
+    "LIQUIDACION": "03",
+    "NOTA_CREDITO": "04",
+    "NOTA_DEBITO": "05",
+    "RETENCION": "07",
+}
+
+
+def _row_matches_access_key(row: ParsedTxtRow) -> bool:
+    if not access_key.verify_access_key(row.access_key):
+        return False
+    if row.access_key[:8] != row.issue_date.strftime("%d%m%Y"):
+        return False
+    if row.access_key[8:10] != _DOCUMENT_CODES.get(row.doc_type):
+        return False
+    if row.access_key[10:23] != row.issuer_identification:
+        return False
+    if row.series:
+        parts = row.series.split("-")
+        if len(parts) != 3 or row.access_key[24:39] != "".join(parts):
+            return False
+    return True
 
 
 @dataclass(frozen=True)
 class ReceivedReportsResult:
-    report_date: date
+    report_year: int
+    report_month: int
     evidence_count: int
     listed_rows: int
     document_types: dict[str, int]
@@ -38,22 +65,30 @@ async def process_received_reports(
     context: AuthContext,
     *,
     evidence_ids: list[uuid.UUID],
-    report_date: date,
+    report_year: int,
+    report_month: int,
     tenant_ruc: str,
 ) -> ReceivedReportsResult:
-    """Valida e importa los TXT de un solo dia y crea un trabajo de recuperacion.
+    """Valida e importa los TXT de un mes y crea un trabajo de recuperacion.
 
-    El flujo local consulta los cinco tipos del portal. Los archivos se aceptan
-    solo si todas sus filas pertenecen a ``report_date``; asi un nombre errado o
-    un archivo mensual no mezcla periodos de forma silenciosa.
+    El flujo local consulta los cinco tipos del portal para el mes completo. Los
+    archivos se aceptan solo si todas sus filas pertenecen al periodo pedido;
+    asi un resultado viejo que el portal dejo en pantalla no mezcla meses.
     """
     unique_ids = list(dict.fromkeys(evidence_ids))
     if len(unique_ids) != len(evidence_ids):
         raise HTTPException(status_code=422, detail="Evidence IDs must be unique")
-    if not 1 <= len(unique_ids) <= MAX_DAILY_REPORTS:
+    if not 1 <= len(unique_ids) <= MAX_MONTHLY_REPORTS:
         raise HTTPException(
             status_code=422,
-            detail=f"Between 1 and {MAX_DAILY_REPORTS} evidence files are required",
+            detail=f"Between 1 and {MAX_MONTHLY_REPORTS} evidence files are required",
+        )
+
+    automation = await session.get(AutomationSettings, context.tenant_id)
+    if automation is None or not automation.writes_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail="Automation writes are disabled for this tenant",
         )
 
     evidence_by_id = {
@@ -75,15 +110,35 @@ async def process_received_reports(
         if evidence.file_type != "TXT":
             raise HTTPException(
                 status_code=422,
-                detail="Daily received reports must be TXT files",
+                detail="Monthly received reports must be TXT files",
             )
         rows = parse_received_txt(await storage.download_artifact(object_key=evidence.object_key))
         if not rows:
             raise HTTPException(status_code=422, detail="SRI report contains no rows")
-        if any(row.issue_date != report_date for row in rows):
+        if len(rows) > MAX_ROWS_PER_REPORT:
             raise HTTPException(
                 status_code=422,
-                detail="Every report row must match reportDate",
+                detail=f"SRI report exceeds {MAX_ROWS_PER_REPORT} rows",
+            )
+        if any(
+            not receiver_matches_tenant(row.receiver_identification, tenant_ruc) for row in rows
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Every report row must belong to the active tenant",
+            )
+        if any(not _row_matches_access_key(row) for row in rows):
+            raise HTTPException(
+                status_code=422,
+                detail="Every report row must have a coherent SRI access key",
+            )
+        if any(
+            row.issue_date.year != report_year or row.issue_date.month != report_month
+            for row in rows
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Every report row must match reportYear and reportMonth",
             )
         listed_rows += len(rows)
         document_types.update(row.doc_type for row in rows)
@@ -104,13 +159,19 @@ async def process_received_reports(
     period = await periods.get_or_create_period(
         session,
         context,
-        year=report_date.year,
-        month=report_date.month,
+        year=report_year,
+        month=report_month,
         obligation_type="IVA",
     )
-    recovery_job = await xml_recovery.create_job(session, context, period_id=period.id)
+    recovery_job = await xml_recovery.create_job(
+        session,
+        context,
+        period_id=period.id,
+        reuse_active=True,
+    )
     return ReceivedReportsResult(
-        report_date=report_date,
+        report_year=report_year,
+        report_month=report_month,
         evidence_count=len(unique_ids),
         listed_rows=listed_rows,
         document_types=dict(sorted(document_types.items())),
@@ -123,7 +184,8 @@ async def process_received_reports(
 
 
 __all__ = [
-    "MAX_DAILY_REPORTS",
+    "MAX_MONTHLY_REPORTS",
+    "MAX_ROWS_PER_REPORT",
     "ReceivedReportsResult",
     "process_received_reports",
 ]

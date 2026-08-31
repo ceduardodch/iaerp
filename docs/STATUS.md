@@ -7,6 +7,21 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Refresco mensual de comprobantes SRI listo para promoción: 2026-08-31
+  `America/Guayaquil`. La tarea consulta cada día el mes actual completo con
+  `Todos` los días; el día 1 consulta además el mes anterior. REST y MCP reciben
+  `reportYear` y `reportMonth`, aceptan fechas distintas dentro del periodo y
+  rechazan cualquier fila de otro mes. La repetición queda protegida por hash
+  de evidencia, idempotencia y la clave única `tenant_id + access_key`; un TXT
+  no degrada un XML autorizado. Si ya existe una recuperación XML en cola, el
+  refresco agrega solo los documentos nuevos; si está corriendo, la reutiliza
+  y el siguiente corte recogerá cualquier preliminar pendiente. Pasan Ruff,
+  mypy, 43 pruebas dirigidas, los contratos YAML y las 23 huellas MCP. La suite
+  total deja 609 aprobadas y 36 omitidas; sus seis fallos son preexistentes de
+  entorno (clave Fernet de prueba, Redis de salud y unicidad SQLite de nómina),
+  fuera de este flujo. Falta promoción por CI, reactivar la tarea y la
+  autenticación inicial de DATA-CLIP para la prueba real.
+
 - Flujo diario de comprobantes recibidos publicado en producción: 2026-08-31
   `America/Guayaquil`. El Mac consulta en el portal SRI el día anterior y los
   cinco tipos de comprobante; no descarga reportes vacíos. IAERP expone el caso

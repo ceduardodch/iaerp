@@ -315,6 +315,42 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /tax/received-reports/process:
+    post:
+      operationId: processTaxReceivedReports
+      summary: Importar los reportes mensuales recibidos del SRI
+      description: >-
+        Procesa de uno a cinco TXT del mismo mes. El tenant se deriva del
+        token, valida que todas las filas pertenezcan a ese tenant y encola la
+        recuperación de los XML aún preliminares. Repetir el mes es seguro: la
+        clave de acceso evita documentos duplicados.
+      security:
+        - oauth2: ["tax:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivedReportsProcess"
+      responses:
+        "201":
+          description: Reportes procesados y recuperación de XML encolada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceivedReportsProcessResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
   /tax-categories:
     get:
       operationId: listTaxCategories
@@ -1586,6 +1622,7 @@ components:
             automation:read: Leer politicas de automatizacion
             automation:write: Gestionar politicas y kill switch
             operations:read: Consultar operaciones asincronas
+            tax:write: Importar evidencia tributaria y procesar reportes
         clientCredentials:
           tokenUrl: https://auth.example.invalid/token
           scopes:
@@ -1605,6 +1642,7 @@ components:
             payables:write: Gestionar obligaciones y pagos
             payables:extract: Extraer obligaciones
             finance:read: Leer resumen operativo
+            tax:write: Importar evidencia tributaria y procesar reportes
   parameters:
     IdempotencyKey:
       name: Idempotency-Key
@@ -1643,6 +1681,119 @@ components:
         type: string
         format: uuid
   schemas:
+    ReceivedReportsProcess:
+      type: object
+      additionalProperties: false
+      required: [evidenceIds, reportYear, reportMonth]
+      properties:
+        evidenceIds:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        reportYear:
+          type: integer
+          minimum: 2000
+          maximum: 2100
+        reportMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
+    TaxXmlRecoveryJobResult:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - taxPeriodId
+        - status
+        - totalCount
+        - processedCount
+        - recoveredCount
+        - unavailableCount
+        - failedCount
+        - items
+      properties:
+        id:
+          type: string
+          format: uuid
+        taxPeriodId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        totalCount:
+          type: integer
+          minimum: 0
+        processedCount:
+          type: integer
+          minimum: 0
+        recoveredCount:
+          type: integer
+          minimum: 0
+        unavailableCount:
+          type: integer
+          minimum: 0
+        failedCount:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [documentId, status]
+            properties:
+              documentId:
+                type: string
+                format: uuid
+              status:
+                type: string
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        completedAt:
+          type: [string, "null"]
+          format: date-time
+    ReceivedReportsProcessResult:
+      type: object
+      additionalProperties: false
+      required:
+        - reportYear
+        - reportMonth
+        - evidenceCount
+        - listedRows
+        - documentTypes
+        - created
+        - updated
+        - skipped
+        - preliminary
+        - recoveryJob
+      properties:
+        reportYear:
+          type: integer
+        reportMonth:
+          type: integer
+        evidenceCount:
+          type: integer
+        listedRows:
+          type: integer
+        documentTypes:
+          type: object
+          additionalProperties:
+            type: integer
+        created:
+          type: integer
+        updated:
+          type: integer
+        skipped:
+          type: integer
+        preliminary:
+          type: integer
+        recoveryJob:
+          $ref: "#/components/schemas/TaxXmlRecoveryJobResult"
     NonNegativeDecimal:
       type: string
       pattern: "^[0-9]{1,16}(\\.[0-9]{1,2})?$"

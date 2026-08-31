@@ -48,11 +48,11 @@ tools:
   - name: tax.process_received_reports
     effect: external-write
     scope: tax:write
-    description: Importar reportes recibidos de un dia y pedir sus XML autorizados.
+    description: Importar reportes recibidos de un mes y pedir sus XML autorizados.
     inputSchema:
       type: object
       additionalProperties: false
-      required: [evidenceIds, reportDate, idempotencyKey]
+      required: [evidenceIds, reportYear, reportMonth, idempotencyKey]
       properties:
         evidenceIds:
           type: array
@@ -62,9 +62,14 @@ tools:
           items:
             type: string
             format: uuid
-        reportDate:
-          type: string
-          format: date
+        reportYear:
+          type: integer
+          minimum: 2000
+          maximum: 2100
+        reportMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
         idempotencyKey:
           $ref: "#/$defs/idempotencyKey"
     outputSchema:
@@ -451,12 +456,17 @@ $defs:
     type: object
     additionalProperties: false
     required:
-      [reportDate, evidenceCount, listedRows, documentTypes, created, updated,
+      [reportYear, reportMonth, evidenceCount, listedRows, documentTypes, created, updated,
        skipped, preliminary, recoveryJob]
     properties:
-      reportDate:
-        type: string
-        format: date
+      reportYear:
+        type: integer
+        minimum: 2000
+        maximum: 2100
+      reportMonth:
+        type: integer
+        minimum: 1
+        maximum: 12
       evidenceCount:
         type: integer
         minimum: 1
@@ -515,6 +525,14 @@ $defs:
             type: array
             items:
               type: object
+              additionalProperties: false
+              required: [documentId, status]
+              properties:
+                documentId:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
           startedAt:
             type: [string, "null"]
             format: date-time

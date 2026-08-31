@@ -19,6 +19,7 @@ from app.models.tax import FiscalDocument, TaxPeriod, TaxXmlRecoveryItem, TaxXml
 from app.services.tax import evidence, ingest, periods
 from app.services.tax.identification import receiver_matches_tenant
 from app.services.tax.sri_xml import parse_authorized_document
+from app.services.tax.xml_recovery import RECOVERY_REQUESTED_EVENT
 from app.services.unit_of_work import append_audit
 from app.workers.outbox import OutboxMessage
 
@@ -106,6 +107,34 @@ async def _complete(job_id: uuid.UUID) -> None:
     async with SessionFactory() as session, session.begin():
         job = await session.get(TaxXmlRecoveryJob, job_id, with_for_update=True)
         if job is None:
+            return
+        pending_item = await session.scalar(
+            select(TaxXmlRecoveryItem.id)
+            .where(
+                TaxXmlRecoveryItem.tenant_id == job.tenant_id,
+                TaxXmlRecoveryItem.job_id == job.id,
+                TaxXmlRecoveryItem.status == "PENDING",
+            )
+            .limit(1)
+        )
+        if pending_item is not None:
+            # Un refresco mensual puede agregar comprobantes mientras el worker
+            # procesa su foto inicial. El nuevo evento outbox retomara el mismo
+            # trabajo y drenara estos pendientes sin perderlos.
+            job.status = "QUEUED"
+            job.lease_until = None
+            job.completed_at = None
+            session.add(
+                OutboxEvent(
+                    tenant_id=job.tenant_id,
+                    event_type=RECOVERY_REQUESTED_EVENT,
+                    aggregate_type="tax_xml_recovery_job",
+                    aggregate_id=str(job.id),
+                    payload={"entity_id": str(job.id)},
+                    correlation_id=str(job.id),
+                    available_at=datetime.now(UTC),
+                )
+            )
             return
         job.status = "COMPLETED"
         job.lease_until = None

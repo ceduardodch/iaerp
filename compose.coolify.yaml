@@ -26,6 +26,10 @@ x-backend-environment: &backend-environment
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
   MINIO_SECURE: "false"
   IAERP_SECRETS_ENCRYPTION_KEY: ${IAERP_SECRETS_ENCRYPTION_KEY}
+  # Sentry/GlitchTip. Vacio (default) = desactivado, sin tocar la red. Sin esta
+  # linea la variable no llega al contenedor por mas que se configure en
+  # Coolify: este bloque es una lista explicita, no un passthrough del entorno.
+  IAERP_ERROR_DSN: ${IAERP_ERROR_DSN:-}
   PUBLIC_APP_URL: https://iaerp.b2b.com.ec
   # Evolution remains private to this Compose project.  Tenant credentials are
   # encrypted in IAERP; this platform key is only used to create/link instances.

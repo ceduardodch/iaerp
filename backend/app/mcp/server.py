@@ -110,6 +110,7 @@ def _tool_fingerprint(tool: MCPTool) -> str:
         "name": tool.name,
         "description": tool.description or "",
         "inputSchema": tool.inputSchema,
+        "outputSchema": tool.outputSchema,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -283,6 +284,15 @@ mcp = ScopedFastMCP(
 )
 
 
+def _forbid_extra_tool_arguments(tool_name: str) -> None:
+    """Cierra el schema efectivo que FastMCP genera para una tool sensible."""
+    tool = mcp._tool_manager._tools[tool_name]
+    argument_model = tool.fn_metadata.arg_model
+    argument_model.model_config["extra"] = "forbid"
+    argument_model.model_rebuild(force=True)
+    tool.parameters = argument_model.model_json_schema()
+
+
 @mcp.tool(name="context.get")
 async def context_get() -> dict[str, object]:
     """Obtener el tenant activo, permisos, limites y kill switch."""
@@ -335,18 +345,20 @@ async def ops_list_failures(
         await session.close()
 
 
-@mcp.tool(name="tax.process_received_reports")
+@mcp.tool(name="tax.process_received_reports", structured_output=True)
 async def tax_process_received_reports(
     evidenceIds: Annotated[list[uuid.UUID], Field(min_length=1, max_length=5)],
-    reportDate: date,
+    reportYear: Annotated[int, Field(ge=2000, le=2100)],
+    reportMonth: Annotated[int, Field(ge=1, le=12)],
     idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
-) -> dict[str, object]:
-    """Importar los reportes recibidos de un dia y pedir sus XML autorizados.
+) -> ReceivedReportsProcessRead:
+    """Importar los reportes recibidos de un mes y pedir sus XML autorizados.
 
     Los archivos deben haberse cargado antes como evidencia TXT. El tenant sale
     del token; la tool no recibe RUC, credenciales ni contenido del portal.
-    Todas las filas deben corresponder a ``reportDate`` y la escritura respeta
-    politica, idempotencia, auditoria y outbox.
+    Todas las filas deben corresponder a ``reportYear`` y ``reportMonth``. La
+    escritura deduplica por clave de acceso y respeta politica, idempotencia,
+    auditoria y outbox.
     """
     session, context = await _tool_context("tax:write", "tax.process_received_reports")
     try:
@@ -359,11 +371,13 @@ async def tax_process_received_reports(
                 session,
                 context,
                 evidence_ids=evidenceIds,
-                report_date=reportDate,
+                report_year=reportYear,
+                report_month=reportMonth,
                 tenant_ruc=tenant_ruc,
             )
             response = ReceivedReportsProcessRead(
-                report_date=result.report_date,
+                report_year=result.report_year,
+                report_month=result.report_month,
                 evidence_count=result.evidence_count,
                 listed_rows=result.listed_rows,
                 document_types=result.document_types,
@@ -372,7 +386,7 @@ async def tax_process_received_reports(
                 skipped=result.skipped,
                 preliminary=result.preliminary,
                 recovery_job=TaxXmlRecoveryJobRead.model_validate(
-                    {**result.recovery_job.__dict__, "items": []}
+                    xml_recovery.job_read_payload(result.recovery_job, items=[])
                 ),
             )
             return (
@@ -380,28 +394,34 @@ async def tax_process_received_reports(
                 response.model_dump(mode="json", by_alias=True),
             )
 
-        return await execute_idempotent(
+        payload = await execute_idempotent(
             session,
             context=context,
             operation="tax.received_reports.process",
             idempotency_key=idempotencyKey,
             request_payload={
                 "evidenceIds": [str(item) for item in evidenceIds],
-                "reportDate": reportDate.isoformat(),
+                "reportYear": reportYear,
+                "reportMonth": reportMonth,
             },
             action="tax.received_reports.processed",
             entity_type="tax_xml_recovery_job",
             event_type=xml_recovery.RECOVERY_REQUESTED_EVENT,
             callback=run,
             audit_details={
-                "report_date": reportDate.isoformat(),
+                "report_year": reportYear,
+                "report_month": reportMonth,
                 "evidence_count": len(evidenceIds),
             },
         )
+        return ReceivedReportsProcessRead.model_validate(payload)
     except HTTPException as exc:
         raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
     finally:
         await session.close()
+
+
+_forbid_extra_tool_arguments("tax.process_received_reports")
 
 
 @mcp.tool(name="parties.search")

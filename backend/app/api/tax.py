@@ -4,6 +4,7 @@ Etapa E1: periodos y carga de evidencia. La lectura del contenido (crear
 ``FiscalDocument`` desde el XML/TXT) llega en la etapa E2.
 """
 
+import hashlib
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -394,6 +395,7 @@ async def post_evidence(
         request_payload={
             "filename": file.filename,
             "size": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
         },
         action="tax.evidence.uploaded",
         entity_type="tax_evidence",
@@ -468,7 +470,7 @@ async def post_received_reports_process(
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
 ) -> dict[str, object]:
-    """Importa reportes diarios ya cargados y encola la recuperacion de XML."""
+    """Importa reportes mensuales ya cargados y encola la recuperacion de XML."""
     tenant_ruc = await _tenant_ruc(session, context)
 
     async def run() -> tuple[str, dict[str, object]]:
@@ -476,11 +478,13 @@ async def post_received_reports_process(
             session,
             context,
             evidence_ids=data.evidence_ids,
-            report_date=data.report_date,
+            report_year=data.report_year,
+            report_month=data.report_month,
             tenant_ruc=tenant_ruc,
         )
         response = ReceivedReportsProcessRead(
-            report_date=result.report_date,
+            report_year=result.report_year,
+            report_month=result.report_month,
             evidence_count=result.evidence_count,
             listed_rows=result.listed_rows,
             document_types=result.document_types,
@@ -489,7 +493,7 @@ async def post_received_reports_process(
             skipped=result.skipped,
             preliminary=result.preliminary,
             recovery_job=TaxXmlRecoveryJobRead.model_validate(
-                {**result.recovery_job.__dict__, "items": []}
+                xml_recovery.job_read_payload(result.recovery_job, items=[])
             ),
         )
         return (
@@ -508,7 +512,8 @@ async def post_received_reports_process(
         event_type=xml_recovery.RECOVERY_REQUESTED_EVENT,
         callback=run,
         audit_details={
-            "report_date": data.report_date.isoformat(),
+            "report_year": data.report_year,
+            "report_month": data.report_month,
             "evidence_count": len(data.evidence_ids),
         },
     )
@@ -676,7 +681,7 @@ async def get_period_xml_recovery(
         return None
     items = await xml_recovery.unresolved_items(session, context, job_id=job.id)
     return TaxXmlRecoveryJobRead.model_validate(
-        {**job.__dict__, "items": items},
+        xml_recovery.job_read_payload(job, items=items),
     )
 
 
@@ -698,7 +703,7 @@ async def post_period_xml_recovery(
         return (
             str(job.id),
             TaxXmlRecoveryJobRead.model_validate(
-                {**job.__dict__, "items": []},
+                xml_recovery.job_read_payload(job, items=[]),
             ).model_dump(mode="json", by_alias=True),
         )
 

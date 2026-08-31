@@ -172,6 +172,27 @@ async def test_evidence_can_be_linked_to_a_period(client, stored_objects) -> Non
     assert [item["id"] for item in filtered.json()] == [record["id"]]
 
 
+async def test_evidence_idempotency_hash_includes_file_content(client, stored_objects) -> None:
+    token = await token_for(client, "a@iaerp.local", TENANT_A, TAX_SCOPES)
+    key = "tax-evidence-same-name-size"
+    first = await client.post(
+        "/api/v1/tax/evidence",
+        headers=auth(token, key),
+        files={"file": ("recibidos.txt", b"contenido-a", "text/plain")},
+        data={"origin": "PORTAL_SRI"},
+    )
+    assert first.status_code == 201, first.text
+
+    changed = await client.post(
+        "/api/v1/tax/evidence",
+        headers=auth(token, key),
+        files={"file": ("recibidos.txt", b"contenido-b", "text/plain")},
+        data={"origin": "PORTAL_SRI"},
+    )
+    assert changed.status_code == 409
+    assert "Idempotency key" in changed.json()["detail"]
+
+
 async def test_evidence_rejects_unknown_period(client, stored_objects) -> None:
     token = await token_for(client, "a@iaerp.local", TENANT_A, TAX_SCOPES)
 
