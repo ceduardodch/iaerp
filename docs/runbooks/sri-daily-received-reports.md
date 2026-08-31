@@ -1,5 +1,8 @@
 # Descarga diaria de comprobantes recibidos del SRI
 
+Para volver a configurar accesos, cuentas IAERP o perfiles de Chrome, seguir
+[`sri-multicompany-recovery.md`](sri-multicompany-recovery.md).
+
 ## Objetivo
 
 Ejecutar en el Mac del operador la consulta mensual del portal SRI, subir los
@@ -23,13 +26,15 @@ del portal.
 
 ## Flujo
 
-1. Ejecutar `node scripts/sri_received_reports_to_iaerp.mjs`. El navegador
+1. Ejecutar `node scripts/sri_received_reports_to_iaerp.mjs --all` para todas
+   las empresas o `--company=btob` para una sola. El navegador
    visible entra por `SRI en Línea` y abre comprobantes electrónicos recibidos;
    no usa el módulo legado `facturacion-internet` ni un scraper remoto.
-2. El ejecutor lee RUC y clave desde el servicio `IAERP SRI Portal` del Llavero
-   de macOS y los escribe en la pantalla oficial sin imprimirlos. No guardar la
-   contraseña en IAERP, `.env` ni el repositorio. Si el SRI exige CAPTCHA o
-   MFA, parar y pedir atención humana.
+2. El ejecutor lee RUC y clave desde un servicio distinto del Llavero de macOS
+   por empresa y los escribe en la pantalla oficial sin imprimirlos. También
+   usa una cuenta IAERP de servicio y un perfil de navegador separados por
+   empresa. No guardar la contraseña en IAERP, `.env` ni el repositorio. Si el
+   SRI exige CAPTCHA o MFA, parar y pedir atención humana.
 3. Calcular la fecha de ayer y seleccionar su año y mes, con el día en `Todos`.
 4. Consultar los cinco tipos, uno por uno, solo para ese mes.
 5. Descargar cada reporte que tenga filas.
@@ -63,8 +68,11 @@ del portal.
 
 ## Programación local
 
-La tarea corre solo en este Mac a las 08:00, usa una cuenta IAERP de servicio
-con `tax:write` y guarda ambos accesos en el Llavero de macOS. La corrida real
-del 31 de agosto de 2026 importó tres reportes con filas y encoló la recuperación
-XML sin intervención. Si el SRI agrega CAPTCHA, MFA o cambia el formulario, la
-tarea queda en atención.
+La tarea corre solo en este Mac a las 08:00 con `--all`. DATA-CLIP y BTOB SAS
+usan cuentas IAERP con `tax:write`, servicios de Llavero y perfiles de navegador
+distintos. La corrida real del 31 de agosto de 2026 terminó para ambas empresas:
+DATA-CLIP listó 468 comprobantes en tres reportes y BTOB SAS listó 18 en dos
+reportes. En ambos casos IAERP encoló la recuperación XML. Si una empresa falla,
+la tarea continúa con la otra, termina con error para pedir atención y no mezcla
+tenants. Si el SRI agrega CAPTCHA, MFA o cambia el formulario, la empresa queda
+en atención.
