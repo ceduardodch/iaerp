@@ -7,9 +7,23 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Correctivo de razón social en XML SRI en promoción: 2026-08-31
+  `America/Guayaquil`. El esquema oficial define `razonSocial` como campo
+  alfanumérico de hasta 300 caracteres; el validador rechazó el valor concreto
+  `LEXCODE AUDIT S.A.S.`. Facturas y notas de crédito ahora transliteran a un
+  subconjunto ASCII seguro (`LEXCODE AUDIT SAS`) y aplican la misma regla al comprador. El
+  nombre legal almacenado en IAERP y el RIDE conservan la puntuación original.
+  Ruff, las 15 pruebas de XML y `git diff --check` están verdes; quince pruebas
+  dirigidas de emisión y nota de crédito dependientes del entorno quedaron
+  omitidas. Las revisiones fiscal y de seguridad quedaron en GO. El usuario
+  autorizó la promoción; faltan CI y despliegue. Tras el despliegue, un comprobante de prueba
+  ya `REJECTED` debe archivarse y sustituirse por uno nuevo; no se reenvía su
+  XML firmado anterior.
+
 - Automatización SRI multiempresa probada con datos reales: 2026-08-31
-  `America/Guayaquil`. El comando local `--all` procesó en secuencia DATA-CLIP
-  y BTOB SAS con RUC y clave SRI, cuenta IAERP y perfil de navegador separados.
+  `America/Guayaquil`. El comando local `--all` procesa en secuencia DATA-CLIP,
+  BTOB SAS y LEXCODE AUDIT S.A.S. con RUC y clave SRI, cuenta IAERP y perfil de
+  navegador separados.
   DATA-CLIP listó 468 comprobantes en tres reportes; BTOB SAS listó 18 en dos
   reportes (17 facturas y una retención). Ambas corridas terminaron y encolaron
   la recuperación XML. El formulario ahora borra, fija y verifica localmente
@@ -23,7 +37,18 @@ alcance y las decisiones.
   El procedimiento de recuperación quedó en
   `docs/runbooks/sri-multicompany-recovery.md`, con el mapa de Llavero y
   perfiles, rotación de cuentas IAERP, pruebas por empresa y diagnóstico sin
-  exponer secretos.
+  exponer secretos. Para LEXCODE se provisionó el tenant y su cuenta local
+  mínima `tax:write`; dos corridas reales de agosto leyeron el mismo reporte de
+  cuatro facturas. La pantalla de Compras conservó exactamente cuatro compras
+  en el grupo de agosto, por lo que la repetición no duplicó documentos. La
+  recuperación XML quedó en cola.
+  Antes de abrir el navegador o subir un TXT, el ejecutor valida por una ruta
+  REST autenticada que el RUC guardado para el portal coincide con el tenant de
+  la cuenta IAERP. Una cuenta cruzada termina en `409` y no crea evidencia; dos
+  pruebas cubren tanto el cruce como la coincidencia. La validación local del
+  receptor revisa el lote completo antes de la primera subida y admite la
+  cédula base solo para una persona natural con RUC válido. Las diez pruebas
+  Node cubren empresas, sesión cruzada, cero uploads y el orden del orquestador.
 
 - Automatización local mensual de comprobantes SRI probada con datos reales:
   2026-08-31 `America/Guayaquil`. El ejecutor visible entra por `SRI en Línea`

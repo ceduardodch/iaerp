@@ -14,6 +14,7 @@ import { join } from "node:path";
 
 import { chromium } from "../frontend/node_modules/playwright/index.mjs";
 import { selectSriReceivedCompanies } from "./sri_received_companies.mjs";
+import { validateDownloadedReports } from "./sri_received_report_validation.mjs";
 
 const SRI_RECEIVED_URL =
   "https://srienlinea.sri.gob.ec/tuportal-internet/" +
@@ -256,6 +257,20 @@ async function uploadEvidence(token, filePath, period, slug) {
   return { id: payload.id, digest };
 }
 
+async function preflightTenant(token, expectedRuc) {
+  const response = await fetch(`${IAERP_URL}/api/v1/tax/received-reports/preflight`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ expectedRuc }),
+  });
+  if (!response.ok) {
+    throw new Error(`IAERP_TENANT_PREFLIGHT_FAILED_${response.status}`);
+  }
+}
+
 async function processReports(token, evidence, period) {
   const setDigest = createHash("sha256")
     .update(evidence.map((item) => item.digest).sort().join(":"))
@@ -285,6 +300,7 @@ async function runCompany(company, period) {
   let context;
   let stage = "credentials";
   let sriCredentials = { ruc: "", password: "" };
+  let token = "";
 
   try {
     sriCredentials = {
@@ -295,6 +311,10 @@ async function runCompany(company, period) {
       ),
       password: readCompanyKeychain(company.sriKeychainService, "password", company.id),
     };
+    stage = "iaerp-token";
+    token = await getIaerpToken(company);
+    stage = "iaerp-preflight";
+    await preflightTenant(token, sriCredentials.ruc);
     stage = "browser";
     context = await chromium.launchPersistentContext(
       join(PROFILE_ROOT, company.browserProfile),
@@ -318,13 +338,13 @@ async function runCompany(company, period) {
       if (filePath) downloaded.push({ slug, filePath });
     }
 
-    sriCredentials = { ruc: "", password: "" };
     if (downloaded.length === 0) {
       throw new Error("SRI_NO_REPORTS_WITH_ROWS");
     }
 
-    stage = "iaerp-token";
-    const token = await getIaerpToken(company);
+    stage = "sri-report-tenant-validation";
+    validateDownloadedReports(downloaded, sriCredentials.ruc);
+    sriCredentials = { ruc: "", password: "" };
     const evidence = [];
     for (const report of downloaded) {
       stage = `iaerp-evidence-${report.slug}`;
@@ -350,6 +370,7 @@ async function runCompany(company, period) {
     throw new Error(`STAGE_${stage}: ${error.message}`);
   } finally {
     sriCredentials = { ruc: "", password: "" };
+    token = "";
     if (context) await context.close();
     rmSync(runtimeDir, { recursive: true, force: true });
   }

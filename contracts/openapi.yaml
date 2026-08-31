@@ -315,6 +315,32 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /tax/received-reports/preflight:
+    post:
+      operationId: preflightTaxReceivedReports
+      summary: Confirmar el enlace entre el acceso SRI y el tenant activo
+      description: >-
+        Compara el RUC que el ejecutor leyó del Llavero con el RUC del tenant
+        derivado del token. No guarda evidencia ni devuelve el RUC.
+      security:
+        - oauth2: ["tax:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivedReportsPreflight"
+      responses:
+        "204":
+          description: El acceso SRI y la cuenta IAERP pertenecen al mismo RUC
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
   /tax/received-reports/process:
     post:
       operationId: processTaxReceivedReports
@@ -1681,6 +1707,14 @@ components:
         type: string
         format: uuid
   schemas:
+    ReceivedReportsPreflight:
+      type: object
+      additionalProperties: false
+      required: [expectedRuc]
+      properties:
+        expectedRuc:
+          type: string
+          pattern: "^[0-9]{13}$"
     ReceivedReportsProcess:
       type: object
       additionalProperties: false

@@ -15,6 +15,14 @@ export const SRI_RECEIVED_COMPANIES = Object.freeze([
     iaerpKeychainService: "IAERP SRI Daily Import BTOB",
     browserProfile: "sri-browser-profile-btob",
   }),
+  Object.freeze({
+    id: "lexcode",
+    label: "LEXCODE AUDIT S.A.S.",
+    sriKeychainService: "IAERP SRI Portal LEXCODE",
+    sriUsernameAccount: "ruc",
+    iaerpKeychainService: "IAERP SRI Daily Import LEXCODE",
+    browserProfile: "sri-browser-profile-lexcode",
+  }),
 ]);
 
 export function selectSriReceivedCompanies(args = []) {
@@ -32,7 +40,7 @@ export function selectSriReceivedCompanies(args = []) {
     requested = args[1];
   }
   if (!requested) {
-    throw new Error("USAGE: --all | --company <data-clip|btob>");
+    throw new Error("USAGE: --all | --company <data-clip|btob|lexcode>");
   }
 
   const company = SRI_RECEIVED_COMPANIES.find((item) => item.id === requested);

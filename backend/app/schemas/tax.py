@@ -66,6 +66,14 @@ class ReceivedReportsProcess(APIModel):
     report_month: int = Field(ge=1, le=12)
 
 
+class ReceivedReportsPreflight(APIModel):
+    """RUC que el ejecutor leyó del acceso al portal SRI."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_ruc: str = Field(pattern=r"^\d{13}$")
+
+
 class ReceivedReportsProcessRead(APIModel):
     """Resumen seguro: no devuelve claves de acceso ni contenido fiscal."""
 

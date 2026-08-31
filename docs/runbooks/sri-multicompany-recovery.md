@@ -24,11 +24,17 @@ script nunca toma el tenant desde el RUC escrito en el portal.
 | BTOB SAS | `IAERP SRI Portal BTOB` | `password` | Clave del portal |
 | BTOB SAS | `IAERP SRI Daily Import BTOB` | `client_id` | ID de la cuenta IAERP |
 | BTOB SAS | `IAERP SRI Daily Import BTOB` | `client_secret` | Secreto de la cuenta IAERP |
+| LEXCODE AUDIT S.A.S. | `IAERP SRI Portal LEXCODE` | `ruc` | Usuario RUC del portal |
+| LEXCODE AUDIT S.A.S. | `IAERP SRI Portal LEXCODE` | `password` | Clave del portal |
+| LEXCODE AUDIT S.A.S. | `IAERP SRI Daily Import LEXCODE` | `client_id` | ID de la cuenta IAERP |
+| LEXCODE AUDIT S.A.S. | `IAERP SRI Daily Import LEXCODE` | `client_secret` | Secreto de la cuenta IAERP |
 
 Perfiles persistentes, fuera del repositorio:
 
 - DATA-CLIP: `~/Library/Application Support/IAERP/sri-browser-profile`
 - BTOB SAS: `~/Library/Application Support/IAERP/sri-browser-profile-btob`
+- LEXCODE AUDIT S.A.S.:
+  `~/Library/Application Support/IAERP/sri-browser-profile-lexcode`
 
 La tarea local `SRI recibidos a IAERP` ejecuta todos los días a las 08:00:
 
@@ -99,6 +105,7 @@ node --check scripts/sri_received_reports_to_iaerp.mjs
 node --test scripts/tests/sri_received_companies.test.mjs
 node scripts/sri_received_reports_to_iaerp.mjs --company=data-clip
 node scripts/sri_received_reports_to_iaerp.mjs --company=btob
+node scripts/sri_received_reports_to_iaerp.mjs --company=lexcode
 node scripts/sri_received_reports_to_iaerp.mjs --all
 ```
 
