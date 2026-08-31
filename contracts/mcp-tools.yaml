@@ -20,6 +20,31 @@ tools:
       additionalProperties: false
     outputSchema:
       $ref: openapi.yaml#/components/schemas/TenantContext
+  - name: ops.list_failures
+    effect: read
+    scope: operations:read
+    description: Listar fallos operativos terminales del tenant activo.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: [string, "null"]
+          enum: [OPEN, RESOLVED, null]
+          default: null
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        offset:
+          type: integer
+          minimum: 0
+          default: 0
+    outputSchema:
+      type: array
+      items:
+        $ref: "#/$defs/opsFailure"
   - name: tax.process_received_reports
     effect: external-write
     scope: tax:write
@@ -381,6 +406,47 @@ $defs:
     type: string
     minLength: 16
     maxLength: 128
+  opsFailure:
+    type: object
+    additionalProperties: false
+    required:
+      [id, sourceType, sourceId, eventType, error, attempts, status,
+       classification, correlationId, aggregateType, aggregateId, createdAt,
+       resolvedAt]
+    properties:
+      id:
+        type: string
+        format: uuid
+      sourceType:
+        type: string
+      sourceId:
+        type: string
+        format: uuid
+      eventType:
+        type: string
+      error:
+        type: string
+      attempts:
+        type: integer
+        minimum: 0
+      status:
+        type: string
+        enum: [OPEN, RESOLVED]
+      classification:
+        type: string
+        enum: [AUTO_RETRY, NEEDS_HUMAN]
+      correlationId:
+        type: [string, "null"]
+      aggregateType:
+        type: [string, "null"]
+      aggregateId:
+        type: [string, "null"]
+      createdAt:
+        type: string
+        format: date-time
+      resolvedAt:
+        type: [string, "null"]
+        format: date-time
   receivedReportsResult:
     type: object
     additionalProperties: false
