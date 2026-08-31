@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Correctivo de razón social en XML SRI en promoción: 2026-08-31
+- Correctivo de razón social en XML SRI publicado: 2026-08-31
   `America/Guayaquil`. El esquema oficial define `razonSocial` como campo
   alfanumérico de hasta 300 caracteres; el validador rechazó el valor concreto
   `LEXCODE AUDIT S.A.S.`. Facturas y notas de crédito ahora transliteran a un
@@ -15,12 +15,14 @@ alcance y las decisiones.
   nombre legal almacenado en IAERP y el RIDE conservan la puntuación original.
   Ruff, las 15 pruebas de XML y `git diff --check` están verdes; quince pruebas
   dirigidas de emisión y nota de crédito dependientes del entorno quedaron
-  omitidas. Las revisiones fiscal y de seguridad quedaron en GO. El usuario
-  autorizó la promoción; faltan CI y despliegue. Tras el despliegue, un comprobante de prueba
-  ya `REJECTED` debe archivarse y sustituirse por uno nuevo; no se reenvía su
-  XML firmado anterior.
+  omitidas. Las revisiones fiscal y de seguridad quedaron en GO. PR `#73`,
+  merge `e194140` y CI `33427391055` verdes; el job de Coolify terminó y
+  `/health/live`, `/health/ready`, `/health/startup`, la web y el OpenAPI
+  público respondieron correctamente. Un comprobante de prueba ya `REJECTED`
+  debe archivarse y sustituirse por uno nuevo; no se reenvía su XML firmado
+  anterior.
 
-- Automatización SRI multiempresa probada con datos reales: 2026-08-31
+- Automatización SRI multiempresa publicada y probada con datos reales: 2026-08-31
   `America/Guayaquil`. El comando local `--all` procesa en secuencia DATA-CLIP,
   BTOB SAS y LEXCODE AUDIT S.A.S. con RUC y clave SRI, cuenta IAERP y perfil de
   navegador separados.
@@ -49,6 +51,8 @@ alcance y las decisiones.
   receptor revisa el lote completo antes de la primera subida y admite la
   cédula base solo para una persona natural con RUC válido. Las diez pruebas
   Node cubren empresas, sesión cruzada, cero uploads y el orden del orquestador.
+  La protección llegó a producción en el mismo PR `#73`; la ruta preflight
+  pública exige autenticación y respondió `401` sin token.
 
 - Automatización local mensual de comprobantes SRI probada con datos reales:
   2026-08-31 `America/Guayaquil`. El ejecutor visible entra por `SRI en Línea`
