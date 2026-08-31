@@ -92,19 +92,45 @@ seguridad de todo el bucle.
       correlation_id, tenant, versión. Backend y frontend. Sin DSN configurado
       el código no debe cambiar de comportamiento ni fallar.
 
-### 🔒 Fase 3 — Bucle operativo (REQUIERE AUTORIZACIÓN HUMANA)
+### Fase 3 — Bucle operativo (AUTORIZADA por el humano el 2026-08-31)
 
-**La corrida que llegue aquí NO implementa: escribe en la Bitácora que la Fase 1
-y 2 están cerradas, apaga la tarea programada y termina.** A partir de este
-punto un agente adquiere capacidad de escritura sobre datos de producción, y esa
-decisión es del humano, no del bucle.
+El humano autorizó explícitamente esta fase. **Sigue siendo inerte al
+publicarse**: `_require_automation_writes` (`mcp/server.py:240`) falla cerrado
+si el tenant no tiene fila de `AutomationSettings` o si `writes_enabled` es
+`False`, que es el default. Nada se activa hasta que una persona lo encienda por
+tenant, igual que `IAERP_ERROR_DSN`. Construir esto NO enciende nada.
 
-- [ ] 10. Tool MCP `ops.list_failures` (solo lectura, `operations:read`).
-- [ ] 11. Tool MCP `ops.retry_failure`: solo acepta fallos que
-      `classify_failure()` marque `AUTO_RETRY`, pasa por `AutomationSettings`
-      (`writes_enabled`), `consume_automation_rate` e idempotencia, y queda
-      auditada como acción de agente distinguible de una humana.
-- [ ] 12. Disparo por evento al crearse un `DeadLetter` (no por reloj).
+Patrón obligatorio para las tools, ya probado en `receivables.record_payment`:
+`_tool_context(scope, tool_name)` (que aplica `_consume_tool_rate`) →
+`_require_automation_writes` → `execute_idempotent`.
+
+Toda tool nueva debe registrarse también en `contracts/mcp-tools.yaml`: el job
+`YAML contracts` del CI valida la paridad contra `mcp/server.py` y se pone rojo
+si falta.
+
+- [ ] 10. Tool MCP `ops.list_failures` (solo lectura, `operations:read`),
+      reutilizando `ops_failures.list_failures` sin duplicar la consulta.
+      Devuelve la `classification` para que el agente sepa qué puede tocar.
+- [ ] 11. Tool MCP `ops.retry_failure` (`operations:write`). **Diferencia
+      central con `POST /ops/failures/{id}/retry`:** el endpoint REST NO pasa por
+      `classify_failure()` a propósito, porque ahí un humano ya ejerció su
+      juicio (ver el docstring de `retry_failure`). La tool del agente SÍ debe
+      pasar, y rechazar todo lo que no sea `AUTO_RETRY`. Tres pruebas
+      obligatorias: rechaza un `NEEDS_HUMAN`, rechaza con
+      `writes_enabled=False`, y la auditoría queda distinguible de la humana
+      (actor de cuenta de servicio, no de usuario).
+- [ ] 12. Reintento automático **determinista en el worker**, no vía LLM: un
+      paso en `workers/dispatcher.py` que reintenta los `DeadLetter`
+      `AUTO_RETRY` del tenant cuando `writes_enabled` está activo, reutilizando
+      la misma mecánica de `retry_failure` (encolar un `OutboxEvent` fresco).
+      Para una lista blanca de un solo `event_type` esto es más simple, barato y
+      predecible que pedirle a un modelo que apriete un botón; el valor del
+      agente está en diagnosticar y explicar los `NEEDS_HUMAN`, que es lo que
+      habilitan los pendientes 10 y 11. Debe respetar el mismo kill switch.
+- [ ] 13. Runbook en `docs/10-operations.md`: cómo encender esto de verdad
+      (poner `writes_enabled=True` en el tenant, emitir la cuenta de servicio
+      con `operations:read`/`operations:write`, y cómo apagarlo en caliente).
+      Sin esto, se publica algo que nadie sabe activar ni detener.
 
 ## Reglas de cada corrida
 
