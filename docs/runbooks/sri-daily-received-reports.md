@@ -10,10 +10,13 @@ del portal.
 ## Periodos y tipos
 
 - Zona fiscal: `America/Guayaquil`.
-- Cada día se descarga de nuevo el mes actual completo para recuperar cualquier
+- Cada día se calcula la fecha de ayer y se descarga de nuevo, con el día en
+  `Todos`, el mes completo al que pertenece ayer. Así se recupera cualquier
   fecha que no corrió porque el Mac estuvo apagado o el portal falló.
-- El día 1 también se descarga el mes anterior completo, porque los
-  comprobantes del último día pueden aparecer con retraso.
+- El día 1 se consulta solo el mes anterior, no dos meses. Por ejemplo, el 1 de
+  septiembre se vuelve a descargar agosto completo porque los comprobantes del
+  31 de agosto aparecen al día siguiente. El 2 de septiembre ya se descarga
+  septiembre completo.
 - Tipos: factura, liquidación de compra, nota de crédito, nota de débito y
   comprobante de retención.
 - Si un tipo no tiene filas, no se descarga ni se crea evidencia vacía.
@@ -23,9 +26,8 @@ del portal.
 1. Abrir en Chrome la consulta de comprobantes electrónicos recibidos.
 2. Si la sesión venció, parar y pedir al operador que inicie sesión. No guardar
    la contraseña en IAERP ni en el repositorio.
-3. Seleccionar año y mes, con el día en `Todos`.
-4. Consultar los cinco tipos, uno por uno, para el mes actual. El día 1 repetir
-   los pasos 3 a 7 para el mes anterior.
+3. Calcular la fecha de ayer y seleccionar su año y mes, con el día en `Todos`.
+4. Consultar los cinco tipos, uno por uno, solo para ese mes.
 5. Descargar cada reporte que tenga filas.
 6. Subir cada TXT a `POST /api/v1/tax/evidence` con origen `PORTAL_SRI` y una
    clave idempotente distinta por archivo.

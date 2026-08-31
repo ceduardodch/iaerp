@@ -4,6 +4,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 import jwt
 from fastapi import HTTPException
@@ -12,6 +13,7 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ContentBlock
 from mcp.types import Tool as MCPTool
 from pydantic import Field
@@ -270,6 +272,25 @@ _auth_config = AuthSettings(
     required_scopes=[],  # No requerir scopes específicos en el primer nivel
 )
 
+
+def _transport_security_for(server_url: str) -> TransportSecuritySettings:
+    parsed = urlsplit(server_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError("MCP_SERVER_URL must be an absolute HTTP(S) URL")
+
+    allowed_hosts = {parsed.netloc}
+    allowed_origins = {f"{parsed.scheme}://{parsed.netloc}"}
+    if parsed.hostname in {"127.0.0.1", "localhost", "::1"}:
+        allowed_hosts.update({"127.0.0.1:*", "localhost:*", "[::1]:*"})
+        allowed_origins.update(
+            {"http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"}
+        )
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=sorted(allowed_hosts),
+        allowed_origins=sorted(allowed_origins),
+    )
+
 mcp = ScopedFastMCP(
     "IAERP",
     instructions=(
@@ -281,6 +302,7 @@ mcp = ScopedFastMCP(
     streamable_http_path="/mcp",
     stateless_http=True,
     json_response=True,
+    transport_security=_transport_security_for(settings.MCP_SERVER_URL),
 )
 
 
