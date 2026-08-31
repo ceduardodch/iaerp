@@ -8,8 +8,10 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Refresco mensual de comprobantes SRI listo para promoción: 2026-08-31
-  `America/Guayaquil`. La tarea consulta cada día el mes actual completo con
-  `Todos` los días; el día 1 consulta además el mes anterior. REST y MCP reciben
+  `America/Guayaquil`. La tarea toma el mes de la fecha de ayer y lo consulta
+  completo con el día `Todos`; el día 1 consulta solo el mes anterior, para
+  incluir los comprobantes del último día que el SRI publica al día siguiente.
+  REST y MCP reciben
   `reportYear` y `reportMonth`, aceptan fechas distintas dentro del periodo y
   rechazan cualquier fila de otro mes. La repetición queda protegida por hash
   de evidencia, idempotencia y la clave única `tenant_id + access_key`; un TXT
