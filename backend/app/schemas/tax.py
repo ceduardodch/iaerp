@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, ConfigDict, Field
 
 from app.schemas.base import APIModel
 from app.schemas.masters import AnalyticAssignmentRead
@@ -59,6 +59,8 @@ class IngestResultRead(APIModel):
 class ReceivedReportsProcess(APIModel):
     """Reportes mensuales que el flujo local ya subio como evidencia."""
 
+    model_config = ConfigDict(extra="forbid")
+
     evidence_ids: list[uuid.UUID] = Field(min_length=1, max_length=5)
     report_year: int = Field(ge=2000, le=2100)
     report_month: int = Field(ge=1, le=12)
@@ -66,6 +68,8 @@ class ReceivedReportsProcess(APIModel):
 
 class ReceivedReportsProcessRead(APIModel):
     """Resumen seguro: no devuelve claves de acceso ni contenido fiscal."""
+
+    model_config = ConfigDict(extra="forbid")
 
     report_year: int
     report_month: int
@@ -80,11 +84,18 @@ class ReceivedReportsProcessRead(APIModel):
 
 
 class TaxXmlRecoveryItemRead(APIModel):
-    document_id: uuid.UUID = Field(validation_alias="fiscal_document_id")
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: uuid.UUID = Field(
+        validation_alias=AliasChoices("documentId", "fiscal_document_id"),
+        serialization_alias="documentId",
+    )
     status: str
 
 
 class TaxXmlRecoveryJobRead(APIModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: uuid.UUID
     tax_period_id: uuid.UUID
     status: str

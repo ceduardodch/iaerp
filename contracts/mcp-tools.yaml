@@ -525,6 +525,14 @@ $defs:
             type: array
             items:
               type: object
+              additionalProperties: false
+              required: [documentId, status]
+              properties:
+                documentId:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
           startedAt:
             type: [string, "null"]
             format: date-time

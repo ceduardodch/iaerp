@@ -1,51 +1,51 @@
 # ruff: noqa: E501 -- public SHA-256 fingerprints carry explicit secret-scan annotations
 
 EXPECTED_TOOL_FINGERPRINTS = {
-    "context.get": "268e7362ad3c30c68ba002ba840d721edad5b68136870906b154222a6fe2e2cc",  # pragma: allowlist secret
+    "context.get": "2e2b3cd3c0ca9ec67657ad8b2953dfd84c31454d1f0645c2216f9a24005a7bf5",  # pragma: allowlist secret
     "ops.list_failures": (
-        "9352b5d0de1822e412457981e9e19cd0552bbc16d2061ffd7b692e7b955fd029"  # pragma: allowlist secret
+        "7a557c1fd6602406bf776272aeff6382833c8a6e768c82dc14907490ef60dbee"  # pragma: allowlist secret
     ),
     "tax.process_received_reports": (
-        "f1953b578021324ef88aabce5b119e41493d9cb05d199bbfe298074beb6b86d1"  # pragma: allowlist secret
+        "cd1bf0660631bba901893e654253a231b813b85edcb23424c16341fde8c99b47"  # pragma: allowlist secret
     ),
-    "parties.search": "b30a69092abd26274feb8b60c1c7a80c0c1f105f2b7a35bd7d1c54f9412b396c",  # pragma: allowlist secret
-    "parties.create": "f0695b4c27be49292b13d400ae64fb9b6a0480746029692824498b4f6dba1872",  # pragma: allowlist secret
-    "products.search": "b640ea9c44a3f30f37dc5cde233dd1a05be2dfa8413b5b32c9e2cc85492c3403",  # pragma: allowlist secret
-    "products.create": "bc421a47996e139fcfbd936dd535dd5e31cac0f4f6932e4c36acc3186b7f8667",  # pragma: allowlist secret
-    "leads.list": "127bd0c4ab273a7f4d562dcabb3f243279a94d8380b9ad58e20ac6349f1956dc",  # pragma: allowlist secret
-    "leads.activities": "dbcccf6a58861016ea0b51eab3650e18339d54e1aec5fc086db9ecef7bfe4f60",  # pragma: allowlist secret
+    "parties.search": "eaa06912c1ed4ce7bda1086bb3e18ff1eb526e27203d1e3bff928fdac0b357c7",  # pragma: allowlist secret
+    "parties.create": "66912fd439261d0c521dcb397e05ea74dfc3bd8b9d764585a9acf8568c36f92a",  # pragma: allowlist secret
+    "products.search": "4f101518151a3528dc23dffc726605b5bd8f37317907ce6ff32bebc89c27bd87",  # pragma: allowlist secret
+    "products.create": "7e98be20f8696a1ddd48c5335e9775e2c03a5b4f8e94aa7c9425c1584f295680",  # pragma: allowlist secret
+    "leads.list": "345a04185847cf12dd155ab698e46a8f94538da9620429d1eabd3b38143ab170",  # pragma: allowlist secret
+    "leads.activities": "43b07b77d43711cb5032d4e254390c3e1bd5de3cbb4d8f54661ef8a25d6faa63",  # pragma: allowlist secret
     "leads.create_with_party": (
-        "724c4a7a3b786691fbb8f9ac0ddbc6ef474d118ec41dd785b10b68bffa9720e0"  # pragma: allowlist secret
+        "e5e460e9a3250fb95c8a309e09efbfd52a6d0c8dbdaf0580dd9bb68a0cab218c"  # pragma: allowlist secret
     ),
     "leads.create_activity": (
-        "27eba68d532a173e1c0f22fb4d730653ecc1698025851c8f944578ff2b63a483"  # pragma: allowlist secret
+        "bc7655270855e0c1b4444d5c11eb5a3bc9b1a7c41520e095a87f093b3eeb7ef8"  # pragma: allowlist secret
     ),
-    "invoices.get": "8ab5c5b6cf7c22ce2bdc1b1bcfb554b76b4aecc7ac17df181c05ef132652db25",  # pragma: allowlist secret
+    "invoices.get": "ebfe2c0855f000ce67b3b032edaaf105f996ea62708e4bf725d736151de3ab93",  # pragma: allowlist secret
     "invoices.create_draft": (
-        "143f994ca96d058274076052e60e54da306380efedd2d9fc8a5015082b3090ec"  # pragma: allowlist secret
+        "f3bb8223f68e2cb147a392963a71c5ff24c8a1308a4ed5b158e8ec33ea26c69a"  # pragma: allowlist secret
     ),
-    "invoices.issue": "503285bd8fa6e9e4a6f7c0847dcd904cc0f85926a8586e70c01421876633b4f3",  # pragma: allowlist secret
+    "invoices.issue": "be890a3144a1697f0060411347128d938047382c3ae9fb66c435716c0817f2a7",  # pragma: allowlist secret
     "credit_notes.create_and_issue": (
-        "da7c2af6c5d991fc7c843555f689bed90d6b90716ae2b4e089eb8ff2f743b24c"  # pragma: allowlist secret
+        "5262d81451539c1d2c323df3ad2349de60b68c56e683a09f1a8338e8b3ec3dd0"  # pragma: allowlist secret
     ),
     "receivables.list": (
-        "873bdfdac2c03b4694afc15d36e1fc58c98039d3e8a3f8c4d43ad53c51866e5c"  # pragma: allowlist secret
+        "fe5b1196696d09e7bc6e2e492ac07df084b3a63ad99a9074acbdab98f36db924"  # pragma: allowlist secret
     ),
     "receivables.record_payment": (
-        "421b053528cda8f95c2139e73511db369b04109cda3e86c973baa6041c495d27"  # pragma: allowlist secret
+        "2edbcefd1d277d96e81214cfb39ec0ddb1e46c07e601ec5816d49bffb0bbfd4a"  # pragma: allowlist secret
     ),
     "receivables.send_reminder": (
-        "7bf3c061c255df09f4ad70cafe2f7c586b8fe97941fe9f2680b425bbec29bbe4"  # pragma: allowlist secret
+        "7e39f766623d5c0036563e89582d457d350996c9f028b045dfe76155e2f0d6f6"  # pragma: allowlist secret
     ),
-    "payables.list": "7a2bb13faaa5cc6344b8b923260936e053363ad8607939e0528e7fce37a430f4",  # pragma: allowlist secret
-    "payables.create": "4551af24687a9fbbccd42d0fe93431aae97b619ba1dc3dbfd979a5e3f14df31a",  # pragma: allowlist secret
+    "payables.list": "3a8cbe25d75289f2e3af8fb9d32b22417bf4ead5f8f39ec0f9dcbc8030c23ba1",  # pragma: allowlist secret
+    "payables.create": "c00038903e25d55e8dceac9aa76185c96a146366da853e671dc8b9bc49713d60",  # pragma: allowlist secret
     "payables.create_from_document": (
-        "fb74b3320414a6e9af5c423e2ebd755227cb343328e41bfaad2ce7dff8358c98"  # pragma: allowlist secret
+        "60bfa0cd7445562f1bf9581cda5e970ac3b2d8573f7863690774f380fd41c1c5"  # pragma: allowlist secret
     ),
     "payables.schedule_payment": (
-        "8d7c7a13656a69ead0923ee4851db4b5e50f774e9a554cb36b7b393da0d14281"  # pragma: allowlist secret
+        "30c2ea49b5a7d04b60f359fa277b2412773428fcf865e54c35ba4589c05413d9"  # pragma: allowlist secret
     ),
     "payables.record_payment": (
-        "426eb6950084f3a97f279a0fb3652360c875bef12c3efab26ec70e88c0c7006f"  # pragma: allowlist secret
+        "df32c627a25a716e827a2effcaab790944bec62888feec25c436b7c9cefdb2a6"  # pragma: allowlist secret
     ),
 }

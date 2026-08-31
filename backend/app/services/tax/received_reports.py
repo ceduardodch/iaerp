@@ -1,21 +1,49 @@
-"""Caso de uso diario: importar reportes recibidos y pedir sus XML al SRI."""
+"""Caso de uso mensual: importar reportes recibidos y pedir sus XML al SRI."""
 
 from __future__ import annotations
 
 import uuid
 from collections import Counter
 from dataclasses import dataclass
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
+from app.models.platform import AutomationSettings
 from app.models.tax import TaxEvidence, TaxXmlRecoveryJob
-from app.services import storage
+from app.services import access_key, storage
 from app.services.tax import ingest, periods, xml_recovery
-from app.services.tax.txt_import import parse_received_txt
+from app.services.tax.identification import receiver_matches_tenant
+from app.services.tax.txt_import import ParsedTxtRow, parse_received_txt
 
 MAX_MONTHLY_REPORTS = 5
+MAX_ROWS_PER_REPORT = 10_000
+
+_DOCUMENT_CODES = {
+    "FACTURA": "01",
+    "LIQUIDACION": "03",
+    "NOTA_CREDITO": "04",
+    "NOTA_DEBITO": "05",
+    "RETENCION": "07",
+}
+
+
+def _row_matches_access_key(row: ParsedTxtRow) -> bool:
+    if not access_key.verify_access_key(row.access_key):
+        return False
+    if row.access_key[:8] != row.issue_date.strftime("%d%m%Y"):
+        return False
+    if row.access_key[8:10] != _DOCUMENT_CODES.get(row.doc_type):
+        return False
+    if row.access_key[10:23] != row.issuer_identification:
+        return False
+    if row.series:
+        parts = row.series.split("-")
+        if len(parts) != 3 or row.access_key[24:39] != "".join(parts):
+            return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -56,6 +84,13 @@ async def process_received_reports(
             detail=f"Between 1 and {MAX_MONTHLY_REPORTS} evidence files are required",
         )
 
+    automation = await session.get(AutomationSettings, context.tenant_id)
+    if automation is None or not automation.writes_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail="Automation writes are disabled for this tenant",
+        )
+
     evidence_by_id = {
         evidence.id: evidence
         for evidence in await session.scalars(
@@ -75,11 +110,28 @@ async def process_received_reports(
         if evidence.file_type != "TXT":
             raise HTTPException(
                 status_code=422,
-                detail="Daily received reports must be TXT files",
+                detail="Monthly received reports must be TXT files",
             )
         rows = parse_received_txt(await storage.download_artifact(object_key=evidence.object_key))
         if not rows:
             raise HTTPException(status_code=422, detail="SRI report contains no rows")
+        if len(rows) > MAX_ROWS_PER_REPORT:
+            raise HTTPException(
+                status_code=422,
+                detail=f"SRI report exceeds {MAX_ROWS_PER_REPORT} rows",
+            )
+        if any(
+            not receiver_matches_tenant(row.receiver_identification, tenant_ruc) for row in rows
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Every report row must belong to the active tenant",
+            )
+        if any(not _row_matches_access_key(row) for row in rows):
+            raise HTTPException(
+                status_code=422,
+                detail="Every report row must have a coherent SRI access key",
+            )
         if any(
             row.issue_date.year != report_year or row.issue_date.month != report_month
             for row in rows
@@ -111,7 +163,12 @@ async def process_received_reports(
         month=report_month,
         obligation_type="IVA",
     )
-    recovery_job = await xml_recovery.create_job(session, context, period_id=period.id)
+    recovery_job = await xml_recovery.create_job(
+        session,
+        context,
+        period_id=period.id,
+        reuse_active=True,
+    )
     return ReceivedReportsResult(
         report_year=report_year,
         report_month=report_month,
@@ -128,6 +185,7 @@ async def process_received_reports(
 
 __all__ = [
     "MAX_MONTHLY_REPORTS",
+    "MAX_ROWS_PER_REPORT",
     "ReceivedReportsResult",
     "process_received_reports",
 ]

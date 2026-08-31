@@ -365,6 +365,42 @@ async def test_recovery_job_ingests_xml_and_completes_period(client, monkeypatch
     assert len(events) == 1
 
 
+async def test_recovery_completion_requeues_when_monthly_refresh_added_pending_items(
+    client,
+) -> None:
+    period_id, _document_id, _key = await _seed_preliminary()
+    token = await _token(client)
+    created = await client.post(
+        f"/api/v1/tax/periods/{period_id}/xml-recovery",
+        headers=_auth(token, "recover-monthly-refresh-0001"),
+    )
+    assert created.status_code == 201, created.text
+    job_id = uuid.UUID(created.json()["id"])
+
+    async with SessionFactory.begin() as session:
+        job = await session.get(TaxXmlRecoveryJob, job_id)
+        assert job is not None
+        job.status = "RUNNING"
+
+    await recovery_worker._complete(job_id)
+
+    async with SessionFactory() as session:
+        job = await session.get(TaxXmlRecoveryJob, job_id)
+        requeued_events = list(
+            await session.scalars(
+                select(OutboxEvent).where(
+                    OutboxEvent.tenant_id == TENANT_A,
+                    OutboxEvent.event_type == "tax.xml_recovery.requested",
+                    OutboxEvent.aggregate_id == str(job_id),
+                )
+            )
+        )
+    assert job is not None
+    assert job.status == "QUEUED"
+    assert job.completed_at is None
+    assert len(requeued_events) == 2
+
+
 async def test_recovery_accepts_natural_person_cedula_for_tenant_ruc(
     client, monkeypatch
 ) -> None:

@@ -4,6 +4,7 @@ Etapa E1: periodos y carga de evidencia. La lectura del contenido (crear
 ``FiscalDocument`` desde el XML/TXT) llega en la etapa E2.
 """
 
+import hashlib
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -394,6 +395,7 @@ async def post_evidence(
         request_payload={
             "filename": file.filename,
             "size": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
         },
         action="tax.evidence.uploaded",
         entity_type="tax_evidence",
@@ -491,7 +493,7 @@ async def post_received_reports_process(
             skipped=result.skipped,
             preliminary=result.preliminary,
             recovery_job=TaxXmlRecoveryJobRead.model_validate(
-                {**result.recovery_job.__dict__, "items": []}
+                xml_recovery.job_read_payload(result.recovery_job, items=[])
             ),
         )
         return (
@@ -679,7 +681,7 @@ async def get_period_xml_recovery(
         return None
     items = await xml_recovery.unresolved_items(session, context, job_id=job.id)
     return TaxXmlRecoveryJobRead.model_validate(
-        {**job.__dict__, "items": items},
+        xml_recovery.job_read_payload(job, items=items),
     )
 
 
@@ -701,7 +703,7 @@ async def post_period_xml_recovery(
         return (
             str(job.id),
             TaxXmlRecoveryJobRead.model_validate(
-                {**job.__dict__, "items": []},
+                xml_recovery.job_read_payload(job, items=[]),
             ).model_dump(mode="json", by_alias=True),
         )
 
