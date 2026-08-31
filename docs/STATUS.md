@@ -15,7 +15,9 @@ alcance y las decisiones.
   listó 468 registros, creó 131 preliminares, omitió 337 ya conocidos y encoló
   la recuperación XML. La tarea local quedó activa cada día a las 08:00. Si el
   SRI presenta CAPTCHA, MFA o cambia el formulario, se detiene y pide atención.
-  El ejecutor y el runbook quedaron autorizados para promoción a `main`.
+  PR `#69`, merge `af64e3d` y CI `33415359865` verdes. Una segunda corrida real
+  devolvió el mismo conjunto y reutilizó las claves idempotentes por contenido;
+  no repitió la escritura fiscal.
 
 - Refresco mensual de comprobantes SRI listo para promoción: 2026-08-31
   `America/Guayaquil`. La tarea toma el mes de la fecha de ayer y lo consulta
