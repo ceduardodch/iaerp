@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Flujo diario de comprobantes recibidos listo para promoción: 2026-08-31
+- Flujo diario de comprobantes recibidos publicado en producción: 2026-08-31
   `America/Guayaquil`. El Mac consulta en el portal SRI el día anterior y los
   cinco tipos de comprobante; no descarga reportes vacíos. IAERP expone el caso
   de uso compartido por REST y MCP para importar de uno a cinco TXT ya
@@ -21,7 +21,11 @@ alcance y las decisiones.
   36 omitidas; sus seis fallos locales son previos y ajenos (clave Fernet de
   ejemplo, Redis apagado y contrato PostgreSQL de nómina). La repetición con
   una clave Fernet sintética dejó solo el caso de nómina que SQLite no traduce.
-  PostgreSQL, CI, Coolify y verificación pública quedan en la promoción.
+  El commit `4b7eaca` llegó a `main` por el PR `#63` como merge `f37743b`.
+  El CI `33392739692`, el despliegue Coolify, `/health/live`,
+  `/health/ready`, `/health/startup`, OpenAPI y la ruta MCP autenticada quedaron
+  verdes. Falta emitir la cuenta local `SRI Daily Import`, guardarla en el
+  Llavero de macOS y acordar la hora antes de activar la tarea diaria.
 
 - Correctivo de edición masiva de compras publicado en `main`: 2026-08-22
   `America/Guayaquil`. En producción quedaron seleccionadas 36 compras de enero
