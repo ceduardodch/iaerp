@@ -468,7 +468,7 @@ async def post_received_reports_process(
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
 ) -> dict[str, object]:
-    """Importa reportes diarios ya cargados y encola la recuperacion de XML."""
+    """Importa reportes mensuales ya cargados y encola la recuperacion de XML."""
     tenant_ruc = await _tenant_ruc(session, context)
 
     async def run() -> tuple[str, dict[str, object]]:
@@ -476,11 +476,13 @@ async def post_received_reports_process(
             session,
             context,
             evidence_ids=data.evidence_ids,
-            report_date=data.report_date,
+            report_year=data.report_year,
+            report_month=data.report_month,
             tenant_ruc=tenant_ruc,
         )
         response = ReceivedReportsProcessRead(
-            report_date=result.report_date,
+            report_year=result.report_year,
+            report_month=result.report_month,
             evidence_count=result.evidence_count,
             listed_rows=result.listed_rows,
             document_types=result.document_types,
@@ -508,7 +510,8 @@ async def post_received_reports_process(
         event_type=xml_recovery.RECOVERY_REQUESTED_EVENT,
         callback=run,
         audit_details={
-            "report_date": data.report_date.isoformat(),
+            "report_year": data.report_year,
+            "report_month": data.report_month,
             "evidence_count": len(data.evidence_ids),
         },
     )
