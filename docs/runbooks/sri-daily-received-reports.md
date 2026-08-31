@@ -23,9 +23,13 @@ del portal.
 
 ## Flujo
 
-1. Abrir en Chrome la consulta de comprobantes electrónicos recibidos.
-2. Si la sesión venció, parar y pedir al operador que inicie sesión. No guardar
-   la contraseña en IAERP ni en el repositorio.
+1. Ejecutar `node scripts/sri_received_reports_to_iaerp.mjs`. El navegador
+   visible entra por `SRI en Línea` y abre comprobantes electrónicos recibidos;
+   no usa el módulo legado `facturacion-internet` ni un scraper remoto.
+2. El ejecutor lee RUC y clave desde el servicio `IAERP SRI Portal` del Llavero
+   de macOS y los escribe en la pantalla oficial sin imprimirlos. No guardar la
+   contraseña en IAERP, `.env` ni el repositorio. Si el SRI exige CAPTCHA o
+   MFA, parar y pedir atención humana.
 3. Calcular la fecha de ayer y seleccionar su año y mes, con el día en `Todos`.
 4. Consultar los cinco tipos, uno por uno, solo para ese mes.
 5. Descargar cada reporte que tenga filas.
@@ -57,10 +61,10 @@ del portal.
 - Si aparece CAPTCHA, bloqueo, error de autenticación o cambio del portal, parar
   y avisar. No intentar saltarlo.
 
-## Programación pendiente
+## Programación local
 
-Antes de activar la tarea diaria hay que acordar la hora. La tarea debe correr
-solo en este Mac, usar una cuenta IAERP de servicio con scopes mínimos y guardar
-su secreto en el Llavero de macOS. El portal SRI seguirá usando la sesión de
-Chrome; si vence, la tarea queda en atención hasta que el operador vuelva a
-iniciar sesión.
+La tarea corre solo en este Mac a las 08:00, usa una cuenta IAERP de servicio
+con `tax:write` y guarda ambos accesos en el Llavero de macOS. La corrida real
+del 31 de agosto de 2026 importó tres reportes con filas y encoló la recuperación
+XML sin intervención. Si el SRI agrega CAPTCHA, MFA o cambia el formulario, la
+tarea queda en atención.

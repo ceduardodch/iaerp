@@ -7,6 +7,16 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Automatización local mensual de comprobantes SRI probada con datos reales:
+  2026-08-31 `America/Guayaquil`. El ejecutor visible entra por `SRI en Línea`
+  con el acceso cifrado en el Llavero de macOS, calcula el mes de ayer,
+  selecciona día `Todos` y recorre los cinco tipos sin usar el módulo legado ni
+  un scraper remoto. La prueba de agosto descargó los tres tipos con filas,
+  listó 468 registros, creó 131 preliminares, omitió 337 ya conocidos y encoló
+  la recuperación XML. La tarea local quedó activa cada día a las 08:00. Si el
+  SRI presenta CAPTCHA, MFA o cambia el formulario, se detiene y pide atención.
+  El ejecutor y el runbook quedaron autorizados para promoción a `main`.
+
 - Refresco mensual de comprobantes SRI listo para promoción: 2026-08-31
   `America/Guayaquil`. La tarea toma el mes de la fecha de ayer y lo consulta
   completo con el día `Todos`; el día 1 consulta solo el mes anterior, para
