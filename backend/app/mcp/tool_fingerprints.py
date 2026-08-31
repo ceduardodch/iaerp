@@ -2,6 +2,9 @@
 
 EXPECTED_TOOL_FINGERPRINTS = {
     "context.get": "268e7362ad3c30c68ba002ba840d721edad5b68136870906b154222a6fe2e2cc",  # pragma: allowlist secret
+    "ops.list_failures": (
+        "9352b5d0de1822e412457981e9e19cd0552bbc16d2061ffd7b692e7b955fd029"  # pragma: allowlist secret
+    ),
     "tax.process_received_reports": (
         "f1953b578021324ef88aabce5b119e41493d9cb05d199bbfe298074beb6b86d1"  # pragma: allowlist secret
     ),

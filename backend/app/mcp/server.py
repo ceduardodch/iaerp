@@ -42,7 +42,15 @@ from app.schemas.payables import (
 from app.schemas.platform import OperationRead, TenantContextRead
 from app.schemas.receivables import AccountItemRead, AgingRead, PaymentInput, ReminderInput
 from app.schemas.tax import ReceivedReportsProcessRead, TaxXmlRecoveryJobRead
-from app.services import automation_rate, billing, crm, masters, payables, receivables
+from app.services import (
+    automation_rate,
+    billing,
+    crm,
+    masters,
+    ops_failures,
+    payables,
+    receivables,
+)
 from app.services.tax import received_reports, xml_recovery
 from app.services.unit_of_work import append_audit, execute_idempotent
 
@@ -67,10 +75,12 @@ MCP_SCOPES = [
     "payables:extract",
     "leads:read",
     "leads:write",
+    "operations:read",
     "tax:write",
 ]
 TOOL_REQUIRED_SCOPES = {
     "context.get": "context:read",
+    "ops.list_failures": "operations:read",
     "tax.process_received_reports": "tax:write",
     "parties.search": "parties:read",
     "parties.create": "parties:write",
@@ -291,6 +301,36 @@ async def context_get() -> dict[str, object]:
             ),
             default_payment_terms_days=tenant.default_payment_terms_days,
         ).model_dump(mode="json", by_alias=True)
+    finally:
+        await session.close()
+
+
+@mcp.tool(name="ops.list_failures")
+async def ops_list_failures(
+    status: Annotated[Literal["OPEN", "RESOLVED"] | None, Field(default=None)] = None,
+    limit: Annotated[int, Field(ge=1, le=200)] = 50,
+    offset: Annotated[int, Field(ge=0)] = 0,
+) -> list[dict[str, object]]:
+    """Listar fallos operativos terminales (dead letters) del tenant activo.
+
+    Solo lectura: no pasa por ``_require_automation_writes`` (el kill switch
+    de automatizacion solo aplica a escrituras) y reutiliza exactamente
+    ``ops_failures.list_failures`` -- el mismo caso de uso que
+    ``GET /ops/failures`` (REST), sin duplicar la consulta. Cada fallo trae su
+    ``classification`` (``AUTO_RETRY``/``NEEDS_HUMAN``, calculada por
+    ``classify_failure()``) para que el agente sepa cuales puede tocar con
+    ``ops.retry_failure`` y cuales debe escalar a un humano.
+    """
+    session, context = await _tool_context("operations:read", "ops.list_failures")
+    try:
+        entities = await ops_failures.list_failures(
+            session,
+            tenant_id=context.tenant_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+        return [entity.model_dump(mode="json", by_alias=True) for entity in entities]
     finally:
         await session.close()
 
