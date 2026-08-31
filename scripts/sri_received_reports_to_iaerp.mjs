@@ -13,22 +13,15 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { chromium } from "../frontend/node_modules/playwright/index.mjs";
+import { selectSriReceivedCompanies } from "./sri_received_companies.mjs";
 
-const SRI_KEYCHAIN_SERVICE = "IAERP SRI Portal";
-const IAERP_KEYCHAIN_SERVICE = "IAERP SRI Daily Import";
 const SRI_RECEIVED_URL =
   "https://srienlinea.sri.gob.ec/tuportal-internet/" +
   "accederAplicacion.jspa?redireccion=57&idGrupo=55";
 const IAERP_URL = "https://iaerp.b2b.com.ec";
 const TOKEN_URL =
   "https://iaerp-auth.b2b.com.ec/realms/iaerp/protocol/openid-connect/token";
-const PROFILE_DIR = join(
-  homedir(),
-  "Library",
-  "Application Support",
-  "IAERP",
-  "sri-browser-profile",
-);
+const PROFILE_ROOT = join(homedir(), "Library", "Application Support", "IAERP");
 
 const MONTH_NAMES = [
   "Enero",
@@ -61,6 +54,14 @@ function readKeychain(service, account) {
   ).trim();
 }
 
+function readCompanyKeychain(service, account, companyId) {
+  try {
+    return readKeychain(service, account);
+  } catch {
+    throw new Error(`KEYCHAIN_CONFIGURATION_MISSING_${companyId}`);
+  }
+}
+
 function fiscalPeriodForYesterday() {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -75,10 +76,11 @@ function fiscalPeriodForYesterday() {
 }
 
 async function typeLikeUser(locator, value) {
-  await locator.click();
-  await locator.press("Meta+A");
-  await locator.press("Backspace");
-  await locator.pressSequentially(value, { delay: 45 });
+  await locator.fill("");
+  await locator.fill(value);
+  if (await locator.inputValue() !== value) {
+    throw new Error("SRI_CREDENTIAL_FIELD_MISMATCH");
+  }
 }
 
 async function loginIfNeeded(page, credentials) {
@@ -91,12 +93,32 @@ async function loginIfNeeded(page, credentials) {
   await typeLikeUser(rucField, credentials.ruc);
   await typeLikeUser(passwordField, credentials.password);
 
-  await Promise.all([
-    page.waitForURL((url) => !url.href.includes("/auth/realms/Internet/"), {
+  // Chrome can restore a saved login after the first field changes. Reassert
+  // both values immediately before submitting and verify them without logging.
+  await typeLikeUser(rucField, credentials.ruc);
+  await typeLikeUser(passwordField, credentials.password);
+
+  await page.locator('input[name="login"]').click();
+  try {
+    await page.waitForURL((url) => !url.href.includes("/auth/realms/Internet/"), {
       timeout: 60_000,
-    }),
-    page.locator('input[name="login"]').click(),
-  ]);
+    });
+  } catch {
+    const bodyText = await page.locator("body").innerText();
+    if (/captcha/i.test(bodyText)) {
+      throw new Error("SRI_CAPTCHA_REQUIRED");
+    }
+    if (/(código|codigo).*(verificación|verificacion)|segundo factor|token/i.test(bodyText)) {
+      throw new Error("SRI_MFA_REQUIRED");
+    }
+    if (
+      /(usuario|nombre de usuario|contraseña|clave).*(inválid|invalid|incorrect|no válid)/i
+        .test(bodyText)
+    ) {
+      throw new Error("SRI_AUTHENTICATION_REJECTED");
+    }
+    throw new Error("SRI_LOGIN_NOT_COMPLETED");
+  }
 }
 
 async function openReceivedReports(page, credentials) {
@@ -183,9 +205,17 @@ async function queryAndDownload(page, runtimeDir, slug, label) {
   return nonEmptyLines.length > 1 ? destination : null;
 }
 
-async function getIaerpToken() {
-  let clientId = readKeychain(IAERP_KEYCHAIN_SERVICE, "client_id");
-  let clientSecret = readKeychain(IAERP_KEYCHAIN_SERVICE, "client_secret");
+async function getIaerpToken(company) {
+  let clientId = readCompanyKeychain(
+    company.iaerpKeychainService,
+    "client_id",
+    company.id,
+  );
+  let clientSecret = readCompanyKeychain(
+    company.iaerpKeychainService,
+    "client_secret",
+    company.id,
+  );
   const body = new URLSearchParams({
     grant_type: "client_credentials",
     client_id: clientId,
@@ -249,64 +279,98 @@ async function processReports(token, evidence, period) {
   return response.json();
 }
 
-const runtimeDir = mkdtempSync(join(tmpdir(), "iaerp-sri-received-"));
-chmodSync(runtimeDir, 0o700);
-const period = fiscalPeriodForYesterday();
-let context;
-let sriCredentials = { ruc: "", password: "" };
+async function runCompany(company, period) {
+  const runtimeDir = mkdtempSync(join(tmpdir(), `iaerp-sri-${company.id}-`));
+  chmodSync(runtimeDir, 0o700);
+  let context;
+  let stage = "credentials";
+  let sriCredentials = { ruc: "", password: "" };
 
+  try {
+    sriCredentials = {
+      ruc: readCompanyKeychain(
+        company.sriKeychainService,
+        company.sriUsernameAccount,
+        company.id,
+      ),
+      password: readCompanyKeychain(company.sriKeychainService, "password", company.id),
+    };
+    stage = "browser";
+    context = await chromium.launchPersistentContext(
+      join(PROFILE_ROOT, company.browserProfile),
+      {
+        channel: "chrome",
+        headless: false,
+        locale: "es-EC",
+        timezoneId: "America/Guayaquil",
+        viewport: { width: 1366, height: 900 },
+        acceptDownloads: true,
+      },
+    );
+    const page = context.pages()[0] ?? (await context.newPage());
+    const downloaded = [];
+
+    for (const [slug, label] of REPORT_TYPES) {
+      stage = `sri-${slug}`;
+      await openReceivedReports(page, sriCredentials);
+      await selectPeriod(page, period.year, period.month);
+      const filePath = await queryAndDownload(page, runtimeDir, slug, label);
+      if (filePath) downloaded.push({ slug, filePath });
+    }
+
+    sriCredentials = { ruc: "", password: "" };
+    if (downloaded.length === 0) {
+      throw new Error("SRI_NO_REPORTS_WITH_ROWS");
+    }
+
+    stage = "iaerp-token";
+    const token = await getIaerpToken(company);
+    const evidence = [];
+    for (const report of downloaded) {
+      stage = `iaerp-evidence-${report.slug}`;
+      evidence.push(await uploadEvidence(token, report.filePath, period, report.slug));
+    }
+    stage = "iaerp-process";
+    const result = await processReports(token, evidence, period);
+
+    return {
+      company: company.label,
+      period: `${period.year}-${String(period.month).padStart(2, "0")}`,
+      reportCount: downloaded.length,
+      evidenceCount: evidence.length,
+      listedRows: result.listedRows,
+      documentTypes: result.documentTypes,
+      created: result.created,
+      updated: result.updated,
+      skipped: result.skipped,
+      preliminary: result.preliminary,
+      recoveryStatus: result.recoveryJob?.status ?? null,
+    };
+  } catch (error) {
+    throw new Error(`STAGE_${stage}: ${error.message}`);
+  } finally {
+    sriCredentials = { ruc: "", password: "" };
+    if (context) await context.close();
+    rmSync(runtimeDir, { recursive: true, force: true });
+  }
+}
+
+let companies;
 try {
-  sriCredentials = {
-    ruc: readKeychain(SRI_KEYCHAIN_SERVICE, "ruc"),
-    password: readKeychain(SRI_KEYCHAIN_SERVICE, "password"),
-  };
-  context = await chromium.launchPersistentContext(PROFILE_DIR, {
-    channel: "chrome",
-    headless: false,
-    locale: "es-EC",
-    timezoneId: "America/Guayaquil",
-    viewport: { width: 1366, height: 900 },
-    acceptDownloads: true,
-  });
-  const page = context.pages()[0] ?? (await context.newPage());
-  const downloaded = [];
-
-  for (const [slug, label] of REPORT_TYPES) {
-    await openReceivedReports(page, sriCredentials);
-    await selectPeriod(page, period.year, period.month);
-    const filePath = await queryAndDownload(page, runtimeDir, slug, label);
-    if (filePath) downloaded.push({ slug, filePath });
-  }
-
-  sriCredentials = { ruc: "", password: "" };
-  if (downloaded.length === 0) {
-    throw new Error("SRI_NO_REPORTS_WITH_ROWS");
-  }
-
-  const token = await getIaerpToken();
-  const evidence = [];
-  for (const report of downloaded) {
-    evidence.push(await uploadEvidence(token, report.filePath, period, report.slug));
-  }
-  const result = await processReports(token, evidence, period);
-
-  process.stdout.write(`${JSON.stringify({
-    period: `${period.year}-${String(period.month).padStart(2, "0")}`,
-    reportCount: downloaded.length,
-    evidenceCount: evidence.length,
-    listedRows: result.listedRows,
-    documentTypes: result.documentTypes,
-    created: result.created,
-    updated: result.updated,
-    skipped: result.skipped,
-    preliminary: result.preliminary,
-    recoveryStatus: result.recoveryJob?.status ?? null,
-  })}\n`);
+  companies = selectSriReceivedCompanies(process.argv.slice(2));
 } catch (error) {
   process.stderr.write(`SRI_RECEIVED_FAILED: ${error.message}\n`);
-  process.exitCode = 1;
-} finally {
-  sriCredentials = { ruc: "", password: "" };
-  if (context) await context.close();
-  rmSync(runtimeDir, { recursive: true, force: true });
+  process.exit(1);
 }
+
+const period = fiscalPeriodForYesterday();
+let failed = false;
+for (const company of companies) {
+  try {
+    process.stdout.write(`${JSON.stringify(await runCompany(company, period))}\n`);
+  } catch (error) {
+    process.stderr.write(`SRI_RECEIVED_FAILED_${company.id}: ${error.message}\n`);
+    failed = true;
+  }
+}
+if (failed) process.exitCode = 1;

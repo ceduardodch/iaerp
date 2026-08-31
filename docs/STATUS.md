@@ -7,6 +7,21 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Automatización SRI multiempresa probada con datos reales: 2026-08-31
+  `America/Guayaquil`. El comando local `--all` procesó en secuencia DATA-CLIP
+  y BTOB SAS con RUC y clave SRI, cuenta IAERP y perfil de navegador separados.
+  DATA-CLIP listó 468 comprobantes en tres reportes; BTOB SAS listó 18 en dos
+  reportes (17 facturas y una retención). Ambas corridas terminaron y encolaron
+  la recuperación XML. El formulario ahora borra, fija y verifica localmente
+  cada campo antes de enviarlo para impedir que Chrome restaure otro acceso.
+  La tarea está activa todos los días a las 08:00 con `--all`. Pasan las cinco
+  pruebas de selección y aislamiento de empresas, `node --check` y
+  `git diff --check`. Promoción a `main` autorizada por PR.
+  El procedimiento de recuperación quedó en
+  `docs/runbooks/sri-multicompany-recovery.md`, con el mapa de Llavero y
+  perfiles, rotación de cuentas IAERP, pruebas por empresa y diagnóstico sin
+  exponer secretos.
+
 - Automatización local mensual de comprobantes SRI probada con datos reales:
   2026-08-31 `America/Guayaquil`. El ejecutor visible entra por `SRI en Línea`
   con el acceso cifrado en el Llavero de macOS, calcula el mes de ayer,
