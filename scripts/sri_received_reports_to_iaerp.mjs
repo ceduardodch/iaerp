@@ -223,7 +223,7 @@ async function uploadEvidence(token, filePath, period, slug) {
     throw new Error(`IAERP_EVIDENCE_FAILED_${slug}_${response.status}`);
   }
   const payload = await response.json();
-  return { id: payload.id, digest, duplicate: Boolean(payload.duplicate) };
+  return { id: payload.id, digest };
 }
 
 async function processReports(token, evidence, period) {
@@ -293,7 +293,7 @@ try {
   process.stdout.write(`${JSON.stringify({
     period: `${period.year}-${String(period.month).padStart(2, "0")}`,
     reportCount: downloaded.length,
-    duplicateEvidence: evidence.filter((item) => item.duplicate).length,
+    evidenceCount: evidence.length,
     listedRows: result.listedRows,
     documentTypes: result.documentTypes,
     created: result.created,
