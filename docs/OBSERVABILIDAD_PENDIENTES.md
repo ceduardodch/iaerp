@@ -108,7 +108,7 @@ Toda tool nueva debe registrarse también en `contracts/mcp-tools.yaml`: el job
 `YAML contracts` del CI valida la paridad contra `mcp/server.py` y se pone rojo
 si falta.
 
-- [ ] 10. Tool MCP `ops.list_failures` (solo lectura, `operations:read`),
+- [x] 10. Tool MCP `ops.list_failures` (solo lectura, `operations:read`),
       reutilizando `ops_failures.list_failures` sin duplicar la consulta.
       Devuelve la `classification` para que el agente sepa qué puede tocar.
 - [ ] 11. Tool MCP `ops.retry_failure` (`operations:write`). **Diferencia
@@ -489,3 +489,27 @@ ingeniería (error → PR) se decide aparte y **nunca** despliega solo.
   sesión, reaplicar el mismo diseño descrito arriba para `ops.list_failures`
   (no hay nada que rehacer en diseño, solo en mecánica de commit) y seguir el
   flujo normal de publicación en `release`.
+- 2026-08-31 (retoma): `git status` al arrancar mostró árbol limpio salvo mis
+  propios cambios sin commitear de la corrida anterior (`ops.list_failures`
+  en `mcp/server.py`, `tool_fingerprints.py`, `contracts/mcp-tools.yaml` y
+  `tests/test_mcp_ops_failures.py`); la tool de tax de la otra sesión ya
+  estaba commiteada en `main`/`release` (`4b7eaca`). Diff verificado línea por
+  línea contra lo commiteado: sin solape, se inserta limpio justo después de
+  `context.get` y antes de `tax.process_received_reports`. Reverifiqué todo
+  antes de commitear: 23/23 pruebas en los archivos de MCP/ops (incluidas las
+  6 nuevas), `ruff check .` y `uv run mypy app` limpios,
+  `scripts/validate_contracts.py` verde. Suite completa: 603 pasan/36 skip,
+  mismos 2 fallos preexistentes y ajenos a este cambio
+  (`test_health` por Redis apagado; `test_payroll_employees_service.py::
+  test_create_employee_rejects_duplicate_identification_within_tenant`,
+  confirmado reproduciéndolo también en rama limpia sin mis cambios vía
+  `git stash`). A mitad de la corrida `git status` mostró que `release` había
+  avanzado bajo mis pies (de `4b7eaca` a `57575b5`): el humano fusionó los PR
+  #63/#64 de la tool de tax a `main` y sincronizó `release`. Confirmé que solo
+  tocaron `COORDINACION_IA.md`/`docs/STATUS.md` (nada de mis archivos), así
+  que no era una colisión de diseño, solo bookkeeping del humano en paralelo;
+  reconfirmé con un `git fetch` más antes de pushear. Commit `2b9c269` sobre
+  `release` (`feat(ops): agregar tool MCP ops.list_failures`). CI `33395454766`
+  verde (`Backend`, `Frontend`, `OIDC and full stack`; los jobs de Coolify se
+  saltan en `release`, como corresponde). Con esto queda cerrado el pendiente
+  10. Sigue el 11 (`ops.retry_failure`) para la próxima corrida.
