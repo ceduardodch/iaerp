@@ -724,22 +724,44 @@ async def test_form_fields_separate_paste_from_control(client, stored_objects) -
     ).json()
 
     codes = {field["fieldCode"]: field for field in body["fields"]}
-    assert {"401", "411", "500", "510", "517", "609"} <= set(codes)
+    assert {
+        "401",
+        "411",
+        "500",
+        "507",
+        "510",
+        "517",
+        "531",
+        "532",
+        "541",
+        "542",
+        "564",
+        "609",
+    } <= set(codes)
 
-    # El derecho a credito de 500/510 requiere revisar el destino contable.
-    assert codes["510"]["isPaste"] is False
+    # 500/510 se ingresan en el formulario; el derecho a credito aun requiere
+    # revisar el destino contable.
+    assert codes["510"]["isPaste"] is True
     assert codes["510"]["needsReview"] is True
-    assert codes["500"]["isPaste"] is False
+    assert codes["500"]["isPaste"] is True
     assert codes["500"]["sourceKey"] == "comprasGravadasBrutaBase"
     assert codes["500"]["needsReview"] is True
     # El 507 fue contrastado con la guia vigente del SRI: bruto, tarifa 0%.
     assert codes["507"]["sourceKey"] == "comprasTarifaCeroBrutaBase"
     assert codes["507"]["isPaste"] is True
     assert codes["507"]["needsReview"] is False
+    assert codes["531"]["sourceKey"] == "comprasNoObjetoBrutaBase"
+    assert codes["541"]["sourceKey"] == "comprasNoObjetoBase"
+    assert codes["532"]["sourceKey"] == "comprasExentasBrutaBase"
+    assert codes["542"]["sourceKey"] == "comprasExentasBase"
+    assert all(
+        codes[code]["isPaste"] is True for code in ("531", "532", "541", "542")
+    )
     # El 411 es el valor neto de ventas gravadas, no ventas con tarifa 0%.
     assert codes["411"]["sourceKey"] == "ventasGravadasBase"
-    # El 564 depende de proporcionalidad o contabilidad: no se copia sin revisar.
-    assert codes["564"]["isPaste"] is False
+    # El 564 se registra en el formulario, pero depende de proporcionalidad o
+    # contabilidad y por eso mantiene el aviso de revision.
+    assert codes["564"]["isPaste"] is True
     assert codes["564"]["needsReview"] is True
     assert codes["609"]["needsReview"] is False
 

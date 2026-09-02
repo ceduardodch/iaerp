@@ -53,14 +53,14 @@ FORM_104_SEED: tuple[FieldSeed, ...] = (
         "500",
         "Adquisiciones gravadas con tarifa distinta de 0% - valor bruto",
         "compras_gravadas_bruta_base",
-        False,
+        True,
         needs_review=True,
     ),
     FieldSeed(
         "510",
         "Adquisiciones gravadas con tarifa distinta de 0% - valor neto",
         "compras_gravadas_base",
-        False,
+        True,
         needs_review=True,
     ),
     FieldSeed(
@@ -76,10 +76,34 @@ FORM_104_SEED: tuple[FieldSeed, ...] = (
         True,
     ),
     FieldSeed(
+        "531",
+        "Adquisiciones no objeto de IVA - valor bruto",
+        "compras_no_objeto_bruta_base",
+        True,
+    ),
+    FieldSeed(
+        "541",
+        "Adquisiciones no objeto de IVA - valor neto",
+        "compras_no_objeto_base",
+        True,
+    ),
+    FieldSeed(
+        "532",
+        "Adquisiciones exentas del pago de IVA - valor bruto",
+        "compras_exentas_bruta_base",
+        True,
+    ),
+    FieldSeed(
+        "542",
+        "Adquisiciones exentas del pago de IVA - valor neto",
+        "compras_exentas_base",
+        True,
+    ),
+    FieldSeed(
         "564",
         "Credito tributario aplicable segun proporcionalidad o contabilidad",
         "iva_credito_tributario",
-        False,
+        True,
         needs_review=True,
     ),
     # Confirmado por el usuario: el 609 es SOLO retencion de IVA recibida.
@@ -184,7 +208,7 @@ def fields_for_date(records: list[TaxFormFieldMap], moment: date) -> list[TaxFor
 
 
 def review_pending_codes() -> set[str]:
-    """Codigos del seed que aun deben confirmarse contra el formulario vigente."""
+    """Codigos cuyo valor requiere confirmar un criterio tributario o contable."""
     return {seed.field_code for seed in FORM_104_SEED if seed.needs_review}
 
 

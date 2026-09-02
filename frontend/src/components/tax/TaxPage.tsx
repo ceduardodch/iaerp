@@ -412,6 +412,13 @@ export function TaxPage({
     }
   }
 
+  function confirmReviewedValue(fieldCode: string) {
+    const message = fieldCode === '564'
+      ? 'Confirma que el crédito tributario coincide con tu contabilidad o con el factor de proporcionalidad del SRI antes de copiarlo.'
+      : 'Confirma que estas compras dan derecho a crédito tributario y no corresponden a activos fijos ni a compras sin derecho a crédito antes de copiar el valor.'
+    return window.confirm(message)
+  }
+
   const summary = ivaQuery.data
   const pasteFields = summary?.fields.filter((field) => field.isPaste) ?? []
   const controlFields = summary?.fields.filter((field) => !field.isPaste) ?? []
@@ -975,7 +982,7 @@ export function TaxPage({
             { header: 'Campo', cell: (field) => (<><strong>{field.fieldCode}</strong></>) },
             { header: 'Concepto', cell: (field) => (<>{field.label}
                         {field.needsReview ? (
-                          <small className="tax-review"> · confirmar código</small>
+                          <small className="tax-review"> · revisar criterio tributario</small>
                         ) : null}</>) },
             { header: 'Valor', cell: (field) => (<>{field.value}</>) },
             { header: 'Respaldo', cell: (field) => (<>{field.documentCount} doc.</>) },
@@ -983,9 +990,14 @@ export function TaxPage({
                           variant="ghost"
                           aria-label={`Copiar campo ${field.fieldCode}`}
                           disabled={summary.isPreliminary}
-                          onClick={() => void copyValue(field.fieldCode, field.value)}
+                          onClick={() => {
+                            if (field.needsReview && !confirmReviewedValue(field.fieldCode)) return
+                            void copyValue(field.fieldCode, field.value)
+                          }}
                         >
-                          {copiedField === field.fieldCode ? 'Copiado' : 'Copiar'}
+                          {copiedField === field.fieldCode
+                            ? 'Copiado'
+                            : field.needsReview ? 'Revisar y copiar' : 'Copiar'}
                         </ErpButton></>) },
           ]}
         />
@@ -1001,7 +1013,7 @@ export function TaxPage({
             { header: 'Campo', cell: (field) => (<>{field.fieldCode}</>) },
             { header: 'Concepto', cell: (field) => (<>{field.label}
                             {field.needsReview ? (
-                              <small className="tax-review"> · confirmar código</small>
+                              <small className="tax-review"> · revisar criterio tributario</small>
                             ) : null}</>) },
             { header: 'Valor', cell: (field) => (<>{field.value}</>) },
           ]}

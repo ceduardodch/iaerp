@@ -353,7 +353,7 @@ class TaxFormFieldRead(APIModel):
     value: str
     # Documentos que respaldan la cifra.
     document_count: int
-    # true si este codigo aun debe confirmarse contra el formulario vigente.
+    # true si el valor requiere confirmar un criterio tributario o contable.
     needs_review: bool = False
 
 
