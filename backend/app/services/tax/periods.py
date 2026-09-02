@@ -10,8 +10,36 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
+from app.models.platform import Tenant
 from app.models.tax import FiscalDocument, FiscalDocumentTax, TaxPeriod
+from app.services.tax import due_dates
 from app.services.tax.completeness import missing_tax_detail_document_ids
+
+
+async def _computed_due_date(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    year: int,
+    month: int,
+    obligation_type: str,
+) -> date | None:
+    """Fecha limite segun el noveno digito del RUC, o ``None`` si no aplica.
+
+    Queda ``None`` cuando la obligacion no tiene calendario confirmado o el RUC
+    del tenant no es legible: ``services/tax/due_dates.py`` prefiere no dar
+    fecha antes que dar una inventada.
+    """
+    tenant = await session.get(Tenant, context.tenant_id)
+    if tenant is None:
+        return None
+    computed = due_dates.due_date_for_period(
+        obligation_type=obligation_type,
+        year=year,
+        month=month,
+        ruc=tenant.ruc,
+    )
+    return computed.due_date if computed is not None else None
 
 
 async def list_periods(
@@ -50,6 +78,11 @@ async def get_or_create_period(
 
     Un periodo nuevo arranca en ``PENDIENTE_DESCARGA``: sin evidencia cargada no
     hay nada que revisar ni declarar.
+
+    Si no se pasa ``due_date``, se calcula desde el noveno digito del RUC. Una
+    fecha explicita siempre gana: la persona que la escribe sabe de un caso que
+    la regla general no cubre (regimen especial, prorroga) y el calculo no debe
+    pisarla.
     """
     existing = await session.scalar(
         select(TaxPeriod).where(
@@ -61,6 +94,15 @@ async def get_or_create_period(
     )
     if existing is not None:
         return existing
+
+    if due_date is None:
+        due_date = await _computed_due_date(
+            session,
+            context,
+            year=year,
+            month=month,
+            obligation_type=obligation_type,
+        )
 
     period = TaxPeriod(
         tenant_id=context.tenant_id,

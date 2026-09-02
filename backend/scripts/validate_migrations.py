@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 import asyncpg  # type: ignore[import-untyped]
@@ -236,6 +237,38 @@ async def assert_missing_tax_detail_backfill(url: URL) -> None:
         raise RuntimeError("An ATS task remained open for incomplete evidence.")
 
 
+async def assert_tax_period_due_date_backfill(url: URL) -> None:
+    """Prove the deadline backfill reached a period created before the rule existed.
+
+    ``seed_missing_tax_detail`` inserts its period without ``due_date``, which is
+    exactly the legacy state: until ``services/tax/due_dates.py`` existed nobody
+    filled that column unless a person typed it.
+    """
+    connection = await asyncpg.connect(
+        host=url.host or "127.0.0.1",
+        port=url.port or 5432,
+        user=url.username,
+        password=url.password,
+        database=url.database,
+    )
+    try:
+        row = await connection.fetchrow(
+            """
+            SELECT due_date
+            FROM tax_periods
+            WHERE id = '44444444-4444-4444-8444-444444444444'
+            """
+        )
+    finally:
+        await connection.close()
+    # RUC 1788888888001 -> noveno digito 8 -> dia 24 del mes siguiente al periodo
+    # (julio 2026). El 24 de agosto de 2026 cae lunes, asi que no hay corrimiento.
+    if row is None or row["due_date"] != date(2026, 8, 24):
+        raise RuntimeError(
+            "The tax period deadline was not backfilled from the RUC ninth digit."
+        )
+
+
 async def assert_tax_xml_recovery_job_insert(url: URL) -> None:
     """Prove the durable SRI recovery queue can reference a migrated period."""
     connection = await asyncpg.connect(
@@ -305,6 +338,7 @@ def main() -> None:
     asyncio.run(seed_missing_tax_detail(url))
     alembic("upgrade", "head")
     asyncio.run(assert_missing_tax_detail_backfill(url))
+    asyncio.run(assert_tax_period_due_date_backfill(url))
     asyncio.run(assert_analytic_classification_insert(url))
     asyncio.run(assert_tax_xml_recovery_job_insert(url))
     alembic("downgrade", "base")
