@@ -7,6 +7,7 @@ from app.services.payroll.tasks import run_payroll_scheduler
 from app.services.tax.tasks import run_tax_scheduler
 from app.workers.celery_app import celery_app
 from app.workers.collections import run_collection_scheduler
+from app.workers.notifications import run_notification_scheduler
 from app.workers.outbox import OutboxMessage, run_dispatcher
 
 settings = get_settings()
@@ -52,6 +53,7 @@ async def serve() -> None:
         group.create_task(run_collection_scheduler())
         group.create_task(run_tax_scheduler())
         group.create_task(run_payroll_scheduler())
+        group.create_task(run_notification_scheduler())
 
 
 def main() -> None:

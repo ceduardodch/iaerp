@@ -4,9 +4,10 @@
 > código. Coordinación general: [`COORDINACION_IA.md`](../COORDINACION_IA.md).
 > Estado del proyecto: [`docs/STATUS.md`](STATUS.md).
 
-**Última actualización:** 2026-09-02 (F0 en curso)
-**Estado:** 🚧 F0 en curso. P0.1 implementado, P0.2 decidido, P0.3 pendiente del
-usuario. El módulo de avisos en sí (F1 en adelante) no tiene código todavía.
+**Última actualización:** 2026-09-02 (F1 completada)
+**Estado:** ✅ F0 y F1 completas. El módulo programa y entrega el aviso de
+declaración de IVA con `StubEmailSender` (sin red). Falta P0.3 del usuario
+(dominio Brevo, API key, calendario de feriados) para arrancar F2.
 
 ## Qué es
 
@@ -254,6 +255,37 @@ como tarjeta en **Empresa**, junto a las demás integraciones.
 
 ---
 
+## Estado de F1 (implementado)
+
+| Pieza | Dónde |
+|---|---|
+| Modelos (5 tablas) | `models/notifications.py`, migración `e3f4a5b6c7d8` |
+| Catálogo y defaults | `services/notifications/catalog.py` |
+| Aritmética de calendario | `services/notifications/scheduling.py` |
+| Planificador idempotente | `services/notifications/planner.py` |
+| Destinatarios, plantillas y entrega | `services/notifications/delivery.py` |
+| Transporte | `integrations/notifications/email_sender.py` |
+| Despacho por outbox | `workers/notifications.py`, cableado en `dispatcher.py` y `tasks.py` |
+| Pruebas | `tests/test_notifications_foundation.py` (21) |
+
+Decisiones que conviene no revertir sin pensarlo:
+
+- **Las reglas nacen apagadas.** Nada sale hasta que una persona lo enciende.
+- **`uq_notification_events_tenant_dedupe_key` es la garantía real**, no el
+  `SELECT` previo del planificador: verificado quitando esa primera capa y
+  comprobando que el aviso sigue sin duplicarse.
+- **El stub reporta `STUBBED`, nunca `SENT`.** Una bitácora de pruebas no puede
+  ser indistinguible de la de producción. Por eso `STUBBED` existe también como
+  estado de `NotificationEvent`.
+- **La condición de "ya no corresponde" se revisa dos veces**, al programar y al
+  entregar: entre ambos momentos pasan días y avisar de una declaración ya
+  presentada es lo que enseña a la gente a ignorar los avisos.
+- **El correo advierte que los feriados no están verificados** mientras nadie
+  cargue el calendario, en vez de mostrar una fecha que aparente estar confirmada.
+
+Lo que F1 **no** trae, por diseño: API REST y pantalla (F4), y los otros diez
+avisos del catálogo (F3 y F5). El esquema ya los admite sin migración nueva.
+
 ## Fases
 
 Cada fase cierra con CI verde y commit propio (regla 3 de `COORDINACION_IA.md`).
@@ -261,7 +293,7 @@ Cada fase cierra con CI verde y commit propio (regla 3 de `COORDINACION_IA.md`).
 | # | Fase | Entregable | Cierra cuando |
 |---|---|---|---|
 | **F0** | Prerequisitos | ✅ `due_dates.py` + migración; ✅ decisión de alcance Brevo (opción A); ⏳ dominio verificado y calendario de feriados | Un período de IVA muestra su fecha límite correcta según el noveno dígito ✅ |
-| **F1** | Fundación | Modelos + migración + scheduler genérico + `StubEmailSender` + **un** aviso completo (`IVA_DECLARACION`) | El scheduler corre dos veces el mismo día y genera **un** evento |
+| **F1** | Fundación | ✅ Modelos + migración `e3f4a5b6c7d8` + planificador + `StubEmailSender` + `IVA_DECLARACION` completo | ✅ El planificador corre tres veces el mismo día y genera **un** evento |
 | **F2** | Transporte | `brevo.py` + `NotificationDelivery` + webhook + envío de prueba | Un correo real llega a la bandeja del usuario y el webhook marca `delivered` |
 | **F3** | Catálogo | `PartyBillingSchedule` + `CLIENTE_FACTURAR`, `IESS_APORTE`, `RESUMEN_MENSUAL`, `IVA_PREVIEW_MENSUAL` | Cada aviso se salta solo cuando su condición ya se cumplió |
 | **F4** | Parametrización | `NotificationsPage.tsx` (3 pestañas) + calendario en la ficha del cliente | Cambiar el día de un aviso desde la UI cambia el envío, sin redeploy |

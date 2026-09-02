@@ -35,6 +35,13 @@ from app.models.legal_commercial import (
     ContractVersion,
 )
 from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag, TaxCategory
+from app.models.notifications import (
+    NotificationChannelAccount,
+    NotificationDelivery,
+    NotificationEvent,
+    NotificationRule,
+    NotificationTemplate,
+)
 from app.models.payables import (
     BankStatementImport,
     BankTransaction,
@@ -116,6 +123,11 @@ __all__ = [
     "Membership",
     "AutomationRateWindow",
     "Movement",
+    "NotificationChannelAccount",
+    "NotificationDelivery",
+    "NotificationEvent",
+    "NotificationRule",
+    "NotificationTemplate",
     "OperationRecord",
     "OutboxEvent",
     "SocialCampaign",

@@ -28,6 +28,13 @@ from app.workers.collections import (
 from app.workers.collections import (
     CONSUMER_NAME as COLLECTIONS_CONSUMER,
 )
+from app.workers.notifications import (
+    CONSUMER_NAME as NOTIFICATIONS_CONSUMER,
+)
+from app.workers.notifications import (
+    NOTIFICATION_DUE_EVENT,
+    handle_notification_due,
+)
 from app.workers.outbox import OutboxMessage, consume_once
 from app.workers.receivables import CONSUMER_NAME as RECEIVABLES_CONSUMER
 from app.workers.receivables import handle_credit_note_authorized, handle_invoice_authorized
@@ -81,6 +88,7 @@ _HANDLERS_BY_EVENT_TYPE: dict[str, tuple[str, Handler]] = {
     "invoice.authorized": (RECEIVABLES_CONSUMER, handle_invoice_authorized),
     CREDIT_NOTE_AUTHORIZED_EVENT: (RECEIVABLES_CONSUMER, handle_credit_note_authorized),
     COLLECTION_REMINDER_DUE_EVENT: (COLLECTIONS_CONSUMER, handle_collection_reminder_due),
+    NOTIFICATION_DUE_EVENT: (NOTIFICATIONS_CONSUMER, handle_notification_due),
 }
 
 _DEFAULT_CONSUMER_NAME = "iaerp.default"
