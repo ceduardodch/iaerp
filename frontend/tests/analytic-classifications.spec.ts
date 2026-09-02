@@ -42,7 +42,7 @@ function classificationForm(page: Page) {
 test('explica un código repetido sin enviar otra alta', async ({ page }) => {
   let postCount = 0
   await mockShell(page)
-  await page.route('**/api/v1/analytic-classifications', async (route) => {
+  await page.route(/\/api\/v1\/analytic-classifications(?:\?.*)?$/, async (route) => {
     if (route.request().method() === 'POST') {
       postCount += 1
       await route.fulfill({ status: 409, json: { detail: 'No debía enviarse' } })
@@ -66,7 +66,7 @@ test('explica un código repetido sin enviar otra alta', async ({ page }) => {
 
 test('muestra el detalle de validación y no object Object', async ({ page }) => {
   await mockShell(page)
-  await page.route('**/api/v1/analytic-classifications', async (route) => {
+  await page.route(/\/api\/v1\/analytic-classifications(?:\?.*)?$/, async (route) => {
     if (route.request().method() === 'POST') {
       await route.fulfill({
         status: 422,
