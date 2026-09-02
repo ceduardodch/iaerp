@@ -35,6 +35,10 @@ class EmailMessage:
     body_html: str
     sender_email: str | None = None
     sender_name: str | None = None
+    # Con una sola cuenta de plataforma, el ``From`` sale del dominio
+    # verificado de IAERP; el ``Reply-To`` es lo que devuelve la conversacion
+    # a la empresa que corresponde.
+    reply_to: str | None = None
 
 
 @dataclass(frozen=True)

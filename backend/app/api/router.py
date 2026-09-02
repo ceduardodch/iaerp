@@ -160,6 +160,8 @@ ALL_DEV_SCOPES = {
     "tax:write",
     "payroll:read",
     "payroll:write",
+    "notifications:read",
+    "notifications:write",
 }
 
 IdempotencyKey = Annotated[

@@ -428,6 +428,16 @@
       "name": "payroll:write",
       "protocol": "openid-connect",
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "notifications:read",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "notifications:write",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
     }
   ],
   "clients": [
@@ -486,7 +496,9 @@
         "tax:read",
         "tax:write",
         "payroll:read",
-        "payroll:write"
+        "payroll:write",
+        "notifications:read",
+        "notifications:write"
       ],
       "optionalClientScopes": [
         "organization"

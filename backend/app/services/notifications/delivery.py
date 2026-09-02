@@ -32,7 +32,7 @@ from app.models.notifications import (
 )
 from app.models.platform import Membership, Tenant, User
 from app.models.tax import TaxPeriod
-from app.services.notifications import catalog, scheduling
+from app.services.notifications import catalog, channels, scheduling
 
 _PERIOD_STATUS_LABELS = {
     "PENDIENTE_DESCARGA": "Pendiente de bajar comprobantes",
@@ -410,6 +410,10 @@ async def deliver_event(
         return event.status
 
     tenant = await session.get(Tenant, event.tenant_id)
+    company_name = tenant.name if tenant is not None else ""
+    identity = await channels.resolve_sender_identity(
+        session, tenant_id=event.tenant_id, company_name=company_name
+    )
     subject_template, body_template = await template_for(
         session, tenant_id=event.tenant_id, rule_type=event.rule_type
     )
@@ -418,7 +422,7 @@ async def deliver_event(
         body_template=body_template,
         values=placeholder_values(
             rule_type=event.rule_type,
-            company_name=tenant.name if tenant is not None else "",
+            company_name=company_name,
             payload=event.payload,
         ),
     )
@@ -431,6 +435,9 @@ async def deliver_event(
                 subject=subject,
                 body_text=plain,
                 body_html=html_body,
+                sender_email=identity.email,
+                sender_name=identity.name,
+                reply_to=identity.reply_to,
             )
         )
         statuses.append(result.status)

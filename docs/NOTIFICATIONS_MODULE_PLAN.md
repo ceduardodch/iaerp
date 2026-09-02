@@ -4,11 +4,19 @@
 > código. Coordinación general: [`COORDINACION_IA.md`](../COORDINACION_IA.md).
 > Estado del proyecto: [`docs/STATUS.md`](STATUS.md).
 
-**Última actualización:** 2026-09-02 (F3 completada)
-**Estado:** ✅ F0, F1 y F3 completas. Cinco avisos programan y entregan con
-`StubEmailSender` (sin red), todos apagados por defecto. **F2 pendiente**: el
-modelo de cuenta Brevo ya está decidido (una sola, de IAERP); falta el dominio
-verificado y la API key en la configuración del servidor.
+**Última actualización:** 2026-09-02 (F2 completada)
+**Estado:** ✅ F0, F1, F2 y F3 completas. Solo queda **F4** (pantalla de
+configuración). El envío real por Brevo está construido y se activa solo cuando
+existan `BREVO_API_KEY` y `BREVO_SENDER_EMAIL`; sin ellas sigue en stub. Todas
+las reglas siguen apagadas por defecto.
+
+> ⚠️ **Acción manual en Keycloak de producción antes de usar la pantalla.**
+> Los scopes `notifications:read` y `notifications:write` ya están en
+> `infra/keycloak/iaerp-realm.json`, pero la instancia de producción **no se
+> reimporta**: hay que crearlos a mano y agregarlos como *Default* al cliente
+> `iaerp-web`. El procedimiento exacto está en
+> [`TAX_MODULE_PLAN.md`](TAX_MODULE_PLAN.md#-accion-requerida-en-keycloak-de-produccion).
+> Ya pasó con `tax:*` y dejó la sección rota en producción.
 
 ## Qué es
 
@@ -353,6 +361,59 @@ un aviso a fin de mes, también en abril), y un ciclo no mensual exige
 `anchor_month` — sin ancla el aviso caería en el mes equivocado, así que la
 base lo impide con un `CHECK` en vez de adivinar.
 
+## Estado de F2 (implementado)
+
+29 pruebas en `tests/test_notifications_channel.py`, ninguna abre red: el
+cliente se ejercita contra un transporte `httpx` simulado.
+
+| Pieza | Dónde |
+|---|---|
+| Cliente Brevo | `integrations/notifications/brevo.py` |
+| Proveedor y remitente por tenant | `services/notifications/channels.py` |
+| Rebotes y quejas | `services/notifications/webhooks.py` |
+| Estado, remitente, prueba y webhook | `api/notifications.py` |
+| `reply_to` del tenant | migración `a5b6c7d8e9f0` |
+
+### Variables de entorno (Coolify, nunca en Git)
+
+| Variable | Para qué | Sin ella |
+|---|---|---|
+| `BREVO_API_KEY` | Clave de la cuenta de plataforma | Sigue el stub: registra `STUBBED`, no envía |
+| `BREVO_SENDER_EMAIL` | `From` sobre el dominio verificado | El canal reporta `ready=false` con el motivo |
+| `BREVO_SENDER_NAME` | Nombre visible por defecto | Usa `IAERP` |
+| `BREVO_WEBHOOK_TOKEN` | Secreto en la ruta del webhook | El webhook responde 404 a todo |
+
+Decisiones que conviene no revertir:
+
+- **Un request por destinatario**, no un envío agrupado. Cuesta más llamadas,
+  pero es lo único que permite guardar un `provider_message_id` por persona y
+  cruzar después un rebote con quien no recibió el aviso.
+- **`send` nunca lanza**: devuelve `FAILED`. Un correo mal escrito no puede
+  impedir que el resto del equipo reciba el aviso.
+- **El error se limpia con la clave concreta del cliente**, además del patrón
+  genérico. La primera versión del patrón dejaba pasar
+  `api-key': 'xkeysib-...'` porque las comillas cortaban la coincidencia; lo
+  descubrió una prueba y por eso ahora se borra el valor exacto y se corta
+  desde la palabra clave hasta el fin de línea.
+- **Brevo no firma sus webhooks**, así que el secreto va en la ruta, igual que
+  el webhook de Evolution. Un token que no coincide responde **404**, no 401:
+  un endpoint público no debería confirmarle a nadie que existe.
+- **Un `delivered` que llega después de un rebote no lo deshace.** El desenlace
+  negativo es el que importa.
+- **El estado del canal es consultable** (`GET /notifications/channel-account`)
+  y el envío de prueba responde 422 con el motivo si algo falta. Un módulo de
+  correo que falla en silencio es indistinguible de uno roto.
+
+### Lo que falta verificar de verdad
+
+El criterio de salida de F2 pide un correo real en una bandeja real. Eso
+**todavía no ocurrió**: no hay cuenta Brevo con dominio verificado. Lo probado
+hasta aquí es el cuerpo exacto que se manda, el manejo de errores y el cruce de
+rebotes, todo contra un transporte simulado.
+
+Cuando existan las variables: `POST /notifications/channel-account/test` a la
+propia dirección, y recién después encender la primera regla.
+
 ## Fases
 
 Cada fase cierra con CI verde y commit propio (regla 3 de `COORDINACION_IA.md`).
@@ -361,7 +422,7 @@ Cada fase cierra con CI verde y commit propio (regla 3 de `COORDINACION_IA.md`).
 |---|---|---|---|
 | **F0** | Prerequisitos | ✅ `due_dates.py` + migración; ✅ decisión de alcance Brevo (opción A); ⏳ dominio verificado y calendario de feriados | Un período de IVA muestra su fecha límite correcta según el noveno dígito ✅ |
 | **F1** | Fundación | ✅ Modelos + migración `e3f4a5b6c7d8` + planificador + `StubEmailSender` + `IVA_DECLARACION` completo | ✅ El planificador corre tres veces el mismo día y genera **un** evento |
-| **F2** | Transporte | `brevo.py` + `NotificationDelivery` + webhook + envío de prueba | Un correo real llega a la bandeja del usuario y el webhook marca `delivered` |
+| **F2** | Transporte | ✅ `brevo.py` + `channels.py` + `webhooks.py` + envío de prueba + migración `a5b6c7d8e9f0` | ⏳ Falta la prueba real: un correo llega a la bandeja y el webhook marca `delivered` |
 | **F3** | Catálogo | ✅ `PartyBillingSchedule` (migración `f4a5b6c7d8e9`) + `CLIENTE_FACTURAR`, `IESS_APORTE`, `RESUMEN_MENSUAL`, `IVA_PREVIEW_MENSUAL` | ✅ Cada aviso se salta solo cuando su condición ya se cumplió |
 | **F4** | Parametrización | `NotificationsPage.tsx` (3 pestañas) + calendario en la ficha del cliente | Cambiar el día de un aviso desde la UI cambia el envío, sin redeploy |
 | **F5** | Cierre | Resto del catálogo + acuse + digest agrupado por día | Un día con 4 avisos manda 1 correo, no 4 |

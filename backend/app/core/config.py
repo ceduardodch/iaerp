@@ -64,6 +64,22 @@ class Settings(BaseSettings):
     EVOLUTION_API_KEY: SecretStr | None = None
     PUBLIC_API_URL: str | None = None
 
+    # Brevo transporta los AVISOS INTERNOS (docs/NOTIFICATIONS_MODULE_PLAN.md).
+    # Es una sola cuenta de plataforma, no una por tenant: la clave nunca llega
+    # por HTTP ni se guarda en la base. Sin ella el modulo sigue funcionando
+    # con StubEmailSender, que reporta STUBBED y no abre red.
+    BREVO_API_KEY: SecretStr | None = None
+    BREVO_API_BASE_URL: str = "https://api.brevo.com/v3"
+    # Remitente por defecto, sobre el dominio verificado de IAERP. Cada tenant
+    # puede cambiar el nombre visible y el responder-a, pero no el dominio: es
+    # el unico autenticado en la cuenta (SPF/DKIM).
+    BREVO_SENDER_EMAIL: str | None = None
+    BREVO_SENDER_NAME: str = "IAERP"
+    # Brevo no firma sus webhooks, asi que el secreto viaja en la ruta, igual
+    # que el webhook de Evolution (api/crm.py). Sin token configurado el
+    # endpoint responde 404 en vez de aceptar cualquier POST.
+    BREVO_WEBHOOK_TOKEN: SecretStr | None = None
+
     # Simulador SRI (ver app/integrations/sri/simulator.py). Solo se monta el
     # router `/sri-sim` si esta habilitado; NUNCA puede habilitarse fuera de
     # development/test (docs/sprints/sprint-02.md, decision 7).

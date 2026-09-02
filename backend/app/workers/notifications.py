@@ -17,10 +17,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import SessionFactory
-from app.integrations.notifications.email_sender import EmailSender, StubEmailSender
+from app.integrations.notifications.email_sender import EmailSender
 from app.models.notifications import NotificationEvent
 from app.models.platform import OutboxEvent
-from app.services.notifications import delivery, planner
+from app.services.notifications import channels, delivery, planner
 from app.workers.outbox import OutboxMessage
 
 NOTIFICATION_DUE_EVENT = "notification.due"
@@ -32,13 +32,13 @@ _MAX_ATTEMPTS = 3
 
 
 def get_email_sender() -> EmailSender:
-    """Proveedor activo. F1 siempre stub: el envio real por Brevo llega en F2.
+    """Proveedor activo: Brevo si hay clave de plataforma, si no el stub.
 
-    Es una funcion y no una constante para que F2 pueda resolver el proveedor
-    por tenant (``NotificationChannelAccount``) sin tocar a quien la llama, y
-    para que las pruebas la puedan sustituir.
+    Sigue siendo una funcion y no una constante para que las pruebas la puedan
+    sustituir y para que el cambio de proveedor se note en la siguiente entrega
+    sin reiniciar nada.
     """
-    return StubEmailSender()
+    return channels.build_email_sender()
 
 
 async def dispatch_due_notifications_once() -> int:

@@ -97,11 +97,20 @@ _DELIVERY_STATUSES_SQL = ", ".join(f"'{value}'" for value in DELIVERY_STATUSES)
 
 
 class NotificationChannelAccount(TimestampMixin, Base):
-    """Proveedor de envio por cuenta (1:1 con el tenant, como ``CollectionPolicy``).
+    """Identidad de remitente por tenant (1:1, como ``CollectionPolicy``).
 
-    ``api_key_vault_ref`` es una **referencia** al gestor de secretos, igual que
-    ``TenantTaxProfile.vault_ref``. La clave de Brevo no vive aqui, ni en logs,
-    ni en el payload de un evento del outbox.
+    Brevo es **una sola cuenta de plataforma** (decidido el 2026-09-02), asi
+    que aqui NO hay ninguna credencial: la clave vive en ``BREVO_API_KEY``, en
+    la configuracion del servidor. Lo que guarda esta tabla es con que cara
+    sale el correo de cada empresa.
+
+    El ``From`` usa siempre el dominio verificado de IAERP -- es el unico
+    autenticado en la cuenta (SPF/DKIM) -- y ``reply_to`` devuelve la
+    conversacion a la empresa. ``sender_email`` queda para el caso en que un
+    tenant autentique su propio dominio en esa misma cuenta.
+
+    ``api_key_vault_ref`` sobrevive de un diseno anterior con una cuenta por
+    tenant; hoy no se usa.
     """
 
     __tablename__ = "notification_channel_accounts"
@@ -124,6 +133,7 @@ class NotificationChannelAccount(TimestampMixin, Base):
     api_key_vault_ref: Mapped[str | None] = mapped_column(String(200))
     sender_email: Mapped[str | None] = mapped_column(String(320))
     sender_name: Mapped[str | None] = mapped_column(String(200))
+    reply_to: Mapped[str | None] = mapped_column(String(320))
     status: Mapped[str] = mapped_column(String(30), default="NOT_CONFIGURED")
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(String(1000))
