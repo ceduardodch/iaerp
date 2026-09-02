@@ -72,7 +72,20 @@ async function mockApi(page: Page) {
       active: true,
     }],
   }))
-  await page.route('**/api/v1/establishments', (route) => route.fulfill({ json: establishments }))
+  await page.route('**/api/v1/establishments', async (route) => {
+    if (route.request().method() === 'POST') {
+      const payload = route.request().postDataJSON()
+      const created = {
+        id: 'abababab-abab-4bab-8bab-abababababab',
+        ...payload,
+        active: true,
+      }
+      establishments.push(created)
+      await route.fulfill({ status: 201, json: created })
+      return
+    }
+    await route.fulfill({ json: establishments })
+  })
   await page.route('**/api/v1/establishments/*', async (route) => {
     const payload = route.request().postDataJSON()
     establishments[0] = { ...establishments[0], ...payload }
@@ -260,6 +273,22 @@ test('shows where Pifo comes from and updates the emission address in place', as
 
   await expect(dialog).toBeHidden()
   await expect(page.getByText('Av. Nueva matriz 123, Quito')).toBeVisible()
+})
+
+test('creates an establishment from Empresa with its fiscal code and address', async ({ page }) => {
+  await navigateToSection(page, 'Empresa')
+  await page.getByRole('button', { name: 'Nuevo establecimiento' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuevo establecimiento' })
+  await dialog.getByLabel('Código fiscal').fill('002')
+  await dialog.getByLabel('Nombre').fill('Sucursal Norte')
+  await dialog.getByLabel('Dirección del establecimiento').fill('Av. Eloy Alfaro 123, Quito')
+  const results = await new AxeBuilder({ page }).include('.erp-modal').analyze()
+  expect(results.violations).toEqual([])
+  await dialog.getByRole('button', { name: 'Crear establecimiento' }).click()
+
+  await expect(dialog).toBeHidden()
+  await expect(page.getByText('Sucursal Norte')).toBeVisible()
+  await expect(page.getByText('Av. Eloy Alfaro 123, Quito')).toBeVisible()
 })
 
 test('hides establishment editing from a read-only organization user', async ({ page }) => {

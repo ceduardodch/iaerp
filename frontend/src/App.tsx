@@ -1615,6 +1615,52 @@ function EstablishmentEditorModal({
   )
 }
 
+function EstablishmentCreateModal({
+  token,
+  onCreated,
+  onClose,
+}: {
+  token: string
+  onCreated: (establishment: Establishment) => void
+  onClose: () => void
+}) {
+  const requestKey = useRef(idempotencyKey('web-establishment-create'))
+  const createEstablishment = useMutation({
+    mutationFn: (data: FormData) => apiRequest<Establishment>(token, '/establishments', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': requestKey.current },
+      body: JSON.stringify({
+        code: data.get('code'),
+        name: data.get('name'),
+        address: data.get('address'),
+      }),
+    }),
+    onSuccess: onCreated,
+  })
+
+  return (
+    <ErpModal title="Nuevo establecimiento" onClose={onClose} size="sm" initialFocusSelector='input[name="code"]' closeDisabled={createEstablishment.isPending}>
+      <form className="quick-master-form" onSubmit={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        createEstablishment.mutate(new FormData(event.currentTarget))
+      }}>
+        <p className="fine-print">Usa el código registrado ante el SRI. Para la matriz suele ser 001 y no podrá cambiarse después.</p>
+        <div className="erp-form-fields">
+          <label>Código fiscal<input name="code" inputMode="numeric" pattern="[0-9]{3}" maxLength={3} placeholder="001" required /></label>
+          <label>Nombre<input name="name" placeholder="Matriz" required /></label>
+          <label>Dirección del establecimiento<textarea name="address" rows={3} required /></label>
+        </div>
+        {createEstablishment.error ? <p className="form-error" role="alert">{createEstablishment.error.message}</p> : null}
+        <div className="erp-form-actions">
+          <ErpButton variant="secondary" onClick={onClose} disabled={createEstablishment.isPending}>Cancelar</ErpButton>
+          <ErpButton variant="primary" type="submit" disabled={createEstablishment.isPending}>{createEstablishment.isPending ? 'Creando…' : 'Crear establecimiento'}</ErpButton>
+        </div>
+      </form>
+    </ErpModal>
+  )
+}
+
 function NewInvoiceForm({
   token,
   customers,
@@ -4108,6 +4154,7 @@ function OrganizationPage({
   const queryClient = useQueryClient()
   const { notify } = useToast()
   const [editingEstablishment, setEditingEstablishment] = useState<Establishment | null>(null)
+  const [isCreatingEstablishment, setIsCreatingEstablishment] = useState(false)
   const [settingsSection, setSettingsSection] = useState<'fiscal' | 'invoicing' | 'collections' | 'integrations' | 'analytics'>('fiscal')
   const fiscalQuery = useQuery({
     queryKey: ['organization', 'fiscal-settings'],
@@ -4340,7 +4387,7 @@ function OrganizationPage({
             <ErpButton variant="primary" type="submit" disabled={updateProfile.isPending}>{updateProfile.isPending ? 'Guardando…' : 'Guardar datos de empresa'}</ErpButton>
           </form>
         </article>
-        <ErpPanel title="Establecimientos" count={establishments.length}>
+        <ErpPanel title="Establecimientos" count={establishments.length} actions={context.scopes.includes('organization:write') ? <ErpButton variant="secondary" onClick={() => setIsCreatingEstablishment(true)}>Nuevo establecimiento</ErpButton> : null}>
           <ul className="establishment-list">
             {establishments.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.address}</small></div>{context.scopes.includes('organization:write') ? <ErpButton variant="ghost" onClick={() => setEditingEstablishment(item)}>Editar dirección</ErpButton> : null}</li>)}
           </ul>
@@ -4537,6 +4584,17 @@ function OrganizationPage({
             void queryClient.invalidateQueries({ queryKey: ['establishments'] })
             setEditingEstablishment(null)
             notify('Dirección del establecimiento actualizada', 'success')
+          }}
+        />
+      ) : null}
+      {isCreatingEstablishment ? (
+        <EstablishmentCreateModal
+          token={token}
+          onClose={() => setIsCreatingEstablishment(false)}
+          onCreated={() => {
+            void queryClient.invalidateQueries({ queryKey: ['establishments'] })
+            setIsCreatingEstablishment(false)
+            notify('Establecimiento creado', 'success')
           }}
         />
       ) : null}
