@@ -7,6 +7,18 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Formulario 104 de compras corregido: 2026-09-02 `America/Guayaquil`.
+  Los campos 500/510 y 564 pasan al bloque para copiar con confirmacion del
+  criterio tributario; 531/541 muestran compras no objeto de IVA y 532/542
+  muestran compras exentas. El calculo conserva por separado valores brutos y
+  netos para que las notas de credito reduzcan solo el neto. Una migracion
+  idempotente actualiza los mapas por defecto sin sobrescribir mapas propios de
+  cada tenant y su downgrade conserva los datos. El calculo sigue siendo una
+  ayuda supervisada: antes de copiar 500/510/564 se debe confirmar el derecho a
+  credito, activos fijos, compras sin credito y proporcionalidad. Pasan 132
+  pruebas tributarias/MCP, 48 recorridos E2E de escritorio y movil, Ruff, mypy,
+  lint y build; las revisiones fiscal y QA quedaron en GO.
+
 - Correctivo de razón social en XML SRI publicado: 2026-08-31
   `America/Guayaquil`. El esquema oficial define `razonSocial` como campo
   alfanumérico de hasta 300 caracteres; el validador rechazó el valor concreto

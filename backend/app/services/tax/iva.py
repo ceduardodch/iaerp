@@ -88,7 +88,9 @@ AMOUNT_KEYS = (
     "compras_gravadas_base",
     "compras_tarifa_cero_bruta_base",
     "compras_tarifa_cero_base",
+    "compras_exentas_bruta_base",
     "compras_exentas_base",
+    "compras_no_objeto_bruta_base",
     "compras_no_objeto_base",
     "compras_totales_base",
     "iva_credito_tributario",
@@ -224,6 +226,14 @@ async def compute_iva(
                 amounts["compras_gravadas_bruta_base"].add(tax.base_amount, document.id)
             elif sign > 0 and tax.tax_bracket == "TARIFA_CERO":
                 amounts["compras_tarifa_cero_bruta_base"].add(
+                    tax.base_amount, document.id
+                )
+            elif sign > 0 and tax.tax_bracket == "EXENTO":
+                amounts["compras_exentas_bruta_base"].add(
+                    tax.base_amount, document.id
+                )
+            elif sign > 0 and tax.tax_bracket == "NO_OBJETO":
+                amounts["compras_no_objeto_bruta_base"].add(
                     tax.base_amount, document.id
                 )
             amounts["compras_totales_base"].add(base, document.id)

@@ -48,6 +48,15 @@ const summary = {
       needsReview: false,
     },
     {
+      fieldCode: '564',
+      label: 'Crédito tributario aplicable según proporcionalidad o contabilidad',
+      sourceKey: 'ivaCreditoTributario',
+      isPaste: true,
+      value: '1.97',
+      documentCount: 1,
+      needsReview: true,
+    },
+    {
       fieldCode: '609',
       label: 'Retenciones de IVA que le efectuaron',
       sourceKey: 'retencionesIvaRecibidas',
@@ -381,6 +390,23 @@ test('separa los campos para pegar de los que el SRI autocalcula', async ({ page
   // 507 es solo control: aparece en la tabla de control, sin botón de copiar.
   await expect(page.getByRole('button', { name: 'Copiar campo 507' })).toHaveCount(0)
   await expect(page.getByText('Solo control (el SRI los calcula)')).toBeVisible()
+})
+
+test('exige confirmar el criterio tributario antes de copiar el campo 564', async ({ page }) => {
+  await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/iva`, (route) => route.fulfill({
+    json: { ...summary, isPreliminary: false, preliminaryReasons: [] },
+  }))
+  await page.reload()
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await navigateToSection(page, 'Tributario')
+
+  let confirmation = ''
+  page.on('dialog', async (dialog) => {
+    confirmation = dialog.message()
+    await dialog.dismiss()
+  })
+  await page.getByRole('button', { name: 'Copiar campo 564' }).click()
+  await expect.poll(() => confirmation).toContain('factor de proporcionalidad')
 })
 
 test('advierte cuando los datos son preliminares', async ({ page }) => {
