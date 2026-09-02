@@ -1661,6 +1661,49 @@ function EstablishmentCreateModal({
   )
 }
 
+function EmissionPointCreateModal({
+  token,
+  establishments,
+  onCreated,
+  onClose,
+}: {
+  token: string
+  establishments: Establishment[]
+  onCreated: (emissionPoint: EmissionPoint) => void
+  onClose: () => void
+}) {
+  const requestKey = useRef(idempotencyKey('web-emission-point-create'))
+  const createEmissionPoint = useMutation({
+    mutationFn: (data: FormData) => apiRequest<EmissionPoint>(token, '/emission-points', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': requestKey.current },
+      body: JSON.stringify({ establishmentId: data.get('establishmentId'), code: data.get('code') }),
+    }),
+    onSuccess: onCreated,
+  })
+
+  return (
+    <ErpModal title="Nuevo punto de emisión" onClose={onClose} size="sm" initialFocusSelector='select[name="establishmentId"]' closeDisabled={createEmissionPoint.isPending}>
+      <form className="quick-master-form" onSubmit={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        createEmissionPoint.mutate(new FormData(event.currentTarget))
+      }}>
+        <p className="fine-print">Usa el código autorizado por el SRI para este establecimiento. Para el primer punto suele ser 001 y no podrá cambiarse después.</p>
+        <div className="erp-form-fields">
+          <label>Establecimiento<select name="establishmentId" defaultValue={establishments[0]?.id} required>{establishments.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label>
+          <label>Código del punto<input name="code" inputMode="numeric" pattern="[0-9]{3}" maxLength={3} placeholder="001" required /></label>
+        </div>
+        {createEmissionPoint.error ? <p className="form-error" role="alert">{createEmissionPoint.error.message}</p> : null}
+        <div className="erp-form-actions">
+          <ErpButton variant="secondary" onClick={onClose} disabled={createEmissionPoint.isPending}>Cancelar</ErpButton>
+          <ErpButton variant="primary" type="submit" disabled={createEmissionPoint.isPending}>{createEmissionPoint.isPending ? 'Creando…' : 'Crear punto de emisión'}</ErpButton>
+        </div>
+      </form>
+    </ErpModal>
+  )
+}
+
 function NewInvoiceForm({
   token,
   customers,
@@ -4145,16 +4188,19 @@ function ReceivablesPage({
 function OrganizationPage({
   context,
   establishments,
+  emissionPoints,
   token,
 }: {
   context: TenantContext
   establishments: Establishment[]
+  emissionPoints: EmissionPoint[]
   token: string
 }) {
   const queryClient = useQueryClient()
   const { notify } = useToast()
   const [editingEstablishment, setEditingEstablishment] = useState<Establishment | null>(null)
   const [isCreatingEstablishment, setIsCreatingEstablishment] = useState(false)
+  const [isCreatingEmissionPoint, setIsCreatingEmissionPoint] = useState(false)
   const [settingsSection, setSettingsSection] = useState<'fiscal' | 'invoicing' | 'collections' | 'integrations' | 'analytics'>('fiscal')
   const fiscalQuery = useQuery({
     queryKey: ['organization', 'fiscal-settings'],
@@ -4392,6 +4438,16 @@ function OrganizationPage({
             {establishments.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.address}</small></div>{context.scopes.includes('organization:write') ? <ErpButton variant="ghost" onClick={() => setEditingEstablishment(item)}>Editar dirección</ErpButton> : null}</li>)}
           </ul>
         </ErpPanel>
+        <ErpPanel title="Puntos de emisión" count={emissionPoints.length} actions={context.scopes.includes('organization:write') ? <ErpButton variant="secondary" onClick={() => setIsCreatingEmissionPoint(true)} disabled={establishments.length === 0}>Nuevo punto de emisión</ErpButton> : null}>
+          {emissionPoints.length === 0 ? <p className="fiscal-panel-copy">Crea un punto por cada establecimiento antes de emitir facturas.</p> : (
+            <ul className="establishment-list">
+              {emissionPoints.map((item) => {
+                const establishment = establishments.find((candidate) => candidate.id === item.establishmentId)
+                return <li key={item.id}><span>{item.code}</span><div><strong>{item.code}</strong><small>{establishment ? `${establishment.code} · ${establishment.name}` : 'Establecimiento no disponible'}</small></div></li>
+              })}
+            </ul>
+          )}
+        </ErpPanel>
         <ErpPanel
           title="Ambiente SRI"
           actions={fiscal ? <ErpStatusBadge tone={fiscal.sriEnvironment === '2' ? 'warning' : 'neutral'}>{fiscal.sriEnvironment === '2' ? 'Producción' : 'Pruebas'}</ErpStatusBadge> : null}
@@ -4598,6 +4654,18 @@ function OrganizationPage({
           }}
         />
       ) : null}
+      {isCreatingEmissionPoint ? (
+        <EmissionPointCreateModal
+          token={token}
+          establishments={establishments}
+          onClose={() => setIsCreatingEmissionPoint(false)}
+          onCreated={() => {
+            void queryClient.invalidateQueries({ queryKey: ['emission-points'] })
+            setIsCreatingEmissionPoint(false)
+            notify('Punto de emisión creado', 'success')
+          }}
+        />
+      ) : null}
     </>
   )
 }
@@ -4709,7 +4777,7 @@ function Workspace() {
             </Suspense>
           </ErrorBoundary>
         ) : null}
-        {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} token={token} /> : null}
+        {section === 'organization' ? <OrganizationPage context={contextQuery.data} establishments={establishmentsQuery.data ?? []} emissionPoints={emissionPointsQuery.data ?? []} token={token} /> : null}
         {section === 'payroll' ? (
           <ErrorBoundary label="Nómina">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando nómina…" />}>

@@ -28,6 +28,12 @@ async function mockApi(page: Page) {
     address: 'Pifo',
     active: true,
   }]
+  const emissionPoints = [{
+    id: '12121212-1212-4212-8212-121212121212',
+    establishmentId: establishments[0].id,
+    code: '001',
+    active: true,
+  }]
   await page.route('**/api/v1/dev/token', (route) =>
     route.fulfill({ json: { accessToken: 'test-token' } }),
   )
@@ -91,14 +97,16 @@ async function mockApi(page: Page) {
     establishments[0] = { ...establishments[0], ...payload }
     await route.fulfill({ json: establishments[0] })
   })
-  await page.route('**/api/v1/emission-points', (route) => route.fulfill({
-    json: [{
-      id: '12121212-1212-4212-8212-121212121212',
-      establishmentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-      code: '001',
-      active: true,
-    }],
-  }))
+  await page.route('**/api/v1/emission-points', async (route) => {
+    if (route.request().method() === 'POST') {
+      const payload = route.request().postDataJSON()
+      const created = { id: 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd', ...payload, active: true }
+      emissionPoints.push(created)
+      await route.fulfill({ status: 201, json: created })
+      return
+    }
+    await route.fulfill({ json: emissionPoints })
+  })
   await page.route('**/api/v1/invoices/preview', (route) => route.fulfill({
     json: {
       lines: [{
@@ -289,6 +297,22 @@ test('creates an establishment from Empresa with its fiscal code and address', a
   await expect(dialog).toBeHidden()
   await expect(page.getByText('Sucursal Norte')).toBeVisible()
   await expect(page.getByText('Av. Eloy Alfaro 123, Quito')).toBeVisible()
+})
+
+test('creates an emission point from Empresa for its establishment', async ({ page }) => {
+  await navigateToSection(page, 'Empresa')
+  await page.getByRole('button', { name: 'Nuevo punto de emisión' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Nuevo punto de emisión' })
+  await dialog.getByLabel('Establecimiento').selectOption({ label: '001 · Matriz' })
+  await dialog.getByLabel('Código del punto').fill('002')
+  const results = await new AxeBuilder({ page }).include('.erp-modal').analyze()
+  expect(results.violations).toEqual([])
+  await dialog.getByRole('button', { name: 'Crear punto de emisión' }).click()
+
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('heading', { name: 'Puntos de emisión' })).toBeVisible()
+  await expect(page.getByRole('listitem').filter({ hasText: '002001 · Matriz' })).toBeVisible()
+  await expect(page.getByRole('status')).toContainText('Punto de emisión creado')
 })
 
 test('hides establishment editing from a read-only organization user', async ({ page }) => {
