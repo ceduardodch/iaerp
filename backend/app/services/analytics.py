@@ -196,9 +196,7 @@ async def list_classifications(
         filters.append(AnalyticClassification.active.is_(True))
     return list(
         await session.scalars(
-            select(AnalyticClassification)
-            .where(*filters)
-            .order_by(AnalyticClassification.name)
+            select(AnalyticClassification).where(*filters).order_by(AnalyticClassification.name)
         )
     )
 
@@ -425,9 +423,7 @@ async def _get_classification(
     ]
     if not include_inactive:
         filters.append(AnalyticClassification.active.is_(True))
-    entity = await session.scalar(
-        select(AnalyticClassification).where(*filters)
-    )
+    entity = await session.scalar(select(AnalyticClassification).where(*filters))
     if entity is None:
         raise HTTPException(status_code=404, detail="Analytic classification not found")
     return entity

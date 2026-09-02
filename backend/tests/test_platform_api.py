@@ -161,9 +161,7 @@ async def test_establishment_address_update_is_tenant_scoped_and_idempotent(clie
 
     async with SessionFactory() as session:
         actions = list(
-            await session.scalars(
-                select(AuditEvent.action).where(AuditEvent.tenant_id == TENANT_A)
-            )
+            await session.scalars(select(AuditEvent.action).where(AuditEvent.tenant_id == TENANT_A))
         )
         assert actions == ["establishment.created", "establishment.updated"]
         assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 2

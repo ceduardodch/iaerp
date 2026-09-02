@@ -46,9 +46,7 @@ async def test_asyncpg_reports_analytic_unique_constraint():
                 ),
                 {"tenant_id": TENANT_A},
             )
-        assert unique_constraint_name(captured.value) == (
-            "uq_analytic_classifications_tenant_code"
-        )
+        assert unique_constraint_name(captured.value) == ("uq_analytic_classifications_tenant_code")
 
 
 async def _token(client, tenant_id: uuid.UUID, scopes: list[str]) -> str:

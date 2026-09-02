@@ -52,9 +52,7 @@ async def list_establishments(
     return list(
         (
             await session.scalars(
-                select(Establishment)
-                .where(*filters)
-                .order_by(Establishment.code)
+                select(Establishment).where(*filters).order_by(Establishment.code)
             )
         ).all()
     )
@@ -78,10 +76,12 @@ async def update_establishment(
     data: EstablishmentUpdate,
 ) -> Establishment:
     entity = await session.scalar(
-        select(Establishment).where(
+        select(Establishment)
+        .where(
             Establishment.id == establishment_id,
             Establishment.tenant_id == context.tenant_id,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if entity is None:
         raise HTTPException(status_code=404, detail="Establishment not found")
@@ -135,9 +135,7 @@ async def list_emission_points(
     return list(
         (
             await session.scalars(
-                select(EmissionPoint)
-                .where(*filters)
-                .order_by(EmissionPoint.code)
+                select(EmissionPoint).where(*filters).order_by(EmissionPoint.code)
             )
         ).all()
     )
