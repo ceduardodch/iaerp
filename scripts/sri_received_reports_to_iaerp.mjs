@@ -9,7 +9,7 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { chromium } from "../frontend/node_modules/playwright/index.mjs";
@@ -22,8 +22,6 @@ const SRI_RECEIVED_URL =
 const IAERP_URL = "https://iaerp.b2b.com.ec";
 const TOKEN_URL =
   "https://iaerp-auth.b2b.com.ec/realms/iaerp/protocol/openid-connect/token";
-const PROFILE_ROOT = join(homedir(), "Library", "Application Support", "IAERP");
-
 const MONTH_NAMES = [
   "Enero",
   "Febrero",
@@ -317,7 +315,7 @@ async function runCompany(company, period) {
     await preflightTenant(token, sriCredentials.ruc);
     stage = "browser";
     context = await chromium.launchPersistentContext(
-      join(PROFILE_ROOT, company.browserProfile),
+      join(runtimeDir, company.browserProfile),
       {
         channel: "chrome",
         headless: false,
@@ -330,9 +328,12 @@ async function runCompany(company, period) {
     const page = context.pages()[0] ?? (await context.newPage());
     const downloaded = [];
 
+    // Enter the module once. Reopening the SRI launcher for each document type
+    // can close the active page when it reuses an authenticated session.
+    await openReceivedReports(page, sriCredentials);
+
     for (const [slug, label] of REPORT_TYPES) {
       stage = `sri-${slug}`;
-      await openReceivedReports(page, sriCredentials);
       await selectPeriod(page, period.year, period.month);
       const filePath = await queryAndDownload(page, runtimeDir, slug, label);
       if (filePath) downloaded.push({ slug, filePath });

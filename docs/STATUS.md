@@ -19,6 +19,23 @@ alcance y las decisiones.
   pruebas tributarias/MCP, 48 recorridos E2E de escritorio y movil, Ruff, mypy,
   lint y build; las revisiones fiscal y QA quedaron en GO.
 
+- Alta de ANA KARINA DIAZ CHAVEZ preparada para la automatización SRI:
+  2026-08-31 `America/Guayaquil`. Keycloak tiene la organización
+  `ana-karina-diaz` y el usuario `akdiazchavez@gmail.com`; IAERP tiene el
+  tenant `914aae19-fbd9-4f23-b36b-4abaf8f792c2` enlazado al RUC
+  `1719345975001`. En producción se emitió una cuenta técnica limitada a
+  `tax:write`, se habilitaron sus escrituras automáticas con límite diario
+  cero y el token superó el preflight de tenant/RUC. El ID y secreto quedaron
+  solo en el Llavero de macOS. El RUC completo y la clave SRI también quedaron
+  en el Llavero. La corrida real de agosto consultó el portal con un perfil
+  temporal limpio, importó 25 facturas y 2 retenciones y dejó la recuperación
+  XML en cola. La repetición devolvió el resultado idempotente original; la
+  base de producción conserva 27 documentos y 27 claves de acceso distintas,
+  sin duplicados. El catálogo local `--all`, las 12 pruebas dirigidas y el
+  runbook ya incluyen `ana-karina`. Falta promover estos cambios locales por
+  el flujo `release -> main` antes de considerar durable su inclusión en la
+  tarea diaria.
+
 - Correctivo de razón social en XML SRI publicado: 2026-08-31
   `America/Guayaquil`. El esquema oficial define `razonSocial` como campo
   alfanumérico de hasta 300 caracteres; el validador rechazó el valor concreto

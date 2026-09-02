@@ -16,7 +16,7 @@ test("keeps DATA-CLIP as the safe default", () => {
 test("selects all companies explicitly", () => {
   assert.deepEqual(
     selectSriReceivedCompanies(["--all"]).map((company) => company.id),
-    ["data-clip", "btob", "lexcode"],
+    ["data-clip", "btob", "lexcode", "ana-karina"],
   );
 });
 
@@ -25,6 +25,10 @@ test("selects one company by id", () => {
   assert.equal(
     selectSriReceivedCompanies(["--company", "data-clip"])[0].id,
     "data-clip",
+  );
+  assert.equal(
+    selectSriReceivedCompanies(["--company=ana-karina"])[0].label,
+    "ANA KARINA DIAZ CHAVEZ",
   );
 });
 

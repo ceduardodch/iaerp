@@ -23,6 +23,14 @@ export const SRI_RECEIVED_COMPANIES = Object.freeze([
     iaerpKeychainService: "IAERP SRI Daily Import LEXCODE",
     browserProfile: "sri-browser-profile-lexcode",
   }),
+  Object.freeze({
+    id: "ana-karina",
+    label: "ANA KARINA DIAZ CHAVEZ",
+    sriKeychainService: "IAERP SRI Portal ANA KARINA",
+    sriUsernameAccount: "ruc",
+    iaerpKeychainService: "IAERP SRI Daily Import ANA KARINA",
+    browserProfile: "sri-browser-profile-ana-karina",
+  }),
 ]);
 
 export function selectSriReceivedCompanies(args = []) {
@@ -40,7 +48,9 @@ export function selectSriReceivedCompanies(args = []) {
     requested = args[1];
   }
   if (!requested) {
-    throw new Error("USAGE: --all | --company <data-clip|btob|lexcode>");
+    throw new Error(
+      `USAGE: --all | --company <${SRI_RECEIVED_COMPANIES.map((item) => item.id).join("|")}>`,
+    );
   }
 
   const company = SRI_RECEIVED_COMPANIES.find((item) => item.id === requested);

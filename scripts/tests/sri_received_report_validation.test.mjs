@@ -85,3 +85,29 @@ test("runCompany validates with the populated RUC before clearing and uploading"
   assert.ok(clearIndex > validationIndex);
   assert.ok(uploadIndex > clearIndex);
 });
+
+test("runCompany uses a clean temporary browser profile before opening the portal", () => {
+  const scriptPath = fileURLToPath(
+    new URL("../sri_received_reports_to_iaerp.mjs", import.meta.url),
+  );
+  const source = readFileSync(scriptPath, "utf8");
+  const runCompany = source.slice(source.indexOf("async function runCompany"));
+  const temporaryProfileIndex = runCompany.indexOf(
+    "join(runtimeDir, company.browserProfile)",
+  );
+  const openPortalIndex = runCompany.indexOf("await openReceivedReports(page, sriCredentials);");
+
+  assert.ok(temporaryProfileIndex >= 0);
+  assert.ok(openPortalIndex > temporaryProfileIndex);
+});
+
+test("runCompany enters the SRI module only once per company run", () => {
+  const scriptPath = fileURLToPath(
+    new URL("../sri_received_reports_to_iaerp.mjs", import.meta.url),
+  );
+  const source = readFileSync(scriptPath, "utf8");
+  const runCompany = source.slice(source.indexOf("async function runCompany"));
+  const calls = runCompany.match(/await openReceivedReports\(page, sriCredentials\);/g);
+
+  assert.equal(calls?.length, 1);
+});

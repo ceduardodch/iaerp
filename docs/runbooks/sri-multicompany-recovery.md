@@ -28,13 +28,15 @@ script nunca toma el tenant desde el RUC escrito en el portal.
 | LEXCODE AUDIT S.A.S. | `IAERP SRI Portal LEXCODE` | `password` | Clave del portal |
 | LEXCODE AUDIT S.A.S. | `IAERP SRI Daily Import LEXCODE` | `client_id` | ID de la cuenta IAERP |
 | LEXCODE AUDIT S.A.S. | `IAERP SRI Daily Import LEXCODE` | `client_secret` | Secreto de la cuenta IAERP |
+| ANA KARINA DIAZ CHAVEZ | `IAERP SRI Portal ANA KARINA` | `ruc` | Usuario RUC del portal |
+| ANA KARINA DIAZ CHAVEZ | `IAERP SRI Portal ANA KARINA` | `password` | Clave del portal |
+| ANA KARINA DIAZ CHAVEZ | `IAERP SRI Daily Import ANA KARINA` | `client_id` | ID de la cuenta IAERP |
+| ANA KARINA DIAZ CHAVEZ | `IAERP SRI Daily Import ANA KARINA` | `client_secret` | Secreto de la cuenta IAERP |
 
-Perfiles persistentes, fuera del repositorio:
-
-- DATA-CLIP: `~/Library/Application Support/IAERP/sri-browser-profile`
-- BTOB SAS: `~/Library/Application Support/IAERP/sri-browser-profile-btob`
-- LEXCODE AUDIT S.A.S.:
-  `~/Library/Application Support/IAERP/sri-browser-profile-lexcode`
+Cada corrida crea un perfil de navegador temporal y lo elimina al terminar.
+No reutiliza sesiones del SRI: siempre inicia con el RUC completo de 13 dígitos
+y la clave del Llavero. Esto evita que el lanzador cierre una pestaña asociada
+a una sesión anterior y mantiene aisladas las empresas.
 
 La tarea local `SRI recibidos a IAERP` ejecuta todos los días a las 08:00:
 
@@ -48,7 +50,8 @@ node scripts/sri_received_reports_to_iaerp.mjs --all
 2. Abrir **Acceso a Llaveros** en el Mac.
 3. Buscar el servicio exacto de la empresa en la tabla anterior.
 4. Editar la entrada `ruc` o `password`. El campo secreto de la entrada `ruc`
-   contiene el RUC usado como usuario; no crear una cuenta llamada `username`.
+   contiene siempre el RUC completo de 13 dígitos usado como usuario; no crear
+   una cuenta llamada `username` ni sustituirlo por la cédula.
 5. Guardar y cerrar Acceso a Llaveros.
 6. Probar solo esa empresa con el comando de la sección de validación.
 7. Reactivar la tarea únicamente después de una prueba correcta.
@@ -106,6 +109,7 @@ node --test scripts/tests/sri_received_companies.test.mjs
 node scripts/sri_received_reports_to_iaerp.mjs --company=data-clip
 node scripts/sri_received_reports_to_iaerp.mjs --company=btob
 node scripts/sri_received_reports_to_iaerp.mjs --company=lexcode
+node scripts/sri_received_reports_to_iaerp.mjs --company=ana-karina
 node scripts/sri_received_reports_to_iaerp.mjs --all
 ```
 
