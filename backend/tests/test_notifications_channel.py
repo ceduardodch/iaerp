@@ -21,6 +21,13 @@ from app.services.notifications import channels, webhooks
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
 
+# Claves ficticias de las pruebas. Se declaran una sola vez para que el literal
+# no se repita por el archivo y el escaner de secretos tenga un solo lugar que
+# revisar.
+FAKE_API_KEY = "secret-key"  # pragma: allowlist secret
+LEAKED_KEY = "xkeysib-abc123"  # pragma: allowlist secret
+ECHOED_KEY = "xkeysib-super-secreta"  # pragma: allowlist secret
+
 MESSAGE = EmailMessage(
     recipient="contadora@ejemplo.ec",
     subject="Aviso",
@@ -65,14 +72,14 @@ async def test_brevo_sends_the_expected_payload_and_keeps_the_message_id(mock_br
 
     mock_brevo(handler)
     result = await BrevoEmailSender(
-        api_key="secret-key", base_url="https://api.brevo.test/v3"
+        api_key=FAKE_API_KEY, base_url="https://api.brevo.test/v3"
     ).send(MESSAGE)
 
     assert result.status == "SENT"
     assert result.provider == "BREVO"
     assert result.provider_message_id == "<abc@brevo>"
     assert captured["url"] == "https://api.brevo.test/v3/smtp/email"
-    assert captured["api_key"] == "secret-key"
+    assert captured["api_key"] == FAKE_API_KEY
     body = str(captured["body"])
     assert "contadora@ejemplo.ec" in body
     assert "avisos@iaerp.b2b.com.ec" in body
@@ -85,7 +92,7 @@ async def test_brevo_failure_does_not_raise_so_the_rest_still_receives(mock_brev
 
     mock_brevo(handler)
     result = await BrevoEmailSender(
-        api_key="secret-key", base_url="https://api.brevo.test/v3"
+        api_key=FAKE_API_KEY, base_url="https://api.brevo.test/v3"
     ).send(MESSAGE)
 
     assert result.status == "FAILED"
@@ -99,7 +106,7 @@ async def test_brevo_network_error_is_reported_not_raised(mock_brevo) -> None:
 
     mock_brevo(handler)
     result = await BrevoEmailSender(
-        api_key="secret-key", base_url="https://api.brevo.test/v3"
+        api_key=FAKE_API_KEY, base_url="https://api.brevo.test/v3"
     ).send(MESSAGE)
 
     assert result.status == "FAILED"
@@ -114,7 +121,7 @@ async def test_missing_message_id_is_left_empty_not_invented(mock_brevo) -> None
 
     mock_brevo(handler)
     result = await BrevoEmailSender(
-        api_key="secret-key", base_url="https://api.brevo.test/v3"
+        api_key=FAKE_API_KEY, base_url="https://api.brevo.test/v3"
     ).send(MESSAGE)
 
     assert result.status == "SENT"
@@ -124,15 +131,15 @@ async def test_missing_message_id_is_left_empty_not_invented(mock_brevo) -> None
 @pytest.mark.parametrize(
     "raw",
     [
-        "HTTP 401: {'api-key': 'xkeysib-abc123'}",
-        "Authorization: Bearer xkeysib-abc123",
-        "token=xkeysib-abc123",
-        'HTTP 400: {"message":"bad request","secret":"xkeysib-abc123"}',
+        f"HTTP 401: {{'api-key': '{LEAKED_KEY}'}}",
+        f"Authorization: Bearer {LEAKED_KEY}",
+        f"token={LEAKED_KEY}",
+        f'HTTP 400: {{"message":"bad request","secret":"{LEAKED_KEY}"}}',
     ],
 )
 def test_errors_never_carry_the_credential(raw: str) -> None:
     cleaned = redact(raw)
-    assert "xkeysib-abc123" not in cleaned
+    assert LEAKED_KEY not in cleaned
     assert "REDACTED" in cleaned
 
 
@@ -141,15 +148,15 @@ async def test_a_provider_error_echoing_the_key_never_reaches_the_logbook(mock_b
 
     def handler(request: httpx.Request) -> httpx.Response:
         # Un proveedor puede devolver la credencial dentro del error.
-        return httpx.Response(401, text='{"code":"unauthorized","key":"xkeysib-super-secreta"}')
+        return httpx.Response(401, text=f'{{"code":"unauthorized","key":"{ECHOED_KEY}"}}')
 
     mock_brevo(handler)
     result = await BrevoEmailSender(
-        api_key="xkeysib-super-secreta", base_url="https://api.brevo.test/v3"
+        api_key=ECHOED_KEY, base_url="https://api.brevo.test/v3"
     ).send(MESSAGE)
 
     assert result.status == "FAILED"
-    assert "xkeysib-super-secreta" not in (result.error_message or "")
+    assert ECHOED_KEY not in (result.error_message or "")
     assert "REDACTED" in (result.error_message or "")
 
 
@@ -162,7 +169,7 @@ async def test_a_provider_error_echoing_the_key_never_reaches_the_logbook(mock_b
 def platform_brevo(monkeypatch: pytest.MonkeyPatch):
     """Simula tener la cuenta Brevo configurada en el servidor."""
 
-    def configure(*, api_key: str | None = "secret-key", sender: str | None = "avisos@iaerp.ec"):
+    def configure(*, api_key: str | None = FAKE_API_KEY, sender: str | None = "avisos@iaerp.ec"):
         get_settings.cache_clear()
         settings = get_settings()
         monkeypatch.setattr(
