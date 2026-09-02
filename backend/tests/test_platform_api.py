@@ -170,7 +170,9 @@ async def test_establishment_address_update_is_tenant_scoped_and_idempotent(clie
 
 
 @pytest.mark.asyncio
-async def test_establishment_deactivation_hides_it_from_operational_lists_and_disables_points(client):
+async def test_establishment_deactivation_hides_it_from_operational_lists_and_disables_points(
+    client,
+):
     token = await token_for(
         client, "a@iaerp.local", TENANT_A, ["organization:read", "organization:write"]
     )
@@ -195,9 +197,12 @@ async def test_establishment_deactivation_hides_it_from_operational_lists_and_di
     assert disabled.json()["active"] is False
     active_establishments = await client.get("/api/v1/establishments", headers=auth(token))
     assert all(item["id"] != establishment.json()["id"] for item in active_establishments.json())
-    all_points = await client.get("/api/v1/emission-points?include_inactive=true", headers=auth(token))
+    all_points = await client.get(
+        "/api/v1/emission-points?include_inactive=true", headers=auth(token)
+    )
     assert all_points.status_code == 200
-    assert next(item for item in all_points.json() if item["id"] == point.json()["id"])["active"] is False
+    updated_point = next(item for item in all_points.json() if item["id"] == point.json()["id"])
+    assert updated_point["active"] is False
     blocked = await client.put(
         f"/api/v1/emission-points/{point.json()['id']}",
         headers=auth(token, "emission-point-status-reactivate-0001"),

@@ -269,7 +269,9 @@ async def list_values(
     *,
     include_inactive: bool = False,
 ) -> list[AnalyticClassificationValue]:
-    await _get_classification(session, context, classification_id, include_inactive=include_inactive)
+    await _get_classification(
+        session, context, classification_id, include_inactive=include_inactive
+    )
     filters = [
         AnalyticClassificationValue.tenant_id == context.tenant_id,
         AnalyticClassificationValue.classification_id == classification_id,

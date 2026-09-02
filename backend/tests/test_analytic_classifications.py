@@ -232,7 +232,10 @@ async def test_classification_and_values_can_be_edited_and_deactivated(client):
     )
     assert disabled.status_code == 200, disabled.text
     assert disabled.json()["active"] is False
-    assert (await client.get("/api/v1/analytic-classifications", headers=_headers(writer))).json() == []
+    active_classifications = await client.get(
+        "/api/v1/analytic-classifications", headers=_headers(writer)
+    )
+    assert active_classifications.json() == []
     all_classifications = await client.get(
         "/api/v1/analytic-classifications?include_inactive=true", headers=_headers(writer)
     )
