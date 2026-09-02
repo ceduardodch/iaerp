@@ -4,10 +4,11 @@
 > código. Coordinación general: [`COORDINACION_IA.md`](../COORDINACION_IA.md).
 > Estado del proyecto: [`docs/STATUS.md`](STATUS.md).
 
-**Última actualización:** 2026-09-02 (F1 completada)
-**Estado:** ✅ F0 y F1 completas. El módulo programa y entrega el aviso de
-declaración de IVA con `StubEmailSender` (sin red). Falta P0.3 del usuario
-(dominio Brevo, API key, calendario de feriados) para arrancar F2.
+**Última actualización:** 2026-09-02 (F3 completada)
+**Estado:** ✅ F0, F1 y F3 completas. Cinco avisos programan y entregan con
+`StubEmailSender` (sin red), todos apagados por defecto. **F2 pendiente**: el
+modelo de cuenta Brevo ya está decidido (una sola, de IAERP); falta el dominio
+verificado y la API key en la configuración del servidor.
 
 ## Qué es
 
@@ -93,6 +94,37 @@ fecha estimada. Sin dato confirmado, no hay fecha.
 **Brevo transporta solo los avisos internos.** La cobranza y el envío de
 facturas al cliente siguen por Gmail.
 
+### P0.2b · ✅ Una sola cuenta Brevo, la de IAERP
+
+Decidido el 2026-09-02 (revisa una decisión anterior del mismo día, que ponía
+una cuenta por tenant). **IAERP tiene una única cuenta de Brevo.** Cada empresa
+configura desde la web solo su identidad de remitente, nunca una clave.
+
+Consecuencias para F2:
+
+- **La API key es un secreto de plataforma, no de tenant**: vive en la
+  configuración del servidor (env/vault), igual que las demás credenciales de
+  infraestructura. Nunca llega por HTTP ni se guarda por tenant.
+- `notification_channel_accounts` se queda como está y **no necesita columna
+  para la clave**. Lo que guarda por tenant es identidad de envío:
+  `sender_email`, `sender_name` y (a agregar) `reply_to`.
+- No hay que cifrar nada con Fernet ni construir pantalla de API key. F2 se
+  reduce a: cliente Brevo, resolución del remitente por tenant, bitácora de
+  entregas y webhook de rebotes.
+
+**El punto que decide si esto funciona: qué dominio va en el `From`.** Brevo
+solo deja enviar desde dominios autenticados en la cuenta, así que hay dos
+caminos y conviene elegir a conciencia:
+
+| Estrategia | Qué implica |
+|---|---|
+| **Dominio propio de IAERP (recomendada)** | El `From` es `avisos@<dominio-iaerp>` con el nombre de la empresa como display, y el `Reply-To` apunta al correo del tenant. **Cero trabajo de DNS por cliente**: se verifica un dominio una vez y sirve para todos. |
+| Dominio de cada cliente | El `From` es `avisos@sucliente.com`. Exige que cada cliente agregue registros DKIM/SPF a **su** DNS apuntando a la cuenta Brevo de IAERP. Se ve más propio, pero cada alta se bloquea hasta que alguien toque el DNS del cliente. |
+
+La recomendada es la primera: con una sola cuenta, la gracia es justamente no
+depender del DNS ajeno para dar de alta a una empresa. La segunda queda
+disponible por tenant para quien la pida y pueda tocar su DNS.
+
 El motivo: hoy el correo de cobranza vive en un hilo de Gmail real
 (`send_google_email_with_thread`) y las respuestas del cliente se sincronizan a
 la bandeja (`sync_google_inbox`). Mandarlo por Brevo rompería ese hilo. Brevo
@@ -102,9 +134,12 @@ ADR propio.
 
 ### P0.3 · ⏳ Insumos del usuario (no se pueden generar desde el código)
 
-- Cuenta Brevo + **dominio verificado** (SPF, DKIM, DMARC). Sin esto, los
-  correos caen en spam y el módulo parece roto cuando no lo está.
-- API key de Brevo por cuenta → va al gestor de secretos, **nunca a la BD**.
+- **Una** cuenta Brevo de IAERP, con **un dominio verificado** (SPF, DKIM,
+  DMARC). Sin esto los correos caen en spam y el módulo parece roto cuando no
+  lo está. Con la estrategia recomendada se verifica una sola vez, no por
+  cliente.
+- API key de esa cuenta → configuración del servidor, **nunca a la BD** ni por
+  HTTP.
 - **Calendario de feriados** del año en curso, para completar el corrimiento a
   día hábil (ver la tabla de límites en P0.1). Se pide como fechas concretas
   porque la observancia de los feriados ecuatorianos cambia por decreto.
@@ -286,6 +321,38 @@ Decisiones que conviene no revertir sin pensarlo:
 Lo que F1 **no** trae, por diseño: API REST y pantalla (F4), y los otros diez
 avisos del catálogo (F3 y F5). El esquema ya los admite sin migración nueva.
 
+## Estado de F3 (implementado)
+
+Cuatro avisos más, sobre el mismo planificador. 17 pruebas en
+`tests/test_notifications_catalog.py`.
+
+| Aviso | Cuándo | Se calla cuando |
+|---|---|---|
+| `CLIENTE_FACTURAR` | Día del `PartyBillingSchedule`, más recordatorio a los 2 días | Ya hay factura emitida al cliente en el período |
+| `IESS_APORTE` | −5, −2, −1 sobre el 15 del mes siguiente al rol | Hay acuse humano para ese período |
+| `RESUMEN_MENSUAL` | Días 3 y 5, sobre el mes cerrado | Informativo, no se calla |
+| `IVA_PREVIEW_MENSUAL` | Último día hábil, 17:00 | Informativo, no se calla |
+
+Barandas de contenido que cada uno lleva:
+
+- **IESS:** el rol solo tiene el aporte **personal** (9,45%); el patronal
+  (11,15%) no se calcula en ninguna parte de IAERP. El correo lo dice
+  explícitamente, porque leer esa cifra como el total de la planilla lleva a
+  pagar de menos.
+- **Avance de IVA:** si `compute_iva` reporta evidencia incompleta, el correo
+  dice "cifras INCOMPLETAS" y lista los motivos, en vez de mostrar un número
+  que parezca declarable.
+- **Resumen mensual:** avisa cuántas compras están preliminares, porque el
+  egreso puede subir cuando se complete su respaldo.
+- **Facturar a cliente:** el `amount_hint` se presenta como referencia del
+  calendario, nunca como el valor a facturar.
+
+Detalles del calendario que estaban en el aire y quedaron resueltos: un ciclo
+configurado el 31 se recorta al último día real del mes (quien puso 31 espera
+un aviso a fin de mes, también en abril), y un ciclo no mensual exige
+`anchor_month` — sin ancla el aviso caería en el mes equivocado, así que la
+base lo impide con un `CHECK` en vez de adivinar.
+
 ## Fases
 
 Cada fase cierra con CI verde y commit propio (regla 3 de `COORDINACION_IA.md`).
@@ -295,7 +362,7 @@ Cada fase cierra con CI verde y commit propio (regla 3 de `COORDINACION_IA.md`).
 | **F0** | Prerequisitos | ✅ `due_dates.py` + migración; ✅ decisión de alcance Brevo (opción A); ⏳ dominio verificado y calendario de feriados | Un período de IVA muestra su fecha límite correcta según el noveno dígito ✅ |
 | **F1** | Fundación | ✅ Modelos + migración `e3f4a5b6c7d8` + planificador + `StubEmailSender` + `IVA_DECLARACION` completo | ✅ El planificador corre tres veces el mismo día y genera **un** evento |
 | **F2** | Transporte | `brevo.py` + `NotificationDelivery` + webhook + envío de prueba | Un correo real llega a la bandeja del usuario y el webhook marca `delivered` |
-| **F3** | Catálogo | `PartyBillingSchedule` + `CLIENTE_FACTURAR`, `IESS_APORTE`, `RESUMEN_MENSUAL`, `IVA_PREVIEW_MENSUAL` | Cada aviso se salta solo cuando su condición ya se cumplió |
+| **F3** | Catálogo | ✅ `PartyBillingSchedule` (migración `f4a5b6c7d8e9`) + `CLIENTE_FACTURAR`, `IESS_APORTE`, `RESUMEN_MENSUAL`, `IVA_PREVIEW_MENSUAL` | ✅ Cada aviso se salta solo cuando su condición ya se cumplió |
 | **F4** | Parametrización | `NotificationsPage.tsx` (3 pestañas) + calendario en la ficha del cliente | Cambiar el día de un aviso desde la UI cambia el envío, sin redeploy |
 | **F5** | Cierre | Resto del catálogo + acuse + digest agrupado por día | Un día con 4 avisos manda 1 correo, no 4 |
 

@@ -205,3 +205,75 @@ class BillingProposal(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Ba
     report_file_name: Mapped[str | None] = mapped_column(String(255))
     report_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     report_approved_by: Mapped[str | None] = mapped_column(String(200))
+
+
+class PartyBillingSchedule(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
+    """Cada cuanto y que dia hay que facturarle a un cliente.
+
+    Es el dato que faltaba para el aviso ``CLIENTE_FACTURAR``: hasta ahora
+    ``CommercialContract.service_type`` decia ``FIXED_MONTHLY`` pero no que dia,
+    asi que "a este se le factura el 1 y a aquel el 10" no vivia en ningun lado.
+
+    Va en tabla propia y no como columna del contrato porque hay clientes
+    recurrentes sin contrato formal cargado, y porque un mismo contrato puede
+    tener mas de un ciclo de facturacion.
+
+    ``amount_hint`` es solo una referencia para el recordatorio; **no** emite
+    ni valida nada. La factura la hace una persona.
+    """
+
+    __tablename__ = "party_billing_schedules"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "party_id"],
+            ["parties.tenant_id", "parties.id"],
+            name="fk_party_billing_schedules_tenant_party",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "contract_id"],
+            ["commercial_contracts.tenant_id", "commercial_contracts.id"],
+            name="fk_party_billing_schedules_tenant_contract",
+        ),
+        UniqueConstraint("tenant_id", "id", name="uq_party_billing_schedules_tenant_id"),
+        UniqueConstraint(
+            "tenant_id",
+            "party_id",
+            "day_of_month",
+            "frequency",
+            name="uq_party_billing_schedules_party_day_frequency",
+        ),
+        CheckConstraint(
+            "day_of_month BETWEEN 1 AND 31",
+            name="day_of_month_valid",
+        ),
+        CheckConstraint(
+            "frequency IN ('MONTHLY', 'BIMONTHLY', 'QUARTERLY', 'ANNUAL')",
+            name="frequency_valid",
+        ),
+        # Un ciclo que no es mensual necesita saber desde que mes se cuenta.
+        # Sin ancla habria que adivinar, y el aviso caeria en el mes equivocado.
+        CheckConstraint(
+            "frequency = 'MONTHLY' OR anchor_month IS NOT NULL",
+            name="anchor_month_required",
+        ),
+        CheckConstraint(
+            "anchor_month IS NULL OR anchor_month BETWEEN 1 AND 12",
+            name="anchor_month_valid",
+        ),
+        CheckConstraint(
+            "amount_hint IS NULL OR amount_hint >= 0",
+            name="amount_hint_non_negative",
+        ),
+        Index("ix_party_billing_schedules_tenant_active", "tenant_id", "active"),
+    )
+
+    party_id: Mapped[uuid.UUID]
+    contract_id: Mapped[uuid.UUID | None]
+    # Se recorta al ultimo dia real del mes: un 31 configurado tiene que
+    # ocurrir igual en febrero.
+    day_of_month: Mapped[int] = mapped_column(Integer)
+    frequency: Mapped[str] = mapped_column(String(20), default="MONTHLY")
+    anchor_month: Mapped[int | None] = mapped_column(Integer)
+    amount_hint: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    notes: Mapped[str | None] = mapped_column(String(500))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)

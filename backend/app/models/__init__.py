@@ -33,6 +33,7 @@ from app.models.legal_commercial import (
     BillingProposal,
     CommercialContract,
     ContractVersion,
+    PartyBillingSchedule,
 )
 from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag, TaxCategory
 from app.models.notifications import (
@@ -135,6 +136,7 @@ __all__ = [
     "SocialCampaignPolicy",
     "SocialCampaignVariant",
     "Party",
+    "PartyBillingSchedule",
     "Payable",
     "PayableInstallment",
     "PayableMovement",
