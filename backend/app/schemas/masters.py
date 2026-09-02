@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator, model_validator
 
 from app.core.phone import normalize_ecuador_whatsapp
 from app.schemas.base import APIModel
@@ -23,8 +23,15 @@ class EstablishmentRead(EstablishmentCreate):
 class EstablishmentUpdate(APIModel):
     """Datos editables sin alterar el código fiscal ni la numeración."""
 
-    name: str = Field(min_length=1, max_length=120)
-    address: str = Field(min_length=1, max_length=500)
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    address: str | None = Field(default=None, min_length=1, max_length=500)
+    active: bool | None = None
+
+    @model_validator(mode="after")
+    def requires_change(self) -> "EstablishmentUpdate":
+        if not self.model_fields_set:
+            raise ValueError("At least one establishment field is required")
+        return self
 
 
 class EmissionPointCreate(APIModel):
@@ -34,6 +41,12 @@ class EmissionPointCreate(APIModel):
 
 class EmissionPointRead(EmissionPointCreate):
     id: uuid.UUID
+    active: bool
+
+
+class EmissionPointUpdate(APIModel):
+    """El código y el establecimiento no cambian; solo se activa o desactiva."""
+
     active: bool
 
 
@@ -82,6 +95,20 @@ class AnalyticClassificationRead(AnalyticClassificationCreate):
     active: bool
 
 
+class AnalyticClassificationUpdate(APIModel):
+    """El código se conserva para no romper reportes ni asignaciones históricas."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    max_depth: int | None = Field(default=None, ge=1, le=3)
+    active: bool | None = None
+
+    @model_validator(mode="after")
+    def requires_change(self) -> "AnalyticClassificationUpdate":
+        if not self.model_fields_set:
+            raise ValueError("At least one analytic classification field is required")
+        return self
+
+
 class AnalyticClassificationValueCreate(APIModel):
     parent_id: uuid.UUID | None = None
     code: str = Field(pattern=r"^[A-Z0-9][A-Z0-9_-]{0,39}$")
@@ -93,6 +120,20 @@ class AnalyticClassificationValueRead(AnalyticClassificationValueCreate):
     id: uuid.UUID
     classification_id: uuid.UUID
     active: bool
+
+
+class AnalyticClassificationValueUpdate(APIModel):
+    """El código y el padre se conservan para preservar la jerarquía histórica."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    active: bool | None = None
+
+    @model_validator(mode="after")
+    def requires_change(self) -> "AnalyticClassificationValueUpdate":
+        if not self.model_fields_set:
+            raise ValueError("At least one analytic classification value field is required")
+        return self
 
 
 class AnalyticAssignmentsUpdate(APIModel):

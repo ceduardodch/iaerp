@@ -191,6 +191,62 @@ async def test_value_cannot_exceed_configured_depth_or_cross_tenant_parent(clien
 
 
 @pytest.mark.asyncio
+async def test_classification_and_values_can_be_edited_and_deactivated(client):
+    writer = await _token(client, TENANT_A, ["analytics:read", "analytics:write"])
+    created = await client.post(
+        "/api/v1/analytic-classifications",
+        headers=_headers(writer, "analytic-edit-classification-create-0001"),
+        json={"code": "CENTRO_COSTO", "name": "Centro de costo", "maxDepth": 2},
+    )
+    assert created.status_code == 201, created.text
+    classification_id = created.json()["id"]
+    value = await client.post(
+        f"/api/v1/analytic-classifications/{classification_id}/values",
+        headers=_headers(writer, "analytic-edit-value-create-0001"),
+        json={"code": "VENTAS", "name": "Ventas"},
+    )
+    assert value.status_code == 201, value.text
+
+    renamed = await client.put(
+        f"/api/v1/analytic-classifications/{classification_id}",
+        headers=_headers(writer, "analytic-edit-classification-update-0001"),
+        json={"name": "Centros de costo", "maxDepth": 3},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["code"] == "CENTRO_COSTO"
+    assert renamed.json()["name"] == "Centros de costo"
+
+    edited_value = await client.put(
+        f"/api/v1/analytic-classifications/{classification_id}/values/{value.json()['id']}",
+        headers=_headers(writer, "analytic-edit-value-update-0001"),
+        json={"name": "Ventas nacionales", "color": "#1769AA"},
+    )
+    assert edited_value.status_code == 200, edited_value.text
+    assert edited_value.json()["code"] == "VENTAS"
+    assert edited_value.json()["name"] == "Ventas nacionales"
+
+    disabled = await client.put(
+        f"/api/v1/analytic-classifications/{classification_id}",
+        headers=_headers(writer, "analytic-edit-classification-disable-0001"),
+        json={"active": False},
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["active"] is False
+    assert (await client.get("/api/v1/analytic-classifications", headers=_headers(writer))).json() == []
+    all_classifications = await client.get(
+        "/api/v1/analytic-classifications?include_inactive=true", headers=_headers(writer)
+    )
+    assert all_classifications.status_code == 200
+    assert all_classifications.json()[0]["active"] is False
+    all_values = await client.get(
+        f"/api/v1/analytic-classifications/{classification_id}/values?include_inactive=true",
+        headers=_headers(writer),
+    )
+    assert all_values.status_code == 200
+    assert all_values.json()[0]["active"] is False
+
+
+@pytest.mark.asyncio
 async def test_invoice_persists_and_filters_controlled_analytic_value(client):
     from test_billing_api import _invoice_payload, _setup_billing_masters
 

@@ -12,7 +12,12 @@ from app.models.analytics import (
     AnalyticClassification,
     AnalyticClassificationValue,
 )
-from app.schemas.masters import AnalyticClassificationCreate, AnalyticClassificationValueCreate
+from app.schemas.masters import (
+    AnalyticClassificationCreate,
+    AnalyticClassificationUpdate,
+    AnalyticClassificationValueCreate,
+    AnalyticClassificationValueUpdate,
+)
 
 
 async def list_assignments(
@@ -184,15 +189,15 @@ async def target_ids_matching_values(
 
 
 async def list_classifications(
-    session: AsyncSession, context: AuthContext
+    session: AsyncSession, context: AuthContext, *, include_inactive: bool = False
 ) -> list[AnalyticClassification]:
+    filters = [AnalyticClassification.tenant_id == context.tenant_id]
+    if not include_inactive:
+        filters.append(AnalyticClassification.active.is_(True))
     return list(
         await session.scalars(
             select(AnalyticClassification)
-            .where(
-                AnalyticClassification.tenant_id == context.tenant_id,
-                AnalyticClassification.active.is_(True),
-            )
+            .where(*filters)
             .order_by(AnalyticClassification.name)
         )
     )
@@ -227,18 +232,54 @@ async def create_classification(
     return entity
 
 
+async def update_classification(
+    session: AsyncSession,
+    context: AuthContext,
+    classification_id: uuid.UUID,
+    data: AnalyticClassificationUpdate,
+) -> AnalyticClassification:
+    entity = await _get_classification(session, context, classification_id, include_inactive=True)
+    if data.name is not None:
+        entity.name = data.name
+    if data.max_depth is not None:
+        entity.max_depth = data.max_depth
+    if data.active is not None:
+        entity.active = data.active
+        if not data.active:
+            values = list(
+                await session.scalars(
+                    select(AnalyticClassificationValue)
+                    .where(
+                        AnalyticClassificationValue.tenant_id == context.tenant_id,
+                        AnalyticClassificationValue.classification_id == classification_id,
+                    )
+                    .with_for_update()
+                )
+            )
+            for value in values:
+                value.active = False
+    await session.flush()
+    return entity
+
+
 async def list_values(
-    session: AsyncSession, context: AuthContext, classification_id: uuid.UUID
+    session: AsyncSession,
+    context: AuthContext,
+    classification_id: uuid.UUID,
+    *,
+    include_inactive: bool = False,
 ) -> list[AnalyticClassificationValue]:
-    await _get_classification(session, context, classification_id)
+    await _get_classification(session, context, classification_id, include_inactive=include_inactive)
+    filters = [
+        AnalyticClassificationValue.tenant_id == context.tenant_id,
+        AnalyticClassificationValue.classification_id == classification_id,
+    ]
+    if not include_inactive:
+        filters.append(AnalyticClassificationValue.active.is_(True))
     return list(
         await session.scalars(
             select(AnalyticClassificationValue)
-            .where(
-                AnalyticClassificationValue.tenant_id == context.tenant_id,
-                AnalyticClassificationValue.classification_id == classification_id,
-                AnalyticClassificationValue.active.is_(True),
-            )
+            .where(*filters)
             .order_by(AnalyticClassificationValue.name)
         )
     )
@@ -298,15 +339,92 @@ async def create_value(
     return entity
 
 
-async def _get_classification(
-    session: AsyncSession, context: AuthContext, classification_id: uuid.UUID
-) -> AnalyticClassification:
+async def update_value(
+    session: AsyncSession,
+    context: AuthContext,
+    classification_id: uuid.UUID,
+    value_id: uuid.UUID,
+    data: AnalyticClassificationValueUpdate,
+) -> AnalyticClassificationValue:
+    classification = await _get_classification(
+        session, context, classification_id, include_inactive=True
+    )
     entity = await session.scalar(
-        select(AnalyticClassification).where(
-            AnalyticClassification.id == classification_id,
-            AnalyticClassification.tenant_id == context.tenant_id,
-            AnalyticClassification.active.is_(True),
+        select(AnalyticClassificationValue)
+        .where(
+            AnalyticClassificationValue.id == value_id,
+            AnalyticClassificationValue.tenant_id == context.tenant_id,
+            AnalyticClassificationValue.classification_id == classification_id,
         )
+        .with_for_update()
+    )
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Analytic classification value not found")
+    if data.name is not None:
+        entity.name = data.name
+    if "color" in data.model_fields_set:
+        entity.color = data.color
+    if data.active is not None:
+        if data.active and not classification.active:
+            raise HTTPException(
+                status_code=409,
+                detail="No se puede activar un valor de una clasificación inactiva",
+            )
+        if data.active and entity.parent_id is not None:
+            parent = await session.scalar(
+                select(AnalyticClassificationValue).where(
+                    AnalyticClassificationValue.id == entity.parent_id,
+                    AnalyticClassificationValue.tenant_id == context.tenant_id,
+                    AnalyticClassificationValue.active.is_(True),
+                )
+            )
+            if parent is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No se puede activar un subnivel cuyo padre está inactivo",
+                )
+        entity.active = data.active
+        if not data.active:
+            descendants = list(
+                await session.scalars(
+                    select(AnalyticClassificationValue)
+                    .where(
+                        AnalyticClassificationValue.tenant_id == context.tenant_id,
+                        AnalyticClassificationValue.classification_id == classification_id,
+                    )
+                    .with_for_update()
+                )
+            )
+            inactive_ids = {entity.id}
+            changed = True
+            while changed:
+                changed = False
+                for candidate in descendants:
+                    if candidate.parent_id in inactive_ids and candidate.id not in inactive_ids:
+                        inactive_ids.add(candidate.id)
+                        changed = True
+            for candidate in descendants:
+                if candidate.id in inactive_ids:
+                    candidate.active = False
+    await session.flush()
+    return entity
+
+
+async def _get_classification(
+    session: AsyncSession,
+    context: AuthContext,
+    classification_id: uuid.UUID,
+    *,
+    include_inactive: bool = False,
+) -> AnalyticClassification:
+    filters = [
+        AnalyticClassification.id == classification_id,
+        AnalyticClassification.tenant_id == context.tenant_id,
+    ]
+    if not include_inactive:
+        filters.append(AnalyticClassification.active.is_(True))
+    entity = await session.scalar(
+        select(AnalyticClassification).where(*filters)
     )
     if entity is None:
         raise HTTPException(status_code=404, detail="Analytic classification not found")

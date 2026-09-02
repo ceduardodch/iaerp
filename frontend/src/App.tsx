@@ -85,6 +85,7 @@ import {
 } from './components/charts'
 import { ErpCombobox } from './components/erp/ErpCombobox'
 import { ErpModal } from './components/erp/ErpModal'
+import { ErpConfirmDialog } from './components/erp/ErpConfirmDialog'
 import { AnalyticClassificationPicker } from './components/analytics/AnalyticClassificationPicker'
 import { AnalyticClassificationSettings } from './components/analytics/AnalyticClassificationSettings'
 // Code-splitting (Sprint 7): la sección CRM arrastra dependencias pesadas
@@ -4201,10 +4202,31 @@ function OrganizationPage({
   const [editingEstablishment, setEditingEstablishment] = useState<Establishment | null>(null)
   const [isCreatingEstablishment, setIsCreatingEstablishment] = useState(false)
   const [isCreatingEmissionPoint, setIsCreatingEmissionPoint] = useState(false)
+  const [statusChange, setStatusChange] = useState<{ type: 'establishment'; item: Establishment } | { type: 'emissionPoint'; item: EmissionPoint } | null>(null)
   const [settingsSection, setSettingsSection] = useState<'fiscal' | 'invoicing' | 'collections' | 'integrations' | 'analytics'>('fiscal')
   const fiscalQuery = useQuery({
     queryKey: ['organization', 'fiscal-settings'],
     queryFn: () => apiRequest<FiscalSettings>(token, '/organization/fiscal-settings'),
+  })
+  const allEstablishmentsQuery = useQuery({
+    queryKey: ['organization', 'establishments', 'all'],
+    queryFn: () => apiRequest<Establishment[]>(token, '/establishments?include_inactive=true'),
+  })
+  const allEmissionPointsQuery = useQuery({
+    queryKey: ['organization', 'emission-points', 'all'],
+    queryFn: () => apiRequest<EmissionPoint[]>(token, '/emission-points?include_inactive=true'),
+  })
+  const updateMasterStatus = useMutation({
+    mutationFn: ({ type, item }: { type: 'establishment'; item: Establishment } | { type: 'emissionPoint'; item: EmissionPoint }) => apiRequest<Establishment | EmissionPoint>(token, type === 'establishment' ? `/establishments/${item.id}` : `/emission-points/${item.id}`, {
+      method: 'PUT', headers: { 'Idempotency-Key': idempotencyKey(`web-${type}-status`) }, body: JSON.stringify({ active: !item.active }),
+    }),
+    onSuccess: () => {
+      setStatusChange(null)
+      void queryClient.invalidateQueries({ queryKey: ['establishments'] })
+      void queryClient.invalidateQueries({ queryKey: ['emission-points'] })
+      void queryClient.invalidateQueries({ queryKey: ['organization', 'establishments'] })
+      void queryClient.invalidateQueries({ queryKey: ['organization', 'emission-points'] })
+    },
   })
   const integrationsQuery = useQuery({
     queryKey: ['crm', 'integrations'],
@@ -4406,6 +4428,8 @@ function OrganizationPage({
   }
 
   const fiscal = fiscalQuery.data
+  const managedEstablishments = allEstablishmentsQuery.data ?? establishments
+  const managedEmissionPoints = allEmissionPointsQuery.data ?? emissionPoints
   return (
     <>
       <ErpPageHeader
@@ -4433,17 +4457,17 @@ function OrganizationPage({
             <ErpButton variant="primary" type="submit" disabled={updateProfile.isPending}>{updateProfile.isPending ? 'Guardando…' : 'Guardar datos de empresa'}</ErpButton>
           </form>
         </article>
-        <ErpPanel title="Establecimientos" count={establishments.length} actions={context.scopes.includes('organization:write') ? <ErpButton variant="secondary" onClick={() => setIsCreatingEstablishment(true)}>Nuevo establecimiento</ErpButton> : null}>
+        <ErpPanel title="Establecimientos" count={managedEstablishments.length} actions={context.scopes.includes('organization:write') ? <ErpButton variant="secondary" onClick={() => setIsCreatingEstablishment(true)}>Nuevo establecimiento</ErpButton> : null}>
           <ul className="establishment-list">
-            {establishments.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.address}</small></div>{context.scopes.includes('organization:write') ? <ErpButton variant="ghost" onClick={() => setEditingEstablishment(item)}>Editar dirección</ErpButton> : null}</li>)}
+            {managedEstablishments.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.address}{item.active ? '' : ' · Inactivo'}</small></div>{context.scopes.includes('organization:write') ? <div className="erp-form-actions"><ErpButton variant="ghost" onClick={() => setEditingEstablishment(item)}>Editar</ErpButton><ErpButton variant={item.active ? 'danger' : 'secondary'} onClick={() => setStatusChange({ type: 'establishment', item })}>{item.active ? 'Desactivar' : 'Reactivar'}</ErpButton></div> : null}</li>)}
           </ul>
         </ErpPanel>
-        <ErpPanel title="Puntos de emisión" count={emissionPoints.length} actions={context.scopes.includes('organization:write') ? <ErpButton variant="secondary" onClick={() => setIsCreatingEmissionPoint(true)} disabled={establishments.length === 0}>Nuevo punto de emisión</ErpButton> : null}>
-          {emissionPoints.length === 0 ? <p className="fiscal-panel-copy">Crea un punto por cada establecimiento antes de emitir facturas.</p> : (
+        <ErpPanel title="Puntos de emisión" count={managedEmissionPoints.length} actions={context.scopes.includes('organization:write') ? <ErpButton variant="secondary" onClick={() => setIsCreatingEmissionPoint(true)} disabled={establishments.length === 0}>Nuevo punto de emisión</ErpButton> : null}>
+          {managedEmissionPoints.length === 0 ? <p className="fiscal-panel-copy">Crea un punto por cada establecimiento antes de emitir facturas.</p> : (
             <ul className="establishment-list">
-              {emissionPoints.map((item) => {
-                const establishment = establishments.find((candidate) => candidate.id === item.establishmentId)
-                return <li key={item.id}><span>{item.code}</span><div><strong>{item.code}</strong><small>{establishment ? `${establishment.code} · ${establishment.name}` : 'Establecimiento no disponible'}</small></div></li>
+              {managedEmissionPoints.map((item) => {
+                const establishment = managedEstablishments.find((candidate) => candidate.id === item.establishmentId)
+                return <li key={item.id}><span>{item.code}</span><div><strong>{item.code}</strong><small>{establishment ? `${establishment.code} · ${establishment.name}` : 'Establecimiento no disponible'}{item.active ? '' : ' · Inactivo'}</small></div>{context.scopes.includes('organization:write') ? <ErpButton variant={item.active ? 'danger' : 'secondary'} onClick={() => setStatusChange({ type: 'emissionPoint', item })}>{item.active ? 'Desactivar' : 'Reactivar'}</ErpButton> : null}</li>
               })}
             </ul>
           )}
@@ -4526,6 +4550,7 @@ function OrganizationPage({
           </div>
         </ErpPanel>
         </> : null}
+        {statusChange ? <ErpConfirmDialog title={`${statusChange.item.active ? 'Desactivar' : 'Reactivar'} ${statusChange.type === 'establishment' ? 'establecimiento' : 'punto de emisión'}`} description={statusChange.item.active ? 'Los comprobantes ya emitidos se conservan. El registro dejará de aparecer al crear nuevos comprobantes.' : 'El registro volverá a estar disponible para nuevos comprobantes.'} confirmLabel={statusChange.item.active ? 'Desactivar' : 'Reactivar'} danger={statusChange.item.active} pending={updateMasterStatus.isPending} onConfirm={() => updateMasterStatus.mutate(statusChange)} onCancel={() => setStatusChange(null)} /> : null}
         {settingsSection === 'analytics' ? <AnalyticClassificationSettings token={token} /> : null}
         {settingsSection === 'invoicing' ? (
           <ErpPanel title="Correo de entrega de factura" className="fiscal-settings-panel">

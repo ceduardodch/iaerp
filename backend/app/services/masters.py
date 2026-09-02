@@ -15,6 +15,7 @@ from app.models.masters import EmissionPoint, Establishment, Party, Product, Tag
 from app.models.platform import AutomationSettings, ServiceAccount, Tenant
 from app.schemas.masters import (
     EmissionPointCreate,
+    EmissionPointUpdate,
     EstablishmentCreate,
     EstablishmentUpdate,
     PartyCreate,
@@ -42,15 +43,17 @@ async def get_active_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> Tena
 async def list_establishments(
     session: AsyncSession,
     context: AuthContext,
+    *,
+    include_inactive: bool = False,
 ) -> list[Establishment]:
+    filters = [Establishment.tenant_id == context.tenant_id]
+    if not include_inactive:
+        filters.append(Establishment.active.is_(True))
     return list(
         (
             await session.scalars(
                 select(Establishment)
-                .where(
-                    Establishment.tenant_id == context.tenant_id,
-                    Establishment.active.is_(True),
-                )
+                .where(*filters)
                 .order_by(Establishment.code)
             )
         ).all()
@@ -78,28 +81,44 @@ async def update_establishment(
         select(Establishment).where(
             Establishment.id == establishment_id,
             Establishment.tenant_id == context.tenant_id,
-            Establishment.active.is_(True),
         ).with_for_update()
     )
     if entity is None:
         raise HTTPException(status_code=404, detail="Establishment not found")
-    document_in_sri = await session.scalar(
-        select(SalesDocument.id).where(
-            SalesDocument.tenant_id == context.tenant_id,
-            SalesDocument.establishment_id == establishment_id,
-            SalesDocument.status.in_({"SIGNED", "RECEIVED", "PENDING_AUTHORIZATION"}),
+    if data.address is not None:
+        document_in_sri = await session.scalar(
+            select(SalesDocument.id).where(
+                SalesDocument.tenant_id == context.tenant_id,
+                SalesDocument.establishment_id == establishment_id,
+                SalesDocument.status.in_({"SIGNED", "RECEIVED", "PENDING_AUTHORIZATION"}),
+            )
         )
-    )
-    if document_in_sri is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "No se puede cambiar la dirección mientras hay comprobantes "
-                "en proceso con el SRI"
-            ),
-        )
-    entity.name = data.name
-    entity.address = data.address
+        if document_in_sri is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "No se puede cambiar la dirección mientras hay comprobantes "
+                    "en proceso con el SRI"
+                ),
+            )
+        entity.address = data.address
+    if data.name is not None:
+        entity.name = data.name
+    if data.active is not None:
+        entity.active = data.active
+        if not data.active:
+            points = list(
+                await session.scalars(
+                    select(EmissionPoint)
+                    .where(
+                        EmissionPoint.tenant_id == context.tenant_id,
+                        EmissionPoint.establishment_id == establishment_id,
+                    )
+                    .with_for_update()
+                )
+            )
+            for point in points:
+                point.active = False
     await session.flush()
     return entity
 
@@ -107,15 +126,17 @@ async def update_establishment(
 async def list_emission_points(
     session: AsyncSession,
     context: AuthContext,
+    *,
+    include_inactive: bool = False,
 ) -> list[EmissionPoint]:
+    filters = [EmissionPoint.tenant_id == context.tenant_id]
+    if not include_inactive:
+        filters.append(EmissionPoint.active.is_(True))
     return list(
         (
             await session.scalars(
                 select(EmissionPoint)
-                .where(
-                    EmissionPoint.tenant_id == context.tenant_id,
-                    EmissionPoint.active.is_(True),
-                )
+                .where(*filters)
                 .order_by(EmissionPoint.code)
             )
         ).all()
@@ -138,6 +159,40 @@ async def create_emission_point(
         raise HTTPException(status_code=404, detail="Establishment not found")
     entity = EmissionPoint(tenant_id=context.tenant_id, **data.model_dump(by_alias=False))
     session.add(entity)
+    await session.flush()
+    return entity
+
+
+async def update_emission_point(
+    session: AsyncSession,
+    context: AuthContext,
+    emission_point_id: uuid.UUID,
+    data: EmissionPointUpdate,
+) -> EmissionPoint:
+    entity = await session.scalar(
+        select(EmissionPoint)
+        .where(
+            EmissionPoint.id == emission_point_id,
+            EmissionPoint.tenant_id == context.tenant_id,
+        )
+        .with_for_update()
+    )
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Emission point not found")
+    if data.active:
+        establishment = await session.scalar(
+            select(Establishment.id).where(
+                Establishment.id == entity.establishment_id,
+                Establishment.tenant_id == context.tenant_id,
+                Establishment.active.is_(True),
+            )
+        )
+        if establishment is None:
+            raise HTTPException(
+                status_code=409,
+                detail="No se puede activar un punto de un establecimiento inactivo",
+            )
+    entity.active = data.active
     await session.flush()
     return entity
 

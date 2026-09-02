@@ -169,6 +169,43 @@ async def test_establishment_address_update_is_tenant_scoped_and_idempotent(clie
         assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 2
 
 
+@pytest.mark.asyncio
+async def test_establishment_deactivation_hides_it_from_operational_lists_and_disables_points(client):
+    token = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["organization:read", "organization:write"]
+    )
+    establishment = await client.post(
+        "/api/v1/establishments",
+        headers=auth(token, "establishment-status-create-0001"),
+        json={"code": "778", "name": "Sucursal", "address": "Quito"},
+    )
+    assert establishment.status_code == 201, establishment.text
+    point = await client.post(
+        "/api/v1/emission-points",
+        headers=auth(token, "emission-point-status-create-0001"),
+        json={"establishmentId": establishment.json()["id"], "code": "007"},
+    )
+    assert point.status_code == 201, point.text
+    disabled = await client.put(
+        f"/api/v1/establishments/{establishment.json()['id']}",
+        headers=auth(token, "establishment-status-disable-0001"),
+        json={"active": False},
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["active"] is False
+    active_establishments = await client.get("/api/v1/establishments", headers=auth(token))
+    assert all(item["id"] != establishment.json()["id"] for item in active_establishments.json())
+    all_points = await client.get("/api/v1/emission-points?include_inactive=true", headers=auth(token))
+    assert all_points.status_code == 200
+    assert next(item for item in all_points.json() if item["id"] == point.json()["id"])["active"] is False
+    blocked = await client.put(
+        f"/api/v1/emission-points/{point.json()['id']}",
+        headers=auth(token, "emission-point-status-reactivate-0001"),
+        json={"active": True},
+    )
+    assert blocked.status_code == 409
+
+
 async def test_idempotency_audit_and_outbox_are_atomic(client):
     token = await token_for(client, "a@iaerp.local", TENANT_A)
     headers = auth(token, "party-idempotency-0001")

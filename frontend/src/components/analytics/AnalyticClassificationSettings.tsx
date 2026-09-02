@@ -1,102 +1,37 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
-import {
-  apiRequest,
-  idempotencyKey,
-  type AnalyticClassification,
-  type AnalyticClassificationValue,
-} from '../../api'
+import { apiRequest, idempotencyKey, type AnalyticClassification, type AnalyticClassificationValue } from '../../api'
 import { ErpButton, ErpEmptyState, ErpPanel } from '../erp'
+import { ErpConfirmDialog } from '../erp/ErpConfirmDialog'
+import { ErpModal } from '../erp/ErpModal'
+
+type StatusChange = { type: 'classification'; item: AnalyticClassification } | { type: 'value'; item: AnalyticClassificationValue; classificationId: string }
 
 export function AnalyticClassificationSettings({ token }: { token: string }) {
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState('')
-  const [classificationFormError, setClassificationFormError] = useState('')
-  const classifications = useQuery({
-    queryKey: ['analytic-classifications'],
-    queryFn: () => apiRequest<AnalyticClassification[]>(token, '/analytic-classifications'),
-  })
-  const values = useQueries({
-    queries: (classifications.data ?? []).map((item) => ({
-      queryKey: ['analytic-classifications', item.id, 'values'],
-      queryFn: () => apiRequest<AnalyticClassificationValue[]>(token, `/analytic-classifications/${item.id}/values`),
-    })),
-  })
-  const createClassification = useMutation({
-    mutationFn: (body: object) => apiRequest<AnalyticClassification>(token, '/analytic-classifications', {
-      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-analytic-classification') }, body: JSON.stringify(body),
-    }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['analytic-classifications'] }),
-  })
-  const createValue = useMutation({
-    mutationFn: ({ classificationId, body }: { classificationId: string; body: object }) => apiRequest<AnalyticClassificationValue>(token, `/analytic-classifications/${classificationId}/values`, {
-      method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-analytic-value') }, body: JSON.stringify(body),
-    }),
-    onSuccess: (_, variables) => void queryClient.invalidateQueries({ queryKey: ['analytic-classifications', variables.classificationId, 'values'] }),
-  })
+  const [formError, setFormError] = useState('')
+  const [editingClassification, setEditingClassification] = useState<AnalyticClassification | null>(null)
+  const [editingValue, setEditingValue] = useState<AnalyticClassificationValue | null>(null)
+  const [statusChange, setStatusChange] = useState<StatusChange | null>(null)
+  const classifications = useQuery({ queryKey: ['analytic-classifications', 'all'], queryFn: () => apiRequest<AnalyticClassification[]>(token, '/analytic-classifications?include_inactive=true') })
+  const values = useQueries({ queries: (classifications.data ?? []).map((item) => ({ queryKey: ['analytic-classifications', item.id, 'values', 'all'], queryFn: () => apiRequest<AnalyticClassificationValue[]>(token, `/analytic-classifications/${item.id}/values?include_inactive=true`) })) })
+  const invalidate = (classificationId?: string) => { void queryClient.invalidateQueries({ queryKey: ['analytic-classifications'] }); if (classificationId) void queryClient.invalidateQueries({ queryKey: ['analytic-classifications', classificationId, 'values'] }) }
+  const createClassification = useMutation({ mutationFn: (body: object) => apiRequest<AnalyticClassification>(token, '/analytic-classifications', { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-analytic-classification') }, body: JSON.stringify(body) }), onSuccess: () => invalidate() })
+  const updateClassification = useMutation({ mutationFn: ({ id, body }: { id: string; body: object }) => apiRequest<AnalyticClassification>(token, `/analytic-classifications/${id}`, { method: 'PUT', headers: { 'Idempotency-Key': idempotencyKey('web-analytic-classification-update') }, body: JSON.stringify(body) }), onSuccess: () => { setEditingClassification(null); setStatusChange(null); invalidate() } })
+  const createValue = useMutation({ mutationFn: ({ classificationId, body }: { classificationId: string; body: object }) => apiRequest<AnalyticClassificationValue>(token, `/analytic-classifications/${classificationId}/values`, { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey('web-analytic-value') }, body: JSON.stringify(body) }), onSuccess: (_, variables) => invalidate(variables.classificationId) })
+  const updateValue = useMutation({ mutationFn: ({ classificationId, id, body }: { classificationId: string; id: string; body: object }) => apiRequest<AnalyticClassificationValue>(token, `/analytic-classifications/${classificationId}/values/${id}`, { method: 'PUT', headers: { 'Idempotency-Key': idempotencyKey('web-analytic-value-update') }, body: JSON.stringify(body) }), onSuccess: (_, variables) => { setEditingValue(null); setStatusChange(null); invalidate(variables.classificationId) } })
   const selected = (classifications.data ?? []).find((item) => item.id === selectedId) ?? classifications.data?.[0]
   const selectedValues = selected ? values[(classifications.data ?? []).findIndex((item) => item.id === selected.id)]?.data ?? [] : []
-
-  function submitClassification(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const code = String(form.get('code')).trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_')
-    if (!/^[A-Z][A-Z0-9_]{1,39}$/.test(code)) {
-      setClassificationFormError('El código debe empezar con una letra y usar solo letras, números o guion bajo.')
-      return
-    }
-    if (classifications.data?.some((item) => item.code === code)) {
-      setClassificationFormError(`Ya existe una clasificación con el código ${code}.`)
-      return
-    }
-    setClassificationFormError('')
-    createClassification.mutate({
-      code,
-      name: String(form.get('name')).trim(),
-      maxDepth: Number(form.get('maxDepth')),
-    })
-  }
-  function submitValue(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!selected) return
-    const form = new FormData(event.currentTarget)
-    createValue.mutate({
-      classificationId: selected.id,
-      body: {
-        code: String(form.get('code')).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_'),
-        name: String(form.get('name')).trim(),
-        parentId: String(form.get('parentId') || '') || null,
-      },
-    })
-  }
-
+  function submitClassification(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const form = new FormData(event.currentTarget); const code = String(form.get('code')).trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_'); if (!/^[A-Z][A-Z0-9_]{1,39}$/.test(code)) { setFormError('El código debe empezar con una letra y usar solo letras, números o guion bajo.'); return }; if (classifications.data?.some((item) => item.code === code)) { setFormError(`Ya existe una clasificación con el código ${code}.`); return }; setFormError(''); createClassification.mutate({ code, name: String(form.get('name')).trim(), maxDepth: Number(form.get('maxDepth')) }) }
+  function submitValue(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!selected) return; const form = new FormData(event.currentTarget); createValue.mutate({ classificationId: selected.id, body: { code: String(form.get('code')).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_'), name: String(form.get('name')).trim(), parentId: String(form.get('parentId') || '') || null } }) }
+  function confirmStatus() { if (!statusChange) return; if (statusChange.type === 'classification') updateClassification.mutate({ id: statusChange.item.id, body: { active: !statusChange.item.active } }); else updateValue.mutate({ classificationId: statusChange.classificationId, id: statusChange.item.id, body: { active: !statusChange.item.active } }) }
   return <>
-    <ErpPanel title="Clasificaciones analíticas">
-      <p className="fine-print">Define aquí franquicias, sucursales, proyectos, centros de costo u otros catálogos. Cada tenant decide sus propios niveles; ningún nivel es obligatorio en los documentos.</p>
-      <form className="company-profile-editor" onSubmit={submitClassification}>
-        <label>Nombre<input name="name" required minLength={2} placeholder="Ej. Franquicia" /></label>
-        <label>Código<input name="code" required minLength={2} maxLength={40} pattern="[A-Za-z][A-Za-z0-9_]{1,39}" title="Empieza con una letra y usa solo letras, números o guion bajo" placeholder="FRANQUICIA" /></label>
-        <label>Niveles máximos<select name="maxDepth" defaultValue="1"><option value="1">1 nivel</option><option value="2">2 niveles</option><option value="3">3 niveles</option></select></label>
-        {classificationFormError || createClassification.error ? <p className="form-error" role="alert">{classificationFormError || createClassification.error?.message}</p> : null}
-        <ErpButton variant="primary" type="submit" disabled={createClassification.isPending}>{createClassification.isPending ? 'Guardando…' : 'Crear clasificación'}</ErpButton>
-      </form>
-    </ErpPanel>
-    <ErpPanel title="Valores controlados" count={classifications.data?.length ?? 0}>
-      {classifications.isPending ? <p>Cargando…</p> : null}
-      {classifications.error ? <p className="form-error" role="alert">{classifications.error.message}</p> : null}
-      {!classifications.isPending && !classifications.error && !classifications.data?.length ? <ErpEmptyState title="Sin clasificaciones" description="Crea primero un catálogo para usarlo en Facturas y Compras." /> : null}
-      {classifications.data?.length ? <>
-        <label>Clasificación<select value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.target.value)}>{classifications.data.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.maxDepth} nivel(es)</option>)}</select></label>
-        <ul className="establishment-list">{selectedValues.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.parentId ? 'Subnivel configurado' : 'Nivel principal'}</small></div></li>)}</ul>
-        <form className="company-profile-editor" onSubmit={submitValue}>
-          <label>Nombre<input name="name" required minLength={2} /></label>
-          <label>Código<input name="code" required minLength={1} /></label>
-          <label>Depende de<select name="parentId"><option value="">Sin padre: primer nivel</option>{selectedValues.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          {createValue.error ? <p className="form-error" role="alert">{createValue.error.message}</p> : null}
-          <ErpButton variant="secondary" type="submit" disabled={createValue.isPending}>{createValue.isPending ? 'Guardando…' : 'Agregar valor'}</ErpButton>
-        </form>
-      </> : null}
-    </ErpPanel>
+    <ErpPanel title="Clasificaciones analíticas"><p className="fine-print">Define franquicias, sucursales, proyectos, centros de costo u otros catálogos. Desactivar conserva las asignaciones ya hechas y lo oculta de nuevos documentos.</p><form className="company-profile-editor" onSubmit={submitClassification}><label>Nombre<input name="name" required minLength={2} placeholder="Ej. Franquicia" /></label><label>Código<input name="code" required minLength={2} maxLength={40} pattern="[A-Za-z][A-Za-z0-9_]{1,39}" placeholder="FRANQUICIA" /></label><label>Niveles máximos<select name="maxDepth" defaultValue="1"><option value="1">1 nivel</option><option value="2">2 niveles</option><option value="3">3 niveles</option></select></label>{formError || createClassification.error ? <p className="form-error" role="alert">{formError || createClassification.error?.message}</p> : null}<ErpButton variant="primary" type="submit" disabled={createClassification.isPending}>{createClassification.isPending ? 'Guardando…' : 'Crear clasificación'}</ErpButton></form></ErpPanel>
+    <ErpPanel title="Valores controlados" count={classifications.data?.length ?? 0}>{classifications.isPending ? <p>Cargando…</p> : null}{classifications.error ? <p className="form-error" role="alert">{classifications.error.message}</p> : null}{!classifications.isPending && !classifications.error && !classifications.data?.length ? <ErpEmptyState title="Sin clasificaciones" description="Crea primero un catálogo para usarlo en Facturas y Compras." /> : null}{classifications.data?.length ? <><label>Clasificación<select value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.target.value)}>{classifications.data.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.maxDepth} nivel(es){item.active ? '' : ' · Inactiva'}</option>)}</select></label>{selected ? <div className="erp-form-actions"><ErpButton variant="ghost" onClick={() => setEditingClassification(selected)}>Editar clasificación</ErpButton><ErpButton variant={selected.active ? 'danger' : 'secondary'} onClick={() => setStatusChange({ type: 'classification', item: selected })}>{selected.active ? 'Desactivar clasificación' : 'Reactivar clasificación'}</ErpButton></div> : null}<ul className="establishment-list">{selectedValues.map((item) => <li key={item.id}><span>{item.code}</span><div><strong>{item.name}</strong><small>{item.parentId ? 'Subnivel configurado' : 'Nivel principal'}{item.active ? '' : ' · Inactivo'}</small></div><div className="erp-form-actions"><ErpButton variant="ghost" onClick={() => setEditingValue(item)}>Editar</ErpButton><ErpButton variant={item.active ? 'danger' : 'secondary'} onClick={() => selected && setStatusChange({ type: 'value', item, classificationId: selected.id })}>{item.active ? 'Desactivar' : 'Reactivar'}</ErpButton></div></li>)}</ul>{selected?.active ? <form className="company-profile-editor" onSubmit={submitValue}><label>Nombre<input name="name" required minLength={2} /></label><label>Código<input name="code" required minLength={1} /></label><label>Depende de<select name="parentId"><option value="">Sin padre: primer nivel</option>{selectedValues.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{createValue.error ? <p className="form-error" role="alert">{createValue.error.message}</p> : null}<ErpButton variant="secondary" type="submit" disabled={createValue.isPending}>{createValue.isPending ? 'Guardando…' : 'Agregar valor'}</ErpButton></form> : <p className="fine-print">Reactiva la clasificación para agregar valores.</p>}</> : null}</ErpPanel>
+    {editingClassification ? <ErpModal title={`Editar ${editingClassification.name}`} onClose={() => setEditingClassification(null)} size="sm"><form className="quick-master-form" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); updateClassification.mutate({ id: editingClassification.id, body: { name: form.get('name'), maxDepth: Number(form.get('maxDepth')) } }) }}><p className="fine-print">El código {editingClassification.code} se conserva para no romper reportes ni asignaciones previas.</p><label>Nombre<input name="name" defaultValue={editingClassification.name} required /></label><label>Niveles máximos<select name="maxDepth" defaultValue={String(editingClassification.maxDepth)}><option value="1">1 nivel</option><option value="2">2 niveles</option><option value="3">3 niveles</option></select></label>{updateClassification.error ? <p className="form-error" role="alert">{updateClassification.error.message}</p> : null}<div className="erp-form-actions"><ErpButton variant="secondary" onClick={() => setEditingClassification(null)}>Cancelar</ErpButton><ErpButton variant="primary" type="submit" disabled={updateClassification.isPending}>{updateClassification.isPending ? 'Guardando…' : 'Guardar'}</ErpButton></div></form></ErpModal> : null}
+    {editingValue && selected ? <ErpModal title={`Editar ${editingValue.name}`} onClose={() => setEditingValue(null)} size="sm"><form className="quick-master-form" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); updateValue.mutate({ classificationId: selected.id, id: editingValue.id, body: { name: form.get('name'), color: form.get('color') } }) }}><p className="fine-print">El código y la jerarquía se conservan para mantener los documentos ya clasificados.</p><label>Nombre<input name="name" defaultValue={editingValue.name} required /></label><label>Color<input name="color" type="color" defaultValue={editingValue.color ?? '#1769AA'} /></label>{updateValue.error ? <p className="form-error" role="alert">{updateValue.error.message}</p> : null}<div className="erp-form-actions"><ErpButton variant="secondary" onClick={() => setEditingValue(null)}>Cancelar</ErpButton><ErpButton variant="primary" type="submit" disabled={updateValue.isPending}>{updateValue.isPending ? 'Guardando…' : 'Guardar'}</ErpButton></div></form></ErpModal> : null}
+    {statusChange ? <ErpConfirmDialog title={`${statusChange.item.active ? 'Desactivar' : 'Reactivar'} ${statusChange.type === 'classification' ? 'clasificación' : 'valor'}`} description={statusChange.item.active ? 'Se conservarán las asignaciones históricas. No estará disponible en documentos nuevos.' : 'Volverá a estar disponible en documentos nuevos si su catálogo y padre están activos.'} confirmLabel={statusChange.item.active ? 'Desactivar' : 'Reactivar'} danger={statusChange.item.active} pending={updateClassification.isPending || updateValue.isPending} onConfirm={confirmStatus} onCancel={() => setStatusChange(null)} /> : null}
   </>
 }

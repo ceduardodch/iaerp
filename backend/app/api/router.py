@@ -54,6 +54,7 @@ from app.schemas.masters import (
     AnalyticAssignmentsUpdate,
     EmissionPointCreate,
     EmissionPointRead,
+    EmissionPointUpdate,
     EstablishmentCreate,
     EstablishmentRead,
     EstablishmentUpdate,
@@ -358,10 +359,13 @@ async def delete_service_account(
 async def get_establishments(
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("organization:read"))],
+    include_inactive: bool = False,
 ) -> list[EstablishmentRead]:
     return [
         EstablishmentRead.model_validate(entity)
-        for entity in await masters.list_establishments(session, context)
+        for entity in await masters.list_establishments(
+            session, context, include_inactive=include_inactive
+        )
     ]
 
 
@@ -561,10 +565,13 @@ async def put_establishment(
 async def get_emission_points(
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("organization:read"))],
+    include_inactive: bool = False,
 ) -> list[EmissionPointRead]:
     return [
         EmissionPointRead.model_validate(entity)
-        for entity in await masters.list_emission_points(session, context)
+        for entity in await masters.list_emission_points(
+            session, context, include_inactive=include_inactive
+        )
     ]
 
 
@@ -591,6 +598,33 @@ async def post_emission_point(
         action="emission_point.created",
         entity_type="emission_point",
         callback=create,
+    )
+
+
+@router.put("/emission-points/{emission_point_id}", response_model=EmissionPointRead)
+async def put_emission_point(
+    emission_point_id: uuid.UUID,
+    data: EmissionPointUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        entity = await masters.update_emission_point(session, context, emission_point_id, data)
+        return (
+            str(entity.id),
+            EmissionPointRead.model_validate(entity).model_dump(mode="json", by_alias=True),
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="emission_points.update",
+        idempotency_key=idempotency_key,
+        request_payload={"emission_point_id": str(emission_point_id), **data.model_dump()},
+        action="emission_point.updated",
+        entity_type="emission_point",
+        callback=update,
     )
 
 
