@@ -262,7 +262,7 @@ async def test_preview_renders_the_sample_payload_markers(client) -> None:
     token = await token_for(client, TENANT_A, ["notifications:write"])
 
     response = await client.post(
-        "/api/v1/notifications/templates/IVA_DECLARACION/preview",
+        "/api/v1/notifications/templates/IVA_DECLARACION/preview",  # pragma: allowlist secret
         headers=auth(token),
         json={
             "subject": catalog.IVA_DECLARACION.subject,
