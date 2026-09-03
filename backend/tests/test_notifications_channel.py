@@ -5,6 +5,7 @@ de ``httpx`` simulado, que es lo que permite verificar el cuerpo real que se
 manda sin depender de credenciales.
 """
 
+import json
 import uuid
 from datetime import UTC, datetime
 
@@ -84,6 +85,51 @@ async def test_brevo_sends_the_expected_payload_and_keeps_the_message_id(mock_br
     assert "contadora@ejemplo.ec" in body
     assert "avisos@iaerp.b2b.com.ec" in body
     assert "gerencia@btob.com.ec" in body
+
+
+async def test_payload_matches_the_documented_brevo_contract(mock_brevo) -> None:
+    """Fija el contrato publicado de ``POST /v3/smtp/email``.
+
+    Es lo unico que un transporte simulado no puede descubrir por si solo: que
+    los nombres de campo sean los que Brevo espera. Verificado contra la
+    referencia de la API el 2026-09-03; si Brevo los cambia, esta prueba es la
+    que debe avisar.
+    """
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.read().decode())
+        captured["path"] = request.url.path
+        return httpx.Response(201, json={"messageId": "<abc@brevo>"})
+
+    mock_brevo(handler)
+    await BrevoEmailSender(
+        api_key=FAKE_API_KEY, base_url="https://api.brevo.test/v3"
+    ).send(MESSAGE)
+
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert captured["path"] == "/v3/smtp/email"
+    assert set(body) == {"sender", "to", "subject", "textContent", "htmlContent", "replyTo"}
+    assert body["sender"] == {"email": "avisos@iaerp.b2b.com.ec", "name": "BTOB SAS"}
+    assert body["to"] == [{"email": "contadora@ejemplo.ec"}]
+    assert body["replyTo"] == {"email": "gerencia@btob.com.ec"}
+    assert body["subject"] == "Aviso"
+    assert body["textContent"] == "cuerpo"
+    assert body["htmlContent"] == "<p>cuerpo</p>"
+
+
+async def test_message_ids_plural_is_also_accepted(mock_brevo) -> None:
+    """Brevo devuelve ``messageIds`` (lista) cuando hay varias versiones."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(201, json={"messageIds": ["<uno@brevo>", "<dos@brevo>"]})
+
+    mock_brevo(handler)
+    result = await BrevoEmailSender(
+        api_key=FAKE_API_KEY, base_url="https://api.brevo.test/v3"
+    ).send(MESSAGE)
+    assert result.provider_message_id == "<uno@brevo>"
 
 
 async def test_brevo_failure_does_not_raise_so_the_rest_still_receives(mock_brevo) -> None:

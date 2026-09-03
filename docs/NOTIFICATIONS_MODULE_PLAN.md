@@ -140,6 +140,32 @@ es excelente para correo transaccional saliente, que es justamente lo que son
 los avisos internos. Si alguna vez se quiere mover la cobranza, se hace con un
 ADR propio.
 
+### Estado real del remitente (verificado 2026-09-03)
+
+Remitente elegido: **`notificaciones@b2b.com.ec`**. Se descartó un buzón
+personal (`carlos.diaz@…`) porque con una sola cuenta ese `From` lo ven todos
+los clientes, y las respuestas y rebotes de todos caerían en una bandeja
+personal. El `Reply-To` sí es por empresa (`NotificationChannelAccount.reply_to`).
+
+| Registro DNS de `b2b.com.ec` | Estado |
+|---|---|
+| SPF con `include:spf.brevo.com` | ✅ Añadido al registro existente (no uno nuevo) |
+| Consultas DNS del SPF | ✅ 6 de 10 — sin riesgo de `permerror` |
+| DKIM Brevo | ✅ `brevo1._domainkey` y `brevo2._domainkey` → `*.dkim.brevo.com` |
+| Subdominio de marca | ✅ `notificaciones.b2b.com.ec` → `brand.brevosend.com` |
+| DMARC | ✅ Publicado, `p=none` |
+
+El dominio figura como **Authenticated** y **Branded** en el panel de Brevo, así
+que los correos firman con DKIM alineado a `b2b.com.ec` y DMARC pasa: la
+entregabilidad no es un problema pendiente.
+
+> 📌 **Nota para quien verifique el DNS a mano:** Brevo publica el DKIM como
+> **CNAMEs numerados** (`brevo1._domainkey`, `brevo2._domainkey`), no como un
+> TXT en `brevo._domainkey` ni en `mail._domainkey`. Consultar esos selectores
+> da vacío y hace creer que falta la autenticación cuando está completa.
+> El registro `brevo-code` solo interviene en la verificación inicial del
+> dominio; una vez autenticado, su ausencia no significa nada.
+
 ### P0.3 · ⏳ Insumos del usuario (no se pueden generar desde el código)
 
 - **Una** cuenta Brevo de IAERP, con **un dominio verificado** (SPF, DKIM,
@@ -404,15 +430,41 @@ Decisiones que conviene no revertir:
   y el envío de prueba responde 422 con el motivo si algo falta. Un módulo de
   correo que falla en silencio es indistinguible de uno roto.
 
-### Lo que falta verificar de verdad
+### Contrato con Brevo, verificado contra la API publicada (2026-09-03)
 
-El criterio de salida de F2 pide un correo real en una bandeja real. Eso
-**todavía no ocurrió**: no hay cuenta Brevo con dominio verificado. Lo probado
-hasta aquí es el cuerpo exacto que se manda, el manejo de errores y el cruce de
-rebotes, todo contra un transporte simulado.
+Un transporte simulado responde lo que uno le diga, así que valida el manejo de
+errores pero **no** si el proveedor entiende el payload. Se contrastó campo por
+campo contra la referencia de `POST /v3/smtp/email` y coincide: endpoint,
+cabecera `api-key`, `sender {email,name}`, `to [{email}]`, `subject`,
+`textContent`, `htmlContent`, `replyTo {email}` y `messageId` en la respuesta
+201. Brevo además devuelve `messageIds` en plural y como lista cuando hay
+varias versiones; el cliente ya lo contempla.
 
-Cuando existan las variables: `POST /notifications/channel-account/test` a la
-propia dirección, y recién después encender la primera regla.
+Eso quedó fijado en `test_payload_matches_the_documented_brevo_contract`, para
+que un cambio de contrato lo detecte el CI y no un aviso que no llega.
+
+### Configuración real, verificada en producción (2026-09-03)
+
+`GET /notifications/channel-account` respondió:
+
+```json
+{"provider":"BREVO","platformKeyConfigured":true,
+ "senderEmail":"notificaciones@b2b.com.ec","ready":true,"blockingReason":null}
+```
+
+Eso confirma de una sola vez: la app lee `BREVO_API_KEY` (el nombre en Coolify
+coincide), el remitente está puesto, el proveedor ya no es el stub, y los scopes
+`notifications:*` funcionan de punta a punta en Keycloak.
+
+### Lo único que falta
+
+**Un correo real llegando a una bandeja real.** Es el criterio de salida de F2 y
+sigue sin cumplirse: requiere disparar
+`POST /notifications/channel-account/test` con un token de sesión. Lo que queda
+por comprobar ahí es que la clave sea válida y que el mensaje se entregue -- el
+formato ya está verificado.
+
+Recién después de ese correo se debería encender la primera regla.
 
 ## Fases
 
