@@ -5,10 +5,12 @@ from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
 from app.core.timezones import today_in_fiscal_timezone
+from app.db.integrity import unique_constraint_name
 from app.models.billing import SalesDocument
 from app.models.crm import Lead
 from app.models.legal_commercial import (
@@ -16,6 +18,7 @@ from app.models.legal_commercial import (
     BillingProposal,
     CommercialContract,
     ContractVersion,
+    PartyBillingSchedule,
 )
 from app.models.masters import EmissionPoint, Establishment, Party, Product, TaxCategory
 from app.schemas.billing import (
@@ -33,7 +36,13 @@ from app.schemas.legal_commercial import (
     ContractEmailSyncRead,
     ContractVersionCreate,
 )
+from app.schemas.notifications import (
+    NotificationBillingScheduleCreate,
+    NotificationBillingScheduleUpdate,
+)
 from app.services import billing, crm_integrations, storage
+
+_DUPLICATE_BILLING_SCHEDULE_CONSTRAINT = "uq_party_billing_schedules_party_day_frequency"
 
 MAX_SIGNED_CONTRACT_BYTES = 10 * 1024 * 1024
 MAX_REPORT_BYTES = 15 * 1024 * 1024
@@ -962,3 +971,135 @@ async def convert_billing_proposal(
             cut.status = "BILLED"
     await session.flush()
     return proposal, invoice
+
+
+# --------------------------------------------------------------------------
+# Calendario de facturación por cliente (``PartyBillingSchedule``, F4 del plan
+# de avisos). Vive aquí porque comparte modelo y validaciones de "el cliente y
+# el contrato son de este tenant" con el resto del expediente comercial; el
+# endpoint que lo expone vive en ``api/notifications.py`` porque es el dato
+# que alimenta el aviso ``CLIENTE_FACTURAR`` (decisión ya tomada en
+# ``docs/NOTIFICATIONS_MODULE_PLAN.md``).
+# --------------------------------------------------------------------------
+
+
+async def _validate_billing_schedule_party(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    party_id: uuid.UUID,
+    contract_id: uuid.UUID | None,
+) -> None:
+    """El cliente (y el contrato, si viene) deben ser de este tenant.
+
+    Reutiliza ``_customer``: un calendario de facturación solo tiene sentido
+    sobre un ``Party`` con rol ``CUSTOMER``, igual que un contrato o una
+    propuesta de facturación.
+    """
+    await _customer(session, context, party_id)
+    if contract_id is not None:
+        contract = await session.scalar(
+            select(CommercialContract.id).where(
+                CommercialContract.id == contract_id,
+                CommercialContract.tenant_id == context.tenant_id,
+                CommercialContract.party_id == party_id,
+            )
+        )
+        if contract is None:
+            raise HTTPException(status_code=404, detail="Commercial contract not found")
+
+
+async def list_billing_schedules(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    party_id: uuid.UUID | None = None,
+    active: bool | None = None,
+) -> list[tuple[PartyBillingSchedule, str]]:
+    """Calendarios del tenant junto al nombre del cliente, sin N+1 queries."""
+    statement = (
+        select(PartyBillingSchedule, Party.name)
+        .join(Party, Party.id == PartyBillingSchedule.party_id)
+        .where(
+            PartyBillingSchedule.tenant_id == context.tenant_id,
+            Party.tenant_id == context.tenant_id,
+        )
+    )
+    if party_id is not None:
+        statement = statement.where(PartyBillingSchedule.party_id == party_id)
+    if active is not None:
+        statement = statement.where(PartyBillingSchedule.active == active)
+    statement = statement.order_by(PartyBillingSchedule.day_of_month)
+    rows = await session.execute(statement)
+    return [(schedule, party_name) for schedule, party_name in rows.all()]
+
+
+async def create_billing_schedule(
+    session: AsyncSession,
+    context: AuthContext,
+    data: NotificationBillingScheduleCreate,
+) -> PartyBillingSchedule:
+    await _validate_billing_schedule_party(
+        session, context, party_id=data.party_id, contract_id=data.contract_id
+    )
+    entity = PartyBillingSchedule(
+        tenant_id=context.tenant_id,
+        party_id=data.party_id,
+        contract_id=data.contract_id,
+        day_of_month=data.day_of_month,
+        frequency=data.frequency,
+        anchor_month=data.anchor_month,
+        amount_hint=data.amount_hint,
+        notes=data.notes,
+    )
+    session.add(entity)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        if unique_constraint_name(exc) == _DUPLICATE_BILLING_SCHEDULE_CONSTRAINT:
+            raise HTTPException(
+                status_code=409,
+                detail="Ya existe un calendario igual para este cliente",
+            ) from exc
+        raise
+    return entity
+
+
+async def update_billing_schedule(
+    session: AsyncSession,
+    context: AuthContext,
+    schedule_id: uuid.UUID,
+    data: NotificationBillingScheduleUpdate,
+) -> PartyBillingSchedule:
+    """Reemplazo completo del calendario, no un parche parcial."""
+    schedule = await session.scalar(
+        select(PartyBillingSchedule)
+        .where(
+            PartyBillingSchedule.id == schedule_id,
+            PartyBillingSchedule.tenant_id == context.tenant_id,
+        )
+        .with_for_update()
+    )
+    if schedule is None:
+        raise HTTPException(status_code=404, detail="Billing schedule not found")
+    await _validate_billing_schedule_party(
+        session, context, party_id=data.party_id, contract_id=data.contract_id
+    )
+    schedule.party_id = data.party_id
+    schedule.contract_id = data.contract_id
+    schedule.day_of_month = data.day_of_month
+    schedule.frequency = data.frequency
+    schedule.anchor_month = data.anchor_month
+    schedule.amount_hint = data.amount_hint
+    schedule.notes = data.notes
+    schedule.active = data.active
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        if unique_constraint_name(exc) == _DUPLICATE_BILLING_SCHEDULE_CONSTRAINT:
+            raise HTTPException(
+                status_code=409,
+                detail="Ya existe un calendario igual para este cliente",
+            ) from exc
+        raise
+    return schedule

@@ -105,6 +105,10 @@ const PurchasesPage = lazy(() =>
 const PayrollPage = lazy(() =>
   import('./components/payroll').then((module) => ({ default: module.PayrollPage })),
 )
+// Avisos es configuración que se visita poco frente al arranque normal: mismo criterio de code-splitting.
+const NotificationsPage = lazy(() =>
+  import('./components/notifications').then((module) => ({ default: module.NotificationsPage })),
+)
 // Bandeja de acción: revisión agregada de cobranza + prospección, poco usada
 // frente al arranque normal, misma razón de code-splitting que las de arriba.
 const ActionQueuePage = lazy(() =>
@@ -4807,6 +4811,13 @@ function Workspace() {
           <ErrorBoundary label="Nómina">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando nómina…" />}>
               <PayrollPage token={token} />
+            </Suspense>
+          </ErrorBoundary>
+        ) : null}
+        {section === 'notifications' ? (
+          <ErrorBoundary label="Avisos">
+            <Suspense fallback={<SectionLoadingSkeleton label="Cargando avisos…" />}>
+              <NotificationsPage token={token} parties={parties} />
             </Suspense>
           </ErrorBoundary>
         ) : null}

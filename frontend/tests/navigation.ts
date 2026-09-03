@@ -12,6 +12,7 @@ const sectionGroups: Record<string, string> = {
   Catálogos: 'Administración',
   Empresa: 'Administración',
   Nómina: 'Administración',
+  Avisos: 'Administración',
 }
 
 /** Navega por la cabecera agrupada en desktop o por el panel lateral en móvil. */

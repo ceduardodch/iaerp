@@ -4,18 +4,17 @@
 > código. Coordinación general: [`COORDINACION_IA.md`](../COORDINACION_IA.md).
 > Estado del proyecto: [`docs/STATUS.md`](STATUS.md).
 
-**Última actualización:** 2026-09-02 (F2 completada)
-**Estado:** ✅ F0, F1, F2 y F3 completas. Solo queda **F4** (pantalla de
-configuración). El envío real por Brevo está construido y se activa solo cuando
-existan `BREVO_API_KEY` y `BREVO_SENDER_EMAIL`; sin ellas sigue en stub. Todas
-las reglas siguen apagadas por defecto.
+**Última actualización:** 2026-09-03 (F4 completada — módulo funcionalmente completo)
+**Estado:** ✅ F0, F1, F2, F3 y F4 completas. El módulo se configura entero
+desde la web: reglas, plantillas, bitácora, calendario de facturación y canal
+Brevo. El envío real se activa solo cuando existan `BREVO_API_KEY` y
+`BREVO_SENDER_EMAIL`; sin ellas sigue en stub. Todas las reglas siguen
+apagadas por defecto hasta que una persona las encienda.
 
-> ⚠️ **Acción manual en Keycloak de producción antes de usar la pantalla.**
-> Los scopes `notifications:read` y `notifications:write` ya están en
-> `infra/keycloak/iaerp-realm.json`, pero la instancia de producción **no se
-> reimporta**: hay que crearlos a mano y agregarlos como *Default* al cliente
-> `iaerp-web`. El procedimiento exacto está en
-> [`TAX_MODULE_PLAN.md`](TAX_MODULE_PLAN.md#-accion-requerida-en-keycloak-de-produccion).
+> ✅ **Keycloak de producción ya tiene los scopes.** `notifications:read` y
+> `notifications:write` se crearon a mano el 2026-09-03 y quedaron como
+> *Default* en `iaerp-web` (verificado contra el discovery del realm). No
+> queda acción pendiente de este tipo.
 > Ya pasó con `tax:*` y dejó la sección rota en producción.
 
 ## Qué es
@@ -309,18 +308,27 @@ Escrituras con `execute_idempotent` y `append_audit`, como el resto del repo.
 > `tax:read`/`tax:write` y dejó la sección rota en producción — el
 > procedimiento exacto está en [`TAX_MODULE_PLAN.md`](TAX_MODULE_PLAN.md#-accion-requerida-en-keycloak-de-produccion).
 
-### Frontend (`frontend/src/components/notifications/`)
+### Frontend (`frontend/src/components/notifications/`) — ✅ implementado
 
-`NotificationsPage.tsx` con tres pestañas, patrón `Erp*`, carga lazy con
+`NotificationsPage.tsx` con **cinco** pestañas, patrón `Erp*`, carga lazy con
 `ErrorBoundary` + `Suspense` (igual que Nómina en `App.tsx`):
 
-1. **Reglas** — lista por tipo con interruptor, días, hora y destinatarios.
-2. **Plantillas** — editor con marcadores y vista previa con datos reales.
-3. **Bitácora** — eventos con estado, destinatarios, acuse y reenvío.
+1. **Reglas** — lista por tipo con interruptor, calendario y destinatarios.
+2. **Plantillas** — editor con marcadores, vista previa y restaurar default.
+3. **Bitácora** — eventos con estado, detalle de entregas, acuse y reintento.
+4. **Calendario de facturación** — CRUD de `PartyBillingSchedule` por cliente.
+5. **Canal (Brevo)** — estado, remitente y envío de prueba.
 
-Entrada "Avisos" en el grupo Administración del `Sidebar.tsx`. El calendario de
-facturación vive dentro de la ficha del cliente, no aquí. La conexión Brevo va
-como tarjeta en **Empresa**, junto a las demás integraciones.
+Entrada "Avisos" en el grupo Administración del `Sidebar.tsx`.
+
+**Desviación deliberada del diseño original:** el boceto inicial preveía 3
+pestañas, con el calendario de facturación en la ficha del cliente y Brevo
+como tarjeta en Empresa. Se cambió porque **no existe una vista de "ficha del
+cliente"** en el código — `PartiesPage` vive inline dentro de `App.tsx` (4800+
+líneas) sin una ruta de detalle por contacto. Construir esa vista habría sido
+un cambio mucho más grande y riesgoso que lo que pedía F4. Las cinco pestañas
+dentro de `NotificationsPage` logran la misma capacidad (ver/editar el
+calendario por cliente, configurar Brevo) sin tocar ese archivo.
 
 ---
 
@@ -476,7 +484,7 @@ Cada fase cierra con CI verde y commit propio (regla 3 de `COORDINACION_IA.md`).
 | **F1** | Fundación | ✅ Modelos + migración `e3f4a5b6c7d8` + planificador + `StubEmailSender` + `IVA_DECLARACION` completo | ✅ El planificador corre tres veces el mismo día y genera **un** evento |
 | **F2** | Transporte | ✅ `brevo.py` + `channels.py` + `webhooks.py` + envío de prueba + migración `a5b6c7d8e9f0` | ⏳ Falta la prueba real: un correo llega a la bandeja y el webhook marca `delivered` |
 | **F3** | Catálogo | ✅ `PartyBillingSchedule` (migración `f4a5b6c7d8e9`) + `CLIENTE_FACTURAR`, `IESS_APORTE`, `RESUMEN_MENSUAL`, `IVA_PREVIEW_MENSUAL` | ✅ Cada aviso se salta solo cuando su condición ya se cumplió |
-| **F4** | Parametrización | `NotificationsPage.tsx` (3 pestañas) + calendario en la ficha del cliente | Cambiar el día de un aviso desde la UI cambia el envío, sin redeploy |
+| **F4** | Parametrización | ✅ 12 endpoints REST + `NotificationsPage.tsx` (5 pestañas) | ✅ Cambiar el día de un aviso desde la UI cambia el envío, sin redeploy |
 | **F5** | Cierre | Resto del catálogo + acuse + digest agrupado por día | Un día con 4 avisos manda 1 correo, no 4 |
 
 **F1 es la fase que decide el módulo.** Si el scheduler genérico + `dedupe_key`

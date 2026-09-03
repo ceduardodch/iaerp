@@ -1028,6 +1028,179 @@ export type PayrollEntry = {
   tasaFondosAplicada: string
 }
 
+// Módulo de avisos internos (F4): reglas, plantillas, bitácora, calendario de
+// facturación por cliente y canal Brevo. Espejo camelCase de
+// `app/schemas/notifications.py` (alias_generator=to_camel).
+
+export type ChannelAccountRead = {
+  provider: string
+  platformKeyConfigured: boolean
+  senderEmail?: string | null
+  senderName: string
+  replyTo?: string | null
+  ready: boolean
+  blockingReason?: string | null
+}
+
+export type ChannelAccountUpdate = {
+  senderName?: string | null
+  senderEmail?: string | null
+  replyTo?: string | null
+}
+
+export type ChannelTestStatus = 'SENT' | 'STUBBED' | 'FAILED'
+
+export type ChannelTestResult = {
+  provider: string
+  status: ChannelTestStatus
+  providerMessageId?: string | null
+  errorMessage?: string | null
+}
+
+/**
+ * Catálogo completo del modelo (`models/notifications.RULE_TYPES`). Hoy
+ * `GET /notifications/rules` solo devuelve filas para los primeros 5 — el
+ * resto ya está declarado en el esquema pero el planificador no los calcula
+ * todavía (ver `IMPLEMENTED_RULE_TYPES` en `services/notifications/catalog.py`).
+ */
+export type NotificationRuleType =
+  | 'CLIENTE_FACTURAR'
+  | 'IVA_DECLARACION'
+  | 'IVA_PREVIEW_MENSUAL'
+  | 'RESUMEN_MENSUAL'
+  | 'IESS_APORTE'
+  | 'NOMINA_ROL'
+  | 'CARTERA_VENCIDA'
+  | 'CXP_PROXIMO_PAGO'
+  | 'RENOVACION_CONTRATO'
+  | 'SRI_RECHAZO'
+  | 'EVIDENCIA_INCOMPLETA'
+
+export type NotificationScheduleKind = 'DAY_OF_MONTH' | 'OFFSET_TO_DUE' | 'LAST_BUSINESS_DAY' | 'WEEKDAY'
+export type NotificationAudienceKind = 'TENANT_USERS' | 'EXPLICIT_EMAILS' | 'PARTY'
+
+export type NotificationRuleRead = {
+  id: string
+  ruleType: NotificationRuleType
+  name: string
+  enabled: boolean
+  scheduleKind: NotificationScheduleKind
+  daysOfMonth?: string | null
+  offsetsDays?: string | null
+  sendHour: number
+  channels: string
+  audienceKind: NotificationAudienceKind
+  audienceRoles: string[]
+  audienceEmails: string[]
+  requireAck: boolean
+  updatedAt: string
+}
+
+/** Reemplazo completo (PUT, no parche): `ruleType`/`name` no son editables. */
+export type NotificationRuleUpdate = {
+  enabled: boolean
+  scheduleKind: NotificationScheduleKind
+  daysOfMonth?: string | null
+  offsetsDays?: string | null
+  sendHour: number
+  channels: string
+  audienceKind: NotificationAudienceKind
+  audienceRoles: string[]
+  audienceEmails: string[]
+  requireAck: boolean
+}
+
+export type NotificationTemplateRead = {
+  ruleType: string
+  subject: string
+  body: string
+  /** false = mostrando el default del catálogo, true = el tenant lo editó. */
+  isCustom: boolean
+}
+
+/** Mismo shape para el PUT (guardar) y el POST /preview (no persiste nada). */
+export type NotificationTemplateUpdate = {
+  subject: string
+  body: string
+}
+
+export type NotificationTemplatePreviewResult = {
+  subject: string
+  bodyText: string
+  bodyHtml: string
+}
+
+export type NotificationDeliveryStatus = 'PENDING' | 'STUBBED' | 'SENT' | 'FAILED' | 'BOUNCED' | 'COMPLAINED'
+
+export type NotificationDeliveryRead = {
+  id: string
+  recipient: string
+  channel: string
+  provider: string
+  status: NotificationDeliveryStatus
+  errorMessage?: string | null
+  sentAt?: string | null
+}
+
+export type NotificationEventStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'SENT'
+  | 'STUBBED'
+  | 'SKIPPED'
+  | 'FAILED'
+  | 'CANCELLED'
+
+export type NotificationEventRead = {
+  id: string
+  ruleId?: string | null
+  ruleType: string
+  status: NotificationEventStatus
+  scheduledAt: string
+  attempts: number
+  errorMessage?: string | null
+  sentAt?: string | null
+  ackAt?: string | null
+  ackBy?: string | null
+  periodLabel?: string | null
+}
+
+export type NotificationEventDetailRead = NotificationEventRead & {
+  payload: Record<string, unknown>
+  deliveries: NotificationDeliveryRead[]
+}
+
+export type NotificationBillingFrequency = 'MONTHLY' | 'BIMONTHLY' | 'QUARTERLY' | 'ANNUAL'
+
+export type NotificationBillingScheduleRead = {
+  id: string
+  partyId: string
+  partyName: string
+  contractId?: string | null
+  dayOfMonth: number
+  frequency: NotificationBillingFrequency
+  anchorMonth?: number | null
+  amountHint?: string | null
+  notes?: string | null
+  active: boolean
+}
+
+/**
+ * Mismo shape para crear y editar. `active` solo lo lee el PUT: el POST lo
+ * ignora en el body (Pydantic descarta claves extra por defecto) y siempre
+ * crea con `active=true`.
+ */
+export type NotificationBillingScheduleInput = {
+  partyId: string
+  contractId?: string | null
+  dayOfMonth: number
+  frequency: NotificationBillingFrequency
+  anchorMonth?: number | null
+  amountHint?: string | null
+  notes?: string | null
+  active?: boolean
+}
+
 export class ApiError extends Error {
   readonly status: number
 
