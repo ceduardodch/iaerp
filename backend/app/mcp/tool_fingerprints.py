@@ -11,7 +11,7 @@ EXPECTED_TOOL_FINGERPRINTS = {
     "parties.search": "eaa06912c1ed4ce7bda1086bb3e18ff1eb526e27203d1e3bff928fdac0b357c7",  # pragma: allowlist secret
     "parties.create": "66912fd439261d0c521dcb397e05ea74dfc3bd8b9d764585a9acf8568c36f92a",  # pragma: allowlist secret
     "products.search": "4f101518151a3528dc23dffc726605b5bd8f37317907ce6ff32bebc89c27bd87",  # pragma: allowlist secret
-    "products.create": "7e98be20f8696a1ddd48c5335e9775e2c03a5b4f8e94aa7c9425c1584f295680",  # pragma: allowlist secret
+    "products.create": "26994a3cf482d124a4d0642c2e1c7a5582bbcfabecf515bdb7565bdee1e82961",  # pragma: allowlist secret
     "leads.list": "345a04185847cf12dd155ab698e46a8f94538da9620429d1eabd3b38143ab170",  # pragma: allowlist secret
     "leads.activities": "43b07b77d43711cb5032d4e254390c3e1bd5de3cbb4d8f54661ef8a25d6faa63",  # pragma: allowlist secret
     "leads.create_with_party": (
