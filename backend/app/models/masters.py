@@ -133,7 +133,13 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
         Index("ix_products_tenant_name", "tenant_id", "name"),
     )
 
-    name: Mapped[str] = mapped_column(String(200))
+    # El nombre del producto es la descripcion por defecto de la linea de
+    # factura, o sea el texto que termina en ``detalle/descripcion`` del XML.
+    # Por eso el limite es el de ese campo en el esquema SRI 1.1.0 (300) y no
+    # uno propio: un nombre mas largo produciria un comprobante rechazado. Los
+    # servicios contratados por concurso publico se nombran con el objeto, la
+    # entidad y el numero de proceso, y no entraban en 200.
+    name: Mapped[str] = mapped_column(String(300))
     code: Mapped[str | None] = mapped_column(String(80))
     unit_price: Mapped[Decimal] = mapped_column(Numeric(18, 6))
     tax_category_id: Mapped[uuid.UUID]

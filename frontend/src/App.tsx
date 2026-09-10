@@ -1203,7 +1203,7 @@ function ProductsPage({
           onSubmit={submitProduct}
           onCancel={() => setEditor(undefined)}
         >
-          <label>Nombre<input name="name" maxLength={200} defaultValue={editor?.name} required /></label>
+          <label>Nombre<input name="name" maxLength={300} defaultValue={editor?.name} required /></label>
           <label>Código interno<input name="code" maxLength={80} defaultValue={editor?.code ?? ''} /></label>
           <label>Precio unitario<input name="unitPrice" type="number" min="0" step="0.000001" defaultValue={editor?.unitPrice} required /></label>
           <label>Categoría tributaria<select name="taxCategoryId" defaultValue={editor?.taxCategoryId ?? taxes[0]?.id} required>{taxes.map((tax) => <option key={tax.id} value={tax.id}>{tax.name} · {formatPercent(tax.rate)}</option>)}</select></label>
@@ -1558,7 +1558,7 @@ function QuickProductModal({
         }}>
           <p className="fine-print">El producto quedará guardado en el catálogo y seleccionado en esta factura.</p>
           <div className="erp-form-fields">
-            <label>Nombre<input name="name" maxLength={200} required /></label>
+            <label>Nombre<input name="name" maxLength={300} required /></label>
             <label>Código interno<input name="code" maxLength={80} /></label>
             <div className="field-row">
               <label>Precio unitario<input name="unitPrice" type="number" min="0" step="0.000001" required /></label>

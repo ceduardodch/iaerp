@@ -190,7 +190,9 @@ class PartyRead(PartyFields):
 
 
 class ProductCreate(APIModel):
-    name: str = Field(min_length=1, max_length=200)
+    # 300 es el limite de ``detalle/descripcion`` en el esquema SRI 1.1.0, que
+    # es donde acaba este nombre cuando se factura (ver ``Product.name``).
+    name: str = Field(min_length=1, max_length=300)
     code: str | None = Field(default=None, max_length=80)
     unit_price: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
     tax_category_id: uuid.UUID
