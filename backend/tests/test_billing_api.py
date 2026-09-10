@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -1184,3 +1184,89 @@ async def test_void_also_voids_the_receivable_and_stops_collections(client):
     assert aging.status_code == 200, aging.text
     total_aging = sum(Decimal(bucket["total"]) for bucket in aging.json()["buckets"])
     assert total_aging == Decimal("0.00")
+
+
+async def test_void_reconciles_a_legacy_voided_invoice_with_open_receivable(client):
+    """Factura ya VOIDED con cartera OPEN (anulada antes de la reconciliacion).
+
+    Re-pulsar 'anular' no falla ni re-marca el documento; solo anula la
+    cartera pendiente. Cubre exactamente las facturas viejas descuadradas.
+    """
+
+    invoice_id, _token = await _create_authorized_invoice_for_void(
+        client, key_prefix="void-legacy"
+    )
+    token_invoices = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["invoices:write", "invoices:read", "receivables:read"],
+    )
+
+    # Simula el estado legado: documento VOIDED pero su cartera quedo OPEN
+    # (la logica de anular cartera no existia cuando se anulo).
+    async with SessionFactory() as session:
+        document = await session.get(SalesDocument, invoice_id)
+        assert document is not None
+        document.status = "VOIDED"
+        document.voided_at = datetime.now(UTC)
+        await session.commit()
+
+    # Con el documento ya VOIDED, la cartera sigue cobrable.
+    before = await client.get("/api/v1/receivables", headers=auth(token_invoices))
+    assert before.status_code == 200, before.text
+    assert any(item["status"] in ("OPEN", "OVERDUE") for item in before.json())
+
+    # Re-pulsar la anulacion: no falla, reconcilia la cartera.
+    response = await client.post(
+        f"/api/v1/invoices/{invoice_id}/void",
+        headers=auth(token_invoices, "void-legacy-reconcile-idempotency-key"),
+        json={"reason": "Reconciliacion de cartera de una factura ya anulada."},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "VOIDED"
+    assert response.json()["collectionStatus"] == "VOIDED"
+
+    async with SessionFactory() as session:
+        receivable = await session.scalar(
+            select(Receivable).where(
+                Receivable.tenant_id == TENANT_A,
+                Receivable.sales_document_id == invoice_id,
+            )
+        )
+        assert receivable is not None
+        assert receivable.status == "VOID"
+
+    after = await client.get("/api/v1/receivables", headers=auth(token_invoices))
+    assert after.status_code == 200, after.text
+    assert [item["status"] for item in after.json()] == ["VOIDED"]
+
+
+async def test_void_refuses_a_draft_document(client):
+    """Un DRAFT no tiene anulacion del SRI que reflejar: 409."""
+
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(client, token, key_prefix="void-draft-only")
+    token_invoices = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["invoices:write", "invoices:read"]
+    )
+    created = await client.post(
+        "/api/v1/invoices",
+        headers=auth(token_invoices, "void-draft-only-draft-idempotency-key"),
+        json=_invoice_payload(masters),
+    )
+    assert created.status_code == 201, created.text
+    invoice_id = created.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/invoices/{invoice_id}/void",
+        headers=auth(token_invoices, "void-draft-only-request-idempotency-key"),
+        json={"reason": "No deberia poder anularse un borrador."},
+    )
+    assert response.status_code == 409, response.text
+    assert "DRAFT" in response.text

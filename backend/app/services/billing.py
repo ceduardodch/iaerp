@@ -1023,26 +1023,42 @@ async def void_authorized_sales_document(
     pendientes, en la MISMA transaccion, via
     ``receivables.void_receivable_for_sales_document``. Sin eso, la cartera
     seguiria OPEN y cobrable pese a que la factura ya no existe ante el SRI.
+
+    Es idempotente y reconciliador: si el documento YA esta ``VOIDED`` pero su
+    cartera quedo sin anular (facturas anuladas antes de que existiera esta
+    logica), volver a invocarlo NO falla ni re-marca el documento; solo
+    reconcilia la cartera pendiente. Asi el mismo boton "Marcar como anulada"
+    corrige las facturas viejas descuadradas.
     """
 
     document = await get_sales_document(session, context, document_id)
-    if document.status != "AUTHORIZED":
+    if document.status not in {"AUTHORIZED", "VOIDED"}:
+        # DRAFT/READY/SIGNED/RECEIVED/... no tienen una anulacion del SRI que
+        # reflejar; REJECTED/NOT_AUTHORIZED se archivan, no se anulan.
         raise HTTPException(
             status_code=409,
             detail=(
-                "Only an authorized sales document can be voided, "
-                f"current status is {document.status}"
+                "Only an authorized (or already voided) sales document can be "
+                f"voided, current status is {document.status}"
             ),
         )
-    if document.voided_at is not None:
-        raise HTTPException(status_code=409, detail="Sales document is already voided")
 
-    document.status = "VOIDED"
-    document.voided_at = datetime.now(UTC)
-    document.voided_reason = reason.strip()
-    await session.flush()
+    if document.status == "AUTHORIZED":
+        # Transicion normal: primera anulacion.
+        document.status = "VOIDED"
+        document.voided_at = datetime.now(UTC)
+        document.voided_reason = reason.strip()
+        await session.flush()
+    elif document.voided_reason is None:
+        # Documento marcado VOIDED por una version anterior sin motivo
+        # persistido: se completa el motivo sin cambiar el estado ni la fecha.
+        document.voided_reason = reason.strip()
+        await session.flush()
 
     # Import local para evitar un ciclo billing <-> receivables a nivel modulo.
+    # Idempotente: si la cartera ya esta VOID (o no existe), no hace nada.
+    # Cuando el documento ya estaba VOIDED, esto es exactamente la
+    # reconciliacion de una factura vieja descuadrada.
     from app.services import receivables
 
     await receivables.void_receivable_for_sales_document(
