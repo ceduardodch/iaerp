@@ -1723,8 +1723,14 @@ async def post_invoice_void(
     """
 
     async def void() -> tuple[str, dict[str, object]]:
+        correlation_id = str(uuid.uuid4())
         entity = await billing.void_authorized_sales_document(
-            session, context, invoice_id, reason=data.reason
+            session,
+            context,
+            invoice_id,
+            reason=data.reason,
+            correlation_id=correlation_id,
+            idempotency_key=idempotency_key,
         )
         response_model = await billing.to_sales_document_read(session, context, entity)
         return str(entity.id), response_model.model_dump(mode="json", by_alias=True)

@@ -1006,6 +1006,8 @@ async def void_authorized_sales_document(
     document_id: uuid.UUID,
     *,
     reason: str,
+    correlation_id: str,
+    idempotency_key: str,
 ) -> SalesDocument:
     """Reconcilia una anulacion hecha en el SRI: AUTHORIZED -> VOIDED.
 
@@ -1015,6 +1017,12 @@ async def void_authorized_sales_document(
     el estado para que IAERP coincida con el SRI. El motivo, la clave de
     acceso, el actor y el momento quedan auditados por el ``execute_idempotent``
     que envuelve al endpoint.
+
+    Ademas, una factura anulada deja de ser cobrable: se anula su cartera
+    (``Receivable`` -> ``VOID``) y se cancelan los recordatorios de cobranza
+    pendientes, en la MISMA transaccion, via
+    ``receivables.void_receivable_for_sales_document``. Sin eso, la cartera
+    seguiria OPEN y cobrable pese a que la factura ya no existe ante el SRI.
     """
 
     document = await get_sales_document(session, context, document_id)
@@ -1033,6 +1041,18 @@ async def void_authorized_sales_document(
     document.voided_at = datetime.now(UTC)
     document.voided_reason = reason.strip()
     await session.flush()
+
+    # Import local para evitar un ciclo billing <-> receivables a nivel modulo.
+    from app.services import receivables
+
+    await receivables.void_receivable_for_sales_document(
+        session,
+        context,
+        sales_document_id=document.id,
+        reason=reason,
+        correlation_id=correlation_id,
+        idempotency_key=idempotency_key,
+    )
     return document
 
 

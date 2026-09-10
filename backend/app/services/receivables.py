@@ -38,7 +38,7 @@ from xml.etree.ElementTree import Element
 
 from defusedxml.ElementTree import fromstring as safe_fromstring  # type: ignore[import-untyped]
 from fastapi import HTTPException
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
@@ -1638,6 +1638,91 @@ async def apply_credit_note(
         receivable.status = "PARTIALLY_PAID"
 
     return first_movement
+
+
+async def void_receivable_for_sales_document(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    sales_document_id: uuid.UUID,
+    reason: str,
+    correlation_id: str,
+    idempotency_key: str,
+) -> None:
+    """Anula la cartera de una factura que se anulo en el SRI (VOIDED).
+
+    Una factura anulada deja de ser cobrable: su ``Receivable`` pasa al estado
+    terminal ``VOID`` (lo saca de ``list_receivables`` por estado, del aging /
+    cartera vencida en ``compute_aging_summary`` -que solo mira OPEN/
+    PARTIALLY_PAID- y del dossier con el estado correcto) y sus recordatorios
+    de cobranza pendientes se cancelan (``SKIPPED``) para no seguir cobrando
+    algo anulado.
+
+    No borra ni edita movimientos previos (pagos, retenciones, NC ya
+    aplicados): quedan como evidencia; el "no cobrable" se basa en el estado
+    VOID. Idempotente: si ya esta ``VOID`` (o no existe cartera para el
+    documento), no hace nada ni vuelve a auditar. Pensado para invocarse
+    dentro de la misma transaccion que marca el documento ``VOIDED``.
+    """
+
+    receivable = await session.scalar(
+        select(Receivable).where(
+            Receivable.tenant_id == context.tenant_id,
+            Receivable.sales_document_id == sales_document_id,
+        )
+    )
+    if receivable is None or receivable.status == "VOID":
+        # Sin cartera (factura de contado ya cobrada al instante, o evento de
+        # autorizacion aun no materializado) o ya anulada: nada que hacer.
+        return
+
+    locked = await lock_receivable(
+        session, tenant_id=context.tenant_id, receivable_id=receivable.id
+    )
+    if locked.status == "VOID":
+        return
+
+    locked.status = "VOID"
+
+    # Cancela los recordatorios que aun no se enviaron; los ya enviados se
+    # conservan como historial. Se cuentan antes de actualizar para auditar
+    # cuantos se cancelaron sin depender de ``rowcount``.
+    pending_reminder_ids = list(
+        await session.scalars(
+            select(CollectionReminder.id).where(
+                CollectionReminder.tenant_id == context.tenant_id,
+                CollectionReminder.receivable_id == receivable.id,
+                CollectionReminder.status.in_(("PENDING", "PROCESSING")),
+            )
+        )
+    )
+    if pending_reminder_ids:
+        await session.execute(
+            update(CollectionReminder)
+            .where(CollectionReminder.id.in_(pending_reminder_ids))
+            .values(status="SKIPPED")
+        )
+    await session.flush()
+
+    await append_audit(
+        session,
+        context=context,
+        action="receivable.voided",
+        entity_type="receivable",
+        entity_id=str(receivable.id),
+        correlation_id=correlation_id,
+        idempotency_key=idempotency_key,
+        details={
+            "sales_document_id": str(sales_document_id),
+            "reason": reason.strip(),
+            "cancelled_reminders": len(pending_reminder_ids),
+        },
+    )
+    # Flush para que este AuditEvent quede visible al calcular el siguiente
+    # ``sequence`` del hash-chain: ``execute_idempotent`` agrega despues su
+    # propia auditoria (``invoice.voided``) y ambas comparten el contador por
+    # tenant (mismo motivo que en ``record_payment``).
+    await session.flush()
 
 
 async def reverse_movement(
