@@ -2348,6 +2348,11 @@ function InvoiceDetail({
   // Anular = reflejar una anulacion ya hecha en el portal del SRI sobre un
   // comprobante autorizado. No transmite nada; solo reconcilia el estado.
   const canVoid = invoice.status === 'AUTHORIZED'
+  // Factura ya anulada cuya cartera quedo sin anular (anulada antes de que
+  // existiera la reconciliacion de cartera): permite corregirla desde el mismo
+  // boton, sin volver a cambiar el documento.
+  const needsCollectionReconcile =
+    invoice.status === 'VOIDED' && invoice.collectionStatus != null && invoice.collectionStatus !== 'VOIDED'
   const taxBreakdown = Array.from(
     invoice.lines.reduce((groups, line) => {
       const current = groups.get(line.taxRate) ?? { base: 0, tax: 0 }
@@ -2373,6 +2378,9 @@ function InvoiceDetail({
         <p className="form-warning" role="status">
           Comprobante anulado en el SRI y reconciliado en IAERP. El XML, RIDE y la
           respuesta del SRI se conservan.{invoice.voidedReason ? ` Motivo: ${invoice.voidedReason}` : ''}
+          {needsCollectionReconcile
+            ? ' Su cartera aún figura como cobrable: usa "Anular cartera pendiente" para corregirla.'
+            : ''}
         </p>
       ) : null}
       <dl className="invoice-summary invoice-metadata">
@@ -2524,11 +2532,29 @@ function InvoiceDetail({
       ) : null}
 
       {voiding ? (
-        <ErpModal title={`Marcar como anulada la factura ${invoice.sequential}`} size="sm" onClose={() => setVoiding(false)}>
+        <ErpModal
+          title={
+            needsCollectionReconcile
+              ? `Anular cartera pendiente de la factura ${invoice.sequential}`
+              : `Marcar como anulada la factura ${invoice.sequential}`
+          }
+          size="sm"
+          onClose={() => setVoiding(false)}
+        >
           <p className="fine-print">
-            Usa esto cuando el comprobante ya fue anulado en el portal del SRI. IAERP
-            reflejará el estado <strong>Anulada</strong> conservando XML, RIDE, la respuesta
-            del SRI y la auditoría. No se transmite nada al SRI.
+            {needsCollectionReconcile ? (
+              <>
+                Esta factura ya está anulada, pero su cartera todavía figura como cobrable.
+                Esto la retirará de cobranzas (cartera y recordatorios) conservando XML, RIDE,
+                la respuesta del SRI y la auditoría. No se transmite nada al SRI.
+              </>
+            ) : (
+              <>
+                Usa esto cuando el comprobante ya fue anulado en el portal del SRI. IAERP
+                reflejará el estado <strong>Anulada</strong> conservando XML, RIDE, la respuesta
+                del SRI y la auditoría. No se transmite nada al SRI.
+              </>
+            )}
           </p>
           <label>
             Motivo de la anulación
@@ -2656,6 +2682,9 @@ function InvoiceDetail({
         ) : null}
         {canVoid ? (
           <ErpButton variant="danger" onClick={() => setVoiding(true)}>Marcar como anulada</ErpButton>
+        ) : null}
+        {needsCollectionReconcile ? (
+          <ErpButton variant="danger" onClick={() => setVoiding(true)}>Anular cartera pendiente</ErpButton>
         ) : null}
         {invoice.status !== 'HISTORICAL_ISSUED' ? (
           <ErpButton
