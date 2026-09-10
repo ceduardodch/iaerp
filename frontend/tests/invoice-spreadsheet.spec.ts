@@ -228,7 +228,13 @@ test('creates and adds a product without losing the invoice draft', async ({ pag
   const issueDate = await page.getByLabel('Fecha de emisión').inputValue()
   await page.getByRole('button', { name: 'Crear producto o servicio' }).click()
   const dialog = page.getByRole('dialog', { name: 'Crear producto o servicio' })
-  await dialog.getByLabel('Nombre').fill('Servicio rápido')
+  // `ProductCreate` acota el nombre en 200 caracteres: el modal tiene que
+  // frenarlo aquí en vez de dejar que el 422 de Pydantic llegue crudo a la
+  // pantalla ("name: String should have at most 200 characters").
+  const nameField = dialog.getByLabel('Nombre')
+  await nameField.fill('x'.repeat(260))
+  await expect(nameField).toHaveValue('x'.repeat(200))
+  await nameField.fill('Servicio rápido')
   await dialog.getByLabel('Precio unitario').fill('25')
   const results = await new AxeBuilder({ page }).include('.erp-modal').analyze()
   expect(results.violations).toEqual([])

@@ -68,8 +68,17 @@ test('creates a product through the real API and refreshes the catalog', async (
   await login(page, tenantNorte)
   await navigateToSection(page, 'Catálogos')
   await page.getByRole('button', { name: 'Nuevo producto' }).click()
-  await page.getByLabel('Nombre').fill(productName)
-  await page.getByLabel('Código interno').fill(`E2E-${suffix}`)
+  // `ProductCreate` acota nombre y código (200 y 80 caracteres): el formulario
+  // tiene que frenarlos aquí en vez de dejar que el 422 de Pydantic llegue
+  // crudo a la pantalla ("name: String should have at most 200 characters").
+  const nameField = page.getByLabel('Nombre')
+  await nameField.fill('x'.repeat(260))
+  await expect(nameField).toHaveValue('x'.repeat(200))
+  const codeField = page.getByLabel('Código interno')
+  await codeField.fill('C'.repeat(120))
+  await expect(codeField).toHaveValue('C'.repeat(80))
+  await nameField.fill(productName)
+  await codeField.fill(`E2E-${suffix}`)
   await page.getByLabel('Precio unitario').fill('12.345678')
   await page.getByRole('button', { name: 'Guardar' }).click()
 
