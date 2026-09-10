@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from app.db.session import SessionFactory, engine
 from app.models.billing import DocumentArtifact, SalesDocument, Sequence
 from app.models.platform import AuditEvent, OutboxEvent
+from app.models.receivables import CollectionReminder, Receivable, ReceivableInstallment
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
 TENANT_B = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -969,6 +970,39 @@ async def _create_authorized_invoice_for_void(client, *, key_prefix: str) -> tup
         assert document is not None
         document.status = "AUTHORIZED"
         document.access_key = "1" * 49
+        # Simula la cartera OPEN que crearia handle_invoice_authorized: un
+        # Receivable 1:1, una cuota por el total y un recordatorio PENDING.
+        receivable = Receivable(
+            tenant_id=TENANT_A,
+            sales_document_id=invoice_id,
+            party_id=document.party_id,
+            original_amount=document.total,
+            currency=document.currency,
+            status="OPEN",
+            collection_enabled=True,
+        )
+        session.add(receivable)
+        await session.flush()
+        session.add(
+            ReceivableInstallment(
+                tenant_id=TENANT_A,
+                receivable_id=receivable.id,
+                sequence=1,
+                due_date=document.issue_date,
+                amount=document.total,
+            )
+        )
+        session.add(
+            CollectionReminder(
+                tenant_id=TENANT_A,
+                party_id=document.party_id,
+                receivable_id=receivable.id,
+                channel="email",
+                template_id="payment_reminder",
+                recipient="cliente@example.com",
+                status="PENDING",
+            )
+        )
         await session.commit()
 
     return invoice_id, token_invoices
@@ -1075,3 +1109,78 @@ async def test_void_is_idempotent_for_the_same_key(client):
         )
     # Una sola anulacion auditada pese a las dos llamadas.
     assert audited == 1
+
+
+async def test_void_also_voids_the_receivable_and_stops_collections(client):
+    """Anular la factura anula su cartera: Receivable -> VOID y recordatorios cancelados."""
+
+    invoice_id, _token_invoices = await _create_authorized_invoice_for_void(
+        client, key_prefix="void-cartera"
+    )
+    token_invoices = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["invoices:write", "invoices:read", "receivables:read"],
+    )
+
+    # Antes de anular: cartera OPEN, aparece en el listado y en el aging.
+    before = await client.get(
+        "/api/v1/receivables", headers=auth(token_invoices)
+    )
+    assert before.status_code == 200, before.text
+    # La cartera arranca cobrable: OPEN, o OVERDUE si su cuota ya vencio.
+    cobrable = [item for item in before.json() if item["status"] in ("OPEN", "OVERDUE")]
+    assert len(cobrable) == 1, before.text
+
+    response = await client.post(
+        f"/api/v1/invoices/{invoice_id}/void",
+        headers=auth(token_invoices, "void-cartera-request-idempotency-key"),
+        json={"reason": "Anulado en el SRI; la deuda ya no es cobrable."},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "VOIDED"
+    # La factura reporta su cartera como anulada.
+    assert response.json()["collectionStatus"] == "VOIDED"
+
+    async with SessionFactory() as session:
+        receivable = await session.scalar(
+            select(Receivable).where(
+                Receivable.tenant_id == TENANT_A,
+                Receivable.sales_document_id == invoice_id,
+            )
+        )
+        assert receivable is not None
+        assert receivable.status == "VOID"
+
+        # El recordatorio pendiente quedo cancelado (SKIPPED), no enviado.
+        reminder_statuses = list(
+            await session.scalars(
+                select(CollectionReminder.status).where(
+                    CollectionReminder.tenant_id == TENANT_A,
+                    CollectionReminder.receivable_id == receivable.id,
+                )
+            )
+        )
+        assert reminder_statuses == ["SKIPPED"]
+
+        audited = await session.scalar(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(
+                AuditEvent.tenant_id == TENANT_A,
+                AuditEvent.entity_id == str(receivable.id),
+                AuditEvent.action == "receivable.voided",
+            )
+        )
+    assert audited == 1
+
+    # Ya no aparece como cobrable ni en el aging / cartera vencida.
+    after = await client.get("/api/v1/receivables", headers=auth(token_invoices))
+    assert after.status_code == 200, after.text
+    assert [item["status"] for item in after.json()] == ["VOIDED"]
+
+    aging = await client.get("/api/v1/receivables/aging", headers=auth(token_invoices))
+    assert aging.status_code == 200, aging.text
+    total_aging = sum(Decimal(bucket["total"]) for bucket in aging.json()["buckets"])
+    assert total_aging == Decimal("0.00")
