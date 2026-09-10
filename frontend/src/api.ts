@@ -215,6 +215,8 @@ export type SalesDocument = {
   accessKey: string | null
   authorizationNumber?: string | null
   authorizedAt?: string | null
+  voidedAt?: string | null
+  voidedReason?: string | null
   subtotal: string
   tax: string
   total: string

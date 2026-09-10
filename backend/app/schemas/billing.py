@@ -105,6 +105,17 @@ class SalesDocumentArchiveInput(APIModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class SalesDocumentVoidInput(APIModel):
+    """Motivo obligatorio para reconciliar una anulacion ya hecha en el SRI.
+
+    La anulacion es un acto externo del contribuyente en el portal del SRI
+    sobre un comprobante ya AUTHORIZED; este motivo documenta por que se
+    refleja aqui (numero de tramite, resolucion, etc.) y queda auditado.
+    """
+
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class SalesDocumentLineRead(APIModel):
     id: uuid.UUID
     line_number: int
@@ -162,6 +173,8 @@ class SalesDocumentRead(APIModel):
     reason: str | None
     authorization_number: str | None = None
     authorized_at: datetime | None = None
+    voided_at: datetime | None = None
+    voided_reason: str | None = None
     sri_transmission: SRITransmissionRead | None = None
     collection_status: Literal["OPEN", "PARTIAL", "OVERDUE", "SETTLED", "VOIDED"] | None = None
     retention_total: Decimal = Decimal("0.00")

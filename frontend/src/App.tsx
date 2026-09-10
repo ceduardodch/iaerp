@@ -2204,6 +2204,8 @@ function InvoiceDetail({
   const [sentEmail, setSentEmail] = useState<InvoiceEmailResult | null>(null)
   const [archiving, setArchiving] = useState(false)
   const [archiveReason, setArchiveReason] = useState('Prueba de emisión SRI; comprobante no autorizado.')
+  const [voiding, setVoiding] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
   const invoiceQuery = useQuery({
     queryKey: ['invoices', invoiceId],
     queryFn: () => apiRequest<SalesDocument>(token, `/invoices/${invoiceId}`),
@@ -2275,6 +2277,20 @@ function InvoiceDetail({
     },
   })
 
+  const voidInvoice = useMutation({
+    mutationFn: () =>
+      apiRequest<SalesDocument>(token, `/invoices/${invoiceId}/void`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey('web-void-invoice') },
+        body: JSON.stringify({ reason: voidReason.trim() }),
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['invoices', invoiceId], updated)
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      setVoiding(false)
+    },
+  })
+
   const emailInvoice = useMutation({
     mutationFn: () => apiRequest<InvoiceEmailResult>(token, `/invoices/${invoiceId}/email`, {
       method: 'POST',
@@ -2329,6 +2345,9 @@ function InvoiceDetail({
   const transmission = invoice.sriTransmission
   const canIssue = invoice.status === 'DRAFT'
   const canCreditNote = invoice.type === 'INVOICE' && invoice.status === 'AUTHORIZED'
+  // Anular = reflejar una anulacion ya hecha en el portal del SRI sobre un
+  // comprobante autorizado. No transmite nada; solo reconcilia el estado.
+  const canVoid = invoice.status === 'AUTHORIZED'
   const taxBreakdown = Array.from(
     invoice.lines.reduce((groups, line) => {
       const current = groups.get(line.taxRate) ?? { base: 0, tax: 0 }
@@ -2348,6 +2367,12 @@ function InvoiceDetail({
         <p className="form-warning" role="status">
           Venta histórica respaldada por este RIDE PDF. El XML no está disponible y el
           documento no entra al ATS ni a Cartera.
+        </p>
+      ) : null}
+      {invoice.status === 'VOIDED' ? (
+        <p className="form-warning" role="status">
+          Comprobante anulado en el SRI y reconciliado en IAERP. El XML, RIDE y la
+          respuesta del SRI se conservan.{invoice.voidedReason ? ` Motivo: ${invoice.voidedReason}` : ''}
         </p>
       ) : null}
       <dl className="invoice-summary invoice-metadata">
@@ -2498,6 +2523,34 @@ function InvoiceDetail({
         <PdfPreviewModal title={invoice.status === 'HISTORICAL_ISSUED' ? 'RIDE histórico' : 'RIDE autorizado'} artifact={ridePreview} onClose={() => setRidePreview(null)} />
       ) : null}
 
+      {voiding ? (
+        <ErpModal title={`Marcar como anulada la factura ${invoice.sequential}`} size="sm" onClose={() => setVoiding(false)}>
+          <p className="fine-print">
+            Usa esto cuando el comprobante ya fue anulado en el portal del SRI. IAERP
+            reflejará el estado <strong>Anulada</strong> conservando XML, RIDE, la respuesta
+            del SRI y la auditoría. No se transmite nada al SRI.
+          </p>
+          <label>
+            Motivo de la anulación
+            <textarea
+              value={voidReason}
+              onChange={(event) => setVoidReason(event.target.value)}
+              placeholder="Número de trámite o resolución del SRI, y el motivo."
+              minLength={3}
+              maxLength={500}
+              required
+            />
+          </label>
+          {voidInvoice.error ? <p className="form-error" role="alert">{voidInvoice.error.message}</p> : null}
+          <div className="erp-form-actions">
+            <ErpButton variant="secondary" onClick={() => setVoiding(false)} disabled={voidInvoice.isPending}>Cancelar</ErpButton>
+            <ErpButton variant="danger" onClick={() => voidInvoice.mutate()} disabled={voidInvoice.isPending || voidReason.trim().length < 3}>
+              {voidInvoice.isPending ? 'Anulando…' : 'Marcar como anulada'}
+            </ErpButton>
+          </div>
+        </ErpModal>
+      ) : null}
+
       {archiving ? (
         <ErpModal title="Archivar comprobante de prueba" size="sm" onClose={() => setArchiving(false)}>
           <p className="fine-print">Se ocultará de Facturas y Cartera. El XML, RIDE, respuesta SRI y auditoría se conservarán.</p>
@@ -2600,6 +2653,9 @@ function InvoiceDetail({
         ) : null}
         {invoice.status === 'REJECTED' || invoice.status === 'NOT_AUTHORIZED' ? (
           <ErpButton variant="danger" onClick={() => setArchiving(true)}>Archivar</ErpButton>
+        ) : null}
+        {canVoid ? (
+          <ErpButton variant="danger" onClick={() => setVoiding(true)}>Marcar como anulada</ErpButton>
         ) : null}
         {invoice.status !== 'HISTORICAL_ISSUED' ? (
           <ErpButton

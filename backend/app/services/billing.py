@@ -1000,6 +1000,42 @@ async def archive_failed_sales_document(
     return document
 
 
+async def void_authorized_sales_document(
+    session: AsyncSession,
+    context: AuthContext,
+    document_id: uuid.UUID,
+    *,
+    reason: str,
+) -> SalesDocument:
+    """Reconcilia una anulacion hecha en el SRI: AUTHORIZED -> VOIDED.
+
+    La anulacion es un acto externo del contribuyente en el portal del SRI
+    sobre un comprobante ya autorizado; aqui no se transmite nada ni se toca
+    la evidencia (XML firmado, RIDE, rastro de transmision). Solo se refleja
+    el estado para que IAERP coincida con el SRI. El motivo, la clave de
+    acceso, el actor y el momento quedan auditados por el ``execute_idempotent``
+    que envuelve al endpoint.
+    """
+
+    document = await get_sales_document(session, context, document_id)
+    if document.status != "AUTHORIZED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Only an authorized sales document can be voided, "
+                f"current status is {document.status}"
+            ),
+        )
+    if document.voided_at is not None:
+        raise HTTPException(status_code=409, detail="Sales document is already voided")
+
+    document.status = "VOIDED"
+    document.voided_at = datetime.now(UTC)
+    document.voided_reason = reason.strip()
+    await session.flush()
+    return document
+
+
 async def list_sales_document_lines(
     session: AsyncSession,
     context: AuthContext,
@@ -1161,6 +1197,8 @@ async def to_sales_document_read(
         reason=document.reason,
         authorization_number=document.authorization_number,
         authorized_at=document.authorized_at,
+        voided_at=document.voided_at,
+        voided_reason=document.voided_reason,
         sri_transmission=sri_transmission,
         collection_status=_collection_status_from_receivable(
             receivable.status if receivable is not None else None
