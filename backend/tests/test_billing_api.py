@@ -936,3 +936,142 @@ async def test_invoice_listing_filters_by_customer(client):
     )
     assert ajenas.status_code == 200, ajenas.text
     assert ajenas.json() == []
+
+
+async def _create_authorized_invoice_for_void(client, *, key_prefix: str) -> tuple[uuid.UUID, str]:
+    """Crea una factura y la fuerza a AUTHORIZED en la BD (sin transmitir).
+
+    Suficiente para las pruebas de reconciliacion de anulacion: no necesitan
+    el ciclo SRI real, solo un documento en el estado AUTHORIZED del que
+    partir, igual que ``test_archive_refuses_an_authorized_invoice``.
+    """
+
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(client, token, key_prefix=key_prefix)
+    token_invoices = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["invoices:write", "invoices:read"]
+    )
+    created = await client.post(
+        "/api/v1/invoices",
+        headers=auth(token_invoices, f"{key_prefix}-draft-idempotency-key"),
+        json=_invoice_payload(masters),
+    )
+    assert created.status_code == 201, created.text
+    invoice_id = uuid.UUID(created.json()["id"])
+
+    async with SessionFactory() as session:
+        document = await session.get(SalesDocument, invoice_id)
+        assert document is not None
+        document.status = "AUTHORIZED"
+        document.access_key = "1" * 49
+        await session.commit()
+
+    return invoice_id, token_invoices
+
+
+async def test_void_reconciles_an_authorized_invoice_and_audits_it(client):
+    """Reflejar una anulacion del SRI: AUTHORIZED -> VOIDED, con auditoria."""
+
+    invoice_id, token_invoices = await _create_authorized_invoice_for_void(
+        client, key_prefix="void-ok"
+    )
+
+    reason = "Anulado en el SRI, tramite No.000-2026; se reemitira corregido."
+    response = await client.post(
+        f"/api/v1/invoices/{invoice_id}/void",
+        headers=auth(token_invoices, "void-ok-request-idempotency-key"),
+        json={"reason": reason},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "VOIDED"
+    assert body["voidedReason"] == reason
+    assert body["voidedAt"] is not None
+
+    # La evidencia fiscal no se toca: la clave de acceso sigue ahi.
+    assert body["accessKey"] == "1" * 49
+
+    async with SessionFactory() as session:
+        audited = await session.scalar(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(
+                AuditEvent.tenant_id == TENANT_A,
+                AuditEvent.entity_id == str(invoice_id),
+                AuditEvent.action == "invoice.voided",
+            )
+        )
+    assert audited == 1
+
+
+async def test_void_refuses_a_document_that_is_not_authorized(client):
+    """Solo un comprobante AUTHORIZED puede anularse; un DRAFT devuelve 409."""
+
+    token = await token_for(
+        client,
+        "a@iaerp.local",
+        TENANT_A,
+        ["organization:write", "organization:read", "parties:write", "products:write"],
+    )
+    masters = await _setup_billing_masters(client, token, key_prefix="void-draft")
+    token_invoices = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["invoices:write", "invoices:read"]
+    )
+    created = await client.post(
+        "/api/v1/invoices",
+        headers=auth(token_invoices, "void-draft-draft-idempotency-key"),
+        json=_invoice_payload(masters),
+    )
+    assert created.status_code == 201, created.text
+    invoice_id = created.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/invoices/{invoice_id}/void",
+        headers=auth(token_invoices, "void-draft-request-idempotency-key"),
+        json={"reason": "No deberia poder anularse un borrador."},
+    )
+    assert response.status_code == 409, response.text
+    assert "authorized" in response.text.lower()
+    assert "DRAFT" in response.text
+
+
+async def test_void_is_idempotent_for_the_same_key(client):
+    """Repetir la misma Idempotency-Key devuelve el mismo resultado, sin doble anulacion."""
+
+    invoice_id, token_invoices = await _create_authorized_invoice_for_void(
+        client, key_prefix="void-idem"
+    )
+
+    payload = {"reason": "Anulado en el SRI; reconciliacion unica."}
+    first = await client.post(
+        f"/api/v1/invoices/{invoice_id}/void",
+        headers=auth(token_invoices, "void-idem-request-idempotency-key"),
+        json=payload,
+    )
+    assert first.status_code == 200, first.text
+
+    second = await client.post(
+        f"/api/v1/invoices/{invoice_id}/void",
+        headers=auth(token_invoices, "void-idem-request-idempotency-key"),
+        json=payload,
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["status"] == "VOIDED"
+
+    async with SessionFactory() as session:
+        audited = await session.scalar(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(
+                AuditEvent.tenant_id == TENANT_A,
+                AuditEvent.entity_id == str(invoice_id),
+                AuditEvent.action == "invoice.voided",
+            )
+        )
+    # Una sola anulacion auditada pese a las dos llamadas.
+    assert audited == 1

@@ -89,6 +89,13 @@ class SalesDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base
     # su evidencia, XML/RIDE ni rastro de transmision con el SRI.
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     archived_reason: Mapped[str | None] = mapped_column(String(500))
+    # Anulacion: el comprobante se anulo directamente en el portal del SRI
+    # (acto externo sobre un documento ya AUTHORIZED) y aqui solo se reconcilia
+    # ese estado para que IAERP coincida. No borra XML/RIDE ni el rastro de
+    # transmision; el estado del documento pasa a ``VOIDED``. La clave de
+    # acceso, actor y momento quedan ademas en el AuditEvent de la operacion.
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    voided_reason: Mapped[str | None] = mapped_column(String(500))
     # Respaldo comercial: nunca sustituye al XML/RIDE ni cambia su ciclo SRI.
     commercial_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSON)
     collection_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

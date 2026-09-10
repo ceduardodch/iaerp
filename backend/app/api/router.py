@@ -35,6 +35,7 @@ from app.schemas.billing import (
     InvoicePreviewRead,
     SalesDocumentArchiveInput,
     SalesDocumentRead,
+    SalesDocumentVoidInput,
 )
 from app.schemas.legal_commercial import (
     AwsConsumptionCutCreate,
@@ -1703,6 +1704,40 @@ async def post_invoice_archive(
         action="invoice.archived",
         entity_type="sales_document",
         callback=archive,
+    )
+
+
+@router.post("/invoices/{invoice_id}/void", response_model=SalesDocumentRead)
+async def post_invoice_void(
+    invoice_id: uuid.UUID,
+    data: SalesDocumentVoidInput,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:write"))],
+) -> dict[str, object]:
+    """Refleja en IAERP una anulacion ya realizada en el portal del SRI.
+
+    No transmite ni retransmite nada: reconcilia el estado de un comprobante
+    AUTHORIZED a VOIDED conservando XML/RIDE y el rastro de transmision. La
+    clave de acceso y el motivo quedan auditados.
+    """
+
+    async def void() -> tuple[str, dict[str, object]]:
+        entity = await billing.void_authorized_sales_document(
+            session, context, invoice_id, reason=data.reason
+        )
+        response_model = await billing.to_sales_document_read(session, context, entity)
+        return str(entity.id), response_model.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="invoices.void",
+        idempotency_key=idempotency_key,
+        request_payload={"invoice_id": str(invoice_id), "reason": data.reason},
+        action="invoice.voided",
+        entity_type="sales_document",
+        callback=void,
     )
 
 
