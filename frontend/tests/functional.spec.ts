@@ -63,17 +63,22 @@ test('creates a product through the real API and refreshes the catalog', async (
   page,
 }) => {
   const suffix = crypto.randomUUID().slice(0, 8)
-  const productName = `Producto E2E ${suffix}`
+  // Un servicio contratado por concurso público se nombra con el objeto, la
+  // entidad y el número de proceso; el caso real que falló medía 268
+  // caracteres y no cabía en la columna de 200.
+  const productName = `CONTRATO DE ENCARGO DE TRATAMIENTO DE DATOS PERSONALES RELATIVO A LA RENOVACION DE UN SERVICIO GESTIONADO DESTINADO A LA PROTECCION DE LA INFRAESTRUCTURA DE UNA ENTIDAD DEMO E2E ${suffix} No.000-CM-2026 DEL (1 JULIO 2026 AL 31 JULIO 2026)`
+  expect(productName.length).toBeGreaterThan(200)
 
   await login(page, tenantNorte)
   await navigateToSection(page, 'Catálogos')
   await page.getByRole('button', { name: 'Nuevo producto' }).click()
-  // `ProductCreate` acota nombre y código (200 y 80 caracteres): el formulario
-  // tiene que frenarlos aquí en vez de dejar que el 422 de Pydantic llegue
+  // El tope real es el de `ProductCreate` (300 para nombre, 80 para código), y
+  // 300 es a su vez el de `detalle/descripcion` en el esquema SRI. El
+  // formulario lo frena aquí en vez de dejar que el 422 de Pydantic llegue
   // crudo a la pantalla ("name: String should have at most 200 characters").
   const nameField = page.getByLabel('Nombre')
-  await nameField.fill('x'.repeat(260))
-  await expect(nameField).toHaveValue('x'.repeat(200))
+  await nameField.fill('x'.repeat(360))
+  await expect(nameField).toHaveValue('x'.repeat(300))
   const codeField = page.getByLabel('Código interno')
   await codeField.fill('C'.repeat(120))
   await expect(codeField).toHaveValue('C'.repeat(80))

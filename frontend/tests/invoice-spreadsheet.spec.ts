@@ -228,12 +228,12 @@ test('creates and adds a product without losing the invoice draft', async ({ pag
   const issueDate = await page.getByLabel('Fecha de emisión').inputValue()
   await page.getByRole('button', { name: 'Crear producto o servicio' }).click()
   const dialog = page.getByRole('dialog', { name: 'Crear producto o servicio' })
-  // `ProductCreate` acota el nombre en 200 caracteres: el modal tiene que
-  // frenarlo aquí en vez de dejar que el 422 de Pydantic llegue crudo a la
-  // pantalla ("name: String should have at most 200 characters").
+  // `ProductCreate` acota el nombre en 300 caracteres, el mismo tope que
+  // `detalle/descripcion` en el esquema SRI: el modal tiene que frenarlo aquí
+  // en vez de dejar que el 422 de Pydantic llegue crudo a la pantalla.
   const nameField = dialog.getByLabel('Nombre')
-  await nameField.fill('x'.repeat(260))
-  await expect(nameField).toHaveValue('x'.repeat(200))
+  await nameField.fill('x'.repeat(360))
+  await expect(nameField).toHaveValue('x'.repeat(300))
   await nameField.fill('Servicio rápido')
   await dialog.getByLabel('Precio unitario').fill('25')
   const results = await new AxeBuilder({ page }).include('.erp-modal').analyze()
