@@ -1048,12 +1048,18 @@ async def void_authorized_sales_document(
         document.status = "VOIDED"
         document.voided_at = datetime.now(UTC)
         document.voided_reason = reason.strip()
-        await session.flush()
     elif document.voided_reason is None:
         # Documento marcado VOIDED por una version anterior sin motivo
         # persistido: se completa el motivo sin cambiar el estado ni la fecha.
         document.voided_reason = reason.strip()
-        await session.flush()
+
+    # Una factura anulada tambien se retira del listado operativo (mismo
+    # ``archived_at`` que usa el archivado de rechazos): asi desaparece de
+    # Facturas ademas de Cartera. Conserva XML, RIDE y auditoria. Idempotente.
+    if document.archived_at is None:
+        document.archived_at = datetime.now(UTC)
+        document.archived_reason = f"Anulada en el SRI: {reason.strip()}"[:500]
+    await session.flush()
 
     # Import local para evitar un ciclo billing <-> receivables a nivel modulo.
     # Idempotente: si la cartera ya esta VOID (o no existe), no hace nada.

@@ -2348,11 +2348,12 @@ function InvoiceDetail({
   // Anular = reflejar una anulacion ya hecha en el portal del SRI sobre un
   // comprobante autorizado. No transmite nada; solo reconcilia el estado.
   const canVoid = invoice.status === 'AUTHORIZED'
-  // Factura ya anulada cuya cartera quedo sin anular (anulada antes de que
-  // existiera la reconciliacion de cartera): permite corregirla desde el mismo
-  // boton, sin volver a cambiar el documento.
+  // Factura YA anulada cuya cartera todavia no quedo anulada. Tratar null como
+  // "necesita reconciliar" es clave: las facturas anuladas antes de esta
+  // logica no traen collectionStatus y hasta ahora se quedaban sin ninguna
+  // accion. Es idempotente en el backend, asi que ofrecerlo de mas es seguro.
   const needsCollectionReconcile =
-    invoice.status === 'VOIDED' && invoice.collectionStatus != null && invoice.collectionStatus !== 'VOIDED'
+    invoice.status === 'VOIDED' && invoice.collectionStatus !== 'VOIDED'
   const taxBreakdown = Array.from(
     invoice.lines.reduce((groups, line) => {
       const current = groups.get(line.taxRate) ?? { base: 0, tax: 0 }

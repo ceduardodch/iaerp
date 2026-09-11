@@ -1270,3 +1270,34 @@ async def test_void_refuses_a_draft_document(client):
     )
     assert response.status_code == 409, response.text
     assert "DRAFT" in response.text
+
+
+async def test_void_archives_the_invoice_hiding_it_from_the_listing(client):
+    """Anular tambien archiva la factura: desaparece del listado de Facturas."""
+
+    invoice_id, token_invoices = await _create_authorized_invoice_for_void(
+        client, key_prefix="void-archiva"
+    )
+
+    # Antes de anular la factura aparece en el listado.
+    before = await client.get("/api/v1/invoices", headers=auth(token_invoices))
+    assert before.status_code == 200, before.text
+    assert str(invoice_id) in {item["id"] for item in before.json()}
+
+    response = await client.post(
+        f"/api/v1/invoices/{invoice_id}/void",
+        headers=auth(token_invoices, "void-archiva-request-idempotency-key"),
+        json={"reason": "Anulado en el SRI; retirar de operacion."},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "VOIDED"
+
+    # Ya no aparece en el listado operativo (queda archivada).
+    after = await client.get("/api/v1/invoices", headers=auth(token_invoices))
+    assert after.status_code == 200, after.text
+    assert str(invoice_id) not in {item["id"] for item in after.json()}
+
+    # Pero se puede abrir directo por id (la evidencia fiscal se conserva).
+    detail = await client.get(f"/api/v1/invoices/{invoice_id}", headers=auth(token_invoices))
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["status"] == "VOIDED"
