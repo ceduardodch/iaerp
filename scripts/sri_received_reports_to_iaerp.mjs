@@ -277,7 +277,7 @@ async function getSriPortalCredentials(token) {
     throw new Error(`IAERP_SRI_CREDENTIALS_FAILED_${response.status}`);
   }
   const payload = await response.json();
-  if (!/^\d{13}$/.test(payload.ruc) || typeof payload.password !== "string" || !payload.password) {
+  if (!/^\d{13}$/.test(payload.ruc) || typeof payload.password !== "string" || !payload.password) { // pragma: allowlist secret
     throw new Error("IAERP_SRI_CREDENTIALS_INVALID");
   }
   return { ruc: payload.ruc, password: payload.password };

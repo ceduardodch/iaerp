@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Configuración de acceso SRI por empresa preparada en `release` (sin publicar):
+- Configuración de acceso SRI por empresa enviada a `release`, en validación CI antes de `main`:
   Empresa → Configuración permite guardar RUC y clave del portal cifrados por
   tenant; la clave no vuelve a la web. El importador local obtiene ese acceso
   solo con su cuenta técnica `tax:write`, audita la lectura y conserva en el

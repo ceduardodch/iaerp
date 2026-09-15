@@ -136,7 +136,7 @@ async def test_sri_portal_credentials_are_encrypted_and_not_exposed_to_users(cli
     saved = await client.put(
         "/api/v1/organization/sri-portal-credentials",
         headers=_headers(token, "sri-portal-credentials-key"),
-        json={"ruc": "1793113192001", "password": "portal-secret"},
+        json={"ruc": "1793113192001", "password": "portal-secret"},  # pragma: allowlist secret
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["sriPortalConfigured"] is True
@@ -152,7 +152,7 @@ async def test_sri_portal_credentials_are_encrypted_and_not_exposed_to_users(cli
     async with SessionFactory() as session:
         entity = await session.get(TenantFiscalSettings, TENANT_A)
         assert entity is not None
-        assert entity.sri_portal_password_encrypted != "portal-secret"
+        assert entity.sri_portal_password_encrypted != "portal-secret"  # pragma: allowlist secret
         automation_context = AuthContext(
             actor_id="service-account-id",
             actor_type="SERVICE_ACCOUNT",
@@ -165,7 +165,7 @@ async def test_sri_portal_credentials_are_encrypted_and_not_exposed_to_users(cli
             session, automation_context
         )
         assert credentials.ruc == "1793113192001"
-        assert credentials.password == "portal-secret"
+        assert credentials.password == "portal-secret"  # pragma: allowlist secret
 
 
 @pytest.mark.asyncio
