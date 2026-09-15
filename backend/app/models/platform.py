@@ -53,6 +53,11 @@ class TenantFiscalSettings(TimestampMixin, Base):
     certificate_valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     certificate_valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     certificate_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sri_portal_ruc: Mapped[str | None] = mapped_column(String(13))
+    sri_portal_password_encrypted: Mapped[str | None] = mapped_column(Text)
+    sri_portal_credentials_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     ride_logo_object_key: Mapped[str | None] = mapped_column(String(500))
     ride_logo_sha256: Mapped[str | None] = mapped_column(String(64))
     invoice_email_subject: Mapped[str] = mapped_column(

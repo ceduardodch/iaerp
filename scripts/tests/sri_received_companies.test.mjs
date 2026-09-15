@@ -35,7 +35,6 @@ test("selects one company by id", () => {
 test("uses separate secret services and browser profiles", () => {
   for (const field of [
     "id",
-    "sriKeychainService",
     "iaerpKeychainService",
     "browserProfile",
   ]) {
@@ -43,7 +42,8 @@ test("uses separate secret services and browser profiles", () => {
     assert.equal(new Set(values).size, values.length, `${field} must be globally unique`);
   }
   for (const company of SRI_RECEIVED_COMPANIES) {
-    assert.equal(company.sriUsernameAccount, "ruc");
+    assert.equal("sriKeychainService" in company, false);
+    assert.equal("sriUsernameAccount" in company, false);
   }
 });
 

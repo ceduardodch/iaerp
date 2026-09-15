@@ -7,6 +7,13 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Configuración de acceso SRI por empresa preparada en `release` (sin publicar):
+  Empresa → Configuración permite guardar RUC y clave del portal cifrados por
+  tenant; la clave no vuelve a la web. El importador local obtiene ese acceso
+  solo con su cuenta técnica `tax:write`, audita la lectura y conserva en el
+  Llavero únicamente las credenciales técnicas IAERP. Incluye migración,
+  runbook y pruebas; falta commit, CI y promoción autorizada.
+
 - Formulario 104 de compras corregido: 2026-09-02 `America/Guayaquil`.
   Los campos 500/510 y 564 pasan al bloque para copiar con confirmacion del
   criterio tributario; 531/541 muestran compras no objeto de IVA y 532/542

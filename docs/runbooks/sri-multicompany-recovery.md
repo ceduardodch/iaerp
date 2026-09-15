@@ -8,35 +8,29 @@ de entrar. No guardar RUC, contraseñas, `client_id`, `client_secret`, cookies n
 reportes fiscales en Git, `.env`, tickets, capturas o chats.
 
 La fuente de verdad de las empresas está en
-`scripts/sri_received_companies.mjs`. Cada empresa debe tener cuatro secretos y
-un perfil de navegador propios. El token de la cuenta IAERP fija el tenant; el
-script nunca toma el tenant desde el RUC escrito en el portal.
+`scripts/sri_received_companies.mjs`. Cada empresa mantiene su cuenta técnica
+IAERP y perfil de navegador propios. El RUC y la clave SRI se guardan por
+empresa en **IAERP → Empresa → Configuración → Comprobantes recibidos del SRI**.
+El token de la cuenta IAERP fija el tenant; el script nunca toma el tenant desde
+el RUC escrito en el portal.
 
 ## Mapa de configuración
 
 | Empresa | Servicio del Llavero | Cuenta | Valor guardado |
 | --- | --- | --- | --- |
-| DATA-CLIP | `IAERP SRI Portal` | `ruc` | Usuario RUC del portal |
-| DATA-CLIP | `IAERP SRI Portal` | `password` | Clave del portal |
 | DATA-CLIP | `IAERP SRI Daily Import` | `client_id` | ID de la cuenta IAERP |
 | DATA-CLIP | `IAERP SRI Daily Import` | `client_secret` | Secreto de la cuenta IAERP |
-| BTOB SAS | `IAERP SRI Portal BTOB` | `ruc` | Usuario RUC del portal |
-| BTOB SAS | `IAERP SRI Portal BTOB` | `password` | Clave del portal |
 | BTOB SAS | `IAERP SRI Daily Import BTOB` | `client_id` | ID de la cuenta IAERP |
 | BTOB SAS | `IAERP SRI Daily Import BTOB` | `client_secret` | Secreto de la cuenta IAERP |
-| LEXCODE AUDIT S.A.S. | `IAERP SRI Portal LEXCODE` | `ruc` | Usuario RUC del portal |
-| LEXCODE AUDIT S.A.S. | `IAERP SRI Portal LEXCODE` | `password` | Clave del portal |
 | LEXCODE AUDIT S.A.S. | `IAERP SRI Daily Import LEXCODE` | `client_id` | ID de la cuenta IAERP |
 | LEXCODE AUDIT S.A.S. | `IAERP SRI Daily Import LEXCODE` | `client_secret` | Secreto de la cuenta IAERP |
-| ANA KARINA DIAZ CHAVEZ | `IAERP SRI Portal ANA KARINA` | `ruc` | Usuario RUC del portal |
-| ANA KARINA DIAZ CHAVEZ | `IAERP SRI Portal ANA KARINA` | `password` | Clave del portal |
 | ANA KARINA DIAZ CHAVEZ | `IAERP SRI Daily Import ANA KARINA` | `client_id` | ID de la cuenta IAERP |
 | ANA KARINA DIAZ CHAVEZ | `IAERP SRI Daily Import ANA KARINA` | `client_secret` | Secreto de la cuenta IAERP |
 
 Cada corrida crea un perfil de navegador temporal y lo elimina al terminar.
 No reutiliza sesiones del SRI: siempre inicia con el RUC completo de 13 dígitos
-y la clave del Llavero. Esto evita que el lanzador cierre una pestaña asociada
-a una sesión anterior y mantiene aisladas las empresas.
+y la clave cifrada de la configuración de IAERP. Esto evita que el lanzador
+cierre una pestaña asociada a una sesión anterior y mantiene aisladas las empresas.
 
 La tarea local `SRI recibidos a IAERP` ejecuta todos los días a las 08:00:
 
@@ -47,24 +41,13 @@ node scripts/sri_received_reports_to_iaerp.mjs --all
 ## Cambiar RUC o clave del SRI
 
 1. Pausar `SRI recibidos a IAERP` desde Automations en Codex.
-2. Abrir **Acceso a Llaveros** en el Mac.
-3. Buscar el servicio exacto de la empresa en la tabla anterior.
-4. Editar la entrada `ruc` o `password`. El campo secreto de la entrada `ruc`
-   contiene siempre el RUC completo de 13 dígitos usado como usuario; no crear
-   una cuenta llamada `username` ni sustituirlo por la cédula.
-5. Guardar y cerrar Acceso a Llaveros.
-6. Probar solo esa empresa con el comando de la sección de validación.
-7. Reactivar la tarea únicamente después de una prueba correcta.
-
-Se puede confirmar que una entrada existe sin mostrar su valor:
-
-```bash
-/usr/bin/security find-generic-password -s "IAERP SRI Portal BTOB" -a ruc >/dev/null && echo "RUC configurado"
-/usr/bin/security find-generic-password -s "IAERP SRI Portal BTOB" -a password >/dev/null && echo "Clave configurada"
-```
-
-Cambiar el nombre del servicio o de la cuenta exige actualizar también
-`scripts/sri_received_companies.mjs` y sus pruebas.
+2. Abrir **Empresa → Configuración → Comprobantes recibidos del SRI** en la
+   empresa correcta.
+3. Ingresar el RUC completo de 13 dígitos usado como usuario y su clave. No
+   reemplazar el RUC por la cédula.
+4. Guardar. IAERP cifra la clave y no vuelve a mostrarla.
+5. Probar solo esa empresa con el comando de la sección de validación.
+6. Reactivar la tarea únicamente después de una prueba correcta.
 
 ## Reemitir una cuenta IAERP
 
@@ -91,7 +74,7 @@ auditar la cuenta.
 Primero cerrar la ventana de Chrome abierta por el ejecutor. Si el perfil quedó
 bloqueado o corrupto, renombrar su carpeta exacta a una copia de respaldo desde
 Finder; no borrar toda la carpeta `IAERP`. La siguiente corrida crea un perfil
-nuevo. El script escribe RUC y clave desde el Llavero, así que una sesión previa
+nuevo. El script escribe RUC y clave desde IAERP, así que una sesión previa
 del portal no es requisito.
 
 Mantener un perfil distinto por empresa. Reusar el mismo perfil permite que

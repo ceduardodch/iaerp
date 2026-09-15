@@ -269,6 +269,20 @@ async function preflightTenant(token, expectedRuc) {
   }
 }
 
+async function getSriPortalCredentials(token) {
+  const response = await fetch(`${IAERP_URL}/api/v1/tax/automation/sri-portal-credentials`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`IAERP_SRI_CREDENTIALS_FAILED_${response.status}`);
+  }
+  const payload = await response.json();
+  if (!/^\d{13}$/.test(payload.ruc) || typeof payload.password !== "string" || !payload.password) {
+    throw new Error("IAERP_SRI_CREDENTIALS_INVALID");
+  }
+  return { ruc: payload.ruc, password: payload.password };
+}
+
 async function processReports(token, evidence, period) {
   const setDigest = createHash("sha256")
     .update(evidence.map((item) => item.digest).sort().join(":"))
@@ -301,16 +315,10 @@ async function runCompany(company, period) {
   let token = "";
 
   try {
-    sriCredentials = {
-      ruc: readCompanyKeychain(
-        company.sriKeychainService,
-        company.sriUsernameAccount,
-        company.id,
-      ),
-      password: readCompanyKeychain(company.sriKeychainService, "password", company.id),
-    };
     stage = "iaerp-token";
     token = await getIaerpToken(company);
+    stage = "iaerp-sri-credentials";
+    sriCredentials = await getSriPortalCredentials(token);
     stage = "iaerp-preflight";
     await preflightTenant(token, sriCredentials.ruc);
     stage = "browser";
