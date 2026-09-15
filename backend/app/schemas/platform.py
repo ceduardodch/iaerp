@@ -54,6 +54,21 @@ class FiscalSettingsRead(FiscalSettingsUpdate):
     certificate_valid_from: datetime | None = None
     certificate_valid_to: datetime | None = None
     certificate_uploaded_at: datetime | None = None
+    sri_portal_configured: bool
+    sri_portal_ruc: str | None = Field(default=None, pattern=r"^[0-9]{13}$")
+    sri_portal_credentials_updated_at: datetime | None = None
+
+
+class SriPortalCredentialsUpdate(APIModel):
+    ruc: str = Field(pattern=r"^[0-9]{13}$")
+    password: str = Field(min_length=1, max_length=500)
+
+
+class SriPortalCredentialsAutomationRead(APIModel):
+    """Solo para la cuenta técnica del importador local; nunca para la web."""
+
+    ruc: str
+    password: str
 
 
 class InvoiceEmailTemplateUpdate(APIModel):

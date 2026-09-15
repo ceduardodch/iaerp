@@ -63,7 +63,7 @@ from app.schemas.tax import (
     TaxPeriodStatusUpdate,
     TaxXmlRecoveryJobRead,
 )
-from app.services import analytics, receivables
+from app.services import analytics, fiscal_settings, receivables
 from app.services.tax import annexes as annexes_service
 from app.services.tax import bulk as bulk_service
 from app.services.tax import dossier as dossier_service
@@ -75,7 +75,7 @@ from app.services.tax import periods as periods_service
 from app.services.tax import received_reports as received_reports_service
 from app.services.tax import reporting as reporting_service
 from app.services.tax.formatting import format_amount
-from app.services.unit_of_work import execute_idempotent
+from app.services.unit_of_work import append_audit, execute_idempotent
 
 router = APIRouter(prefix="/tax", tags=["tax"])
 
@@ -430,6 +430,31 @@ async def _tenant_ruc(session: AsyncSession, context: AuthContext) -> str:
     if not ruc:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return str(ruc)
+
+
+@router.get("/automation/sri-portal-credentials", include_in_schema=False)
+async def get_sri_portal_credentials_for_automation(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+) -> dict[str, str]:
+    """Entrega el acceso SRI únicamente a la cuenta técnica local del tenant."""
+    if session.in_transaction():
+        await session.rollback()
+    async with session.begin():
+        credentials = await fiscal_settings.read_sri_portal_credentials_for_automation(
+            session, context
+        )
+        await append_audit(
+            session,
+            context=context,
+            action="tax.sri_portal_credentials.read",
+            entity_type="tenant_fiscal_settings",
+            entity_id=str(context.tenant_id),
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key="automation-sri-portal-credentials-read",
+            details={"source": "local_sri_received_importer"},
+        )
+    return credentials.model_dump()
 
 
 @router.post("/received-reports/preflight", status_code=204)

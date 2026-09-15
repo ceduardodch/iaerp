@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from app.core.auth import AuthContext
 from app.db.session import SessionFactory
 from app.models.platform import TenantFiscalSettings
 from app.services import fiscal_settings
@@ -116,6 +117,9 @@ async def test_update_sri_environment_never_exposes_secret(client) -> None:
         "certificateValidFrom": None,
         "certificateValidTo": None,
         "certificateUploadedAt": None,
+        "sriPortalConfigured": False,
+        "sriPortalRuc": None,
+        "sriPortalCredentialsUpdatedAt": None,
     }
 
     read = await client.get(
@@ -124,6 +128,44 @@ async def test_update_sri_environment_never_exposes_secret(client) -> None:
     )
     assert read.status_code == 200
     assert read.json()["sriEnvironment"] == "2"
+
+
+@pytest.mark.asyncio
+async def test_sri_portal_credentials_are_encrypted_and_not_exposed_to_users(client) -> None:
+    token = await _token(client, ["organization:read", "organization:write", "tax:write"])
+    saved = await client.put(
+        "/api/v1/organization/sri-portal-credentials",
+        headers=_headers(token, "sri-portal-credentials-key"),
+        json={"ruc": "1793113192001", "password": "portal-secret"},  # pragma: allowlist secret
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["sriPortalConfigured"] is True
+    assert saved.json()["sriPortalRuc"] == "1793113192001"
+    assert "portal-secret" not in saved.text
+
+    user_read = await client.get(
+        "/api/v1/tax/automation/sri-portal-credentials",
+        headers=_headers(token),
+    )
+    assert user_read.status_code == 403
+
+    async with SessionFactory() as session:
+        entity = await session.get(TenantFiscalSettings, TENANT_A)
+        assert entity is not None
+        assert entity.sri_portal_password_encrypted != "portal-secret"  # pragma: allowlist secret
+        automation_context = AuthContext(
+            actor_id="service-account-id",
+            actor_type="SERVICE_ACCOUNT",
+            tenant_id=TENANT_A,
+            roles=frozenset({"agent"}),
+            scopes=frozenset({"tax:write"}),
+            token_id="test-token",
+        )
+        credentials = await fiscal_settings.read_sri_portal_credentials_for_automation(
+            session, automation_context
+        )
+        assert credentials.ruc == "1793113192001"
+        assert credentials.password == "portal-secret"  # pragma: allowlist secret
 
 
 @pytest.mark.asyncio

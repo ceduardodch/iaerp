@@ -83,6 +83,7 @@ from app.schemas.platform import (
     ServiceAccountCreate,
     ServiceAccountCreated,
     ServiceAccountRead,
+    SriPortalCredentialsUpdate,
     TenantContextRead,
     TokenResponse,
 )
@@ -398,6 +399,31 @@ async def put_fiscal_settings(
         idempotency_key=idempotency_key,
         request_payload=data.model_dump(mode="json"),
         action="organization.fiscal_settings.updated",
+        entity_type="tenant_fiscal_settings",
+        callback=update,
+    )
+
+
+@router.put("/organization/sri-portal-credentials", response_model=FiscalSettingsRead)
+async def put_sri_portal_credentials(
+    data: SriPortalCredentialsUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("organization:write"))],
+) -> dict[str, object]:
+    """Guarda de forma cifrada el acceso al portal de comprobantes recibidos."""
+
+    async def update() -> tuple[str, dict[str, object]]:
+        response = await fiscal_settings.update_sri_portal_credentials(session, context, data)
+        return str(context.tenant_id), response.model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="organization.sri_portal_credentials.update",
+        idempotency_key=idempotency_key,
+        request_payload={"ruc": data.ruc, "passwordConfigured": True},
+        action="organization.sri_portal_credentials.updated",
         entity_type="tenant_fiscal_settings",
         callback=update,
     )

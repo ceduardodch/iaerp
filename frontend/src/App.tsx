@@ -4420,6 +4420,18 @@ function OrganizationPage({
       queryClient.setQueryData(['organization', 'fiscal-settings'], settings)
     },
   })
+  const saveSriPortalCredentials = useMutation({
+    mutationFn: (data: { ruc: string; password: string }) =>
+      apiRequest<FiscalSettings>(token, '/organization/sri-portal-credentials', {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': idempotencyKey('web-sri-portal-credentials') },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['organization', 'fiscal-settings'], settings)
+      notify('Acceso SRI guardado. La clave quedó cifrada y no se volverá a mostrar.', 'success')
+    },
+  })
   const uploadCertificate = useMutation({
     mutationFn: (formData: FormData) =>
       apiRequest<FiscalSettings>(token, '/organization/signing-certificate', {
@@ -4451,6 +4463,16 @@ function OrganizationPage({
   function submitRideLogo(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     uploadRideLogo.mutate(new FormData(event.currentTarget))
+  }
+
+  function submitSriPortalCredentials(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    saveSriPortalCredentials.mutate(
+      { ruc: String(data.get('ruc')), password: String(data.get('password')) },
+      { onSuccess: () => form.reset() },
+    )
   }
 
   function submitProfile(event: FormEvent<HTMLFormElement>) {
@@ -4588,6 +4610,24 @@ function OrganizationPage({
               {updateEnvironment.error ? <p className="form-error" role="alert">{updateEnvironment.error.message}</p> : null}
             </div>
           ) : null}
+        </ErpPanel>
+        <ErpPanel
+          title="Comprobantes recibidos del SRI"
+          actions={fiscal?.sriPortalConfigured ? <ErpStatusBadge tone="success">Configurado</ErpStatusBadge> : <ErpStatusBadge tone="warning">Pendiente</ErpStatusBadge>}
+          className="fiscal-settings-panel"
+        >
+          <div className="fiscal-panel-body">
+            <p className="fiscal-panel-copy">IAERP usa este acceso solo para descargar los comprobantes recibidos de esta empresa. La clave queda cifrada y no se muestra después de guardarla.</p>
+            <form className="certificate-form" onSubmit={submitSriPortalCredentials}>
+              <label>RUC de acceso al SRI<input name="ruc" inputMode="numeric" pattern="[0-9]{13}" defaultValue={fiscal?.sriPortalRuc ?? context.ruc} required /></label>
+              <label>{fiscal?.sriPortalConfigured ? 'Nueva clave SRI' : 'Clave SRI'}<input name="password" type="password" autoComplete="new-password" required /></label>
+              {fiscal?.sriPortalCredentialsUpdatedAt ? <p className="fiscal-panel-copy">Actualizada el {new Date(fiscal.sriPortalCredentialsUpdatedAt).toLocaleDateString('es-EC')}.</p> : null}
+              {saveSriPortalCredentials.error ? <p className="form-error" role="alert">{saveSriPortalCredentials.error.message}</p> : null}
+              <ErpButton variant="primary" type="submit" disabled={saveSriPortalCredentials.isPending || !context.scopes.includes('organization:write')}>
+                {saveSriPortalCredentials.isPending ? 'Guardando…' : fiscal?.sriPortalConfigured ? 'Actualizar acceso SRI' : 'Guardar acceso SRI'}
+              </ErpButton>
+            </form>
+          </div>
         </ErpPanel>
         <ErpPanel title="Proveedor de facturación electrónica" className="fiscal-settings-panel">
           {fiscal ? (

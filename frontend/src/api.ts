@@ -324,6 +324,9 @@ export type FiscalSettings = {
   certificateValidFrom?: string | null
   certificateValidTo?: string | null
   certificateUploadedAt?: string | null
+  sriPortalConfigured: boolean
+  sriPortalRuc?: string | null
+  sriPortalCredentialsUpdatedAt?: string | null
 }
 
 export type AccountItemStatus = 'OPEN' | 'PARTIAL' | 'OVERDUE' | 'SETTLED' | 'VOIDED'

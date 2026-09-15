@@ -20,6 +20,8 @@ from app.schemas.platform import (
     FiscalSettingsUpdate,
     InvoiceEmailTemplateRead,
     InvoiceEmailTemplateUpdate,
+    SriPortalCredentialsAutomationRead,
+    SriPortalCredentialsUpdate,
 )
 from app.services import storage
 
@@ -91,6 +93,11 @@ def to_read(entity: TenantFiscalSettings) -> FiscalSettingsRead:
         certificate_valid_from=entity.certificate_valid_from,
         certificate_valid_to=entity.certificate_valid_to,
         certificate_uploaded_at=entity.certificate_uploaded_at,
+        sri_portal_configured=bool(
+            entity.sri_portal_ruc and entity.sri_portal_password_encrypted
+        ),
+        sri_portal_ruc=entity.sri_portal_ruc,
+        sri_portal_credentials_updated_at=entity.sri_portal_credentials_updated_at,
     )
 
 
@@ -110,6 +117,43 @@ async def update_settings(
     entity.sri_environment = data.sri_environment
     await session.flush()
     return to_read(entity)
+
+
+async def update_sri_portal_credentials(
+    session: AsyncSession,
+    context: AuthContext,
+    data: SriPortalCredentialsUpdate,
+) -> FiscalSettingsRead:
+    """Guarda la clave de acceso al portal, sin incluirla nunca en una respuesta web."""
+    entity = await get_or_create(session, context.tenant_id)
+    entity.sri_portal_ruc = data.ruc
+    entity.sri_portal_password_encrypted = encrypt_secret(data.password)
+    entity.sri_portal_credentials_updated_at = datetime.now(UTC)
+    await session.flush()
+    return to_read(entity)
+
+
+async def read_sri_portal_credentials_for_automation(
+    session: AsyncSession,
+    context: AuthContext,
+) -> SriPortalCredentialsAutomationRead:
+    """Entrega el secreto solo al importador autenticado con cuenta de servicio."""
+    if context.actor_type != "SERVICE_ACCOUNT":
+        raise HTTPException(
+            status_code=403,
+            detail="Only a service account may read SRI credentials",
+        )
+    entity = await session.get(TenantFiscalSettings, context.tenant_id)
+    if (
+        entity is None
+        or not entity.sri_portal_ruc
+        or not entity.sri_portal_password_encrypted
+    ):
+        raise HTTPException(status_code=409, detail="SRI portal credentials are not configured")
+    return SriPortalCredentialsAutomationRead(
+        ruc=entity.sri_portal_ruc,
+        password=decrypt_secret(entity.sri_portal_password_encrypted),
+    )
 
 
 def invoice_email_template_read(entity: TenantFiscalSettings) -> InvoiceEmailTemplateRead:
@@ -255,7 +299,9 @@ __all__ = [
     "load_tenant_signing_credentials",
     "load_ride_logo",
     "read_settings",
+    "read_sri_portal_credentials_for_automation",
     "to_read",
+    "update_sri_portal_credentials",
     "update_settings",
     "upload_ride_logo",
     "upload_signing_certificate",
