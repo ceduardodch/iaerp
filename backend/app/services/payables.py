@@ -943,6 +943,11 @@ async def sync_fiscal_document(
         existing.document_number = _document_number(document)
         existing.evidence_status = "PRELIMINARY" if document.is_preliminary else "FISCAL_XML"
         return existing
+    # El comprobante fiscal se conserva incluso si no genera una deuda.
+    # CxP y sus cuotas exigen importes positivos; crear una deuda en cero
+    # revierte todo el lote recibido, incluidos los comprobantes válidos.
+    if document.total <= Decimal("0.00"):
+        return None
     manual_matches = list(
         await session.scalars(
             select(Payable).where(
