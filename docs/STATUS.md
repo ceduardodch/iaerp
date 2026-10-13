@@ -7,6 +7,18 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Recuperación de septiembre revisada el 2026-10-13: el lote de recibidos
+  falla tanto por REST mensual como por carga desde pantalla. Los logs de
+  API/PostgreSQL confirman una violación de `payables_total_positive`: un
+  comprobante de importe cero intenta crear una deuda y revierte el lote.
+  Correctivo local: conservar el documento fiscal, pero no crear una nueva
+  cuenta por pagar ni cuotas sin importe positivo. Seis casos sintéticos
+  cubren factura, liquidación y nota de débito, ambos endpoints, repetición
+  sin duplicados y ausencia de escrituras en otro tenant. Las 30 pruebas de
+  carga mensual/masiva pasan. Falta revisión independiente, autorización de
+  promoción y verificación real del lote y de su recuperación XML; septiembre
+  aún no se considera completo ni declarado.
+
 - Configuración de acceso SRI por empresa enviada a `release`, en validación CI antes de `main`:
   Empresa → Configuración permite guardar RUC y clave del portal cifrados por
   tenant; la clave no vuelve a la web. El importador local obtiene ese acceso
