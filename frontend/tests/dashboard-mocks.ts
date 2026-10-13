@@ -13,6 +13,9 @@ import type { Page } from '@playwright/test'
  * consulta que agregue el tablero se añade aquí una vez y no en nueve specs.
  */
 export async function mockDashboardEndpoints(page: Page): Promise<void> {
+  await page.route('**/api/v1/receivables/reconcile-retentions', (route) =>
+    route.fulfill({ json: { appliedRetentions: 0, pendingRetentions: 0, notes: [] } }),
+  )
   await page.route('**/api/v1/receivables/aging**', (route) =>
     route.fulfill({
       json: {

@@ -301,6 +301,10 @@ async def upsert_parsed_document(
     await _resolve_related_access_key(session, context, document=document)
     await payables.sync_fiscal_document(session, context, document=document)
     await _sync_related_credit_notes(session, context, source=document)
+    if document.doc_type == "RETENCION" and document.direction == "RECIBIDO":
+        from app.services.tax.receivable_retentions import sync_ingested_retention
+
+        await sync_ingested_retention(session, context, document=document, parsed=parsed)
     return document, created
 
 

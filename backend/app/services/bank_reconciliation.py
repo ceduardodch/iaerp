@@ -21,6 +21,7 @@ from app.models.payables import (
     PayableMovement,
 )
 from app.models.payables import BankTransaction as StoredBankTransaction
+from app.models.platform import Tenant
 from app.models.receivables import Movement, Receivable
 from app.schemas.bank_reconciliation import (
     BankStatementDebitMatchRead,
@@ -36,13 +37,9 @@ from app.services import payables, receivables
 MAX_BANK_STATEMENT_BYTES = 2 * 1024 * 1024
 
 
-def _child_idempotency_key(
-    parent_key: str, *, operation: str, transaction_id: str
-) -> str:
+def _child_idempotency_key(parent_key: str, *, operation: str, transaction_id: str) -> str:
     """Derive a stable audit key that always fits the database column."""
-    digest = hashlib.sha256(
-        f"{parent_key}|{operation}|{transaction_id}".encode()
-    ).hexdigest()
+    digest = hashlib.sha256(f"{parent_key}|{operation}|{transaction_id}".encode()).hexdigest()
     return f"bank:{operation}:{digest}"
 
 
@@ -301,18 +298,12 @@ async def _manual_correction_candidate(
     target_movements = await _active_movements(
         session, tenant_id=tenant_id, receivable_id=target_receivable.id
     )
-    if any(
-        movement.movement_type not in {"PAYMENT", "RETENTION"}
-        for movement in target_movements
-    ):
+    if any(movement.movement_type not in {"PAYMENT", "RETENTION"} for movement in target_movements):
         return None
-    target_applied = sum(
-        (movement.amount for movement in target_movements), Decimal("0.00")
-    )
+    target_applied = sum((movement.amount for movement in target_movements), Decimal("0.00"))
     bank_reference = _bank_reference(credit)
     has_bank_payment = any(
-        movement.movement_type == "PAYMENT"
-        and movement.support_reference == bank_reference
+        movement.movement_type == "PAYMENT" and movement.support_reference == bank_reference
         for movement in target_movements
     )
     has_replaceable_target_payment = any(
@@ -363,9 +354,7 @@ async def _manual_correction_candidate(
             or document.issue_date <= credit.occurred_at.date()
         ):
             continue
-        movements = await _active_movements(
-            session, tenant_id=tenant_id, receivable_id=sibling.id
-        )
+        movements = await _active_movements(session, tenant_id=tenant_id, receivable_id=sibling.id)
         if len(movements) != 1:
             continue
         manual_payment = movements[0]
@@ -414,7 +403,8 @@ async def _payable_candidates(
             select(Payable).where(
                 Payable.tenant_id == tenant_id,
                 Payable.status.in_(("OPEN", "PARTIALLY_PAID", "PAID")),
-                Payable.issue_date < date(
+                Payable.issue_date
+                < date(
                     period.year + (1 if period.month == 12 else 0),
                     1 if period.month == 12 else period.month + 1,
                     1,
@@ -546,6 +536,53 @@ async def _allocated_transaction_ids(
 
 
 async def import_bank_statement(
+    session: AsyncSession,
+    *,
+    context: AuthContext,
+    file_name: str,
+    content: bytes,
+    period: date,
+    apply: bool,
+    correlation_id: str,
+    idempotency_key: str,
+    debit_allocations: list[BankDebitAllocationInput] | None = None,
+    process_debits: bool = False,
+) -> BankStatementImportRead:
+    """Match deposits against documented net debt; previews persist nothing."""
+    from app.services.tax.receivable_retentions import sync_tenant_retentions
+
+    # Reject bad uploads before fetching fiscal evidence.
+    parse_bank_statement(content)
+
+    async def calculate() -> BankStatementImportRead:
+        await session.scalar(
+            select(Tenant.id).where(Tenant.id == context.tenant_id).with_for_update()
+        )
+        await sync_tenant_retentions(
+            session, context, correlation_id=correlation_id, idempotency_key=idempotency_key
+        )
+        return await _import_bank_statement(
+            session,
+            context=context,
+            file_name=file_name,
+            content=content,
+            period=period,
+            apply=apply,
+            correlation_id=correlation_id,
+            idempotency_key=idempotency_key,
+            debit_allocations=debit_allocations,
+            process_debits=process_debits,
+        )
+
+    if apply:
+        return await calculate()
+    async with session.begin_nested() as preview:
+        result = await calculate()
+        await preview.rollback()
+    return result
+
+
+async def _import_bank_statement(
     session: AsyncSession,
     *,
     context: AuthContext,
@@ -699,9 +736,7 @@ async def import_bank_statement(
 
     targets_by_transaction: dict[str, tuple[Receivable, SalesDocument]] = {}
     for match in matches:
-        candidate = next(
-            item for item in candidates if item.receivable.id == match.receivable_id
-        )
+        candidate = next(item for item in candidates if item.receivable.id == match.receivable_id)
         targets_by_transaction[match.transaction_id] = (
             candidate.receivable,
             candidate.document,
@@ -791,9 +826,7 @@ async def import_bank_statement(
             )
         )
     if apply:
-        credit_targets = {
-            match.transaction_id: match.receivable_id for match in matches
-        }
+        credit_targets = {match.transaction_id: match.receivable_id for match in matches}
         for transaction_id, receivable_id in credit_targets.items():
             if transaction_id in allocated_transaction_ids:
                 continue
@@ -817,27 +850,17 @@ async def import_bank_statement(
         payable_candidates = await _payable_candidates(
             session, tenant_id=context.tenant_id, period=period
         )
-        candidates_by_id = {
-            candidate.payable.id: candidate for candidate in payable_candidates
-        }
+        candidates_by_id = {candidate.payable.id: candidate for candidate in payable_candidates}
         pending_debits = [
-            item
-            for item in period_debits
-            if item.transaction_id not in allocated_transaction_ids
+            item for item in period_debits if item.transaction_id not in allocated_transaction_ids
         ]
         debits_by_id = {item.transaction_id: item for item in pending_debits}
         planned: list[tuple[BankTransaction, PayableBankCandidate, Decimal]] = []
         used_payables: set[uuid.UUID] = set()
-        allocations_by_transaction: dict[str, Decimal] = defaultdict(
-            lambda: Decimal("0.00")
-        )
-        manual_amounts: dict[tuple[str, uuid.UUID], Decimal] = defaultdict(
-            lambda: Decimal("0.00")
-        )
+        allocations_by_transaction: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+        manual_amounts: dict[tuple[str, uuid.UUID], Decimal] = defaultdict(lambda: Decimal("0.00"))
         for allocation in debit_allocations or []:
-            manual_amounts[(allocation.transaction_id, allocation.payable_id)] += (
-                allocation.amount
-            )
+            manual_amounts[(allocation.transaction_id, allocation.payable_id)] += allocation.amount
         for (transaction_id, payable_id), allocation_amount in manual_amounts.items():
             debit = debits_by_id.get(transaction_id)
             payable_candidate = candidates_by_id.get(payable_id)
@@ -875,9 +898,7 @@ async def import_bank_statement(
             and _debit_classification(item.description) == "UNCLASSIFIED"
         ]
         debits_by_amount: dict[Decimal, list[BankTransaction]] = defaultdict(list)
-        payable_candidates_by_amount: dict[
-            Decimal, list[PayableBankCandidate]
-        ] = defaultdict(list)
+        payable_candidates_by_amount: dict[Decimal, list[PayableBankCandidate]] = defaultdict(list)
         for debit in auto_debits:
             debits_by_amount[debit.amount].append(debit)
         for payable_candidate in payable_candidates:
@@ -889,8 +910,7 @@ async def import_bank_statement(
             payable_amount_candidates = [
                 payable_candidate
                 for payable_candidate in payable_candidates_by_amount.get(amount, [])
-                if payable_candidate.payable.issue_date
-                <= amount_debits[0].occurred_at.date()
+                if payable_candidate.payable.issue_date <= amount_debits[0].occurred_at.date()
             ]
             if len(amount_debits) != 1 or len(payable_amount_candidates) != 1:
                 continue
@@ -968,9 +988,7 @@ async def import_bank_statement(
                 amount=debit.amount,
                 account_last4=parsed.account_last4,
             )
-            effective_classification = (
-                "EXPENSE_CANDIDATE" if rule is not None else classification
-            )
+            effective_classification = "EXPENSE_CANDIDATE" if rule is not None else classification
             detail = (
                 "Regla encontrada; confirma los datos para crear el gasto"
                 if rule is not None
@@ -992,9 +1010,7 @@ async def import_bank_statement(
                     rule_id=rule.id if rule is not None else None,
                     rule_name=rule.name if rule is not None else None,
                     suggested_category=rule.category if rule is not None else None,
-                    suggested_supplier_name=(
-                        rule.supplier_name if rule is not None else None
-                    ),
+                    suggested_supplier_name=(rule.supplier_name if rule is not None else None),
                     suggested_tax_classification=(
                         rule.tax_classification if rule is not None else None
                     ),
@@ -1021,9 +1037,7 @@ async def import_bank_statement(
             if process_debits
             else len(period_debits)
         ),
-        rule_suggestion_count=sum(
-            item.rule_id is not None for item in debit_suggestions
-        ),
+        rule_suggestion_count=sum(item.rule_id is not None for item in debit_suggestions),
         already_imported_count=already_imported_count,
         manual_correction_count=len(manual_corrections),
         matches=matches,

@@ -100,11 +100,13 @@ from app.schemas.receivables import (
     MovementRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
+    PaymentPreparationRead,
     ReceivableCollectionUpdate,
     ReceivableDueDateUpdate,
     ReminderInput,
     ReminderRead,
     RetentionBatchRead,
+    RetentionReconciliationRead,
     RetentionXmlPreviewRead,
     ReversalInput,
 )
@@ -2463,6 +2465,70 @@ async def post_retention_xml_preview(
         xml_bytes=xml_bytes,
     )
     return preview.model_dump(mode="json", by_alias=True)
+
+
+@router.post("/receivables/reconcile-retentions", response_model=RetentionReconciliationRead)
+async def post_reconcile_receivable_retentions(
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:write"))],
+) -> dict[str, object]:
+    from app.services.tax.receivable_retentions import sync_tenant_retentions
+
+    async def reconcile() -> tuple[str, dict[str, object]]:
+        result = await sync_tenant_retentions(
+            session, context, correlation_id=str(uuid.uuid4()), idempotency_key=idempotency_key
+        )
+        return str(context.tenant_id), RetentionReconciliationRead(
+            applied_retentions=result.applied,
+            pending_retentions=result.pending,
+            notes=result.notes,
+        ).model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.reconcile_retentions",
+        idempotency_key=idempotency_key,
+        request_payload={},
+        action="receivable.retentions_reconciled",
+        entity_type="tenant",
+        callback=reconcile,
+    )
+
+
+@router.post("/receivables/{receivable_id}/prepare-payment", response_model=PaymentPreparationRead)
+async def post_prepare_receivable_payment(
+    receivable_id: uuid.UUID,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:write"))],
+) -> dict[str, object]:
+    async def prepare() -> tuple[str, dict[str, object]]:
+        summary, result = await receivables.prepare_payment(
+            session,
+            context,
+            receivable_id,
+            correlation_id=str(uuid.uuid4()),
+            idempotency_key=idempotency_key,
+        )
+        return str(receivable_id), PaymentPreparationRead(
+            **_summary_to_account_item(summary).model_dump(),
+            applied_retentions=result.applied,
+            pending_retentions=result.pending,
+            notes=result.notes,
+        ).model_dump(mode="json", by_alias=True)
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="receivables.prepare_payment",
+        idempotency_key=idempotency_key,
+        request_payload={"receivable_id": str(receivable_id)},
+        action="receivable.payment_prepared",
+        entity_type="receivable",
+        callback=prepare,
+    )
 
 
 @router.post(

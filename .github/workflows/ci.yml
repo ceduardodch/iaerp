@@ -89,7 +89,7 @@ jobs:
           if changed '^backend/'; then backend=true; fi
           if changed '^(backend/(migrations/|app/models/)|compose\.ya?ml|compose\.coolify\.yaml)' || [[ "$strict" == true ]]; then migrations=true; fi
           if changed '^frontend/' || [[ "$strict" == true ]]; then frontend=true; fi
-          if changed '^(backend/app/core/|backend/app/api/auth|backend/app/services/(auth|identity)|frontend/src/(auth|oidc)|compose\.ya?ml|infra/keycloak/)' || [[ "$strict" == true ]]; then oidc=true; fi
+          if changed '^(backend/app/core/|backend/app/api/auth|backend/app/services/(auth|identity)|frontend/src/(auth|oidc)|compose\.ya?ml|compose\.ci\.yaml|infra/minio-ci/|scripts/tests/test_ci_minio\.py|infra/keycloak/)' || [[ "$strict" == true ]]; then oidc=true; fi
           if changed '^(contracts/|backend/app/(api|mcp)/|\.github/workflows/)'; then contracts=true; fi
           if changed '^(compose\.coolify\.yaml|compose\.ya?ml|Dockerfile|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/)'; then deployment_config=true; fi
           if changed '^(backend/app/|frontend/src/|compose\.ya?ml|compose\.coolify\.yaml|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/)' ; then deploy=true; fi
@@ -377,6 +377,8 @@ jobs:
     if: needs.changes.outputs.oidc == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    env:
+      COMPOSE_FILE: compose.yaml:compose.ci.yaml
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -407,6 +409,11 @@ jobs:
           cd ../frontend
           npm ci
           npx playwright install --with-deps chromium
+
+      - name: Validate CI-only MinIO override
+        run: >-
+          uv run --no-project --with PyYAML==6.0.2 python -m unittest
+          discover -s scripts/tests -p test_ci_minio.py
 
       - name: Start OIDC stack
         env:

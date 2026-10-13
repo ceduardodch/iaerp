@@ -56,6 +56,20 @@ class AccountItemRead(APIModel):
     collection_enabled: bool = False
 
 
+class RetentionReconciliationRead(APIModel):
+    """Cruce documental; no registra dinero ni cambia el XML autorizado."""
+
+    applied_retentions: int = 0
+    pending_retentions: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+
+class PaymentPreparationRead(AccountItemRead):
+    applied_retentions: int = 0
+    pending_retentions: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+
 class RetentionInput(APIModel):
     """Retencion aplicada dentro de un cobro (``PaymentInput.retentions``).
 

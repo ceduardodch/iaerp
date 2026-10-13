@@ -1,0 +1,7 @@
+# Opt-in for synthetic OIDC/stack tests. Never used by Coolify.
+services:
+  minio:
+    image: iaerp-minio-ci:2025-10-15
+    pull_policy: build
+    build:
+      context: ./infra/minio-ci

@@ -66,6 +66,25 @@ que hoy estan fuera del alcance del producto.
 
 ## Consecuencias
 
+### Cruce documental de retenciones con Cartera (2026-10-13)
+
+El XML autorizado de una retención recibida también respalda un movimiento
+comercial `RETENTION`: rebaja el saldo, nunca registra ingreso en dinero. Se
+exigen el tenant receptor, el emisor que corresponde al cliente, el número
+completo y el tipo de factura autorizada. Se aplica una sola vez por
+autorización y factura, bajo el bloqueo de Cartera y con auditoría.
+
+Un conflicto comercial no elimina ni invalida la evidencia tributaria. Si la
+cuenta está saldada, anulada, tiene una aplicación diferente o un reverso, el
+cruce queda pendiente; no se altera un cobro anterior. Los históricos se
+reconcilian con una escritura explícita y autorizada, no mediante un GET.
+
+La conciliación bancaria compara el depósito con el neto respaldado. Su
+vista previa calcula el cruce dentro de un savepoint y lo revierte completo:
+no guarda movimientos ni auditoría hasta que el usuario confirma. El registro
+vuelve a validar el neto actual, sin inferir una retención por una diferencia
+de importes ni modificar el XML autorizado.
+
 - `Tenant` sigue siendo la entidad fiscal (un RUC por tenant, ADR 0007). El
   perfil tributario se agrega en una tabla aparte para no modificar `Tenant`.
 - Aparecen los **comprobantes recibidos (compras)**, que el sistema no modelaba:

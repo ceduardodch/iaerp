@@ -71,6 +71,7 @@ class ParsedRetention:
     base_amount: Decimal
     retained_amount: Decimal
     supporting_document_number: str | None = None
+    supporting_document_type: str | None = None
 
 
 @dataclass
@@ -174,9 +175,7 @@ def open_authorization_envelope(xml_bytes: bytes) -> tuple[Element, str, datetim
         raise HTTPException(status_code=422, detail="Invalid SRI XML") from exc
 
     if _local(envelope.tag) != "autorizacion":
-        raise HTTPException(
-            status_code=422, detail="XML must use the SRI authorization envelope"
-        )
+        raise HTTPException(status_code=422, detail="XML must use the SRI authorization envelope")
     if (_text(envelope, "estado") or "").upper() != "AUTORIZADO":
         raise HTTPException(status_code=422, detail="Document is not authorized by SRI")
 
@@ -286,7 +285,9 @@ def _parse_retention(
 
     retentions: list[ParsedRetention] = []
 
-    def append_retention(item: Element, supporting_number: str | None) -> None:
+    def append_retention(
+        item: Element, supporting_number: str | None, supporting_type: str | None
+    ) -> None:
         code = _text(item, "codigo") or ""
         kind = _RETENTION_KINDS.get(code)
         if kind is None:
@@ -301,20 +302,21 @@ def _parse_retention(
                 base_amount=_decimal(_text(item, "baseImponible")),
                 retained_amount=_decimal(_text(item, "valorRetenido")),
                 supporting_document_number=supporting_number,
+                supporting_document_type=supporting_type,
             )
         )
 
     for support in _children(document, "docsSustento/docSustento"):
         supporting_number = _text(support, "numDocSustento")
         for item in _children(support, "retenciones/retencion"):
-            append_retention(item, supporting_number)
+            append_retention(item, supporting_number, _text(support, "codDocSustento"))
 
     # Los comprobantes de retención 1.0 guardan los rubros directamente en
     # ``impuestos``. Siguen siendo documentos SRI válidos y deben entrar al
     # mismo cálculo sin inventar ni transformar sus valores.
     if not retentions:
         for item in _children(document, "impuestos/impuesto"):
-            append_retention(item, _text(item, "numDocSustento"))
+            append_retention(item, _text(item, "numDocSustento"), _text(item, "codDocSustento"))
 
     total_retained = sum((item.retained_amount for item in retentions), Decimal("0.00"))
     return ParsedDocument(
@@ -325,9 +327,7 @@ def _parse_retention(
         issue_date=issue_date,
         issuer_identification=_text(document, "infoTributaria/ruc") or "",
         issuer_name=_text(document, "infoTributaria/razonSocial") or "",
-        receiver_identification=_text(
-            document, "infoCompRetencion/identificacionSujetoRetenido"
-        ),
+        receiver_identification=_text(document, "infoCompRetencion/identificacionSujetoRetenido"),
         receiver_name=_text(document, "infoCompRetencion/razonSocialSujetoRetenido"),
         establishment_code=_text(document, "infoTributaria/estab"),
         emission_point_code=_text(document, "infoTributaria/ptoEmi"),

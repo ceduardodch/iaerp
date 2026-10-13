@@ -129,6 +129,13 @@ async function mockApi(page: Page) {
     }),
   )
   await mockDashboardEndpoints(page)
+  await page.route('**/api/v1/receivables/reconcile-retentions', (route) =>
+    route.fulfill({ json: { appliedRetentions: 0, pendingRetentions: 0, notes: [] } }),
+  )
+  await page.route('**/api/v1/receivables/*/prepare-payment', (route) => {
+    const account = currentReceivables.find((item) => route.request().url().includes(item.id))
+    return route.fulfill({ json: { ...account, appliedRetentions: 0, pendingRetentions: 0, notes: [] } })
+  })
   await page.route(`**/api/v1/receivables/${overdueReceivable.id}/payments`, (route) => {
     if (route.request().method() === 'POST') {
       currentReceivables = currentReceivables.map((item) =>
@@ -239,6 +246,7 @@ test('register payment full-page view is keyboard reachable, labelled and passes
   await expect(page.getByLabel('Método')).toBeVisible()
   await expectNoA11yViolations(page)
 
+  await page.getByText('Retenciones o descuentos adicionales', { exact: true }).click()
   await page.getByRole('button', { name: 'Agregar retención' }).click()
   await expect(page.getByLabel('Tipo de retención 1')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Quitar retención 1' })).toBeVisible()
@@ -260,12 +268,226 @@ test('registering a payment shows the backend-computed balance, never client mat
     .first()
     .click()
   await page.getByLabel('Monto en efectivo').fill('100.00')
+  await page.getByRole('combobox', { name: 'Método', exact: true }).selectOption('TRANSFER')
   await page.getByRole('button', { name: 'Guardar' }).click()
 
   await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
   const updatedRow = page.getByRole('row', { name: /\$50,00/ })
   await expect(updatedRow).toBeVisible()
   await expectNoA11yViolations(page)
+})
+
+test('quick collection uses the prepared net balance, not the customer withholding profile', async ({ page }) => {
+  let paymentBody: Record<string, unknown> | undefined
+  await page.route('**/api/v1/parties', (route) => route.fulfill({ json: [{ ...customer, expectedIvaWithholdingRate: '30', expectedIncomeWithholdingRate: '10' }] }))
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/prepare-payment`, (route) => route.fulfill({ json: {
+    ...overdueReceivable, status: 'PARTIAL', openAmount: '136.50', appliedRetentions: 1, pendingRetentions: 0, notes: ['Retención registrada aplicada al saldo.'],
+  } }))
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/payments`, (route) => {
+    paymentBody = route.request().postDataJSON()
+    return route.fulfill({ status: 201, json: { ...overdueReceivable, status: 'SETTLED', openAmount: '0.00' } })
+  })
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first().click()
+  await expect(page.getByLabel('Monto en efectivo')).toHaveValue('136.50')
+  await expect(page.getByRole('combobox', { name: 'Método', exact: true })).toHaveValue('')
+  await expect(page.getByText('Perfil esperado', { exact: false })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Agregar retención' })).not.toBeVisible()
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+  expect(paymentBody).toBeUndefined()
+  await page.getByRole('combobox', { name: 'Método', exact: true }).selectOption('TRANSFER')
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+  expect(paymentBody).toMatchObject({ cashAmount: '136.50', method: 'TRANSFER', retentions: [], discounts: [] })
+})
+
+test('failed preparation blocks payment and retries with the same idempotency key', async ({ page }) => {
+  const keys: string[] = []
+  let paymentCount = 0
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/prepare-payment`, (route) => {
+    keys.push(route.request().headers()['idempotency-key'])
+    return keys.length === 1
+      ? route.fulfill({ status: 503, json: { detail: 'No se pudo revisar el saldo' } })
+      : route.fulfill({ json: { ...overdueReceivable, appliedRetentions: 0, pendingRetentions: 0, notes: [] } })
+  })
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/payments`, (route) => {
+    paymentCount += 1
+    return route.fulfill({ status: 201, json: updatedAfterPayment })
+  })
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first().click()
+  await expect(page.getByRole('alert')).toContainText('No se registró ningún cobro')
+  await expect(page.getByLabel('Monto en efectivo')).toHaveCount(0)
+  expect(paymentCount).toBe(0)
+  await expectNoA11yViolations(page)
+  const retry = page.getByRole('button', { name: 'Reintentar preparación' })
+  await retry.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByLabel('Monto en efectivo')).toHaveValue('150.00')
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toBeTruthy()
+  expect(keys[1]).toBe(keys[0])
+})
+
+test('the list automatically reconciles registered retentions before collecting', async ({ page }) => {
+  let reconcileCount = 0
+  let listCount = 0
+  let reconciled = false
+  let collectionViewRequested = false
+  let initialListObserved!: () => void
+  const initialList = new Promise<void>((resolve) => { initialListObserved = resolve })
+  let finishReconciliation!: () => void
+  const reconciliationGate = new Promise<void>((resolve) => { finishReconciliation = resolve })
+  await page.route('**/api/v1/receivables', (route) => {
+    if (collectionViewRequested) listCount += 1
+    else initialListObserved()
+    return route.fulfill({ json: [
+      { ...overdueReceivable, openAmount: reconciled ? '136.50' : '150.00' }, partialReceivable,
+    ] })
+  })
+  await page.route('**/api/v1/receivables/reconcile-retentions', async (route) => {
+    reconcileCount += 1
+    await reconciliationGate
+    reconciled = true
+    await route.fulfill({ json: { appliedRetentions: 1, pendingRetentions: 0, notes: ['Una retención registrada redujo el saldo.'] } })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
+  await initialList
+  collectionViewRequested = true
+  await navigateToSection(page, 'Cartera')
+  await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+  await expect(page.getByRole('status')).toContainText('Cruzando retenciones')
+  await expect(page.getByRole('button', { name: 'Cargar retenciones XML' })).toBeVisible()
+  // No stale list may be loaded while the backend is still applying retentions.
+  expect(listCount).toBe(0)
+  finishReconciliation()
+  await expect(page.getByRole('row', { name: /\$136,50/ })).toBeVisible()
+  expect(listCount).toBeGreaterThan(0)
+  await expect(page.getByRole('status')).toContainText('1 retención(es) aplicada(s) al saldo de Cartera.')
+  await page.getByLabel('Filtrar por estado').selectOption('PARTIAL')
+  await expect(page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first()).toBeEnabled()
+  expect(reconcileCount).toBe(1)
+})
+
+test('reconciliation retry ignores an older list response that arrives after the updated net balance', async ({ page }) => {
+  const keys: string[] = []
+  let reconciled = false
+  let staleReadStarted!: () => void
+  let releaseStaleRead!: () => void
+  let staleReadFinished!: () => void
+  const staleStarted = new Promise<void>((resolve) => { staleReadStarted = resolve })
+  const staleGate = new Promise<void>((resolve) => { releaseStaleRead = resolve })
+  const staleFinished = new Promise<void>((resolve) => { staleReadFinished = resolve })
+  await page.route('**/api/v1/receivables', async (route) => {
+    const stale = keys.length === 1 && !reconciled
+    const amount = reconciled ? '136.50' : '150.00'
+    if (stale) {
+      staleReadStarted()
+      await staleGate
+    }
+    await route.fulfill({ json: [{ ...overdueReceivable, openAmount: amount }, partialReceivable] })
+    if (stale) staleReadFinished()
+  })
+  await page.route('**/api/v1/receivables/reconcile-retentions', (route) => {
+    keys.push(route.request().headers()['idempotency-key'])
+    if (keys.length === 1) return route.fulfill({ status: 503, json: { detail: 'Cruce temporalmente no disponible' } })
+    reconciled = true
+    return route.fulfill({ json: { appliedRetentions: 1, pendingRetentions: 0, notes: [] } })
+  })
+  await loginAndOpenReceivables(page)
+  await expect(page.getByRole('alert')).toContainText('Revisa las retenciones antes de cobrar')
+  await staleStarted
+  await page.getByRole('button', { name: 'Reintentar cruce de retenciones' }).click()
+  await expect(page.getByRole('row', { name: /\$136,50/ })).toBeVisible()
+  releaseStaleRead()
+  await staleFinished
+  await expect(page.getByRole('row', { name: /\$136,50/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first()).toBeEnabled()
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toBeTruthy()
+  expect(keys[1]).toBe(keys[0])
+})
+
+test('read-only accounts never reconcile or prepare a payment', async ({ page }) => {
+  let writes = 0
+  await page.route('**/api/v1/context', (route) => route.fulfill({ json: { ...context, scopes: context.scopes.filter((scope) => scope !== 'receivables:write') } }))
+  await page.route('**/api/v1/receivables/reconcile-retentions', (route) => { writes += 1; return route.fulfill({ json: { appliedRetentions: 0, pendingRetentions: 0, notes: [] } }) })
+  await loginAndOpenReceivables(page)
+  await expect(page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first()).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Cargar retenciones XML' })).toBeDisabled()
+  expect(writes).toBe(0)
+})
+
+test('pending retentions show a safe review warning without claiming a lower balance', async ({ page }) => {
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/prepare-payment`, (route) => route.fulfill({ json: {
+    ...overdueReceivable, appliedRetentions: 0, pendingRetentions: 1, notes: ['RETENTION_XML_REQUIRED'],
+  } }))
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first().click()
+  await expect(page.getByLabel('Monto en efectivo')).toHaveValue('150.00')
+  await expect(page.getByRole('status')).toContainText('no se descontaron del saldo')
+  await expect(page.getByText('RETENTION_XML_REQUIRED', { exact: true })).toHaveCount(0)
+  await expectNoA11yViolations(page)
+})
+
+test('a double submit registers only one collection request', async ({ page }) => {
+  let paymentCount = 0
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/payments`, (route) => {
+    paymentCount += 1
+    return route.fulfill({ status: 201, json: updatedAfterPayment })
+  })
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first().click()
+  await page.getByRole('combobox', { name: 'Método', exact: true }).selectOption('TRANSFER')
+  await page.locator('.erp-form-panel form').evaluate((form) => {
+    ;(form as HTMLFormElement).requestSubmit()
+    ;(form as HTMLFormElement).requestSubmit()
+  })
+  await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+  expect(paymentCount).toBe(1)
+})
+
+test('retention-only payment does not require a cash method and uses the fiscal date', async ({ page }) => {
+  let paymentBody: Record<string, unknown> | undefined
+  await page.clock.install({ time: new Date('2026-10-14T03:30:00Z') })
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/payments`, (route) => {
+    paymentBody = route.request().postDataJSON()
+    return route.fulfill({ status: 201, json: { ...overdueReceivable, status: 'SETTLED', openAmount: '0.00' } })
+  })
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first().click()
+  await expect(page.getByLabel('Fecha de cobro')).toHaveValue('2026-10-13')
+  await page.getByLabel('Monto en efectivo').fill('0.00')
+  await page.getByText('Retenciones o descuentos adicionales', { exact: true }).click()
+  await page.getByRole('button', { name: 'Agregar retención' }).click()
+  await page.getByLabel('Monto', { exact: true }).fill('150.00')
+  await page.getByLabel('Motivo', { exact: true }).fill('Comprobante autorizado sintético')
+  await page.getByLabel('Comprobante de retención', { exact: true }).fill('RET-SINTETICA-001')
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+  expect(paymentBody).toMatchObject({ cashAmount: '0.00', method: null, paymentDate: '2026-10-13' })
+})
+
+test('failed payment retries the same payload without duplicating the idempotency key', async ({ page }) => {
+  const keys: string[] = []
+  await page.route(`**/api/v1/receivables/${overdueReceivable.id}/payments`, (route) => {
+    keys.push(route.request().headers()['idempotency-key'])
+    return keys.length === 1
+      ? route.fulfill({ status: 503, json: { detail: 'No se pudo confirmar el cobro' } })
+      : route.fulfill({ status: 201, json: updatedAfterPayment })
+  })
+  await loginAndOpenReceivables(page)
+  await page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first().click()
+  await page.getByRole('combobox', { name: 'Método', exact: true }).selectOption('TRANSFER')
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toBeTruthy()
+  expect(keys[1]).toBe(keys[0])
 })
 
 test('send collection email view is keyboard reachable, labelled and passes axe', async ({ page }) => {

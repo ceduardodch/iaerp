@@ -1166,6 +1166,49 @@ paths:
           description: >-
             El movimiento ya fue revertido, o el movimiento es en si mismo
             un REVERSAL
+  /receivables/reconcile-retentions:
+    post:
+      operationId: reconcileCustomerRetentions
+      summary: Cruzar retenciones autorizadas ya importadas con Cartera
+      security:
+        - oauth2: ["receivables:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Cruce realizado sin registrar efectivo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetentionReconciliation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /receivables/{receivableId}/prepare-payment:
+    post:
+      operationId: prepareCustomerPayment
+      summary: Preparar cobro con saldo neto y retenciones respaldadas
+      security:
+        - oauth2: ["receivables:write"]
+      parameters:
+        - $ref: "#/components/parameters/ReceivableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Saldo actual y pendientes; no registra dinero
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/AccountItem"
+                  - $ref: "#/components/schemas/RetentionReconciliation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Cuenta no encontrada en el tenant activo
   /receivables/{receivableId}/payments:
     post:
       operationId: recordCustomerPayment
@@ -2411,6 +2454,20 @@ components:
           minimum: 1
         fileName:
           type: string
+    RetentionReconciliation:
+      type: object
+      required: [appliedRetentions, pendingRetentions, notes]
+      properties:
+        appliedRetentions:
+          type: integer
+          minimum: 0
+        pendingRetentions:
+          type: integer
+          minimum: 0
+        notes:
+          type: array
+          items:
+            type: string
     AccountItem:
       type: object
       additionalProperties: false

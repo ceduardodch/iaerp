@@ -33,7 +33,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from xml.etree.ElementTree import Element
 
 from defusedxml.ElementTree import fromstring as safe_fromstring  # type: ignore[import-untyped]
@@ -81,6 +81,8 @@ from app.services.unit_of_work import append_audit
 
 MAX_RETENTION_XML_BYTES = 2 * 1024 * 1024
 RETENTION_SETTLEMENT_TOLERANCE = Decimal("0.01")
+if TYPE_CHECKING:
+    from app.services.tax.receivable_retentions import RetentionSyncResult
 _RETENTION_TOLERANCE_AUDIT_ACTION = "retention.settled_with_rounding_tolerance"
 
 # Estados de AccountItem (contrato) -> filtros sobre Receivable.status persistido
@@ -287,7 +289,7 @@ async def _active_retention_movements(
                 Movement.tenant_id == tenant_id,
                 Movement.receivable_id == receivable_id,
                 Movement.movement_type == "RETENTION",
-                Movement.support_reference.like(f"{authorization_number} |%"),
+                Movement.support_reference.startswith(f"{authorization_number} |", autoescape=True),
                 Movement.reversed_movement_id.is_(None),
                 Movement.id.not_in(_reversed_movement_ids(tenant_id)),
             )
@@ -1255,12 +1257,14 @@ async def to_receivable_summary(
             ReceivableInstallment.receivable_id == receivable.id,
         )
     )
-    invoice_row = (await session.execute(
-        select(SalesDocument.sequential, SalesDocument.issue_date).where(
-            SalesDocument.tenant_id == tenant_id,
-            SalesDocument.id == receivable.sales_document_id,
+    invoice_row = (
+        await session.execute(
+            select(SalesDocument.sequential, SalesDocument.issue_date).where(
+                SalesDocument.tenant_id == tenant_id,
+                SalesDocument.id == receivable.sales_document_id,
+            )
         )
-    )).one_or_none()
+    ).one_or_none()
     invoice_sequential = invoice_row[0] if invoice_row is not None else None
     issue_date = invoice_row[1] if invoice_row is not None else None
 
@@ -1341,6 +1345,36 @@ async def lock_receivable(
 # --- Escritura: cobros, NC, reverso ------------------------------------------
 
 
+async def prepare_payment(
+    session: AsyncSession,
+    context: AuthContext,
+    receivable_id: uuid.UUID,
+    *,
+    correlation_id: str,
+    idempotency_key: str,
+) -> tuple[ReceivableSummary, RetentionSyncResult]:
+    """Cruza respaldo real y devuelve el neto; nunca registra dinero."""
+    from app.services.tax.receivable_retentions import sync_receivable_retentions
+
+    result = await sync_receivable_retentions(
+        session,
+        context,
+        receivable_id=receivable_id,
+        correlation_id=correlation_id,
+        idempotency_key=idempotency_key,
+    )
+    locked = await lock_receivable(
+        session, tenant_id=context.tenant_id, receivable_id=receivable_id
+    )
+    summary = await to_receivable_summary(
+        session,
+        tenant_id=context.tenant_id,
+        receivable=locked,
+        as_of=today_in_fiscal_timezone(),
+    )
+    return summary, result
+
+
 async def record_payment(
     session: AsyncSession,
     context: AuthContext,
@@ -1351,6 +1385,7 @@ async def record_payment(
     idempotency_key: str,
     settlement_tolerance: Decimal = Decimal("0.00"),
     settlement_reference: str | None = None,
+    skip_fiscal_retention_sync: bool = False,
 ) -> ReceivableSummary:
     """Registra un cobro parcial o total con retenciones/descuentos (E5-03/E5-04).
 
@@ -1378,6 +1413,19 @@ async def record_payment(
     """
     tenant_id = context.tenant_id
 
+    # Todos los canales cobran el saldo documental, no una copia de la web.
+    # El puente registra solo RETENTION y evita volver a invocarse.
+    if payment.cash_amount > 0 and not skip_fiscal_retention_sync:
+        from app.services.tax.receivable_retentions import sync_receivable_retentions
+
+        await sync_receivable_retentions(
+            session,
+            context,
+            receivable_id=receivable_id,
+            correlation_id=correlation_id,
+            idempotency_key=idempotency_key,
+        )
+
     # Validar que el total sea > 0
     retentions_total = sum((r.amount for r in payment.retentions), Decimal("0.00"))
     discounts_total = sum((d.amount for d in payment.discounts), Decimal("0.00"))
@@ -1387,6 +1435,20 @@ async def record_payment(
 
     # Lock y validar saldo
     locked = await lock_receivable(session, tenant_id=tenant_id, receivable_id=receivable_id)
+    for reference in {item.document_reference for item in payment.retentions}:
+        if await _active_retention_movements(
+            session,
+            tenant_id=tenant_id,
+            receivable_id=receivable_id,
+            authorization_number=reference,
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "La retención ya está aplicada a esta factura; "
+                    "registra solo el dinero recibido."
+                ),
+            )
     open_balance = await compute_receivable_balance(session, tenant_id=tenant_id, receivable=locked)
 
     overapplication = max(total_application - open_balance, Decimal("0.00"))
@@ -1492,6 +1554,23 @@ async def record_payment(
     # retencion/descuento recien agregados no serian visibles y el saldo
     # quedaria sobrestimado.
     await session.flush()
+
+    if payment.cash_amount > 0:
+        await append_audit(
+            session,
+            context=context,
+            action="receivable.money_recorded",
+            entity_type="receivable",
+            entity_id=str(receivable_id),
+            correlation_id=correlation_id,
+            idempotency_key=f"{idempotency_key}:money",
+            details={
+                "cash_amount": format_amount(payment.cash_amount),
+                "method": payment.method,
+                "payment_date": payment.payment_date.isoformat(),
+            },
+        )
+        await session.flush()
 
     if overapplication > 0:
         assert settlement_reference is not None
@@ -1905,9 +1984,7 @@ async def send_reminder(
     if policy is None or not policy.enabled:
         raise HTTPException(status_code=422, detail="La cobranza general está pausada")
     if not receivable.collection_enabled:
-        raise HTTPException(
-            status_code=422, detail="Esta factura no permite mensajes de cobranza"
-        )
+        raise HTTPException(status_code=422, detail="Esta factura no permite mensajes de cobranza")
 
     # Buscar party para validar consent_opt_out y obtener el destinatario
     from app.models.masters import Party
@@ -2035,9 +2112,7 @@ async def send_real_reminder(
     if policy is None or not policy.enabled:
         raise HTTPException(status_code=422, detail="La cobranza general está pausada")
     if not receivable.collection_enabled:
-        raise HTTPException(
-            status_code=422, detail="Esta factura no permite mensajes de cobranza"
-        )
+        raise HTTPException(status_code=422, detail="Esta factura no permite mensajes de cobranza")
     from app.models.masters import Party
 
     party = await session.scalar(
