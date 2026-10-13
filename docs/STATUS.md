@@ -23,7 +23,24 @@ alcance y las decisiones.
   escritorio/móvil, teclado, axe, 320 px y zoom pasan; lint/build verdes.
   Revisión fiscal GO y QA GO final; 38 pruebas PostgreSQL dirigidas también
   pasan tras fijar el orden de bloqueo tenant → cuenta. Promoción autorizada
-  por el usuario, pendiente verificar CI, Coolify y comportamiento visible.
+  por el usuario. Commit `2dc2d5a` en `release`, PR #84. CI de PR
+  `38444801195` y release `38444796212`: seguridad, contratos y migraciones
+  verdes; backend y frontend de PR pasan. Frontend de release detectó una
+  carrera GET/POST: se corrige esperando el cruce antes de consultar y
+  cancelando lecturas viejas al reintentar. Las dos regresiones con barreras
+  reproducen el fallo antes del arreglo y pasan en escritorio/móvil.
+  Suite actual 42/42, lint y build verdes; QA independiente 6/6 en servidor
+  separado, incluyendo solo lectura, dio GO sin P0/P1.
+  OIDC falla antes de ejecutar
+  pruebas porque Quay ya no entrega `minio/minio:RELEASE.2025-09-07T16-13-09Z`
+  (Docker Hub tampoco entrega esa imagen). No se integró a `main` ni se
+  desplegó. El usuario autorizó ajustar solo las pruebas: override CI con
+  fuente oficial `9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a`, checksum SHA256
+  verificado y Go 1.24.8, sin cambiar almacenamiento productivo. Construcción,
+  salud y lectura/escritura sintéticas pasan; cuatro pruebas validan el
+  aislamiento y que las rutas CI activen OIDC sin desplegar por sí solas.
+  Dos expertos revisaron el cambio de plataforma. Pendientes CI, Coolify y
+  comportamiento visible.
   El bloqueo ATS por forma de pago faltante sigue separado: no se asignó un
   código ni se alteró el XML autorizado.
 

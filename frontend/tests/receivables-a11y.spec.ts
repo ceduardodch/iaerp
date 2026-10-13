@@ -331,17 +331,83 @@ test('failed preparation blocks payment and retries with the same idempotency ke
 
 test('the list automatically reconciles registered retentions before collecting', async ({ page }) => {
   let reconcileCount = 0
+  let listCount = 0
+  let reconciled = false
+  let collectionViewRequested = false
+  let initialListObserved!: () => void
+  const initialList = new Promise<void>((resolve) => { initialListObserved = resolve })
+  let finishReconciliation!: () => void
+  const reconciliationGate = new Promise<void>((resolve) => { finishReconciliation = resolve })
+  await page.route('**/api/v1/receivables', (route) => {
+    if (collectionViewRequested) listCount += 1
+    else initialListObserved()
+    return route.fulfill({ json: [
+      { ...overdueReceivable, openAmount: reconciled ? '136.50' : '150.00' }, partialReceivable,
+    ] })
+  })
   await page.route('**/api/v1/receivables/reconcile-retentions', async (route) => {
     reconcileCount += 1
-    await page.route('**/api/v1/receivables', (listRoute) => listRoute.fulfill({ json: [{ ...overdueReceivable, openAmount: '136.50' }, partialReceivable] }))
+    await reconciliationGate
+    reconciled = true
     await route.fulfill({ json: { appliedRetentions: 1, pendingRetentions: 0, notes: ['Una retención registrada redujo el saldo.'] } })
   })
-  await loginAndOpenReceivables(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
+  await initialList
+  collectionViewRequested = true
+  await navigateToSection(page, 'Cartera')
+  await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
+  await expect(page.getByRole('status')).toContainText('Cruzando retenciones')
+  await expect(page.getByRole('button', { name: 'Cargar retenciones XML' })).toBeVisible()
+  // No stale list may be loaded while the backend is still applying retentions.
+  expect(listCount).toBe(0)
+  finishReconciliation()
   await expect(page.getByRole('row', { name: /\$136,50/ })).toBeVisible()
+  expect(listCount).toBeGreaterThan(0)
   await expect(page.getByRole('status')).toContainText('1 retención(es) aplicada(s) al saldo de Cartera.')
   await page.getByLabel('Filtrar por estado').selectOption('PARTIAL')
   await expect(page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first()).toBeEnabled()
   expect(reconcileCount).toBe(1)
+})
+
+test('reconciliation retry ignores an older list response that arrives after the updated net balance', async ({ page }) => {
+  const keys: string[] = []
+  let reconciled = false
+  let staleReadStarted!: () => void
+  let releaseStaleRead!: () => void
+  let staleReadFinished!: () => void
+  const staleStarted = new Promise<void>((resolve) => { staleReadStarted = resolve })
+  const staleGate = new Promise<void>((resolve) => { releaseStaleRead = resolve })
+  const staleFinished = new Promise<void>((resolve) => { staleReadFinished = resolve })
+  await page.route('**/api/v1/receivables', async (route) => {
+    const stale = keys.length === 1 && !reconciled
+    const amount = reconciled ? '136.50' : '150.00'
+    if (stale) {
+      staleReadStarted()
+      await staleGate
+    }
+    await route.fulfill({ json: [{ ...overdueReceivable, openAmount: amount }, partialReceivable] })
+    if (stale) staleReadFinished()
+  })
+  await page.route('**/api/v1/receivables/reconcile-retentions', (route) => {
+    keys.push(route.request().headers()['idempotency-key'])
+    if (keys.length === 1) return route.fulfill({ status: 503, json: { detail: 'Cruce temporalmente no disponible' } })
+    reconciled = true
+    return route.fulfill({ json: { appliedRetentions: 1, pendingRetentions: 0, notes: [] } })
+  })
+  await loginAndOpenReceivables(page)
+  await expect(page.getByRole('alert')).toContainText('Revisa las retenciones antes de cobrar')
+  await staleStarted
+  await page.getByRole('button', { name: 'Reintentar cruce de retenciones' }).click()
+  await expect(page.getByRole('row', { name: /\$136,50/ })).toBeVisible()
+  releaseStaleRead()
+  await staleFinished
+  await expect(page.getByRole('row', { name: /\$136,50/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: `Registrar cobro para ${customer.name}` }).first()).toBeEnabled()
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toBeTruthy()
+  expect(keys[1]).toBe(keys[0])
 })
 
 test('read-only accounts never reconcile or prepare a payment', async ({ page }) => {

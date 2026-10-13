@@ -4043,6 +4043,7 @@ function ReceivablesPage({
   const reconciliationKey = useRef(idempotencyKey('web-reconcile-retentions'))
   const reconciliationStarted = useRef<string | null>(null)
   const reconcileRetentions = useMutation({
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['receivables'] }),
     mutationFn: () => apiRequest<{ appliedRetentions: number; pendingRetentions: number; notes: string[] }>(token, '/receivables/reconcile-retentions', {
       method: 'POST', headers: { 'Idempotency-Key': reconciliationKey.current }, body: '{}',
     }),
@@ -4067,8 +4068,13 @@ function ReceivablesPage({
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['receivables'] }) },
   })
   const partiesById = new Map(parties.map((party) => [party.id, party]))
+  // The first read must follow the retention write, not race its stale response.
+  // Read-only users do not reconcile; after a failure the list remains readable,
+  // but collecting stays disabled until the explicit retry succeeds.
+  const reconciliationResolved = !canWrite || reconcileRetentions.isSuccess || reconcileRetentions.isError
   const receivablesQuery = useQuery({
     queryKey: ['receivables', statusFilter, partyFilterId ?? 'todos'],
+    enabled: reconciliationResolved,
     queryFn: () => {
       const params = new URLSearchParams()
       if (statusFilter && statusFilter !== 'OUTSTANDING') params.set('status', statusFilter)
@@ -4085,6 +4091,7 @@ function ReceivablesPage({
     .sort((left, right) => (right.daysSinceInvoice ?? -1) - (left.daysSinceInvoice ?? -1))
   const collectionsQuery = useQuery({
     queryKey: ['receivables', 'collections'],
+    enabled: reconciliationResolved,
     queryFn: () => apiRequest<CollectionsBreakdown>(token, '/receivables/collections'),
   })
 

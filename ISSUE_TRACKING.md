@@ -1,5 +1,15 @@
 # Issue Tracking - Sesión por Sesión
 
+> Corte 2026-10-13: Cartera cruza retenciones tributarias autorizadas y prepara
+> el cobro neto; banco compara contra ese neto sin guardar en vista previa.
+> 80 pruebas PostgreSQL, 38 repetidas tras locks y 40 E2E verdes; fiscal y QA GO.
+> Commit `2dc2d5a`, PR #84. No publicado: OIDC/stack de CI no puede descargar
+> la imagen pública MinIO usada por Compose. El usuario autorizó construir
+> solo MinIO de pruebas desde código oficial fijado. Build, salud, lectura/
+> escritura y cuatro pruebas de aislamiento pasan; producción no se cambia.
+> Carrera de lectura/cruce corregida con dos regresiones deterministas.
+> Pendiente validar CI completo y publicar.
+
 **Fecha:** 2026-07-20
 **Sprint Activo:** Sprint 3 - Sidebar Colapsible + UX Improvements
 **Estado:** 🟢 Iniciando Sprint 3
