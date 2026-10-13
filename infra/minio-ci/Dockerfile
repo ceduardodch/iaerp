@@ -16,7 +16,7 @@ RUN apk add --no-cache ca-certificates curl \
 COPY --from=build /out/minio /usr/local/bin/minio
 COPY --from=build /src/LICENSE /usr/share/licenses/minio/LICENSE
 LABEL org.opencontainers.image.source="https://github.com/minio/minio" \
-      org.opencontainers.image.revision="9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a" \
+      org.opencontainers.image.revision=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a \
       org.opencontainers.image.version="RELEASE.2025-10-15T17-29-55Z" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
 USER minio
