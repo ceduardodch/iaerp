@@ -7,6 +7,26 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Cruce Tributario → Cartera y cobro rápido: 2026-10-13. Las retenciones
+  recibidas con XML autorizado se aplican por factura y autorización, con
+  tenant, cliente, serie, tipo de sustento, bloqueo e auditoría. Reimportar no
+  duplica; conflictos, reversos y cuentas saldadas quedan para revisión sin
+  modificar documentos fiscales ni cobros previos. Al abrir Cartera se
+  reconcilia el respaldo histórico; preparar cobro vuelve a consultar el neto.
+  El formulario precarga ese saldo y fecha de Guayaquil, pide el método real y
+  conserva idempotencia en reintentos. No calcula retenciones desde perfiles.
+  Banco compara el depósito con factura menos retenciones respaldadas: la
+  proyección se revierte completa en vista previa y se confirma en la misma
+  transacción que el depósito. QA independiente: 80 pruebas PostgreSQL 17.5
+  pasan sin omisiones, incluidas concurrencia de retenciones y cobros, otro
+  tenant, roles, reversos y vista previa sin escrituras. UI: 40 recorridos
+  escritorio/móvil, teclado, axe, 320 px y zoom pasan; lint/build verdes.
+  Revisión fiscal GO y QA GO final; 38 pruebas PostgreSQL dirigidas también
+  pasan tras fijar el orden de bloqueo tenant → cuenta. Promoción autorizada
+  por el usuario, pendiente verificar CI, Coolify y comportamiento visible.
+  El bloqueo ATS por forma de pago faltante sigue separado: no se asignó un
+  código ni se alteró el XML autorizado.
+
 - Recuperación de septiembre revisada el 2026-10-13: el lote de recibidos
   falla tanto por REST mensual como por carga desde pantalla. Los logs de
   API/PostgreSQL confirman una violación de `payables_total_positive`: un
@@ -15,9 +35,34 @@ alcance y las decisiones.
   cuenta por pagar ni cuotas sin importe positivo. Seis casos sintéticos
   cubren factura, liquidación y nota de débito, ambos endpoints, repetición
   sin duplicados y ausencia de escrituras en otro tenant. Las 30 pruebas de
-  carga mensual/masiva pasan. Falta revisión independiente, autorización de
-  promoción y verificación real del lote y de su recuperación XML; septiembre
-  aún no se considera completo ni declarado.
+  carga mensual/masiva y 43 de CxP/MCP/recuperación XML pasan; QA independiente
+  dio GO con 45 pruebas. Publicación y actualización de dependencias
+  autorizadas: correctivo `016dd77`, lock Python `230e9e8`, PR #83.
+  PyJWT 2.15.1, pypdf 6.20.1, anyio 4.15.1 y urllib3 2.8.0 pasan el mismo
+  auditor de CI sin avisos conocidos; 76 pruebas dirigidas, Ruff y mypy pasan.
+  El siguiente control detectó `source-map-js` 1.2.1: actualizado solo a 1.2.2,
+  sin cambiar fuentes ni UI; npm audit, lint y build pasan. PR #83 integrado
+  como `561ed8e`; CI `38435641872` y despliegue Coolify verdes. `main` y
+  `release` apuntan a esa revisión. La API pública está sana y se verificaron
+  el guard de importe cero y las cuatro versiones Python en el servidor.
+  Carga mensual por backend probada con tres reportes y 437 recibidos:
+  422 facturas, 11 notas de crédito y 4 retenciones. El reimport no creó
+  duplicados. El periodo muestra 441 documentos contando cuatro ventas
+  propias; recuperación 373/373 XML, cero errores y cero no disponibles.
+  La sesión web confirma `Listo para revisar` y campos de copia habilitados.
+  No se presentó ni se marcó una declaración. Los cambios de notificaciones
+  y del ejecutor local pendientes quedaron fuera de esta publicación.
+
+- Avisos internos: cadena Brevo corregida localmente el 2026-09-22
+  `America/Guayaquil`. El módulo ya tenía reglas, plantillas, bitácora,
+  calendario de facturación, scheduler y despacho por outbox; el defecto era
+  de despliegue: `compose.coolify.yaml` no propagaba las cuatro variables
+  `BREVO_*` a API, worker y scheduler. Ahora las tres piezas reciben la misma
+  configuración y los valores vacíos se tratan como ausentes, por lo que el
+  canal queda explícitamente en `STUB` en vez de aparentar estar listo. Pasan
+  87 pruebas de avisos, Ruff y la resolución de Compose. Falta commit,
+  promoción autorizada y una prueba real desde la pestaña Avisos antes de
+  encender reglas.
 
 - Configuración de acceso SRI por empresa enviada a `release`, en validación CI antes de `main`:
   Empresa → Configuración permite guardar RUC y clave del portal cifrados por

@@ -5,6 +5,7 @@ import {
   startTransition,
   Suspense,
   useDeferredValue,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -3328,52 +3329,23 @@ function EditReceivableDueDateForm({
 function RegisterPaymentForm({
   token,
   receivable,
-  party,
   onSaved,
   onCancel,
 }: {
   token: string
   receivable: AccountItem
-  party: Party | undefined
   onSaved: (updated: AccountItem) => void
   onCancel: () => void
 }) {
-  const profileIsAvailable = party?.expectedIvaWithholdingRate != null || party?.expectedIncomeWithholdingRate != null
-  const expectedIva = profileIsAvailable ? Number(receivable.originalAmount) * Number(party?.expectedIvaWithholdingRate ?? 0) / 100 : 0
-  const expectedIncome = profileIsAvailable ? Number(receivable.originalAmount) * Number(party?.expectedIncomeWithholdingRate ?? 0) / 100 : 0
-  const expectedRetentionTotal = expectedIva + expectedIncome
-  const canPrefill = profileIsAvailable && Number(receivable.openAmount) === Number(receivable.originalAmount) && expectedRetentionTotal <= Number(receivable.openAmount)
-  const [cashAmount, setCashAmount] = useState(() =>
-    canPrefill ? (Number(receivable.openAmount) - expectedRetentionTotal).toFixed(2) : '0.00',
-  )
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [cashAmount, setCashAmount] = useState(receivable.openAmount)
+  const [paymentDate, setPaymentDate] = useState(todayInFiscalTimezone)
   const [method, setMethod] = useState<'' | PaymentInput['method']>('')
   const [reference, setReference] = useState('')
-  const [retentions, setRetentions] = useState<Array<RetentionInput & { key: string }>>(() => {
-    if (!canPrefill) return []
-    const suggested: Array<RetentionInput & { key: string }> = []
-    if (expectedIva > 0) {
-      suggested.push({
-        key: crypto.randomUUID(),
-        kind: 'RETENTION_IVA',
-        amount: expectedIva.toFixed(2),
-        reason: `Perfil esperado de ${party?.name ?? 'cliente'}`,
-        documentReference: '',
-      })
-    }
-    if (expectedIncome > 0) {
-      suggested.push({
-        key: crypto.randomUUID(),
-        kind: 'RETENTION_RENTA',
-        amount: expectedIncome.toFixed(2),
-        reason: `Perfil esperado de ${party?.name ?? 'cliente'}`,
-        documentReference: '',
-      })
-    }
-    return suggested
-  })
+  const [retentions, setRetentions] = useState<Array<RetentionInput & { key: string }>>([])
   const [discounts, setDiscounts] = useState<Array<DiscountInput & { key: string }>>([])
   const [retentionXmlFile, setRetentionXmlFile] = useState<File | null>(null)
+  const paymentAttempt = useRef<{ body: string; key: string } | null>(null)
+  const submitting = useRef(false)
 
   const previewRetentionXml = useMutation({
     mutationFn: async () => {
@@ -3399,24 +3371,28 @@ function RegisterPaymentForm({
   })
 
   const registerPayment = useMutation({
-    mutationFn: () =>
-      apiRequest<AccountItem>(token, `/receivables/${receivable.id}/payments`, {
+    mutationFn: () => {
+      const body = JSON.stringify({
+        cashAmount, paymentDate, method: method || null, reference: reference || null,
+        retentions: retentions.map(({ key: _key, ...retention }) => retention),
+        discounts: discounts.map(({ key: _key, ...discount }) => discount),
+      } satisfies PaymentInput)
+      if (paymentAttempt.current?.body !== body) {
+        paymentAttempt.current = { body, key: idempotencyKey('web-receivable-payment') }
+      }
+      return apiRequest<AccountItem>(token, `/receivables/${receivable.id}/payments`, {
         method: 'POST',
-        headers: { 'Idempotency-Key': idempotencyKey('web-receivable-payment') },
-        body: JSON.stringify({
-          cashAmount,
-          paymentDate,
-          method: method || null,
-          reference: reference || null,
-          retentions: retentions.map(({ key: _key, ...retention }) => retention),
-          discounts: discounts.map(({ key: _key, ...discount }) => discount),
-        } satisfies PaymentInput),
-      }),
+        headers: { 'Idempotency-Key': paymentAttempt.current.key }, body,
+      })
+    },
     onSuccess: (updated) => onSaved(updated),
+    onSettled: () => { submitting.current = false },
   })
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submitting.current || (Number(cashAmount) > 0 && !method)) return
+    submitting.current = true
     registerPayment.mutate()
   }
 
@@ -3431,7 +3407,7 @@ function RegisterPaymentForm({
       onCancel={onCancel}
     >
       <p className="fine-print">Saldo actual ${formatAmount(receivable.openAmount)}. El saldo final lo calcula el servidor.</p>
-      {profileIsAvailable ? <div className="fine-print">Perfil esperado de {party?.name}: IVA {party?.expectedIvaWithholdingRate ?? '0'}% + renta {party?.expectedIncomeWithholdingRate ?? '0'}%. {canPrefill ? <>Valores y neto precargados. Revisa los montos y registra el comprobante de retención antes de guardar.</> : ' No se precarga porque este cobro es parcial o el saldo ya cambió.'}</div> : null}
+      <p className="fine-print">El saldo incluye las retenciones aplicadas. No las registres otra vez.</p>
       <div className="field-row">
         <label>
           Monto en efectivo
@@ -3457,8 +3433,8 @@ function RegisterPaymentForm({
       <div className="field-row">
         <label>
           Método
-          <select value={method ?? ''} onChange={(event) => setMethod(event.target.value as PaymentInput['method'])}>
-            <option value="">Sin especificar</option>
+          <select required={Number(cashAmount) > 0} value={method ?? ''} onChange={(event) => setMethod(event.target.value as PaymentInput['method'])}>
+            <option value="">Selecciona el método</option>
             <option value="TRANSFER">Transferencia</option>
             <option value="CHECK">Cheque</option>
             <option value="CASH">Efectivo</option>
@@ -3472,6 +3448,8 @@ function RegisterPaymentForm({
         </label>
       </div>
 
+      <details className="month-group-accordion">
+      <summary>Retenciones o descuentos adicionales</summary>
       <fieldset className="invoice-lines">
         <legend>Leer XML de retención</legend>
         <p className="fine-print">Carga el XML autorizado por SRI. Validamos que pertenece a este cliente y a esta factura; luego puedes revisar y guardar el cobro.</p>
@@ -3494,7 +3472,7 @@ function RegisterPaymentForm({
             </ErpButton>
           </div>
         </div>
-        {previewRetentionXml.error ? <p className="form-error">{previewRetentionXml.error.message}</p> : null}
+        {previewRetentionXml.error ? <p className="form-error" role="alert">{previewRetentionXml.error.message}</p> : null}
         {previewRetentionXml.data ? <p className="fine-print">XML autorizado leído. Se cargaron {previewRetentionXml.data.retentions.length} retención(es); aún debes confirmar con Guardar.</p> : null}
       </fieldset>
 
@@ -3629,6 +3607,7 @@ function RegisterPaymentForm({
           Agregar descuento
         </ErpButton>
       </fieldset>
+      </details>
     </ErpFormPanel>
   )
 }
@@ -4047,10 +4026,12 @@ function CollectionsBreakdownStrip({ breakdown }: { breakdown?: CollectionsBreak
 function ReceivablesPage({
   token,
   parties,
+  canWrite,
   partyFilterId,
 }: {
   token: string
   parties: Party[]
+  canWrite: boolean
   /** Llega con valor al abrir Cartera desde la ficha de un contacto. */
   partyFilterId?: string
 }) {
@@ -4058,6 +4039,33 @@ function ReceivablesPage({
   const [statusFilter, setStatusFilter] = useState<'' | 'OUTSTANDING' | AccountItemStatus>('OUTSTANDING')
   const [panel, setPanel] = useState<ReceivablePanel | undefined>(undefined)
   const lastTriggerRef = useRef<HTMLElement | null>(null)
+  const preparationKey = useRef(idempotencyKey('web-prepare-payment'))
+  const reconciliationKey = useRef(idempotencyKey('web-reconcile-retentions'))
+  const reconciliationStarted = useRef<string | null>(null)
+  const reconcileRetentions = useMutation({
+    mutationFn: () => apiRequest<{ appliedRetentions: number; pendingRetentions: number; notes: string[] }>(token, '/receivables/reconcile-retentions', {
+      method: 'POST', headers: { 'Idempotency-Key': reconciliationKey.current }, body: '{}',
+    }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['receivables'] }) },
+  })
+  const { mutate: startReconciliation } = reconcileRetentions
+  useEffect(() => {
+    let active = true
+    // Skip the discarded StrictMode mount instead of losing its mutation observer.
+    queueMicrotask(() => {
+      if (!active || !canWrite || reconciliationStarted.current === token) return
+      reconciliationStarted.current = token
+      reconciliationKey.current = idempotencyKey('web-reconcile-retentions')
+      startReconciliation()
+    })
+    return () => { active = false }
+  }, [startReconciliation, canWrite, token])
+  const preparePayment = useMutation({
+    mutationFn: (receivableId: string) => apiRequest<AccountItem & { appliedRetentions: number; pendingRetentions: number; notes: string[] }>(token, `/receivables/${receivableId}/prepare-payment`, {
+      method: 'POST', headers: { 'Idempotency-Key': preparationKey.current }, body: '{}',
+    }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['receivables'] }) },
+  })
   const partiesById = new Map(parties.map((party) => [party.id, party]))
   const receivablesQuery = useQuery({
     queryKey: ['receivables', statusFilter, partyFilterId ?? 'todos'],
@@ -4082,6 +4090,11 @@ function ReceivablesPage({
 
   function openPanel(next: ReceivablePanel, trigger?: HTMLElement) {
     lastTriggerRef.current = trigger ?? null
+    if (next.view === 'payment') {
+      preparationKey.current = idempotencyKey('web-prepare-payment')
+      preparePayment.reset()
+      preparePayment.mutate(next.receivable.id)
+    }
     setPanel(next)
   }
 
@@ -4091,7 +4104,7 @@ function ReceivablesPage({
   }
 
   function applyUpdatedReceivable(updated: AccountItem) {
-    queryClient.setQueryData<AccountItem[]>(['receivables', statusFilter], (current) =>
+    queryClient.setQueryData<AccountItem[]>(['receivables', statusFilter, partyFilterId ?? 'todos'], (current) =>
       current?.map((item) => (item.id === updated.id ? updated : item)) ?? current,
     )
     void queryClient.invalidateQueries({ queryKey: ['receivables'] })
@@ -4099,10 +4112,23 @@ function ReceivablesPage({
   }
 
   if (panel?.view === 'payment') {
+    const prepared = preparePayment.data?.id === panel.receivable.id ? preparePayment.data : undefined
     return (
       <>
-        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Registrar cobro" subtitle={`Saldo actual: $${formatAmount(panel.receivable.openAmount)}`} />
-        <RegisterPaymentForm key={panel.receivable.id} token={token} receivable={panel.receivable} party={partiesById.get(panel.receivable.partyId)} onSaved={applyUpdatedReceivable} onCancel={closePanel} />
+        <ErpPageHeader eyebrow="Cuentas por cobrar" title="Registrar cobro" subtitle={prepared ? `Saldo actual: $${formatAmount(prepared.openAmount)}` : 'Revisando el saldo y las retenciones registradas.'} />
+        {!prepared ? <ErpPanel title="Preparar cobro">
+          {preparePayment.isPending ? <p role="status">Cruzando retenciones y actualizando el saldo…</p> : null}
+          {preparePayment.error ? <p role="alert" className="form-error">{preparePayment.error.message}. No se registró ningún cobro.</p> : null}
+          {preparePayment.error ? <ErpButton variant="secondary" onClick={() => preparePayment.mutate(panel.receivable.id)}>Reintentar preparación</ErpButton> : null}
+          <ErpButton variant="secondary" onClick={closePanel}>Cancelar</ErpButton>
+        </ErpPanel> : <>
+          {prepared.appliedRetentions > 0 ? <p role="status">{prepared.appliedRetentions} retención(es) aplicada(s) al saldo.</p> : null}
+          {prepared.pendingRetentions > 0 ? <p role="status">Hay {prepared.pendingRetentions} retención(es) pendiente(s) de revisar; no se descontaron del saldo.</p> : null}
+          {prepared.status === 'SETTLED' || prepared.status === 'VOIDED' ? <ErpPanel title="Sin saldo por cobrar">
+            <p role="status">Esta cuenta ya no tiene saldo pendiente. No necesitas registrar otro cobro.</p>
+            <ErpButton variant="secondary" onClick={closePanel}>Volver a Cartera</ErpButton>
+          </ErpPanel> : <RegisterPaymentForm key={prepared.id} token={token} receivable={prepared} onSaved={applyUpdatedReceivable} onCancel={closePanel} />}
+        </>}
       </>
     )
   }
@@ -4189,14 +4215,18 @@ function ReceivablesPage({
             <option value="">Todos los estados</option>
           </select>
         </label>
-        <ErpButton variant="primary" onClick={(event) => openPanel({ view: 'retention-batch' }, event.currentTarget)}>
+        <ErpButton variant="primary" disabled={!canWrite} onClick={(event) => openPanel({ view: 'retention-batch' }, event.currentTarget)}>
           Cargar retenciones XML
         </ErpButton>
-        <ErpButton variant="secondary" onClick={(event) => openPanel({ view: 'bank-statement' }, event.currentTarget)}>
+        <ErpButton variant="secondary" disabled={!canWrite} onClick={(event) => openPanel({ view: 'bank-statement' }, event.currentTarget)}>
           Cargar estado bancario
         </ErpButton>
       </ErpToolbar>
       <CollectionsBreakdownStrip breakdown={collectionsQuery.data} />
+      {canWrite && !reconcileRetentions.isSuccess && !reconcileRetentions.error ? <p role="status">Cruzando retenciones…</p> : null}
+      {reconcileRetentions.error ? <div role="alert"><p className="form-error">{reconcileRetentions.error.message}. Revisa las retenciones antes de cobrar.</p><ErpButton variant="secondary" disabled={reconcileRetentions.isPending} onClick={() => reconcileRetentions.mutate()}>Reintentar cruce de retenciones</ErpButton></div> : null}
+      {reconcileRetentions.data?.appliedRetentions ? <p role="status">{reconcileRetentions.data.appliedRetentions} retención(es) aplicada(s) al saldo de Cartera.</p> : null}
+      {reconcileRetentions.data?.pendingRetentions ? <p role="status">Hay {reconcileRetentions.data.pendingRetentions} retención(es) pendiente(s) de revisar; no se descontaron del saldo.</p> : null}
       <section className="split-layout erp-list-only">
         <ErpPanel title="Cuentas por cobrar" count={receivables.length}>
           <ErpDataTable
@@ -4225,7 +4255,7 @@ function ReceivablesPage({
                           aria-label={`Registrar cobro para ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
                           title="Registrar cobro"
                           onClick={(event) => openPanel({ view: 'payment', receivable }, event.currentTarget)}
-                          disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
+                          disabled={!canWrite || !reconcileRetentions.isSuccess || receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
                           <DollarSign size={16} aria-hidden="true" />
                         </ErpButton>
@@ -4263,7 +4293,7 @@ function ReceivablesPage({
                           aria-label={`Editar vencimiento de ${partiesById.get(receivable.partyId)?.name ?? receivable.partyId}`}
                           title="Editar vencimiento"
                           onClick={(event) => openPanel({ view: 'due-date', receivable }, event.currentTarget)}
-                          disabled={receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
+                          disabled={!canWrite || receivable.status === 'SETTLED' || receivable.status === 'VOIDED'}
                         >
                           <CalendarClock size={16} aria-hidden="true" />
                         </ErpButton>
@@ -4947,7 +4977,7 @@ function Workspace() {
             </Suspense>
           </ErrorBoundary>
         ) : null}
-        {section === 'receivables' ? <ReceivablesPage token={token} parties={parties} partyFilterId={partyFilterId} /> : null}
+        {section === 'receivables' ? <ReceivablesPage key={contextQuery.data.tenantId} token={token} parties={parties} canWrite={contextQuery.data.scopes.includes('receivables:write')} partyFilterId={partyFilterId} /> : null}
         {section === 'contracts' ? <ContractsPage key={contractPartyId ?? 'all-contracts'} parties={parties} products={products} taxes={taxesQuery.data ?? []} establishments={establishmentsQuery.data ?? []} emissionPoints={emissionPointsQuery.data ?? []} token={token} initialPartyId={contractPartyId} /> : null}
         {section === 'crm' ? (
           <ErrorBoundary label="el CRM">

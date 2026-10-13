@@ -117,6 +117,21 @@ posiciones de acciones.
 - Al elegir un modulo, el foco pasa a `#main-content` para evitar que usuarios
   de teclado recorran otra vez toda la cabecera.
 
+## Cobro rápido y retenciones
+
+- Al entrar a Cartera, un usuario con permiso de escritura cruza los XML de
+  retención ya importados; las consultas GET no cambian saldos.
+- `Registrar cobro` prepara el saldo en el servidor antes de abrir el formulario.
+  Precarga el neto pendiente y la fecha de Guayaquil. No asigna un método de pago
+  ni calcula retenciones desde porcentajes esperados del cliente.
+- El usuario elige el método y confirma con `Guardar`. Puede cambiar el monto
+  para un abono parcial. XML adicionales, retenciones y descuentos viven en una
+  sección desplegable; lo ya aplicado no se vuelve a ingresar.
+- Un error de preparación no abre el formulario ni registra dinero. Los
+  reintentos conservan la clave de idempotencia; cambiar el cobro usa otra clave.
+- Si una retención requiere revisión, el aviso lo explica sin presentar códigos
+  internos ni asumir que se descontó del saldo.
+
 ## Revision
 
 Una pantalla no cumple Definition of Done si:

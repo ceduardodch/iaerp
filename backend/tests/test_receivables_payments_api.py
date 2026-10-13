@@ -85,6 +85,68 @@ async def test_record_payment_partial_via_api_updates_open_amount(client) -> Non
     assert body["status"] == "PARTIAL"
 
 
+async def test_prepare_payment_is_idempotent_and_does_not_register_cash(client) -> None:
+    setup = await _create_receivable_via_event(
+        key_prefix="prepare-net", sequential="000000959", total=Decimal("100.00")
+    )
+    receivable_id, _ = await setup(client)
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:write"])
+    headers = auth(token, "prepare-payment-stable-key")
+    first = await client.post(
+        f"/api/v1/receivables/{receivable_id}/prepare-payment", headers=headers
+    )
+    replay = await client.post(
+        f"/api/v1/receivables/{receivable_id}/prepare-payment", headers=headers
+    )
+    assert first.status_code == 200, first.text
+    assert replay.json() == first.json()
+    assert first.json()["openAmount"] == "100.00"
+    assert first.json()["appliedRetentions"] == 0
+    async with SessionFactory() as session:
+        assert list(await session.scalars(select(Movement))) == []
+
+
+async def test_reconciliation_requires_write_scope_and_is_tenant_scoped(client) -> None:
+    read_token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:read"])
+    denied = await client.post(
+        "/api/v1/receivables/reconcile-retentions", headers=auth(read_token, "reconcile-denied")
+    )
+    assert denied.status_code == 403
+    write_token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:write"])
+    response = await client.post(
+        "/api/v1/receivables/reconcile-retentions",
+        headers=auth(write_token, "reconcile-empty-0001"),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {"appliedRetentions": 0, "pendingRetentions": 0, "notes": []}
+
+
+async def test_cash_payment_keeps_selected_method_in_audit(client) -> None:
+    setup = await _create_receivable_via_event(
+        key_prefix="pay-method", sequential="000000958", total=Decimal("100.00")
+    )
+    receivable_id, _ = await setup(client)
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:write"])
+    response = await client.post(
+        f"/api/v1/receivables/{receivable_id}/payments",
+        headers=auth(token, "payment-with-method"),
+        json={"cashAmount": "100.00", "paymentDate": "2026-07-10", "method": "TRANSFER"},
+    )
+    assert response.status_code == 201, response.text
+    async with SessionFactory() as session:
+        audit = await session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.tenant_id == TENANT_A, AuditEvent.action == "receivable.money_recorded"
+            )
+        )
+        assert audit is not None
+        assert audit.details == {
+            "cash_amount": "100.00",
+            "method": "TRANSFER",
+            "payment_date": "2026-07-10",
+        }
+
+
 async def test_correct_historical_receivable_due_date_updates_aging_source_and_audit(
     client,
 ) -> None:
@@ -396,9 +458,7 @@ async def test_credit_note_authorized_event_applies_against_receivable(client) -
     assert balance == Decimal("65.00")
 
     token_read = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:read"])
-    response = await client.get(
-        f"/api/v1/receivables/{receivable.id}", headers=auth(token_read)
-    )
+    response = await client.get(f"/api/v1/receivables/{receivable.id}", headers=auth(token_read))
     assert response.json()["openAmount"] == "65.00"
 
 
