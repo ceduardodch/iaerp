@@ -719,6 +719,9 @@ No se presentaron ante SRI. 29 pruebas ATS y 6 E2E dirigidas pasan.
 
 ## ATS identificación — 2026-10-27
 
-Correctivo de ID con guiones y datos condicionales de extranjero06: copia
-corregida con persona natural confirmada y nombre real pasa XSD. Arreglo
-general con persistencia tenant y guardia XSD en publicación; ADR 0018.
+Publicado PR #90, `2f74b6e`, CI/Coolify `40411761365` verdes.
+API/web sanas; 816 backend y 396 E2E pasan, migración PostgreSQL verde.
+ID canónico y datos condicionales de extranjero06 con persistencia tenant
+y validación XSD antes de guardar; ADR 0018. Copia julio v2 con persona
+natural confirmada pasa XSD. Falta regeneración autenticada tras caducar
+sesión: ingreso abierto al operador. No se presentó ante SRI.

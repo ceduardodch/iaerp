@@ -171,6 +171,9 @@ notificaciones y scripts SRI siguen fuera de la entrega.
 
 ## ATS identificación — 2026-10-27
 
-Codex: publicando normalización ATS, validación XSD y clasificación extranjera
-confirmada por tenant, con migración reversible. 50 pruebas backend/6 E2E
-pasan y revisiones fiscal/plataforma GO. No incluye notificaciones ni scripts.
+Codex: EN PRODUCCIÓN por PR #90, `2f74b6e`. CI/Coolify `40411761365`
+verdes; API/web sanas y revisión comprobada. 816 backend/396 E2E pasan,
+migración PostgreSQL verde y revisiones fiscal/plataforma GO.
+Copia julio v2 con persona natural confirmada pasa XSD. Regeneración desde
+sesión pendiente de ingreso del operador; no se presentó ante SRI.
+No incluye notificaciones ni scripts.
