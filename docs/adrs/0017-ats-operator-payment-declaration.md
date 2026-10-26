@@ -38,3 +38,7 @@ La declaración del operador no prueba aceptación del ATS por el SRI.
 El operador pidió que 20 se aplique automáticamente en todos los meses,
 incluidos julio y agosto. Esta instrucción sustituye la elección obligatoria
 por período. No modifica XML ni completa otros datos fiscales desconocidos.
+
+Publicación del valor automático: PR #88, CI/Coolify 40376868467 verdes.
+Revisión ejecutada 5bc215d: julio y agosto generados sin elegir el método,
+con ZIP/XML descargados y verificados; sin presentación ante SRI.
