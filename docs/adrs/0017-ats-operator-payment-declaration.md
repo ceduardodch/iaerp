@@ -1,7 +1,7 @@
 # ADR 0017 — Forma de pago declarada para generar ATS
 
-Fecha: 2026-10-27. Estado: aceptado para implementación local por solicitud del
-operador; publicación pendiente de autorización.
+Fecha: 2026-10-27. Estado: aceptado y publicado con autorización humana.
+PR #85 y #86; ejecución de producción 40371809581 aprobada.
 
 ## Contexto
 

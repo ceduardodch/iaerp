@@ -151,8 +151,9 @@ Las dos sesiones mezclaron `main` y `release`:
 
 ## Sesión ATS — 2026-10-27
 
-Codex: correctivo local terminado en API/schema/servicio ATS y TaxPage.
-Elección explícita 01/20 para ventas sin forma de pago; operador confirmó 20.
-ADR 0017, pruebas y auditoría. Publicación hasta producción autorizada por el
-usuario; revisión fiscal/plataforma independiente en curso. Cambios previos de
-notificaciones y scripts SRI conservados.
+Codex: EN PRODUCCIÓN. PR #85 (ATS) y #86 (dominio Coolify); CI manual
+40371809581 verde. API/web sanas en 5bd095d. Revisiones fiscal y plataforma GO.
+Septiembre BTOB: ATS v1 generado con 20, ZIP descargado y XML verificado; no
+presentado ni marcado como declarado. Coolify ahora usa coolify.b2b.com.ec,
+con DNS/túnel y dominio principal respaldados. No se desplegó por SSH.
+Cambios previos de notificaciones y scripts SRI conservados fuera de la entrega.

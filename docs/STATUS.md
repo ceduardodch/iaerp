@@ -7,12 +7,19 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- ATS, 2026-10-27: correctivo local permite forma de pago declarada por el
-  operador (01/20) solo en ventas sin dato XML. Confirmó 20 en esta sesión.
-  Conserva XML y proyección fiscal; elección auditada y parte de idempotencia.
-  Sin elección conserva el bloqueo. ADR 0017. Backend: 25 pruebas pasan;
-  lint y build frontend pasan; 4 E2E de generación/selección en escritorio y
-  móvil pasan. Publicación y aceptación SRI pendientes.
+- ATS y recuperación de Coolify, 2026-10-27: EN PRODUCCIÓN. PR #85 incorporó
+  la forma de pago declarada 01/20 para ventas sin dato XML; el operador confirmó
+  20. PR #86 cambió Actions a coolify.b2b.com.ec tras NXDOMAIN del dominio previo.
+  Alias DNS y túnel validados; dominio principal del panel actualizado con respaldo.
+  CI manual con deploy=true `40371809581` verde, incluidos migraciones y OIDC.
+  API y web sanas con SOURCE_COMMIT `5bd095d`; OpenAPI expone AtsGenerate.
+  Backend: 792 pasan (30 omisiones existentes); interfaz: 392 pasan. Auditorías
+  sin avisos conocidos tras actualizar cuatro librerías Python y Vite.
+  Septiembre 2026: ATS v1 generado en BTOB, descargado y verificado como
+  AT092026.xml con formas de pago 20. Hash del ZIP:
+  `88100f6eb1f014217e92877af8e8ac5079b2f2db21a912845e8f57a98fff6636`.
+  No se presentó ni se marcó como declarada la obligación. Aceptación SRI pendiente.
+  XML y proyección original intactos; elección auditada e idempotente. ADR 0017.
 
 - Cruce Tributario → Cartera y cobro rápido: 2026-10-13. Las retenciones
   recibidas con XML autorizado se aplican por factura y autorización, con
