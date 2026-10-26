@@ -7,15 +7,17 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- ATS, identificación extranjera y XSD, 2026-10-27: correctivo local para
-  quitar solo espacios/guiones en la proyección ATS, sin cambiar ID/XML fuente.
-  Clasifica alfanuméricos sin perder letras y agrupa por ID canónico. Tipo 06
-  exige naturaleza confirmada y nombre real; guarda la elección por tenant/ID
-  en la UOW auditada. El operador confirmó persona natural para el caso real.
-  Valida XSD oficial offline antes de guardar; errores no exponen valores.
-  50 pruebas backend y 6 E2E pasan, lint/build/mypy verdes; revisión fiscal y
-  plataforma GO (consumidor final omite parteRelVtas). Migración a123bc456def
-  reversible; PostgreSQL y publicación pendientes de CI. ADR 0018.
+- ATS, identificación extranjera y XSD, 2026-10-27: EN PRODUCCIÓN por PR #90,
+  revisión `2f74b6e`. CI/Coolify `40411761365` verdes; API/web sanas ejecutan
+  esa revisión. 816 pruebas backend y 396 E2E pasan (30/4 omisiones previas);
+  migración a123bc456def: instalación, reverso y drift PostgreSQL verdes.
+  Quita solo espacios/guiones en la proyección, conserva XML/ID fuente y letras.
+  Tipo 06 exige naturaleza confirmada y nombre real; guarda elección por
+  tenant/ID en UOW auditada y valida XSD oficial offline antes de guardar.
+  Fiscal/plataforma GO; consumidor final omite parteRelVtas. ADR 0018.
+  Operador confirmó persona natural para julio. Copia local corregida v2 pasa
+  XSD completo; no se presentó ante SRI. Regeneración autenticada pendiente:
+  sesión caducó tras despliegue y se dejó el ingreso de BTOB al operador.
 
 
 - ATS, corrección de valor por defecto, 2026-10-27: EN PRODUCCIÓN por PR #88.
