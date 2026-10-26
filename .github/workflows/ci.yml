@@ -580,7 +580,7 @@ jobs:
           response=$(curl --fail --silent --show-error \
             --request POST \
             --header "Authorization: Bearer $COOLIFY_TOKEN" \
-            "https://coolify.fractalsoft.io/api/v1/deploy?uuid=$COOLIFY_APP_UUID&force=false")
+            "https://coolify.b2b.com.ec/api/v1/deploy?uuid=$COOLIFY_APP_UUID&force=false")
           deployment_uuid=$(jq -r '.deployments[0].deployment_uuid // .deployment_uuid // empty' <<<"$response")
           test -n "$deployment_uuid"
           echo "deployment_uuid=$deployment_uuid" >> "$GITHUB_ENV"
@@ -592,7 +592,7 @@ jobs:
           for attempt in $(seq 1 90); do
             response=$(curl --fail --silent --show-error \
               --header "Authorization: Bearer $COOLIFY_TOKEN" \
-              "https://coolify.fractalsoft.io/api/v1/deployments/$deployment_uuid")
+              "https://coolify.b2b.com.ec/api/v1/deployments/$deployment_uuid")
             status=$(jq -r '.status // empty' <<<"$response")
             echo "Coolify deployment status: ${status:-unknown}"
             case "$status" in
