@@ -707,3 +707,9 @@ Cerrado en producción por PR #85 y #86. CI manual 40371809581 y Coolify verdes;
 API/web ejecutan 5bd095d. Septiembre BTOB: ATS v1 generado con 20, descargado,
 XML verificado; presentación/aceptación SRI pendiente. Dominio de Coolify
 recuperado en coolify.b2b.com.ec con respaldos de túnel y FQDN.
+
+
+## ATS automático — 2026-10-27
+
+Corregir selección obligatoria por mes: 20 automático para ventas sin dato.
+29 pruebas backend y 6 E2E verdes; publicación en curso.

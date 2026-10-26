@@ -395,3 +395,15 @@ def test_operator_sales_default_does_not_fill_purchase_payment_method():
     )
     assert result.missing
     assert result.data.purchases[0].payment_methods == []
+
+
+def test_builder_defaults_missing_sales_payment_to_20_without_an_api():
+    sale, tax = _sale()
+    sale.payment_methods = []
+    result = build_ats_input(
+        period=_period(), identification="1790000000001", legal_name="DEMO",
+        documents=[sale], taxes=[tax], retentions=[],
+    )
+    assert result.missing == []
+    assert result.data.sales[0].payment_methods == ["20"]
+    assert sale.payment_methods == []

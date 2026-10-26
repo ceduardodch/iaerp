@@ -721,12 +721,20 @@ test('despliega la historia del comprobante con retención y cobro', async ({ pa
 })
 
 
-test('envía la forma de pago declarada solo cuando el operador la elige', async ({ page }) => {
+test('usa 20 por defecto al generar ATS sin pedir selección', async ({ page }) => {
   const choice = page.getByRole('combobox', { name: /Forma de pago para ventas sin dato/ })
-  await expect(choice).toHaveValue('')
-  await choice.selectOption('20')
+  await expect(choice).toHaveValue('20')
   const request = page.waitForRequest((req) => req.url().endsWith('/ats') && req.method() === 'POST')
   await page.getByRole('button', { name: 'Generar ATS' }).click()
   expect((await request).postDataJSON()).toEqual({ missingSalesPaymentMethod: '20' })
+  await expect(page.getByRole('link', { name: 'Descargar ZIP' })).toBeVisible()
+})
+
+
+test('permite cambiar el valor por defecto a efectivo', async ({ page }) => {
+  await page.getByRole('combobox', { name: /Forma de pago para ventas sin dato/ }).selectOption('01')
+  const request = page.waitForRequest((req) => req.url().endsWith('/ats') && req.method() === 'POST')
+  await page.getByRole('button', { name: 'Generar ATS' }).click()
+  expect((await request).postDataJSON()).toEqual({ missingSalesPaymentMethod: '01' })
   await expect(page.getByRole('link', { name: 'Descargar ZIP' })).toBeVisible()
 })
