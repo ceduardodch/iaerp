@@ -398,3 +398,10 @@ class SRIValidationIssueRead(SRIValidationIssueCreate):
     id: uuid.UUID
     tax_annex_id: uuid.UUID | None = None
     status: str
+
+
+class AtsGenerate(APIModel):
+    """Forma de pago declarada por el operador solo para ventas sin dato XML."""
+
+    model_config = ConfigDict(extra="forbid")
+    missing_sales_payment_method: Literal["01", "20"] | None = None

@@ -160,3 +160,55 @@ async def test_sri_validation_issue_is_saved_per_private_annex(
     )
     assert listed.status_code == 200
     assert listed.json()[0]["lineNumber"] == 12
+
+
+async def test_ats_operator_declared_payment_is_audited_and_idempotent(
+    client, stored_annex_objects
+):
+    from sqlalchemy import select
+
+    from app.db.session import SessionFactory
+    from app.models.platform import AuditEvent
+    from app.models.tax import FiscalDocument
+
+    token = await _token(client)
+    xml = (
+        (FIXTURES / "factura_emitida_autorizada.xml")
+        .read_bytes()
+        .replace(b"<pagos><pago><formaPago>20</formaPago><total>115.00</total></pago></pagos>", b"")
+    )
+    await _upload_and_ingest(client, token, "venta_sin_pago.xml", content=xml)
+    periods = await client.get("/api/v1/tax/periods", headers={"Authorization": f"Bearer {token}"})
+    path = f"/api/v1/tax/periods/{periods.json()[0]['id']}/ats"
+    headers = _headers(token, "ats-operator")
+    response = await client.post(path, headers=headers, json={"missingSalesPaymentMethod": "20"})
+    assert response.status_code == 201, response.text
+    retry = await client.post(path, headers=headers, json={"missingSalesPaymentMethod": "20"})
+    assert retry.json()["id"] == response.json()["id"]
+    conflict = await client.post(path, headers=headers, json={"missingSalesPaymentMethod": "01"})
+    assert conflict.status_code == 409
+    invalid = await client.post(
+        path, headers=_headers(token, "invalid"), json={"missingSalesPaymentMethod": "99"}
+    )
+    assert invalid.status_code == 422
+    async with SessionFactory() as session:
+        document = await session.scalar(select(FiscalDocument))
+        assert document.payment_methods == []
+        audit = await session.scalar(
+            select(AuditEvent).where(AuditEvent.action == "tax.annex.ats.generated")
+        )
+        assert audit.details["missing_sales_payment_method"] == "20"
+        assert audit.details["payment_method_source"] == "operator_declaration"
+    zip_data = next(data for key, data in stored_annex_objects.items() if key.endswith(".zip"))
+    assert b"<formaPago>20</formaPago>" in zipfile.ZipFile(BytesIO(zip_data)).read("AT112025.xml")
+
+
+def test_ats_without_operator_choice_preserves_legacy_request_hash():
+    from app.schemas.tax import AtsGenerate
+    from app.services.unit_of_work import canonical_hash
+
+    legacy = {"periodId": "synthetic-period", "annexType": "ATS"}
+    current = {**legacy, **AtsGenerate().model_dump(
+        mode="json", by_alias=True, exclude_none=True,
+    )}
+    assert canonical_hash(current) == canonical_hash(legacy)

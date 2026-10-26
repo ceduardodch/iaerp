@@ -26,6 +26,7 @@ async def generate_ats(
     context: AuthContext,
     *,
     period: TaxPeriod,
+    missing_sales_payment_method: str | None = None,
 ) -> TaxAnnex:
     """Genera un ATS solo si cada dato exigido tiene evidencia."""
     tenant = await session.scalar(select(Tenant).where(Tenant.id == context.tenant_id))
@@ -43,8 +44,7 @@ async def generate_ats(
     related_keys = {
         document.related_access_key
         for document in documents
-        if document.doc_type in {"NOTA_CREDITO", "NOTA_DEBITO"}
-        and document.related_access_key
+        if document.doc_type in {"NOTA_CREDITO", "NOTA_DEBITO"} and document.related_access_key
     }
     related_documents: list[FiscalDocument] = []
     if related_keys:
@@ -83,6 +83,7 @@ async def generate_ats(
         taxes=taxes,
         retentions=retentions,
         related_documents=related_documents,
+        missing_sales_payment_method=missing_sales_payment_method,
     )
     if result.missing:
         raise HTTPException(

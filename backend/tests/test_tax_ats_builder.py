@@ -350,3 +350,48 @@ def test_sale_uses_ats_code_18_and_establishment_total_matches_header() -> None:
     assert root.findtext("ventas/detalleVentas/valorRetIva") == "259.61"
     assert root.findtext("ventas/detalleVentas/valorRetRenta") == "115.38"
     assert root.findtext("ventasEstablecimiento/ventaEst/ventasEstab") == "5769.00"
+
+
+def test_operator_payment_method_only_fills_missing_sales_and_preserves_source():
+    sale, tax = _sale()
+    sale.payment_methods = []
+    result = build_ats_input(
+        period=_period(),
+        identification="1790000000001",
+        legal_name="DEMO",
+        documents=[sale],
+        taxes=[tax],
+        retentions=[],
+        missing_sales_payment_method="20",
+    )
+    assert result.missing == []
+    assert result.data.sales[0].payment_methods == ["20"]
+    assert sale.payment_methods == []
+    sale.payment_methods = ["01"]
+    result = build_ats_input(
+        period=_period(),
+        identification="1790000000001",
+        legal_name="DEMO",
+        documents=[sale],
+        taxes=[tax],
+        retentions=[],
+        missing_sales_payment_method="20",
+    )
+    assert result.data.sales[0].payment_methods == ["01"]
+
+
+def test_operator_sales_default_does_not_fill_purchase_payment_method():
+    purchase, tax = _purchase(
+        sequential="000000101", base=Decimal("1000"), iva=Decimal("150"), payment_methods=[]
+    )
+    result = build_ats_input(
+        period=_period(),
+        identification="1790000000001",
+        legal_name="DEMO",
+        documents=[purchase],
+        taxes=[tax],
+        retentions=[],
+        missing_sales_payment_method="20",
+    )
+    assert result.missing
+    assert result.data.purchases[0].payment_methods == []
