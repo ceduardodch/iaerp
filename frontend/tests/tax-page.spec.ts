@@ -719,3 +719,14 @@ test('despliega la historia del comprobante con retención y cobro', async ({ pa
   await expect(dossier).toContainText('Neto esperado')
   await expect(dossier).toContainText('$317.85')
 })
+
+
+test('envía la forma de pago declarada solo cuando el operador la elige', async ({ page }) => {
+  const choice = page.getByRole('combobox', { name: /Forma de pago para ventas sin dato/ })
+  await expect(choice).toHaveValue('')
+  await choice.selectOption('20')
+  const request = page.waitForRequest((req) => req.url().endsWith('/ats') && req.method() === 'POST')
+  await page.getByRole('button', { name: 'Generar ATS' }).click()
+  expect((await request).postDataJSON()).toEqual({ missingSalesPaymentMethod: '20' })
+  await expect(page.getByRole('link', { name: 'Descargar ZIP' })).toBeVisible()
+})

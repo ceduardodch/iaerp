@@ -7,6 +7,13 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- ATS, 2026-10-27: correctivo local permite forma de pago declarada por el
+  operador (01/20) solo en ventas sin dato XML. Confirmó 20 en esta sesión.
+  Conserva XML y proyección fiscal; elección auditada y parte de idempotencia.
+  Sin elección conserva el bloqueo. ADR 0017. Backend: 25 pruebas pasan;
+  lint y build frontend pasan; 4 E2E de generación/selección en escritorio y
+  móvil pasan. Publicación y aceptación SRI pendientes.
+
 - Cruce Tributario → Cartera y cobro rápido: 2026-10-13. Las retenciones
   recibidas con XML autorizado se aplican por factura y autorización, con
   tenant, cliente, serie, tipo de sustento, bloqueo e auditoría. Reimportar no

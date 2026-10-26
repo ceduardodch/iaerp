@@ -148,3 +148,11 @@ Las dos sesiones mezclaron `main` y `release`:
   antes de leer archivos. Se reconstruye solo en cada commit (git hook).
 - Fuente de verdad operativa: `docs/STATUS.md`. Tareas 1x1: `ISSUE_TRACKING.md`.
   Reglas del repo: `AGENTS.md`.
+
+## Sesión ATS — 2026-10-27
+
+Codex: correctivo local terminado en API/schema/servicio ATS y TaxPage.
+Elección explícita 01/20 para ventas sin forma de pago; operador confirmó 20.
+ADR 0017, pruebas y auditoría. Publicación hasta producción autorizada por el
+usuario; revisión fiscal/plataforma independiente en curso. Cambios previos de
+notificaciones y scripts SRI conservados.

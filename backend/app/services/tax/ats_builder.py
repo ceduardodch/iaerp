@@ -1,6 +1,6 @@
 """Convierte comprobantes fiscales respaldados en la entrada del ATS.
 
-Este modulo no completa campos con valores por defecto. Si al documento le
+Este modulo solo acepta valores alternativos declarados por el operador. Si al documento le
 falta un dato que el ATS exige, devuelve el faltante para que la API lo reporte
 antes de crear un anexo que el SRI rechazaria.
 """
@@ -90,13 +90,15 @@ def build_ats_input(
     taxes: list[FiscalDocumentTax],
     retentions: list[FiscalRetention],
     related_documents: list[FiscalDocument] | None = None,
+    missing_sales_payment_method: str | None = None,
 ) -> AtsBuildResult:
     """Arma el ATS exclusivamente desde documentos del periodo.
 
-    La forma de pago sale del XML autorizado. Una venta (o compra sobre el
-    umbral) sin esa evidencia queda como faltante, en lugar de asignarle ``01``
-    o ``20`` de manera ficticia.
+    La forma de pago sale del XML autorizado o de la declaración explícita
+    del operador para ventas sin dato. Las compras conservan sus validaciones.
     """
+    if missing_sales_payment_method not in {None, "01", "20"}:
+        raise ValueError("Forma de pago ATS no admitida")
     by_document: dict[object, list[FiscalDocumentTax]] = defaultdict(list)
     for tax in taxes:
         by_document[tax.fiscal_document_id].append(tax)
@@ -135,9 +137,7 @@ def build_ats_input(
                 "desglose tributario por tarifa; carga su XML autorizado."
             )
             continue
-        doc_codes = (
-            _PURCHASE_DOC_CODES if document.direction == "RECIBIDO" else _SALE_DOC_CODES
-        )
+        doc_codes = _PURCHASE_DOC_CODES if document.direction == "RECIBIDO" else _SALE_DOC_CODES
         doc_code = doc_codes.get(document.doc_type)
         if doc_code is None:
             missing.append(
@@ -148,9 +148,7 @@ def build_ats_input(
         document_taxes = by_document.get(document.id, [])
 
         if document.direction == "RECIBIDO":
-            id_type = _identification_type(
-                document.counterparty_identification, sale=False
-            )
+            id_type = _identification_type(document.counterparty_identification, sale=False)
             if not id_type or not document.counterparty_identification:
                 missing.append(
                     f"Compra del {_date(document.issue_date)} sin identificación válida "
@@ -219,13 +217,9 @@ def build_ats_input(
                         _PURCHASE_DOC_CODES.get(modified.doc_type) if modified else None
                     ),
                     modified_establishment=(modified.establishment_code if modified else None),
-                    modified_emission_point=(
-                        modified.emission_point_code if modified else None
-                    ),
+                    modified_emission_point=(modified.emission_point_code if modified else None),
                     modified_sequential=(modified.sequential if modified else None),
-                    modified_authorization=(
-                        modified.authorization_number if modified else None
-                    ),
+                    modified_authorization=(modified.authorization_number if modified else None),
                 )
             )
             continue
@@ -248,12 +242,15 @@ def build_ats_input(
             sales_groups[key] = sale
         else:
             sale.document_count += 1
-        if not document.payment_methods:
+        payment_methods = list(document.payment_methods)
+        if not payment_methods and missing_sales_payment_method:
+            payment_methods = [missing_sales_payment_method]
+        if not payment_methods:
             missing.append(
                 f"Venta {(_series(document) or _date(document.issue_date))} "
                 "sin forma de pago respaldada en el XML."
             )
-        for method in document.payment_methods:
+        for method in payment_methods:
             if method not in sale.payment_methods:
                 sale.payment_methods.append(method)
         for tax in document_taxes:
@@ -271,12 +268,8 @@ def build_ats_input(
             elif retention.kind == "RENTA":
                 sale.withheld_income_tax += retention.retained_amount
         if document.establishment_code:
-            header_sign = (
-                Decimal("-1") if document.doc_type in _CREDIT_NOTES else Decimal("1")
-            )
-            sales_by_establishment[document.establishment_code] += (
-                header_sign * document.subtotal
-            )
+            header_sign = Decimal("-1") if document.doc_type in _CREDIT_NOTES else Decimal("1")
+            sales_by_establishment[document.establishment_code] += header_sign * document.subtotal
         sales_total += (
             Decimal("-1") if document.doc_type in _CREDIT_NOTES else Decimal("1")
         ) * document.subtotal

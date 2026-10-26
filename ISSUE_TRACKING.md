@@ -700,3 +700,9 @@ Para retomar rápidamente en cualquier momento:
 **Sprint:** Sprint 1 - CRM Kanban Foundation
 **Próxima tarea:** TASK-1.1 (Instalar dependencias @dnd-kit)
 **Estado:** 🟢 Ready to start Sprint 1
+
+## 2026-10-27 — ATS: forma de pago declarada
+
+Correctivo local y ADR 0017: elección explícita 01/20 para ventas sin dato XML;
+auditoría e idempotencia, sin tocar XML ni compras. 25 pruebas backend pasan.
+Pendiente autorización de publicación y validación del archivo ante SRI.
