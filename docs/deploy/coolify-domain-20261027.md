@@ -23,3 +23,11 @@ frontend, seguridad y contratos. La llamada a Coolify falló por el dominio
 anterior. Tras integrar esta corrección de workflow, ejecutar CI sobre main
 con deploy=true, porque el filtro de rutas no publica cambios solo de workflow.
 El éxito de esa ejecución y el ATS real se documentan aparte al cerrar.
+
+## Cierre verificado
+
+CI manual con deploy=true 40371809581 y Coolify terminaron en verde. API y web
+ejecutan 5bd095d, están sanas y la sesión real generó el ATS de septiembre v1.
+El FQDN principal de Coolify también quedó en coolify.b2b.com.ec. Valor previo
+respaldado en /etc/cloudflared/coolify-fqdn-before-b2b-20261026.json.
+No se alteraron credenciales del panel ni se presentó el anexo ante SRI.

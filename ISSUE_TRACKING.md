@@ -703,6 +703,7 @@ Para retomar rápidamente en cualquier momento:
 
 ## 2026-10-27 — ATS: forma de pago declarada
 
-Correctivo local y ADR 0017: elección explícita 01/20 para ventas sin dato XML;
-auditoría e idempotencia, sin tocar XML ni compras. 25 pruebas backend pasan.
-Pendiente autorización de publicación y validación del archivo ante SRI.
+Cerrado en producción por PR #85 y #86. CI manual 40371809581 y Coolify verdes;
+API/web ejecutan 5bd095d. Septiembre BTOB: ATS v1 generado con 20, descargado,
+XML verificado; presentación/aceptación SRI pendiente. Dominio de Coolify
+recuperado en coolify.b2b.com.ec con respaldos de túnel y FQDN.
