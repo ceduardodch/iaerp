@@ -1013,7 +1013,7 @@ async def post_period_ats(
         request_payload={
             "periodId": str(period_id),
             "annexType": "ATS",
-            **options.model_dump(mode="json", by_alias=True),
+            **options.model_dump(mode="json", by_alias=True, exclude_none=True),
         },
         audit_details={
             "period_id": str(period_id),

@@ -201,3 +201,14 @@ async def test_ats_operator_declared_payment_is_audited_and_idempotent(
         assert audit.details["payment_method_source"] == "operator_declaration"
     zip_data = next(data for key, data in stored_annex_objects.items() if key.endswith(".zip"))
     assert b"<formaPago>20</formaPago>" in zipfile.ZipFile(BytesIO(zip_data)).read("AT112025.xml")
+
+
+def test_ats_without_operator_choice_preserves_legacy_request_hash():
+    from app.schemas.tax import AtsGenerate
+    from app.services.unit_of_work import canonical_hash
+
+    legacy = {"periodId": "synthetic-period", "annexType": "ATS"}
+    current = {**legacy, **AtsGenerate().model_dump(
+        mode="json", by_alias=True, exclude_none=True,
+    )}
+    assert canonical_hash(current) == canonical_hash(legacy)
