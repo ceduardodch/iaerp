@@ -13,8 +13,10 @@ from app.core.auth import AuthContext
 from app.models.platform import Tenant
 from app.models.tax import FiscalDocument, FiscalDocumentTax, FiscalRetention, TaxAnnex, TaxPeriod
 from app.services import storage
+from app.services.tax import ats_customers
 from app.services.tax.ats import ats_filename, build_ats_xml, build_ats_zip
 from app.services.tax.ats_builder import build_ats_input
+from app.services.tax.ats_validation import validate_ats_xml
 
 
 def _object_key(*, tenant_id: uuid.UUID, period_id: uuid.UUID, version: int, filename: str) -> str:
@@ -27,6 +29,7 @@ async def generate_ats(
     *,
     period: TaxPeriod,
     missing_sales_payment_method: str | None = None,
+    foreign_customer_types: dict[str, str] | None = None,
 ) -> TaxAnnex:
     """Genera un ATS solo si cada dato exigido tiene evidencia."""
     tenant = await session.scalar(select(Tenant).where(Tenant.id == context.tenant_id))
@@ -75,6 +78,13 @@ async def generate_ats(
                 )
             )
         )
+    customer_types = await ats_customers.remember_customer_types(
+        session,
+        context,
+        period=period,
+        documents=documents,
+        declarations=foreign_customer_types or {},
+    )
     result = build_ats_input(
         period=period,
         identification=tenant.ruc,
@@ -84,6 +94,7 @@ async def generate_ats(
         retentions=retentions,
         related_documents=related_documents,
         missing_sales_payment_method=missing_sales_payment_method,
+        foreign_customer_types=customer_types,
     )
     if result.missing:
         raise HTTPException(
@@ -103,6 +114,10 @@ async def generate_ats(
     ) + 1
     filename = ats_filename(result.data)
     xml_bytes = build_ats_xml(result.data)
+    try:
+        validate_ats_xml(xml_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     zip_bytes = build_ats_zip(xml_bytes, filename=filename)
     xml_key = _object_key(
         tenant_id=context.tenant_id,

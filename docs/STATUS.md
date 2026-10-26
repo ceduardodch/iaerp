@@ -7,6 +7,17 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- ATS, identificación extranjera y XSD, 2026-10-27: correctivo local para
+  quitar solo espacios/guiones en la proyección ATS, sin cambiar ID/XML fuente.
+  Clasifica alfanuméricos sin perder letras y agrupa por ID canónico. Tipo 06
+  exige naturaleza confirmada y nombre real; guarda la elección por tenant/ID
+  en la UOW auditada. El operador confirmó persona natural para el caso real.
+  Valida XSD oficial offline antes de guardar; errores no exponen valores.
+  50 pruebas backend y 6 E2E pasan, lint/build/mypy verdes; revisión fiscal y
+  plataforma GO (consumidor final omite parteRelVtas). Migración a123bc456def
+  reversible; PostgreSQL y publicación pendientes de CI. ADR 0018.
+
+
 - ATS, corrección de valor por defecto, 2026-10-27: EN PRODUCCIÓN por PR #88.
   20 automático en ventas sin dato para cualquier período, con interfaz y API
   compatibles con campo omitido/null. Elección 01 y valores XML conservados;

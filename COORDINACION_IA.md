@@ -167,3 +167,10 @@ agosto generados en la sesión BTOB sin tocar el selector; ZIP/XML descargados y
 verificados. XML existentes conservados. No se presentó ni marcó declaración.
 29 pruebas ATS y 6 E2E pasan; revisión fiscal/plataforma GO. Cambios locales de
 notificaciones y scripts SRI siguen fuera de la entrega.
+
+
+## ATS identificación — 2026-10-27
+
+Codex: publicando normalización ATS, validación XSD y clasificación extranjera
+confirmada por tenant, con migración reversible. 50 pruebas backend/6 E2E
+pasan y revisiones fiscal/plataforma GO. No incluye notificaciones ni scripts.

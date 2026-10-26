@@ -407,3 +407,46 @@ def test_builder_defaults_missing_sales_payment_to_20_without_an_api():
     assert result.missing == []
     assert result.data.sales[0].payment_methods == ["20"]
     assert sale.payment_methods == []
+
+
+def test_foreign_ids_group_by_normalized_value_and_keep_source_intact():
+    first, tax1 = _sale()
+    second, tax2 = _sale()
+    first.counterparty_identification = "12-3456789"
+    second.counterparty_identification = "123 456 789"
+    first.counterparty_name = "PERSONA DEMO"
+    second.counterparty_name = "PERSONA DEMO"
+    result = build_ats_input(
+        period=_period(), identification="1790000000001", legal_name="EMPRESA DEMO",
+        documents=[first, second], taxes=[tax1, tax2], retentions=[],
+        foreign_customer_types={"123456789": "01"},
+    )
+    assert result.missing == []
+    assert len(result.data.sales) == 1
+    sale = result.data.sales[0]
+    assert sale.customer_identification == "123456789"
+    assert sale.customer_identification_type == "06"
+    assert sale.document_count == 2
+    assert sale.customer_type == "01"
+    assert sale.customer_name == "PERSONA DEMO"
+    assert first.counterparty_identification == "12-3456789"
+    assert second.counterparty_identification == "123 456 789"
+    from app.services.tax.ats_validation import validate_ats_xml
+    validate_ats_xml(build_ats_xml(result.data))
+
+
+def test_foreign_customer_requires_confirmed_nature_and_real_name():
+    sale, tax = _sale()
+    sale.counterparty_identification = "AB-12345678"
+    result = build_ats_input(
+        period=_period(), identification="1790000000001", legal_name="EMPRESA DEMO",
+        documents=[sale], taxes=[tax], retentions=[],
+    )
+    assert any("confirma el tipo" in missing for missing in result.missing)
+    sale.counterparty_name = ""
+    result = build_ats_input(
+        period=_period(), identification="1790000000001", legal_name="EMPRESA DEMO",
+        documents=[sale], taxes=[tax], retentions=[],
+        foreign_customer_types={"AB12345678": "01"},
+    )
+    assert any("nombre" in missing for missing in result.missing)

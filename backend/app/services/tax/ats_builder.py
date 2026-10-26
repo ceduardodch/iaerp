@@ -19,6 +19,11 @@ from app.services.tax.ats import (
     AtsPurchase,
     AtsSale,
 )
+from app.services.tax.ats_identification import (
+    ats_identification_type,
+    normalize_ats_identification,
+    normalize_ats_name,
+)
 from app.services.tax.completeness import missing_tax_detail_document_ids
 
 _ADD = {"FACTURA", "LIQUIDACION", "NOTA_DEBITO"}
@@ -46,18 +51,6 @@ class AtsBuildResult:
 
     data: AtsInput
     missing: list[str] = field(default_factory=list)
-
-
-def _identification_type(value: str | None, *, sale: bool) -> str | None:
-    """Tipo ATS deducible solo de la longitud de una identificacion real."""
-    digits = "".join(char for char in value or "" if char.isdigit())
-    if len(digits) == 13:
-        return "04" if sale else "01"
-    if len(digits) == 10:
-        return "05" if sale else "02"
-    if len(digits) >= 5:
-        return "06" if sale else "03"
-    return None
 
 
 def _date(value: date) -> str:
@@ -91,6 +84,7 @@ def build_ats_input(
     retentions: list[FiscalRetention],
     related_documents: list[FiscalDocument] | None = None,
     missing_sales_payment_method: str | None = None,
+    foreign_customer_types: dict[str, str] | None = None,
 ) -> AtsBuildResult:
     """Arma el ATS exclusivamente desde documentos del periodo.
 
@@ -149,9 +143,10 @@ def build_ats_input(
             )
             continue
         document_taxes = by_document.get(document.id, [])
+        identification_number = normalize_ats_identification(document.counterparty_identification)
 
         if document.direction == "RECIBIDO":
-            id_type = _identification_type(document.counterparty_identification, sale=False)
+            id_type = ats_identification_type(document.counterparty_identification, sale=False)
             if not id_type or not document.counterparty_identification:
                 missing.append(
                     f"Compra del {_date(document.issue_date)} sin identificación válida "
@@ -201,7 +196,7 @@ def build_ats_input(
                     )
             purchases.append(
                 AtsPurchase(
-                    supplier_identification=document.counterparty_identification,
+                    supplier_identification=str(identification_number),
                     supplier_identification_type=id_type,
                     document_type=doc_code,
                     establishment=str(document.establishment_code),
@@ -227,18 +222,27 @@ def build_ats_input(
             )
             continue
 
-        id_type = _identification_type(document.counterparty_identification, sale=True)
+        id_type = ats_identification_type(document.counterparty_identification, sale=True)
         if not id_type or not document.counterparty_identification:
             missing.append(
                 f"Venta del {_date(document.issue_date)} sin identificación válida del cliente."
             )
             continue
-        key = (document.counterparty_identification, id_type, doc_code)
+        customer_type = (foreign_customer_types or {}).get(str(identification_number))
+        customer_name = normalize_ats_name(document.counterparty_name)
+        if id_type == "06" and (customer_type not in {"01", "02"} or not customer_name):
+            missing.append(
+                f"Venta {(_series(document) or _date(document.issue_date))}: confirma el tipo "
+                "y nombre del cliente extranjero para el ATS."
+            )
+        key = (str(identification_number), id_type, doc_code)
         sale = sales_groups.get(key)
         if sale is None:
             sale = AtsSale(
-                customer_identification=document.counterparty_identification,
+                customer_identification=str(identification_number),
                 customer_identification_type=id_type,
+                customer_type=customer_type if id_type == "06" else None,
+                customer_name=customer_name if id_type == "06" else None,
                 document_type=doc_code,
                 payment_methods=[],
             )

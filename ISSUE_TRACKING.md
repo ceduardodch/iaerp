@@ -715,3 +715,10 @@ Cerrado en producción por PR #88. CI/Coolify 40376868467 y salud API/web verdes
 revisión 5bc215d. Julio y agosto: ATS v1 generados sin elegir forma de pago y
 ZIP/XML verificados; 20 automático solo en ventas sin dato, XML preservado.
 No se presentaron ante SRI. 29 pruebas ATS y 6 E2E dirigidas pasan.
+
+
+## ATS identificación — 2026-10-27
+
+Correctivo de ID con guiones y datos condicionales de extranjero06: copia
+corregida con persona natural confirmada y nombre real pasa XSD. Arreglo
+general con persistencia tenant y guardia XSD en publicación; ADR 0018.
