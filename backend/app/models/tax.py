@@ -512,3 +512,21 @@ __all__ = [
     "TaxTask",
     "TenantTaxProfile",
 ]
+
+
+class AtsCustomerDeclaration(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
+    """Clasificación ATS confirmada; no modifica el comprobante ni el maestro."""
+
+    __tablename__ = "ats_customer_declarations"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "identification", name="uq_ats_customer_declarations_tenant_identification"
+        ),
+        CheckConstraint("customer_type IN ('01', '02')", name="customer_type_valid"),
+        CheckConstraint(
+            "length(identification) BETWEEN 3 AND 13", name="identification_length_valid"
+        ),
+    )
+
+    identification: Mapped[str] = mapped_column(String(13))
+    customer_type: Mapped[str] = mapped_column(String(2))

@@ -228,3 +228,93 @@ def test_ats_without_operator_choice_preserves_legacy_request_hash():
         mode="json", by_alias=True, exclude_none=True, exclude_unset=True,
     )}
     assert canonical_hash(current) == canonical_hash(legacy)
+
+
+async def _foreign_sale_period(client, token):
+    xml = (FIXTURES / "factura_emitida_autorizada.xml").read_bytes().replace(
+        b"0666666666001", b"12-3456789"
+    )
+    await _upload_and_ingest(client, token, "venta_extranjera_demo.xml", content=xml)
+    periods = await client.get("/api/v1/tax/periods", headers={"Authorization": f"Bearer {token}"})
+    return periods.json()[0]["id"]
+
+
+async def test_foreign_customer_choice_is_tenant_scoped_audited_and_remembered(
+    client, stored_annex_objects
+):
+    from sqlalchemy import select
+
+    from app.db.session import SessionFactory
+    from app.models.platform import AuditEvent
+    from app.models.tax import FiscalDocument
+    from app.services.tax.ats_validation import validate_ats_xml
+
+    token = await _token(client)
+    period_id = await _foreign_sale_period(client, token)
+    path = f"/api/v1/tax/periods/{period_id}/ats"
+    missing = await client.post(path, headers=_headers(token, "foreign-missing"))
+    assert missing.status_code == 422
+    headers = _headers(token, "foreign-declared")
+    body = {"foreignCustomerTypes": {"12-3456789": "01"}}
+    created = await client.post(path, headers=headers, json=body)
+    assert created.status_code == 201, created.text
+    retry = await client.post(path, headers=headers, json=body)
+    assert retry.json()["id"] == created.json()["id"]
+    saved = await client.get("/api/v1/tax/ats/customer-types",
+                             headers={"Authorization": f"Bearer {token}"})
+    assert saved.json() == {"123456789": "01"}
+    regenerated = await client.post(path, headers=_headers(token, "foreign-remembered"))
+    assert regenerated.status_code == 201, regenerated.text
+    assert regenerated.json()["version"] == 2
+    zip_data = next(data for key, data in stored_annex_objects.items()
+                    if "/v2/" in key and key.endswith(".zip"))
+    xml = zipfile.ZipFile(BytesIO(zip_data)).read("AT112025.xml")
+    validate_ats_xml(xml)
+    assert b"<idCliente>123456789</idCliente>" in xml
+    assert b"<tipoCliente>01</tipoCliente><denoCli>CLIENTE DEMO</denoCli>" in xml
+    async with SessionFactory() as session:
+        document = await session.scalar(select(FiscalDocument))
+        assert document.counterparty_identification == "12-3456789"
+        event = await session.scalar(select(AuditEvent).where(
+            AuditEvent.entity_id == created.json()["id"]))
+        assert event.details["foreign_customer_types"] == {"123456789": "01"}
+    other_token = (await client.post("/api/v1/dev/token", json={
+        "email": "b@iaerp.local", "tenantId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "scopes": ["tax:read", "tax:write"],
+    })).json()["accessToken"]
+    assert (await client.get("/api/v1/tax/ats/customer-types", headers={
+        "Authorization": f"Bearer {other_token}"})).json() == {}
+    forbidden = await client.post(path, headers=_headers(other_token, "other-tenant"), json=body)
+    assert forbidden.status_code == 404
+
+
+async def test_invalid_xsd_rolls_back_customer_choice_and_uploads_no_annex(
+    client, stored_annex_objects, monkeypatch
+):
+    token = await _token(client)
+    period_id = await _foreign_sale_period(client, token)
+    monkeypatch.setattr(annexes_service, "build_ats_xml", lambda _: b"<iva/>")
+    response = await client.post(f"/api/v1/tax/periods/{period_id}/ats",
+        headers=_headers(token, "bad-xsd"),
+        json={"foreignCustomerTypes": {"123456789": "01"}})
+    assert response.status_code == 422
+    assert "esquema del SRI" in response.json()["detail"]
+    saved = await client.get("/api/v1/tax/ats/customer-types",
+        headers={"Authorization": f"Bearer {token}"})
+    assert saved.json() == {}
+    assert not any("/tax/annexes/" in key for key in stored_annex_objects)
+
+
+@pytest.mark.parametrize("declarations", [
+    {"ABC@123": "01"}, {"ABC123": "99"},
+    {"12-3456789": "01", "123456789": "02"},
+])
+async def test_foreign_customer_invalid_declarations_are_rejected(
+    client, declarations, stored_annex_objects
+):
+    token = await _token(client)
+    period_id = await _foreign_sale_period(client, token)
+    response = await client.post(f"/api/v1/tax/periods/{period_id}/ats",
+        headers=_headers(token, "bad-foreign"), json={"foreignCustomerTypes": declarations})
+    assert response.status_code == 422
+    assert "ABC@123" not in response.text

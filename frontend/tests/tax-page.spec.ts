@@ -175,6 +175,7 @@ async function mockApi(page: Page) {
   for (const path of ['parties', 'products', 'tax-categories', 'establishments', 'emission-points', 'invoices']) {
     await page.route(`**/api/v1/${path}`, (route) => route.fulfill({ json: [] }))
   }
+  await page.route('**/api/v1/tax/ats/customer-types', (route) => route.fulfill({ json: {} }))
   await page.route('**/api/v1/tax/periods', (route) => route.fulfill({
     json: [
       { id: PERIOD_ID, year: 2025, month: 11, obligationType: 'IVA', status: 'LISTO_REVISAR' },
@@ -737,4 +738,41 @@ test('permite cambiar el valor por defecto a efectivo', async ({ page }) => {
   await page.getByRole('button', { name: 'Generar ATS' }).click()
   expect((await request).postDataJSON()).toEqual({ missingSalesPaymentMethod: '01' })
   await expect(page.getByRole('link', { name: 'Descargar ZIP' })).toBeVisible()
+})
+
+
+test('recuerda la clasificación del cliente extranjero para generar el ATS', async ({ page }) => {
+  let confirmed: Record<string, string> = {}
+  await page.route('**/api/v1/tax/ats/customer-types', (route) => route.fulfill({ json: confirmed }))
+  await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/documents`, (route) => route.fulfill({
+    json: [{
+      id: '99999999-9999-4999-8999-999999999999', direction: 'EMITIDO', docType: 'FACTURA',
+      issueDate: '2025-11-15', counterpartyIdentification: '12-3456789',
+      counterpartyName: 'PERSONA DEMO', subtotal: '100.00', taxTotal: '15.00',
+      total: '115.00', paymentMethods: ['20'], isPreliminary: false,
+    }],
+  }))
+  await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/ats`, async (route) => {
+    const body = route.request().postDataJSON()
+    expect(body.foreignCustomerTypes).toEqual({ '123456789': '01' })
+    confirmed = body.foreignCustomerTypes
+    await route.fulfill({ json: {
+      id: '77777777-7777-4777-8777-777777777777', taxPeriodId: PERIOD_ID,
+      annexType: 'ATS', status: 'GENERADO', version: 2,
+      downloadUrl: 'https://private.example/AT112025.zip',
+    } })
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await navigateToSection(page, 'Tributario')
+  const choice = page.getByRole('combobox', { name: /Tipo de cliente extranjero/ })
+  await expect(choice).toHaveValue('')
+  await choice.selectOption('01')
+  await page.getByRole('button', { name: 'Generar ATS' }).click()
+  await expect(page.getByRole('link', { name: 'Descargar ZIP' })).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await navigateToSection(page, 'Tributario')
+  await expect(page.getByRole('combobox', { name: /Tipo de cliente extranjero/ })).toHaveValue('01')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })

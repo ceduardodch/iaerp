@@ -117,6 +117,8 @@ class AtsSale:
     customer_identification_type: str = "04"
     related_party: str = "NO"
     document_type: str = "18"
+    customer_type: str | None = None
+    customer_name: str | None = None
     emission_type: str = "F"
     document_count: int = 1
     base_no_iva: Decimal = Decimal("0.00")
@@ -266,7 +268,14 @@ def build_ats_xml(data: AtsInput) -> bytes:
             "valorRetRenta": format_amount(sale.withheld_income_tax),
         }
         for tag in _SALES_ORDER:
+            if tag == "parteRelVtas" and sale.customer_identification_type == "07":
+                continue
             _text_node(node, tag, values[tag])
+            if tag == "parteRelVtas" and sale.customer_identification_type == "06":
+                if sale.customer_type:
+                    _text_node(node, "tipoCliente", sale.customer_type)
+                if sale.customer_name:
+                    _text_node(node, "denoCli", sale.customer_name)
         _append_payment_methods(node, sale.payment_methods)
 
     by_establishment = SubElement(root, "ventasEstablecimiento")

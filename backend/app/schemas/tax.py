@@ -5,7 +5,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import AliasChoices, ConfigDict, Field
+from fastapi import HTTPException
+from pydantic import AliasChoices, ConfigDict, Field, field_validator
 
 from app.schemas.base import APIModel
 from app.schemas.masters import AnalyticAssignmentRead
@@ -405,3 +406,31 @@ class AtsGenerate(APIModel):
 
     model_config = ConfigDict(extra="forbid")
     missing_sales_payment_method: Literal["01", "20"] | None = "20"
+
+    foreign_customer_types: dict[str, Literal["01", "02"]] = Field(
+        default_factory=dict, max_length=100
+    )
+
+    @field_validator("foreign_customer_types", mode="before")
+    @classmethod
+    def normalize_foreign_customer_types(cls, value: object) -> dict[str, str]:
+        from app.services.tax.ats_identification import (
+            ats_identification_type,
+            normalize_ats_identification,
+        )
+
+        if not isinstance(value, dict) or len(value) > 100:
+            raise HTTPException(status_code=422, detail="Clasificaciones ATS no válidas.")
+        normalized: dict[str, str] = {}
+        for key, customer_type in value.items():
+            if not isinstance(key, str) or customer_type not in ("01", "02"):
+                raise HTTPException(status_code=422, detail="Clasificaciones ATS no válidas.")
+            identification = normalize_ats_identification(key)
+            if identification is None or ats_identification_type(identification, sale=True) != "06":
+                raise HTTPException(
+                    status_code=422, detail="Identificación extranjera ATS no válida."
+                )
+            if identification in normalized and normalized[identification] != customer_type:
+                raise HTTPException(status_code=422, detail="Clasificaciones ATS contradictorias.")
+            normalized[identification] = customer_type
+        return normalized

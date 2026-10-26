@@ -66,6 +66,7 @@ from app.schemas.tax import (
 )
 from app.services import analytics, fiscal_settings, receivables
 from app.services.tax import annexes as annexes_service
+from app.services.tax import ats_customers as ats_customers_service
 from app.services.tax import bulk as bulk_service
 from app.services.tax import dossier as dossier_service
 from app.services.tax import evidence as evidence_service
@@ -980,6 +981,15 @@ async def get_period_iva(
     )
 
 
+@router.get("/ats/customer-types", response_model=dict[str, str])
+async def get_ats_customer_types(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:read"))],
+) -> dict[str, str]:
+    """Clasificaciones ATS confirmadas del tenant autenticado."""
+    return await ats_customers_service.list_customer_types(session, context)
+
+
 @router.post("/periods/{period_id}/ats", response_model=TaxAnnexRead, status_code=201)
 async def post_period_ats(
     idempotency_key: IdempotencyKey,
@@ -1004,6 +1014,7 @@ async def post_period_ats(
             context,
             period=period,
             missing_sales_payment_method=payment_method,
+            foreign_customer_types=dict(options.foreign_customer_types),
         )
         url = await annexes_service.download_url(session, context, annex_id=annex.id)
         payload = TaxAnnexRead.model_validate(annex)
@@ -1024,6 +1035,7 @@ async def post_period_ats(
         },
         audit_details={
             "period_id": str(period_id),
+            "foreign_customer_types": dict(options.foreign_customer_types),
             "missing_sales_payment_method": payment_method,
             "payment_method_source": "operator_declaration"
             if explicit_payment_method

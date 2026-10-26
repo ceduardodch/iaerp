@@ -1,1 +1,3 @@
 graphify-out/graph.json merge=graphify
+# Preserve the public SRI schema bytes, including CRLF and original whitespace.
+backend/app/services/tax/schemas/ats.xsd -text whitespace=-blank-at-eol,cr-at-eol

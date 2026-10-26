@@ -171,6 +171,7 @@ export function TaxPage({
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [atsPaymentMethod, setAtsPaymentMethod] = useState('20')
+  const [atsForeignChoices, setAtsForeignChoices] = useState<Record<string, string>>({})
   const [generatedAnnex, setGeneratedAnnex] = useState<TaxAnnex | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [applyRetentions, setApplyRetentions] = useState(false)
@@ -191,7 +192,11 @@ export function TaxPage({
   )
   const activePeriodId = selectedPeriodId ?? periods[0]?.id ?? null
   const activePeriod = periods.find((period) => period.id === activePeriodId) ?? null
-  useEffect(() => { setAtsPaymentMethod('20') }, [activePeriodId])
+  useEffect(() => {
+    setAtsPaymentMethod('20')
+    setAtsForeignChoices({})
+    setGeneratedAnnex(null)
+  }, [activePeriodId, token])
 
   const dashboardAsOf = activePeriod
     ? `${activePeriod.year}-${String(activePeriod.month).padStart(2, '0')}-01`
@@ -227,6 +232,32 @@ export function TaxPage({
       apiRequest<TaxFiscalDocument[]>(token, `/tax/periods/${activePeriodId}/documents`),
     enabled: Boolean(activePeriodId),
   })
+
+  const atsCustomerTypesQuery = useQuery({
+    queryKey: ['tax', 'ats-customer-types', activePeriodId],
+    queryFn: () => apiRequest<Record<string, string>>(token, '/tax/ats/customer-types'),
+    enabled: Boolean(activePeriodId),
+  })
+
+  const foreignCustomers = useMemo(() => {
+    const customers = new Map<string, string>()
+    for (const document of documentsQuery.data ?? []) {
+      if (document.direction !== 'EMITIDO' || document.docType === 'RETENCION') continue
+      const id = (document.counterpartyIdentification ?? '').replace(/[ -]/g, '')
+      if (!/^[A-Za-z0-9]{3,13}$/.test(id) || /^\d{10}$|^\d{13}$/.test(id)) continue
+      customers.set(id, document.counterpartyName ?? id)
+    }
+    return [...customers.entries()]
+  }, [documentsQuery.data])
+  const foreignTypeFor = (id: string): string => {
+    if (Object.hasOwn(atsForeignChoices, id)) return atsForeignChoices[id] ?? ''
+    const saved = atsCustomerTypesQuery.data ?? {}
+    return Object.hasOwn(saved, id) ? saved[id] ?? '' : ''
+  }
+  const foreignCustomerTypes = Object.fromEntries(foreignCustomers.flatMap(([id]) => {
+    const type = foreignTypeFor(id)
+    return type ? [[id, type]] : []
+  }))
 
   const classificationsQuery = useQuery({
     queryKey: ['analytic-classifications'],
@@ -315,10 +346,14 @@ export function TaxPage({
     mutationFn: (periodId: string) => apiRequest<TaxAnnex>(token, `/tax/periods/${periodId}/ats`, {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey('tax-ats') },
-      body: JSON.stringify({ missingSalesPaymentMethod: atsPaymentMethod || null }),
+      body: JSON.stringify({
+        missingSalesPaymentMethod: atsPaymentMethod || null,
+        ...(Object.keys(foreignCustomerTypes).length ? { foreignCustomerTypes } : {}),
+      }),
     }),
     onSuccess: (annex) => {
       setGeneratedAnnex(annex)
+      void queryClient.invalidateQueries({ queryKey: ['tax', 'ats-customer-types'] })
     },
   })
 
@@ -942,6 +977,28 @@ export function TaxPage({
               <small>Se usa 20 por defecto si falta la forma de pago. Puedes cambiarla a efectivo.
                 Conserva los valores existentes y el XML autorizado.</small>
             </label>
+            {foreignCustomers.length > 0 ? (
+              <fieldset>
+                <legend>Clientes extranjeros del ATS</legend>
+                <p>Confirma el tipo de cada cliente. IAERP lo recordará para los otros meses.</p>
+                {foreignCustomers.map(([id, name]) => (
+                  <label className="form-field" key={id}>
+                    Tipo de cliente extranjero · {name} · {id}
+                    <select
+                      value={foreignTypeFor(id)}
+                      disabled={generateAts.isPending || atsCustomerTypesQuery.isPending}
+                      onChange={(event) => setAtsForeignChoices((current) => ({
+                        ...current, [id]: event.target.value,
+                      }))}
+                    >
+                      <option value="">Selecciona el tipo</option>
+                      <option value="01">Persona natural</option>
+                      <option value="02">Empresa / sociedad</option>
+                    </select>
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
             {generateAts.error ? (
               <p className="form-error" role="alert">{generateAts.error.message}</p>
             ) : null}
