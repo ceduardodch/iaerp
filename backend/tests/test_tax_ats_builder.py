@@ -437,7 +437,7 @@ def test_foreign_ids_group_by_normalized_value_and_keep_source_intact():
 
 def test_foreign_customer_requires_confirmed_nature_and_real_name():
     sale, tax = _sale()
-    sale.counterparty_identification = "AB-12345678"
+    sale.counterparty_identification = "ZX-12345678"
     result = build_ats_input(
         period=_period(), identification="1790000000001", legal_name="EMPRESA DEMO",
         documents=[sale], taxes=[tax], retentions=[],
@@ -447,6 +447,6 @@ def test_foreign_customer_requires_confirmed_nature_and_real_name():
     result = build_ats_input(
         period=_period(), identification="1790000000001", legal_name="EMPRESA DEMO",
         documents=[sale], taxes=[tax], retentions=[],
-        foreign_customer_types={"AB12345678": "01"},
+        foreign_customer_types={"ZX12345678": "01"},
     )
     assert any("nombre" in missing for missing in result.missing)
