@@ -109,8 +109,9 @@ async def test_ats_uses_transfer_from_authorized_sales_xml(
     assert b"<formasDePago><formaPago>20</formaPago></formasDePago>" in xml
 
 
-async def test_ats_still_refuses_a_sale_without_payment_evidence(
-    client, stored_annex_objects
+@pytest.mark.parametrize("request_body", [None, {}, {"missingSalesPaymentMethod": None}])
+async def test_ats_defaults_to_20_for_a_sale_without_payment_evidence(
+    client, stored_annex_objects, request_body
 ) -> None:
     token = await _token(client)
     xml = (FIXTURES / "factura_emitida_autorizada.xml").read_bytes()
@@ -130,9 +131,24 @@ async def test_ats_still_refuses_a_sale_without_payment_evidence(
     response = await client.post(
         f"/api/v1/tax/periods/{periods.json()[0]['id']}/ats",
         headers=_headers(token, "tax-ats"),
+        **({"json": request_body} if request_body is not None else {}),
     )
-    assert response.status_code == 422
-    assert "sin forma de pago respaldada en el XML" in response.json()["detail"]
+    assert response.status_code == 201, response.text
+    zip_data = next(data for key, data in stored_annex_objects.items() if key.endswith(".zip"))
+    assert b"<formaPago>20</formaPago>" in zipfile.ZipFile(BytesIO(zip_data)).read("AT112025.xml")
+    from sqlalchemy import select
+
+    from app.db.session import SessionFactory
+    from app.models.platform import AuditEvent
+    from app.models.tax import FiscalDocument
+
+    async with SessionFactory() as session:
+        document = await session.scalar(select(FiscalDocument))
+        assert document.payment_methods == []
+        audit = await session.scalar(select(AuditEvent).where(
+            AuditEvent.action == "tax.annex.ats.generated"))
+        assert audit.details["missing_sales_payment_method"] == "20"
+        assert audit.details["payment_method_source"] == "operator_authorized_default"
 
 
 async def test_sri_validation_issue_is_saved_per_private_annex(
@@ -209,6 +225,6 @@ def test_ats_without_operator_choice_preserves_legacy_request_hash():
 
     legacy = {"periodId": "synthetic-period", "annexType": "ATS"}
     current = {**legacy, **AtsGenerate().model_dump(
-        mode="json", by_alias=True, exclude_none=True,
+        mode="json", by_alias=True, exclude_none=True, exclude_unset=True,
     )}
     assert canonical_hash(current) == canonical_hash(legacy)

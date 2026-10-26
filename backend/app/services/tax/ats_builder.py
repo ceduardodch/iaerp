@@ -1,6 +1,6 @@
 """Convierte comprobantes fiscales respaldados en la entrada del ATS.
 
-Este modulo solo acepta valores alternativos declarados por el operador. Si al documento le
+Este modulo usa valores alternativos autorizados por el operador. Si al documento le
 falta un dato que el ATS exige, devuelve el faltante para que la API lo reporte
 antes de crear un anexo que el SRI rechazaria.
 """
@@ -95,9 +95,12 @@ def build_ats_input(
     """Arma el ATS exclusivamente desde documentos del periodo.
 
     La forma de pago sale del XML autorizado o de la declaración explícita
-    del operador para ventas sin dato. Las compras conservan sus validaciones.
+    del operador para ventas sin dato. Sin elección usa el valor 20 autorizado
+    por defecto. Las compras conservan sus validaciones.
     """
-    if missing_sales_payment_method not in {None, "01", "20"}:
+    if missing_sales_payment_method is None:
+        missing_sales_payment_method = "20"
+    if missing_sales_payment_method not in {"01", "20"}:
         raise ValueError("Forma de pago ATS no admitida")
     by_document: dict[object, list[FiscalDocumentTax]] = defaultdict(list)
     for tax in taxes:

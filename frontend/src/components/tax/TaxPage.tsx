@@ -170,7 +170,7 @@ export function TaxPage({
   const queryClient = useQueryClient()
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
-  const [atsPaymentMethod, setAtsPaymentMethod] = useState('')
+  const [atsPaymentMethod, setAtsPaymentMethod] = useState('20')
   const [generatedAnnex, setGeneratedAnnex] = useState<TaxAnnex | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [applyRetentions, setApplyRetentions] = useState(false)
@@ -191,7 +191,7 @@ export function TaxPage({
   )
   const activePeriodId = selectedPeriodId ?? periods[0]?.id ?? null
   const activePeriod = periods.find((period) => period.id === activePeriodId) ?? null
-  useEffect(() => { setAtsPaymentMethod('') }, [activePeriodId])
+  useEffect(() => { setAtsPaymentMethod('20') }, [activePeriodId])
 
   const dashboardAsOf = activePeriod
     ? `${activePeriod.year}-${String(activePeriod.month).padStart(2, '0')}-01`
@@ -936,12 +936,11 @@ export function TaxPage({
               Forma de pago para ventas sin dato en el XML
               <select value={atsPaymentMethod} disabled={generateAts.isPending}
                 onChange={(event) => setAtsPaymentMethod(event.target.value)}>
-                <option value="">Exigir dato del XML</option>
                 <option value="20">20 — Otros con sistema financiero (transferencia o depósito)</option>
                 <option value="01">01 — Sin sistema financiero (efectivo)</option>
               </select>
-              <small>Declaro que esta forma de pago corresponde a las ventas sin dato del período.
-                Solo se usa en este ATS; conserva los valores existentes y el XML autorizado.</small>
+              <small>Se usa 20 por defecto si falta la forma de pago. Puedes cambiarla a efectivo.
+                Conserva los valores existentes y el XML autorizado.</small>
             </label>
             {generateAts.error ? (
               <p className="form-error" role="alert">{generateAts.error.message}</p>

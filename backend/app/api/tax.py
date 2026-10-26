@@ -991,6 +991,11 @@ async def post_period_ats(
     """Genera un ZIP ATS privado; no lo entrega ni lo envia al SRI."""
 
     options = body or AtsGenerate()
+    payment_method = options.missing_sales_payment_method or "20"
+    explicit_payment_method = (
+        "missing_sales_payment_method" in options.model_fields_set
+        and options.missing_sales_payment_method is not None
+    )
 
     async def generate() -> tuple[str, dict[str, object]]:
         period = await periods_service.get_period(session, context, period_id=period_id)
@@ -998,7 +1003,7 @@ async def post_period_ats(
             session,
             context,
             period=period,
-            missing_sales_payment_method=options.missing_sales_payment_method,
+            missing_sales_payment_method=payment_method,
         )
         url = await annexes_service.download_url(session, context, annex_id=annex.id)
         payload = TaxAnnexRead.model_validate(annex)
@@ -1013,14 +1018,16 @@ async def post_period_ats(
         request_payload={
             "periodId": str(period_id),
             "annexType": "ATS",
-            **options.model_dump(mode="json", by_alias=True, exclude_none=True),
+            **options.model_dump(
+                mode="json", by_alias=True, exclude_none=True, exclude_unset=True
+            ),
         },
         audit_details={
             "period_id": str(period_id),
-            "missing_sales_payment_method": options.missing_sales_payment_method,
+            "missing_sales_payment_method": payment_method,
             "payment_method_source": "operator_declaration"
-            if options.missing_sales_payment_method
-            else "xml",
+            if explicit_payment_method
+            else "operator_authorized_default",
         },
         action="tax.annex.ats.generated",
         entity_type="tax_annex",

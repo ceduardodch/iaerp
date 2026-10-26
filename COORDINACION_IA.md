@@ -157,3 +157,10 @@ Septiembre BTOB: ATS v1 generado con 20, ZIP descargado y XML verificado; no
 presentado ni marcado como declarado. Coolify ahora usa coolify.b2b.com.ec,
 con DNS/túnel y dominio principal respaldados. No se desplegó por SSH.
 Cambios previos de notificaciones y scripts SRI conservados fuera de la entrega.
+
+
+## ATS automático — 2026-10-27
+
+Codex: publicando 20 por defecto para ventas sin dato en cualquier mes,
+según corrección expresa del operador. 29 pruebas ATS y 6 E2E verdes,
+revisión fiscal/plataforma GO. No incluye notificaciones ni scripts SRI.
