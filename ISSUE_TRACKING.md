@@ -711,5 +711,7 @@ recuperado en coolify.b2b.com.ec con respaldos de túnel y FQDN.
 
 ## ATS automático — 2026-10-27
 
-Corregir selección obligatoria por mes: 20 automático para ventas sin dato.
-29 pruebas backend y 6 E2E verdes; publicación en curso.
+Cerrado en producción por PR #88. CI/Coolify 40376868467 y salud API/web verdes,
+revisión 5bc215d. Julio y agosto: ATS v1 generados sin elegir forma de pago y
+ZIP/XML verificados; 20 automático solo en ventas sin dato, XML preservado.
+No se presentaron ante SRI. 29 pruebas ATS y 6 E2E dirigidas pasan.

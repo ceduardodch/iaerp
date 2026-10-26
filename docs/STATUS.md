@@ -7,13 +7,15 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- ATS, corrección de valor por defecto, 2026-10-27: el operador confirmó que
-  20 debe aplicarse automáticamente a ventas sin forma de pago en cualquier mes.
-  API sin cuerpo, objeto vacío o null usa 20; UI inicia y vuelve a 20 al cambiar
-  de período. Permite elegir 01 y conserva XML/compras. Hash legado conservado;
-  auditoría distingue default autorizado. 29 pruebas ATS y 6 E2E pasan, lint,
-  build y mypy verdes; revisión fiscal y plataforma GO. Publicación en curso.
-
+- ATS, corrección de valor por defecto, 2026-10-27: EN PRODUCCIÓN por PR #88.
+  20 automático en ventas sin dato para cualquier período, con interfaz y API
+  compatibles con campo omitido/null. Elección 01 y valores XML conservados;
+  compras y otros faltantes siguen sus reglas. Revisión fiscal/plataforma GO.
+  CI/Coolify `40376868467` verdes. API/web sanas con SOURCE_COMMIT `5bc215d`.
+  Julio y agosto BTOB: ATS v1 generados sin tocar el selector, descargados y
+  XML AT072026/AT082026 verificados. Julio conserva 01 existentes y completa 20;
+  agosto contiene 20. No se presentaron ante SRI ni se cambiaron estados fiscales.
+  Pruebas dirigidas: 29 backend y 6 E2E; lint/build/mypy verdes.
 
 - ATS y recuperación de Coolify, 2026-10-27: EN PRODUCCIÓN. PR #85 incorporó
   la forma de pago declarada 01/20 para ventas sin dato XML; el operador confirmó

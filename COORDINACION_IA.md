@@ -161,6 +161,9 @@ Cambios previos de notificaciones y scripts SRI conservados fuera de la entrega.
 
 ## ATS automático — 2026-10-27
 
-Codex: publicando 20 por defecto para ventas sin dato en cualquier mes,
-según corrección expresa del operador. 29 pruebas ATS y 6 E2E verdes,
-revisión fiscal/plataforma GO. No incluye notificaciones ni scripts SRI.
+Codex: EN PRODUCCIÓN por PR #88 y CI/Coolify 40376868467. API/web sanas en
+5bc215d. 20 automático para ventas sin dato, sin elegir cada mes. Julio y
+agosto generados en la sesión BTOB sin tocar el selector; ZIP/XML descargados y
+verificados. XML existentes conservados. No se presentó ni marcó declaración.
+29 pruebas ATS y 6 E2E pasan; revisión fiscal/plataforma GO. Cambios locales de
+notificaciones y scripts SRI siguen fuera de la entrega.
