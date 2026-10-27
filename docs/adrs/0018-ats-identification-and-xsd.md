@@ -55,3 +55,34 @@ ID de tres letras, puntuación no admitida, agrupación canónica, conservación
 fuente, clasificación persistente, tenant ajeno, reintentos y rollback sin
 artefactos al fallar XSD. Migración reversible y validación PostgreSQL/CI antes
 de publicar. La clasificación real se confirma en la sesión autenticada.
+
+## Corrección de advertencias de compras (2026-10-27)
+
+El XSD valida estructura, pero no todas las reglas de negocio del receptor.
+En compras se omite `formasDePago` cuando la suma de bases e impuestos no
+supera USD 500; se conserva el método del documento fuente. Builder y
+serializador comparten el total con bases no objeto, cero, gravada y exenta,
+más IVA e ICE. No se descuentan retenciones ni se aplica el filtro a ventas.
+
+La ficha oficial accesible de julio de 2016 define la suma de bases e impuestos
+(páginas 14–19); incluir exento e ICE deriva de esa definición. Su umbral
+histórico no sustituye el de 2026. La ficha vigente enlazada por el portal SRI
+(febrero de 2025) no respondió durante la revisión. La constante actual de
+USD 500 y la comparación estricta se conservan; la evidencia de julio reportó
+nueve avisos por métodos incluidos en compras pequeñas, con IVA en el total.
+Las pruebas cubren debajo, exactamente y encima del umbral, exento e ICE,
+conservación de métodos e importes fuente y ventas al 15%.
+
+Las advertencias que comparan ventas al 12% no autorizan recalcular documentos
+al 15%. Se conservan bases e IVA respaldados. La circular
+[NAC-DGECCGC25-00000006](https://www.sri.gob.ec/o/sri-portlet-biblioteca-alfresco-internet/descargar?id=236482f4-6125-42fd-b073-62c99d08233d&nombre=NAC-DGECCGC25-00000006.pdf)
+mantiene 15% hasta nueva disposición; confirmar versión/catálogos del validador
+para el período. El portal restringe ATS 1.19 a septiembre de 2026 en adelante,
+por lo que no se prescribe esa versión para julio sin verificar compatibilidad.
+
+Fuente: [Ficha oficial 2016](https://descargas.sri.gob.ec/download/anexos/ats/FICHA_TECNICA_ATS_JULIO2016.pdf)
+y [portal de anexos y guías](https://www.sri.gob.ec/formularios-e-instructivos1).
+
+El operador confirmó que los avisos provienen del portal SRI en línea. No se
+atribuye este caso a una instalación DIMM ni se prescribe actualizar software
+local. Se conserva la discrepancia como pendiente de validación ante SRI.

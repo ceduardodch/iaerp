@@ -177,3 +177,10 @@ migración PostgreSQL verde y revisiones fiscal/plataforma GO.
 Copia julio v2 con persona natural confirmada pasa XSD. Regeneración desde
 sesión pendiente de ingreso del operador; no se presentó ante SRI.
 No incluye notificaciones ni scripts.
+
+## ATS advertencias compras — 2026-10-27
+
+Codex: en validación. Omite formasDePago en compras <=500 por total de bases
+e impuestos; conserva fuente/ventas. 59 pruebas verdes, julio v3 XSD válido.
+IVA respaldado 15% intacto; el operador confirma que compara12% el portal SRI.
+Notificaciones y scripts fuera. Publicación autorizada por alcance de sesión.

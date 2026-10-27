@@ -106,7 +106,10 @@ class AtsPurchase:
 
     @property
     def total(self) -> Decimal:
-        return self.base_no_iva + self.base_zero_rate + self.base_taxed + self.iva_amount
+        return (
+            self.base_no_iva + self.base_zero_rate + self.base_taxed
+            + self.base_exempt + self.iva_amount + self.ice_amount
+        )
 
 
 @dataclass
@@ -221,9 +224,11 @@ def build_ats_xml(data: AtsInput) -> bytes:
         _text_node(payment_exterior, "aplicConvDobTrib", "NA")
         _text_node(payment_exterior, "pagExtSujRetNorLeg", "NA")
 
-        # La capa que arma el ATS valida que exista respaldo antes de llegar
-        # aqui. El generador nunca inventa una forma de pago para completar XML.
-        _append_payment_methods(node, purchase.payment_methods)
+        # El SRI advierte si se informa este bloque bajo el umbral, aunque
+        # el XML fuente sí incluya la forma de pago. Conservar el dato fuente
+        # no implica incluirlo en todos los detalles del ATS.
+        if purchase.total > PAYMENT_METHOD_THRESHOLD:
+            _append_payment_methods(node, purchase.payment_methods)
         # El XSD ubica el comprobante modificado después de pagoExterior,
         # formasDePago, AIR y retenciones. IAERP aún no emite AIR/retenciones
         # en este bloque, por lo que estos cinco nodos van al final.
