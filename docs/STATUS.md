@@ -7,6 +7,14 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- ATS, advertencias de compras, 2026-10-27: correctivo en validación para
+  omitir formasDePago en compras con total de bases+IVA+ICE <=500, sin borrar
+  métodos fuente ni filtrar ventas. Corrige total compartido para exento/ICE.
+  59 pruebas ATS verdes. Julio local v3: nueve bloques omitidos, importes y
+  ventas intactos, XSD completo válido. Avisos de ventas comparan 12% contra
+  IVA respaldado 15%; no se alteran cifras. El operador confirma portal SRI en línea;
+  pendiente validación allí y CI/publicación del correctivo. ADR 0018 actualizado.
+
 - ATS, identificación extranjera y XSD, 2026-10-27: EN PRODUCCIÓN por PR #90,
   revisión `2f74b6e`. CI/Coolify `40411761365` verdes; API/web sanas ejecutan
   esa revisión. 816 pruebas backend y 396 E2E pasan (30/4 omisiones previas);

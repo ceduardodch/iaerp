@@ -11,6 +11,8 @@ import zipfile
 from decimal import Decimal
 from xml.etree.ElementTree import fromstring
 
+import pytest
+
 from app.services.tax.ats import (
     AtsInput,
     AtsPurchase,
@@ -136,6 +138,51 @@ def test_purchase_over_threshold_declares_payment_method() -> None:
     assert under_threshold.find("formasDePago") is None
 
 
+@pytest.mark.parametrize(
+    ("base", "iva", "expected"),
+    [
+        ("128.00", "19.20", False),
+        ("434.78", "65.22", False),
+        ("434.79", "65.22", True),
+        ("500.01", "0.00", True),
+    ],
+)
+def test_purchase_payment_block_respects_threshold_without_losing_source(
+    base: str, iva: str, expected: bool,
+) -> None:
+    data = sample_input()
+    purchase = data.purchases[0]
+    purchase.base_zero_rate = Decimal("0.00")
+    purchase.base_taxed = Decimal(base)
+    purchase.iva_amount = Decimal(iva)
+    purchase.payment_methods = ["20"]
+    data.purchases = [purchase]
+
+    root = parse(build_ats_xml(data))
+
+    block = root.find("compras/detalleCompras/formasDePago")
+    assert (block is not None) is expected
+    if expected:
+        assert block.findtext("formaPago") == "20"
+    assert purchase.payment_methods == ["20"]
+    assert root.findtext("compras/detalleCompras/baseImpGrav") == base
+    assert root.findtext("compras/detalleCompras/montoIva") == iva
+    # Las ventas no usan el umbral de compras.
+    assert root.findtext("ventas/detalleVentas/formasDePago/formaPago") == "01"
+
+
+def test_sale_keeps_authorized_fifteen_percent_iva() -> None:
+    data = sample_input()
+    data.year, data.month = 2026, 7
+    data.sales[0].base_taxed = Decimal("1001.23")
+    data.sales[0].iva_amount = Decimal("150.18")
+
+    root = parse(build_ats_xml(data))
+
+    assert root.findtext("ventas/detalleVentas/baseImpGrav") == "1001.23"
+    assert root.findtext("ventas/detalleVentas/montoIva") == "150.18"
+
+
 def test_amounts_use_two_decimals_and_no_thousand_separator() -> None:
     root = parse(build_ats_xml(sample_input()))
 
@@ -180,3 +227,25 @@ def test_validator_detects_multiple_xml_at_root() -> None:
 
     problems = validate_ats_zip(buffer.getvalue())
     assert any("exactamente un XML" in problem for problem in problems)
+
+@pytest.mark.parametrize(
+    ("exempt", "ice", "expected"),
+    [("500.00", "0.00", False), ("500.01", "0.00", True),
+     ("450.00", "50.00", False), ("450.00", "50.01", True)],
+)
+def test_purchase_threshold_includes_exempt_base_and_ice(
+    exempt: str, ice: str, expected: bool,
+) -> None:
+    data = sample_input()
+    purchase = data.purchases[0]
+    purchase.base_zero_rate = Decimal("0.00")
+    purchase.base_exempt = Decimal(exempt)
+    purchase.ice_amount = Decimal(ice)
+    purchase.payment_methods = ["20"]
+    data.purchases = [purchase]
+
+    root = parse(build_ats_xml(data))
+
+    assert (root.find("compras/detalleCompras/formasDePago") is not None) is expected
+    assert root.findtext("compras/detalleCompras/baseImpExe") == exempt
+    assert root.findtext("compras/detalleCompras/montoIce") == ice
