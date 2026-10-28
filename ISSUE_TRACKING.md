@@ -732,3 +732,5 @@ En validación: nueve avisos por formasDePago bajo umbral, filtro solo en compra
 y suma completa de bases+IVA+ICE. 59 pruebas verdes, julio v3 validado XSD,
 ventas e importes originales intactos. Pendiente CI/publicación y validación en portal SRI, confirmado por operador
 como origen del aviso12% para ventas respaldadas15%.
+PR #92 integrado 9d98fe0; publicación bloqueada por GHSA-45c3-73f7-pv4m.
+Corrección de dependencia dnspython2.9.0 y CI/deploy completo pendientes.

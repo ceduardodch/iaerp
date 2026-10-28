@@ -184,3 +184,5 @@ Codex: en validación. Omite formasDePago en compras <=500 por total de bases
 e impuestos; conserva fuente/ventas. 59 pruebas verdes, julio v3 XSD válido.
 IVA respaldado 15% intacto; el operador confirma que compara12% el portal SRI.
 Notificaciones y scripts fuera. Publicación autorizada por alcance de sesión.
+PR #92 integrado 9d98fe0; CI bloqueó despliegue por advisory nuevo dnspython.
+Actualización acotada del lock a2.9.0; sin saltar auditoría.

@@ -14,6 +14,9 @@ alcance y las decisiones.
   ventas intactos, XSD completo válido. Avisos de ventas comparan 12% contra
   IVA respaldado 15%; no se alteran cifras. El operador confirma portal SRI en línea;
   pendiente validación allí y CI/publicación del correctivo. ADR 0018 actualizado.
+  PR #92 integrado como 9d98fe0. CI main 40543784699 bloqueó publicación por
+  nuevo aviso GHSA-45c3-73f7-pv4m; dnspython se actualiza 2.8.0 → 2.9.0
+  sin omitir auditoría. Requiere CI completo manual con deploy=true tras merge.
 
 - ATS, identificación extranjera y XSD, 2026-10-27: EN PRODUCCIÓN por PR #90,
   revisión `2f74b6e`. CI/Coolify `40411761365` verdes; API/web sanas ejecutan
