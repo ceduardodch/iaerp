@@ -7,16 +7,19 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- ATS, advertencias de compras, 2026-10-27: correctivo en validación para
-  omitir formasDePago en compras con total de bases+IVA+ICE <=500, sin borrar
-  métodos fuente ni filtrar ventas. Corrige total compartido para exento/ICE.
-  59 pruebas ATS verdes. Julio local v3: nueve bloques omitidos, importes y
-  ventas intactos, XSD completo válido. Avisos de ventas comparan 12% contra
-  IVA respaldado 15%; no se alteran cifras. El operador confirma portal SRI en línea;
-  pendiente validación allí y CI/publicación del correctivo. ADR 0018 actualizado.
-  PR #92 integrado como 9d98fe0. CI main 40543784699 bloqueó publicación por
-  nuevo aviso GHSA-45c3-73f7-pv4m; dnspython se actualiza 2.8.0 → 2.9.0
-  sin omitir auditoría. Requiere CI completo manual con deploy=true tras merge.
+- ATS, advertencias de compras, 2026-10-28: EN PRODUCCIÓN por PR #92/#93,
+  revisión 076150f. Omite formasDePago en compras con bases+IVA+ICE <=500,
+  conserva métodos fuente y ventas; suma exento/ICE en el umbral compartido.
+  CI completo y Coolify 40606289186 verdes: 825 backend y 396 navegador pasan
+  (30/4 omisiones previas). API/web sanas ejecutan esa revisión.
+  Prueba sintética dentro de API publicada: compras pequeñas/500 exactos sin
+  bloque, >500/exento/ICE con bloque; métodos fuente y ventas15% conservados;
+  XSD válido. dnspython2.9.0 resuelve auditoría nueva sin saltar controles.
+  Fiscal/plataforma GO. Julio local v3 eliminó nueve bloques con ventas e
+  importes intactos; no se regeneró desde sesión autenticada en este cierre.
+  Los tres avisos del portal SRI que comparan12% con IVA respaldado15% siguen
+  pendientes de validación del receptor; no se alteran cifras ni se afirma
+  aceptación/presentación. Generar ZIP nuevo desde IAERP. ADR0018 actualizado.
 
 - ATS, identificación extranjera y XSD, 2026-10-27: EN PRODUCCIÓN por PR #90,
   revisión `2f74b6e`. CI/Coolify `40411761365` verdes; API/web sanas ejecutan

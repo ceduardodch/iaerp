@@ -180,9 +180,9 @@ No incluye notificaciones ni scripts.
 
 ## ATS advertencias compras — 2026-10-27
 
-Codex: en validación. Omite formasDePago en compras <=500 por total de bases
-e impuestos; conserva fuente/ventas. 59 pruebas verdes, julio v3 XSD válido.
-IVA respaldado 15% intacto; el operador confirma que compara12% el portal SRI.
-Notificaciones y scripts fuera. Publicación autorizada por alcance de sesión.
-PR #92 integrado 9d98fe0; CI bloqueó despliegue por advisory nuevo dnspython.
-Actualización acotada del lock a2.9.0; sin saltar auditoría.
+Codex: EN PRODUCCIÓN 2026-10-28, PR #92/#93, revisión076150f.
+CI completo/Coolify40606289186 verdes, API/web sanas y revisión comprobada.
+825 backend/396 navegador pasan; prueba sintética en API confirma umbral
+completo, fuente intacta, ventas15% y XSD válido. dnspython2.9.0 auditado.
+Avisos del portal comparando12% siguen pendientes; no alterar IVA ni afirmar
+aceptación SRI. Generar ZIP nuevo. Notificaciones y scripts fuera.
