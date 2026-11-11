@@ -12,6 +12,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from PIL import Image
 from pypdf import PdfReader
 
 from app.models.billing import SalesDocument, SalesDocumentLine
@@ -144,7 +145,8 @@ def test_build_ride_pdf_requires_access_key() -> None:
         )
 
 
-def test_build_ride_pdf_is_not_empty_and_contains_access_key() -> None:
+@pytest.mark.parametrize("logo_bytes", [None, b"invalid image"])
+def test_build_ride_pdf_is_not_empty_and_contains_access_key(logo_bytes: bytes | None) -> None:
     document, lines, establishment, emission_point, buyer = _build_fixture()
 
     pdf_bytes = build_ride_pdf(
@@ -158,12 +160,14 @@ def test_build_ride_pdf_is_not_empty_and_contains_access_key() -> None:
         electronic_invoicing_provider_ruc=_PROVIDER_RUC,
         buyer=buyer,
         environment_code="1",
+        logo_bytes=logo_bytes,
     )
 
     assert len(pdf_bytes) > 0
     assert pdf_bytes.startswith(b"%PDF")
 
     text = _extract_text(pdf_bytes)
+    assert text.splitlines()[0].strip() == "IAERP Demo S.A."
     assert document.access_key in "".join(text.split())
     assert "1799999999001" in text
     assert "Cliente Facturable" in text
@@ -176,6 +180,29 @@ def test_build_ride_pdf_is_not_empty_and_contains_access_key() -> None:
     assert "Estado SRI: Firmada y pendiente de envío" in text
     assert "Proveedor de facturación electrónica: BTOB SAS" in text
     assert "RUC proveedor de facturación electrónica: 1793113192001" in text
+
+
+def test_build_ride_pdf_embeds_the_issuer_logo() -> None:
+    document, lines, establishment, emission_point, buyer = _build_fixture()
+    logo = io.BytesIO()
+    Image.new("RGBA", (240, 120), color=(12, 91, 101, 220)).save(logo, format="PNG")
+    pdf_bytes = build_ride_pdf(
+        document=document,
+        lines=lines,
+        establishment=establishment,
+        emission_point=emission_point,
+        tenant_ruc="1799999999001",
+        tenant_legal_name="IAERP Demo S.A.",
+        electronic_invoicing_provider_name=_PROVIDER_NAME,
+        electronic_invoicing_provider_ruc=_PROVIDER_RUC,
+        buyer=buyer,
+        environment_code="1",
+        logo_bytes=logo.getvalue(),
+    )
+    page = PdfReader(io.BytesIO(pdf_bytes)).pages[0]
+
+    assert [image.image.size for image in page.images] == [(240, 120)]
+    assert page.extract_text().splitlines()[0].strip() == "IAERP Demo S.A."
 
 
 def test_build_ride_pdf_reflects_same_totals_as_document_without_recalculating() -> None:
