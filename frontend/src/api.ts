@@ -426,6 +426,15 @@ export type BankStatementImport = {
     status: 'MATCHED' | 'REGISTERED'
     detail: string
   }>
+  creditReviews?: Array<{
+    transactionId: string
+    paymentDate: string
+    reference: string
+    description: string
+    amount: string
+    status: 'ALREADY_RECORDED' | 'AMBIGUOUS' | 'NO_EXACT_MATCH'
+    detail: string
+  }>
   manualCorrections: Array<{
     transactionId: string
     paymentDate: string

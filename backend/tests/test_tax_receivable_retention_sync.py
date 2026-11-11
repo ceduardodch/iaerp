@@ -383,8 +383,9 @@ async def test_concurrent_historical_reconciliation_applies_only_once(client, mo
         assert len(list(await session.scalars(select(Movement)))) == 1
 
 
+@pytest.mark.parametrize("bank_month", [7, 8])
 async def test_bank_preview_matches_documented_net_without_writes_then_confirm_settles(
-    client, monkeypatch
+    client, monkeypatch, bank_month: int
 ):
     from app.services.bank_reconciliation import import_bank_statement
     from tests.test_bank_statement_import import _row, _statement
@@ -399,7 +400,7 @@ async def test_bank_preview_matches_documented_net_without_writes_then_confirm_s
         debt_id = debt.id
     content = _statement(
         _row(
-            occurred_at="07/07/2026 13:32:00.000",
+            occurred_at=f"{bank_month:02d}/07/2026 13:32:00.000",
             reference="SYNTHETIC-DEPOSIT-90",
             description="TRANSFER RECEIVED",
             sign="+",
@@ -412,7 +413,7 @@ async def test_bank_preview_matches_documented_net_without_writes_then_confirm_s
             context=_context(tenant_id=TENANT_A),
             file_name="synthetic.txt",
             content=content,
-            period=date(2026, 7, 1),
+            period=date(2026, bank_month, 1),
             apply=False,
             correlation_id="preview-bank",
             idempotency_key="preview-bank-one",
@@ -430,7 +431,7 @@ async def test_bank_preview_matches_documented_net_without_writes_then_confirm_s
             context=_context(tenant_id=TENANT_A),
             file_name="synthetic.txt",
             content=content,
-            period=date(2026, 7, 1),
+            period=date(2026, bank_month, 1),
             apply=True,
             correlation_id="confirm-bank",
             idempotency_key="confirm-bank-one",
@@ -444,7 +445,7 @@ async def test_bank_preview_matches_documented_net_without_writes_then_confirm_s
             context=_context(tenant_id=TENANT_A),
             file_name="synthetic.txt",
             content=content,
-            period=date(2026, 7, 1),
+            period=date(2026, bank_month, 1),
             apply=True,
             correlation_id="repeat-bank",
             idempotency_key="confirm-bank-two",

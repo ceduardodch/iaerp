@@ -25,6 +25,16 @@ class BankStatementMatchRead(APIModel):
     detail: str
 
 
+class BankStatementCreditReviewRead(APIModel):
+    transaction_id: str = Field(min_length=64, max_length=64)
+    payment_date: date
+    reference: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=300)
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    status: Literal["ALREADY_RECORDED", "AMBIGUOUS", "NO_EXACT_MATCH"]
+    detail: str
+
+
 class BankStatementManualCorrectionRead(APIModel):
     transaction_id: str = Field(min_length=64, max_length=64)
     payment_date: date
@@ -96,6 +106,7 @@ class BankStatementImportRead(APIModel):
     already_imported_count: int = Field(ge=0)
     manual_correction_count: int = Field(ge=0)
     matches: list[BankStatementMatchRead]
+    credit_reviews: list[BankStatementCreditReviewRead] = Field(default_factory=list)
     manual_corrections: list[BankStatementManualCorrectionRead]
     debit_matches: list[BankStatementDebitMatchRead]
     debit_suggestions: list[BankStatementDebitSuggestionRead]

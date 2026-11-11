@@ -346,19 +346,21 @@ Pruebas E2E (Playwright, escritorio y viewport movil):
   exige `Idempotency-Key`.
 - Solo se consideran abonos. Débitos, comisiones y filas inválidas no crean
   movimientos de Cartera.
-- Un abono se relaciona únicamente si una sola factura `AUTHORIZED` del mismo
-  período, emitida antes del movimiento, tiene exactamente ese saldo neto.
-  Las retenciones activas forman parte del cálculo.
+- El período filtra por fecha del abono. El cruce busca un saldo neto exacto
+  en una única factura autorizada emitida hasta esa fecha, incluidos saldos
+  pendientes de meses anteriores. El neto descuenta retenciones activas.
 - La evidencia documental tiene prioridad sobre un cobro manual sin referencia:
   si `abono + retenciones = total`, el sistema crea un reverso auditable del
-  manual y registra el banco. Nunca borra el movimiento ni reemplaza retenciones.
-  Pagos con referencia, descuentos o notas de crédito quedan fuera.
+  manual del período y registra el banco. Nunca borra el movimiento ni reemplaza
+  retenciones. Pagos con referencia, descuentos o notas de crédito quedan fuera.
 - Si el banco ya quedó en la factura respaldada y el mismo valor fue cargado
   manualmente en otra factura del cliente, la vista previa propone corregir el
   manual solo cuando la otra factura fue emitida después del abono. Al confirmar
   crea el reverso en esa factura; no mueve ni borra el cobro original.
-- Dos abonos o dos facturas por el mismo valor dentro del período quedan para
-  revisión. Importes iguales en meses distintos no crean ambigüedad.
+- Dos abonos del período o dos facturas elegibles con el mismo neto quedan
+  para revisión. La vista muestra la referencia, fecha, importe y motivo de
+  cada abono sin cruce o ya registrado. También indica cuántos abonos trae el
+  TXT fuera del período elegido.
 - El archivo se procesa en memoria. Una huella estable de cuenta, fecha,
   referencia, descripción e importe evita registrar dos veces el mismo abono
   aun cuando se vuelva a cargar en otro estado de cuenta.

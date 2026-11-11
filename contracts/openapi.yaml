@@ -1000,9 +1000,9 @@ paths:
       description: >-
         Procesa un TXT bancario en memoria. La vista previa no escribe. Al
         confirmar, registra únicamente abonos del período que cuadran de forma
-        única con una factura autorizada del mismo período. Si la factura ya
-        tiene un cobro manual sin respaldo y el abono más las retenciones
-        documentadas cuadran el total, revierte el manual y registra el banco.
+        única con una factura autorizada ya emitida, incluso de un mes anterior
+        si sigue pendiente. Para facturas del período, puede sustituir un cobro
+        manual sin respaldo cuando el abono más las retenciones cuadran el total.
         Ignora débitos y no aplica coincidencias ambiguas o parciales.
       security:
         - oauth2: ["receivables:write"]
@@ -2630,6 +2630,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BankStatementMatch"
+        creditReviews:
+          type: array
+          items:
+            $ref: "#/components/schemas/BankStatementCreditReview"
         manualCorrections:
           type: array
           items:
@@ -2643,6 +2647,33 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BankStatementDebitSuggestion"
+    BankStatementCreditReview:
+      type: object
+      additionalProperties: false
+      required: [transactionId, paymentDate, reference, description, amount, status, detail]
+      properties:
+        transactionId:
+          type: string
+          minLength: 64
+          maxLength: 64
+        paymentDate:
+          type: string
+          format: date
+        reference:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          minLength: 1
+          maxLength: 300
+        amount:
+          $ref: "#/components/schemas/PositiveDecimal"
+        status:
+          type: string
+          enum: [ALREADY_RECORDED, AMBIGUOUS, NO_EXACT_MATCH]
+        detail:
+          type: string
     BankStatementDebitMatch:
       type: object
       additionalProperties: false

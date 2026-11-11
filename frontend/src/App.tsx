@@ -89,6 +89,7 @@ import { ErpModal } from './components/erp/ErpModal'
 import { ErpConfirmDialog } from './components/erp/ErpConfirmDialog'
 import { AnalyticClassificationPicker } from './components/analytics/AnalyticClassificationPicker'
 import { AnalyticClassificationSettings } from './components/analytics/AnalyticClassificationSettings'
+import { BankCreditReviews } from './components/banking/BankCreditReviews'
 // Code-splitting (Sprint 7): la sección CRM arrastra dependencias pesadas
 // (@dnd-kit + framer-motion) y es la menos usada en el arranque; se carga
 // bajo demanda para reducir el bundle inicial.
@@ -3186,6 +3187,7 @@ function BankStatementImportForm({
           ]}
         />
           ) : null}
+          <BankCreditReviews statement={preview} />
           {preview.manualCorrections.length > 0 ? (
             <ErpDataTable
           ariaLabel="Correcciones de cobros manuales"

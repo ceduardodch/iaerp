@@ -576,10 +576,10 @@ test('bank statement preview registers only the confirmed exact invoice match', 
         fileName: 'estado.txt',
         sourceSha256: 'a'.repeat(64),
         accountMasked: '****8731',
-        totalRows: 3,
+        totalRows: 4,
         creditRows: 2,
         debitRows: 1,
-        outsidePeriodCreditCount: 0,
+        outsidePeriodCreditCount: 1,
         outsidePeriodDebitCount: 0,
         matchedCount: 1,
         unmatchedCreditCount: 1,
@@ -603,6 +603,15 @@ test('bank statement preview registers only the confirmed exact invoice match', 
           status: registered ? 'REGISTERED' : 'MATCHED',
           detail: registered ? 'Cobro registrado' : 'Lista para registrar',
         }],
+        creditReviews: [{
+          transactionId: 'c'.repeat(64),
+          paymentDate: '2026-07-16',
+          reference: 'TRANSFER-DEMO-002',
+          description: 'TRANSFERENCIA RECIBIDA',
+          amount: '111.00',
+          status: 'NO_EXACT_MATCH',
+          detail: 'Sin factura por el saldo neto exacto.',
+        }],
         manualCorrections: [],
         debitMatches: [],
         debitSuggestions: [],
@@ -620,6 +629,10 @@ test('bank statement preview registers only the confirmed exact invoice match', 
   await page.getByRole('button', { name: 'Revisar movimientos' }).click()
   await expect(page.getByRole('cell', { name: '000000961' })).toBeVisible()
   await expect(page.getByText('1 cobro · 0 pagos · 0 gastos sugeridos')).toBeVisible()
+  await expect(page.getByText('Abonos de otros meses en este TXT: 1.', { exact: false })).toBeVisible()
+  const reviewTable = page.getByLabel('Estado de los demás abonos').getByRole('table')
+  await expect(reviewTable.getByRole('cell', { name: 'TRANSFER-DEMO-002' })).toBeVisible()
+  await expect(reviewTable.getByRole('cell', { name: 'Sin factura por el saldo neto exacto.' })).toBeVisible()
   await expectNoA11yViolations(page)
 
   await page.getByRole('button', { name: 'Confirmar 1 cambio' }).click()
