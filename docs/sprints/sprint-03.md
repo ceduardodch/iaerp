@@ -361,6 +361,8 @@ Pruebas E2E (Playwright, escritorio y viewport movil):
   para revisión. La vista muestra la referencia, fecha, importe y motivo de
   cada abono sin cruce o ya registrado. También indica cuántos abonos trae el
   TXT fuera del período elegido.
+- Si un abono de otro mes anterior por el mismo importe sigue pendiente en el
+  TXT y la factura ya existía en esa fecha, se pide revisar ese mes primero.
 - El archivo se procesa en memoria. Una huella estable de cuenta, fecha,
   referencia, descripción e importe evita registrar dos veces el mismo abono
   aun cuando se vuelva a cargar en otro estado de cuenta.

@@ -283,6 +283,49 @@ async def test_bank_statement_can_reconcile_an_older_selected_month(client) -> N
     assert body["matches"][0]["paymentDate"] == "2025-06-15"
 
 
+async def test_bank_statement_defers_newer_duplicate_before_registering_earlier_credit(client):
+    setup = await _create_receivable_via_event(
+        key_prefix="bank-overlapping-months",
+        sequential="000000968",
+        total=Decimal("100.00"),
+        issue_date=date(2026, 7, 1),
+    )
+    receivable_id, _masters = await setup(client)
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:write"])
+    content = _statement(
+        *[
+            _row(
+                occurred_at=f"{month}/14/2026 13:32:00.000",
+                reference=f"SYNTHETIC-CREDIT-{month}",
+                description="TRANSFERENCIA RECIBIDA",
+                sign="+",
+                amount="100.00",
+            )
+            for month in ("07", "08")
+        ]
+    )
+
+    async def upload(period: str, apply: bool) -> dict:
+        response = await client.post(
+            "/api/v1/receivables/bank-statement",
+            headers=auth(token, f"bank-overlap-{period}-{apply}"),
+            data={"apply": str(apply).lower(), "period": period},
+            files={"file": ("estado.txt", content, "text/plain")},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    for apply in (False, True):
+        august = await upload("2026-08", apply)
+        assert august["matches"] == []
+        assert august["creditReviews"][0]["status"] == "AMBIGUOUS"
+        assert "Revisa ese mes primero" in august["creditReviews"][0]["detail"]
+
+    july = await upload("2026-07", True)
+    assert july["matches"][0]["receivableId"] == receivable_id
+    assert july["matches"][0]["reference"] == "SYNTHETIC-CREDIT-07"
+
+
 async def test_bank_statement_period_replaces_manual_payment_with_bank_evidence(client) -> None:
     setup = await _create_receivable_via_event(
         key_prefix="bank-period-replace",

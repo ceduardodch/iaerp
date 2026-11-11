@@ -622,13 +622,19 @@ async def _import_bank_statement(
         tenant_id=context.tenant_id,
         stored=stored_transactions,
     )
+    period_amounts = {credit.amount for credit in period_credits}
+    earlier_credits = [
+        credit
+        for credit in parsed.credits
+        if credit.occurred_at.date() < period and credit.amount in period_amounts
+    ]
     imported_payments = list(
         await session.scalars(
             select(Movement).where(
                 Movement.tenant_id == context.tenant_id,
                 Movement.movement_type == "PAYMENT",
                 Movement.support_reference.in_(
-                    [_bank_reference(credit) for credit in period_credits]
+                    [_bank_reference(credit) for credit in (*period_credits, *earlier_credits)]
                 ),
             )
         )
@@ -642,6 +648,13 @@ async def _import_bank_statement(
     pending_credits = [
         credit for credit in period_credits if _bank_reference(credit) not in imported_references
     ]
+    earlier_pending_dates: dict[Decimal, date] = {}
+    for credit in earlier_credits:
+        if _bank_reference(credit) not in imported_references:
+            bank_date = credit.occurred_at.date()
+            earlier_pending_dates[credit.amount] = max(
+                bank_date, earlier_pending_dates.get(credit.amount, bank_date)
+            )
     candidates = (
         await _receivable_candidates(
             session,
@@ -663,6 +676,7 @@ async def _import_bank_statement(
 
     matches: list[BankStatementMatchRead] = []
     ambiguous_amounts: set[Decimal] = set()
+    deferred_amounts: set[Decimal] = set()
     for amount, amount_credits in credits_by_amount.items():
         last_credit_date = max(credit.occurred_at.date() for credit in amount_credits)
         amount_candidates = [
@@ -676,6 +690,10 @@ async def _import_bank_statement(
             continue
         credit = amount_credits[0]
         candidate = amount_candidates[0]
+        earlier_date = earlier_pending_dates.get(amount)
+        if earlier_date is not None and candidate.document.issue_date <= earlier_date:
+            deferred_amounts.add(amount)
+            continue
         status = "MATCHED"
         detail = (
             "Reemplazará cobro manual con respaldo bancario"
@@ -1033,6 +1051,11 @@ async def _import_bank_statement(
         if _bank_reference(credit) in imported_references:
             review_status = "ALREADY_RECORDED"
             review_detail = "La referencia bancaria ya consta en el historial de Cartera."
+        elif credit.amount in deferred_amounts:
+            review_status = "AMBIGUOUS"
+            review_detail = (
+                "El TXT trae un abono anterior por el mismo valor. Revisa ese mes primero."
+            )
         elif credit.amount in ambiguous_amounts:
             review_status = "AMBIGUOUS"
             review_detail = "Hay varios abonos o facturas por ese importe. Revisa el respaldo."
