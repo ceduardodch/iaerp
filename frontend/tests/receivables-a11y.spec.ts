@@ -567,9 +567,12 @@ test('bank statement preview registers only the confirmed exact invoice match', 
   page,
 }) => {
   let requestCount = 0
-  await page.route('**/api/v1/finance/bank-statements', (route) => {
+  let finishPreview: () => void = () => undefined
+  const previewGate = new Promise<void>((resolve) => { finishPreview = resolve })
+  await page.route('**/api/v1/finance/bank-statements', async (route) => {
     requestCount += 1
     const registered = requestCount > 1
+    if (!registered) await previewGate
     return route.fulfill({
       json: {
         period: '2026-07',
@@ -627,7 +630,11 @@ test('bank statement preview registers only the confirmed exact invoice match', 
     buffer: Buffer.from('estado bancario sintetico'),
   })
   await page.getByRole('button', { name: 'Revisar movimientos' }).click()
+  await expect(page.getByLabel('Período a conciliar')).toBeDisabled()
+  await expect(page.getByLabel('Estado de cuenta bancario')).toBeDisabled()
+  finishPreview()
   await expect(page.getByRole('cell', { name: '000000961' })).toBeVisible()
+  await expect(page.getByLabel('Período a conciliar')).toBeEnabled()
   await expect(page.getByText('1 cobro · 0 pagos · 0 gastos sugeridos')).toBeVisible()
   await expect(page.getByText('Abonos de otros meses en este TXT: 1.', { exact: false })).toBeVisible()
   const reviewTable = page.getByLabel('Estado de los demás abonos').getByRole('table')
