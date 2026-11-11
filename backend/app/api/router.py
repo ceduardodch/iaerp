@@ -2385,7 +2385,7 @@ async def post_bank_statement(
     apply: Annotated[bool, Form()] = False,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> dict[str, object]:
-    """Cruza abonos del periodo y registra solo cobros totales con match único."""
+    """Cruza abonos del período con saldos netos exactos de facturas ya emitidas."""
     try:
         period_date = datetime.strptime(period, "%Y-%m").date().replace(day=1)
     except ValueError as exc:

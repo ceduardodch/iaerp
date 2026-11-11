@@ -2,6 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import select
 
 from app.db.session import SessionFactory
@@ -14,9 +15,9 @@ from tests.test_receivables_payments_api import _create_receivable_via_event
 
 
 def _statement(*rows: str) -> bytes:
-    header = """CLIENTE: BTOB S.A.S.
+    header = """CLIENTE: EMPRESA DE PRUEBA
 RANGO: 01/01/2026 - 08/02/2026
-CUENTA: 27059028731
+CUENTA: 99999000000
 MONEDA: DOLAR
 FECHA REFERENCIA DESCRIPCION +/- VALOR SALDO CONTABLE SALDO DISPONIBLE OFICINA
 """
@@ -36,12 +37,15 @@ def _row(
     )
 
 
-async def test_bank_statement_preview_then_registers_only_unique_exact_match(client) -> None:
+@pytest.mark.parametrize("issue_date", [date(2025, 12, 1), date(2026, 1, 1)])
+async def test_bank_statement_preview_then_registers_only_unique_exact_match(
+    client, issue_date: date
+) -> None:
     setup = await _create_receivable_via_event(
         key_prefix="bank-match",
         sequential="000000961",
         total=Decimal("150.00"),
-        issue_date=date(2026, 1, 1),
+        issue_date=issue_date,
     )
     receivable_id, _masters = await setup(client)
     token = await token_for(
@@ -109,6 +113,9 @@ async def test_bank_statement_preview_then_registers_only_unique_exact_match(cli
     assert body["outsidePeriodCreditCount"] == 0
     assert body["matchedCount"] == 1
     assert body["unmatchedCreditCount"] == 1
+    assert [(row["reference"], row["status"]) for row in body["creditReviews"]] == [
+        ("22525496-2452", "NO_EXACT_MATCH"),
+    ]
     assert body["ignoredDebitCount"] == 1
     assert body["alreadyImportedCount"] == 0
     assert body["matches"][0] | {"transactionId": body["matches"][0]["transactionId"]} == {
@@ -166,6 +173,10 @@ async def test_bank_statement_preview_then_registers_only_unique_exact_match(cli
     assert another_key.status_code == 200, another_key.text
     assert another_key.json()["matchedCount"] == 0
     assert another_key.json()["alreadyImportedCount"] == 1
+    assert [(row["reference"], row["status"]) for row in another_key.json()["creditReviews"]] == [
+        ("22525496-2451", "ALREADY_RECORDED"),
+        ("22525496-2452", "NO_EXACT_MATCH"),
+    ]
     async with SessionFactory() as session:
         payments_after = list(
             await session.scalars(
@@ -180,7 +191,10 @@ async def test_bank_statement_preview_then_registers_only_unique_exact_match(cli
     assert payments_after[0].effective_date == date(2026, 1, 14)
 
 
-async def test_bank_statement_does_not_guess_between_equal_invoices(client) -> None:
+@pytest.mark.parametrize("second_issue_date", [date(2025, 12, 1), date(2026, 1, 1)])
+async def test_bank_statement_does_not_guess_between_equal_invoices(
+    client, second_issue_date: date
+) -> None:
     setup = await _create_receivable_via_event(
         key_prefix="bank-ambiguous",
         sequential="000000962",
@@ -196,7 +210,7 @@ async def test_bank_statement_does_not_guess_between_equal_invoices(client) -> N
         product_id=uuid.UUID(masters["product_id"]),
         sequential="000000963",
         total=Decimal("100.00"),
-        issue_date=date(2026, 1, 1),
+        issue_date=second_issue_date,
     )
     async with SessionFactory() as session:
         await handle_invoice_authorized(
@@ -224,6 +238,7 @@ async def test_bank_statement_does_not_guess_between_equal_invoices(client) -> N
     assert response.json()["matchedCount"] == 0
     assert response.json()["unmatchedCreditCount"] == 1
     assert response.json()["matches"] == []
+    assert response.json()["creditReviews"][0]["status"] == "AMBIGUOUS"
 
 
 async def test_bank_statement_can_reconcile_an_older_selected_month(client) -> None:
@@ -266,6 +281,49 @@ async def test_bank_statement_can_reconcile_an_older_selected_month(client) -> N
     assert body["matchedCount"] == 1
     assert body["matches"][0]["receivableId"] == receivable_id
     assert body["matches"][0]["paymentDate"] == "2025-06-15"
+
+
+async def test_bank_statement_defers_newer_duplicate_before_registering_earlier_credit(client):
+    setup = await _create_receivable_via_event(
+        key_prefix="bank-overlapping-months",
+        sequential="000000968",
+        total=Decimal("100.00"),
+        issue_date=date(2026, 7, 1),
+    )
+    receivable_id, _masters = await setup(client)
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:write"])
+    content = _statement(
+        *[
+            _row(
+                occurred_at=f"{month}/14/2026 13:32:00.000",
+                reference=f"SYNTHETIC-CREDIT-{month}",
+                description="TRANSFERENCIA RECIBIDA",
+                sign="+",
+                amount="100.00",
+            )
+            for month in ("07", "08")
+        ]
+    )
+
+    async def upload(period: str, apply: bool) -> dict:
+        response = await client.post(
+            "/api/v1/receivables/bank-statement",
+            headers=auth(token, f"bank-overlap-{period}-{apply}"),
+            data={"apply": str(apply).lower(), "period": period},
+            files={"file": ("estado.txt", content, "text/plain")},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    for apply in (False, True):
+        august = await upload("2026-08", apply)
+        assert august["matches"] == []
+        assert august["creditReviews"][0]["status"] == "AMBIGUOUS"
+        assert "Revisa ese mes primero" in august["creditReviews"][0]["detail"]
+
+    july = await upload("2026-07", True)
+    assert july["matches"][0]["receivableId"] == receivable_id
+    assert july["matches"][0]["reference"] == "SYNTHETIC-CREDIT-07"
 
 
 async def test_bank_statement_period_replaces_manual_payment_with_bank_evidence(client) -> None:
@@ -331,9 +389,21 @@ async def test_bank_statement_period_replaces_manual_payment_with_bank_evidence(
                 ("MAY", "05/15/2026 13:32:00.000"),
                 ("JUN", "06/16/2026 13:32:00.000"),
                 ("JUL", "07/14/2026 13:32:00.000"),
+                ("AUG", "08/14/2026 13:32:00.000"),
             )
         ]
     )
+
+    later_month = await client.post(
+        "/api/v1/receivables/bank-statement",
+        headers=auth(token),
+        data={"apply": "false", "period": "2026-08"},
+        files={"file": ("estado.txt", content, "text/plain")},
+    )
+    assert later_month.status_code == 200, later_month.text
+    assert later_month.json()["matches"] == []
+    assert later_month.json()["creditReviews"][0]["reference"] == "UNIVERSIDAD-AUG"
+    assert later_month.json()["creditReviews"][0]["status"] == "NO_EXACT_MATCH"
 
     preview = await client.post(
         "/api/v1/receivables/bank-statement",
@@ -345,7 +415,7 @@ async def test_bank_statement_period_replaces_manual_payment_with_bank_evidence(
     preview_body = preview.json()
     assert preview_body["period"] == "2026-07"
     assert preview_body["creditRows"] == 1
-    assert preview_body["outsidePeriodCreditCount"] == 3
+    assert preview_body["outsidePeriodCreditCount"] == 4
     assert preview_body["matchedCount"] == 1
     assert preview_body["matches"][0]["replacesManualPayment"] is True
     assert preview_body["matches"][0]["detail"] == (

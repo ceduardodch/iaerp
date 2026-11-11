@@ -6,6 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Literal
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -24,6 +25,7 @@ from app.models.payables import BankTransaction as StoredBankTransaction
 from app.models.platform import Tenant
 from app.models.receivables import Movement, Receivable
 from app.schemas.bank_reconciliation import (
+    BankStatementCreditReviewRead,
     BankStatementDebitMatchRead,
     BankStatementDebitSuggestionRead,
     BankStatementImportRead,
@@ -186,42 +188,32 @@ def _bank_reference(credit: BankTransaction) -> str:
 
 
 async def _receivable_candidates(
-    session: AsyncSession, *, tenant_id: uuid.UUID, period: date
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    period: date,
+    cutoff: date,
+    credit_amounts: set[Decimal],
 ) -> list[ReceivableCandidate]:
-    entities = list(
-        await session.scalars(
-            select(Receivable).where(
-                Receivable.tenant_id == tenant_id,
-                Receivable.status.in_(("OPEN", "PARTIALLY_PAID", "PAID")),
-            )
+    eligible_invoices = (
+        select(Receivable, SalesDocument)
+        .join(SalesDocument, SalesDocument.id == Receivable.sales_document_id)
+        .where(
+            Receivable.tenant_id == tenant_id,
+            SalesDocument.tenant_id == tenant_id,
+            SalesDocument.document_type == "INVOICE",
+            SalesDocument.status == "AUTHORIZED",
+            SalesDocument.issue_date <= cutoff,
+            (
+                Receivable.status.in_(("OPEN", "PARTIALLY_PAID"))
+                | ((Receivable.status == "PAID") & (SalesDocument.issue_date >= period))
+            ),
         )
     )
     candidates: list[ReceivableCandidate] = []
-    for entity in entities:
-        document = await session.scalar(
-            select(SalesDocument).where(
-                SalesDocument.tenant_id == tenant_id,
-                SalesDocument.id == entity.sales_document_id,
-                SalesDocument.document_type == "INVOICE",
-                SalesDocument.status == "AUTHORIZED",
-                SalesDocument.issue_date >= period,
-            )
-        )
-        if (
-            document is None
-            or document.issue_date.year != period.year
-            or document.issue_date.month != period.month
-        ):
-            continue
-        active_movements = list(
-            await session.scalars(
-                select(Movement).where(
-                    Movement.tenant_id == tenant_id,
-                    Movement.receivable_id == entity.id,
-                    Movement.reversed_movement_id.is_(None),
-                    Movement.id.not_in(receivables._reversed_movement_ids(tenant_id)),
-                )
-            )
+    for entity, document in (await session.execute(eligible_invoices)).all():
+        active_movements = await _active_movements(
+            session, tenant_id=tenant_id, receivable_id=entity.id
         )
         if any(
             movement.movement_type not in {"RETENTION", "PAYMENT"} for movement in active_movements
@@ -239,14 +231,16 @@ async def _receivable_candidates(
             (movement.amount for movement in retention_movements), Decimal("0.00")
         )
         expected_cash = entity.original_amount - retention_total
-        if expected_cash <= 0:
+        if expected_cash not in credit_amounts:
             continue
         manual_payment: Movement | None = None
         if payment_movements:
             manual_payment = payment_movements[0]
             if (
-                manual_payment.support_reference or ""
-            ).strip() or manual_payment.amount != expected_cash:
+                document.issue_date < period
+                or (manual_payment.support_reference or "").strip()
+                or manual_payment.amount != expected_cash
+            ):
                 continue
         else:
             open_amount = await receivables.compute_receivable_balance(
@@ -628,13 +622,19 @@ async def _import_bank_statement(
         tenant_id=context.tenant_id,
         stored=stored_transactions,
     )
+    period_amounts = {credit.amount for credit in period_credits}
+    earlier_credits = [
+        credit
+        for credit in parsed.credits
+        if credit.occurred_at.date() < period and credit.amount in period_amounts
+    ]
     imported_payments = list(
         await session.scalars(
             select(Movement).where(
                 Movement.tenant_id == context.tenant_id,
                 Movement.movement_type == "PAYMENT",
                 Movement.support_reference.in_(
-                    [_bank_reference(credit) for credit in period_credits]
+                    [_bank_reference(credit) for credit in (*period_credits, *earlier_credits)]
                 ),
             )
         )
@@ -648,7 +648,24 @@ async def _import_bank_statement(
     pending_credits = [
         credit for credit in period_credits if _bank_reference(credit) not in imported_references
     ]
-    candidates = await _receivable_candidates(session, tenant_id=context.tenant_id, period=period)
+    earlier_pending_dates: dict[Decimal, date] = {}
+    for credit in earlier_credits:
+        if _bank_reference(credit) not in imported_references:
+            bank_date = credit.occurred_at.date()
+            earlier_pending_dates[credit.amount] = max(
+                bank_date, earlier_pending_dates.get(credit.amount, bank_date)
+            )
+    candidates = (
+        await _receivable_candidates(
+            session,
+            tenant_id=context.tenant_id,
+            period=period,
+            cutoff=max(credit.occurred_at.date() for credit in pending_credits),
+            credit_amounts={credit.amount for credit in pending_credits},
+        )
+        if pending_credits
+        else []
+    )
 
     credits_by_amount: dict[Decimal, list[BankTransaction]] = defaultdict(list)
     candidates_by_amount: dict[Decimal, list[ReceivableCandidate]] = defaultdict(list)
@@ -658,17 +675,24 @@ async def _import_bank_statement(
         candidates_by_amount[candidate.open_amount].append(candidate)
 
     matches: list[BankStatementMatchRead] = []
+    ambiguous_amounts: set[Decimal] = set()
+    deferred_amounts: set[Decimal] = set()
     for amount, amount_credits in credits_by_amount.items():
+        last_credit_date = max(credit.occurred_at.date() for credit in amount_credits)
         amount_candidates = [
             candidate
             for candidate in candidates_by_amount.get(amount, [])
-            if candidate.document.issue_date <= amount_credits[0].occurred_at.date()
+            if candidate.document.issue_date <= last_credit_date
         ]
+        if len(amount_credits) > 1 or len(amount_candidates) > 1:
+            ambiguous_amounts.add(amount)
         if len(amount_credits) != 1 or len(amount_candidates) != 1:
             continue
         credit = amount_credits[0]
         candidate = amount_candidates[0]
-        if credit.occurred_at.date() < candidate.document.issue_date:
+        earlier_date = earlier_pending_dates.get(amount)
+        if earlier_date is not None and candidate.document.issue_date <= earlier_date:
+            deferred_amounts.add(amount)
             continue
         status = "MATCHED"
         detail = (
@@ -1018,6 +1042,39 @@ async def _import_bank_statement(
                 )
             )
     already_imported_count = len(period_credits) - len(pending_credits)
+    credit_reviews: list[BankStatementCreditReviewRead] = []
+    matched_transaction_ids = {match.transaction_id for match in matches}
+    for credit in period_credits:
+        if credit.transaction_id in matched_transaction_ids:
+            continue
+        review_status: Literal["ALREADY_RECORDED", "AMBIGUOUS", "NO_EXACT_MATCH"]
+        if _bank_reference(credit) in imported_references:
+            review_status = "ALREADY_RECORDED"
+            review_detail = "La referencia bancaria ya consta en el historial de Cartera."
+        elif credit.amount in deferred_amounts:
+            review_status = "AMBIGUOUS"
+            review_detail = (
+                "El TXT trae un abono anterior por el mismo valor. Revisa ese mes primero."
+            )
+        elif credit.amount in ambiguous_amounts:
+            review_status = "AMBIGUOUS"
+            review_detail = "Hay varios abonos o facturas por ese importe. Revisa el respaldo."
+        else:
+            review_status = "NO_EXACT_MATCH"
+            review_detail = (
+                "Sin factura por el saldo neto exacto. Revisa retenciones o abonos parciales."
+            )
+        credit_reviews.append(
+            BankStatementCreditReviewRead(
+                transaction_id=credit.transaction_id,
+                payment_date=credit.occurred_at.date(),
+                reference=credit.reference,
+                description=credit.description,
+                amount=credit.amount,
+                status=review_status,
+                detail=review_detail,
+            )
+        )
     return BankStatementImportRead(
         period=period.strftime("%Y-%m"),
         file_name=file_name,
@@ -1041,6 +1098,7 @@ async def _import_bank_statement(
         already_imported_count=already_imported_count,
         manual_correction_count=len(manual_corrections),
         matches=matches,
+        credit_reviews=credit_reviews,
         manual_corrections=manual_corrections,
         debit_matches=debit_matches,
         debit_suggestions=debit_suggestions,

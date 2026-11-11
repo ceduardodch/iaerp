@@ -22,6 +22,7 @@ import {
   ErpToolbar,
 } from '../erp'
 import { AnalyticClassificationPicker } from '../analytics/AnalyticClassificationPicker'
+import { BankCreditReviews } from '../banking/BankCreditReviews'
 import { ErpConfirmDialog } from '../erp/ErpConfirmDialog'
 import './PurchasesPage.css'
 
@@ -473,15 +474,16 @@ function BankReconciliation({ token, payables, onCreateExpense }: BankReconcilia
       void queryClient.invalidateQueries({ queryKey: ['receivables'] })
     },
   })
+  const bankRequestPending = review.isPending || applyMatches.isPending
 
   return (
     <ErpPanel title="Conciliación bancaria">
       <form className="purchase-bank-form" onSubmit={(event) => { event.preventDefault(); review.mutate() }}>
         <p className="fine-print">Una sola carga cruza créditos con CxC y débitos con CxP. El extracto prueba el movimiento de dinero, no su efecto fiscal.</p>
-        <label>Período<input type="month" required value={period} onChange={(event) => { setPeriod(event.target.value); setPreview(null) }} /></label>
-        <label>Extracto Banco Bolivariano<input type="file" accept=".txt,text/plain" required onChange={(event) => { setFile(event.target.files?.[0] ?? null); setPreview(null) }} /></label>
+        <label>Período<input type="month" required disabled={bankRequestPending} value={period} onChange={(event) => { setPeriod(event.target.value); setPreview(null); setManualAllocations([]) }} /></label>
+        <label>Extracto Banco Bolivariano<input type="file" accept=".txt,text/plain" required disabled={bankRequestPending} onChange={(event) => { setFile(event.target.files?.[0] ?? null); setPreview(null); setManualAllocations([]) }} /></label>
         {review.error ? <p className="form-error" role="alert">{review.error.message}</p> : null}
-        <ErpButton variant="primary" type="submit" disabled={review.isPending}>{review.isPending ? 'Revisando…' : 'Revisar movimientos'}</ErpButton>
+        <ErpButton variant="primary" type="submit" disabled={bankRequestPending}>{review.isPending ? 'Revisando…' : 'Revisar movimientos'}</ErpButton>
       </form>
       {preview ? (
         <div className="purchase-bank-results" aria-live="polite">
@@ -490,10 +492,11 @@ function BankReconciliation({ token, payables, onCreateExpense }: BankReconcilia
             <section aria-labelledby="bank-credit-title"><h3 id="bank-credit-title">Cobros encontrados</h3>{preview.matches.length ? <ul>{preview.matches.map((match) => <li key={match.transactionId}><span>{match.paymentDate} · Factura {match.invoiceSequential}</span><strong>${formatAmount(match.amount)}</strong><small>{match.detail}</small></li>)}</ul> : <p className="fine-print">No hay créditos con cruce único.</p>}</section>
             <section aria-labelledby="bank-debit-title"><h3 id="bank-debit-title">Pagos encontrados</h3>{preview.debitMatches.length ? <ul>{preview.debitMatches.map((match) => <li key={`${match.transactionId}-${match.payableId}`}><span>{match.paymentDate} · {match.supplierName ?? match.description}</span><strong>${formatAmount(match.allocatedAmount)}</strong><small>{match.detail}</small></li>)}</ul> : <p className="fine-print">No hay débitos con cruce único.</p>}</section>
           </div>
+          <BankCreditReviews statement={preview} />
           {preview.debitSuggestions.length ? <section aria-labelledby="bank-suggestions-title"><h3 id="bank-suggestions-title">Débitos por revisar</h3><p className="fine-print">Puedes preparar un gasto o repartir el débito entre una o varias CxP. Revisa el reparto antes de confirmar.</p><div className="table-wrap" tabIndex={0}><table className="erp-responsive-table"><thead><tr><th>Fecha</th><th>Descripción</th><th>Valor</th><th>Regla</th><th>Acción</th></tr></thead><tbody>{preview.debitSuggestions.map((item) => <tr key={item.transactionId}><td>{item.paymentDate}</td><td>{item.description}<small>{item.detail}</small></td><td>${formatAmount(item.amount)}</td><td>{item.ruleName ?? 'Sin regla'}</td><td><div className="purchase-suggestion-actions">{item.classification === 'EXPENSE_CANDIDATE' || item.classification === 'BANK_FEE' || item.classification === 'BANK_TAX' || item.classification === 'UNCLASSIFIED' ? <ErpButton variant="secondary" onClick={() => onCreateExpense({ supplierName: item.suggestedSupplierName ?? '', description: item.description, category: item.suggestedCategory ?? (item.classification === 'BANK_FEE' ? 'Comisiones bancarias' : item.classification === 'BANK_TAX' ? 'Impuestos bancarios' : 'Sin clasificar'), issueDate: item.paymentDate, total: item.amount })}>Crear gasto</ErpButton> : <span className="fine-print">Clasificar manualmente</span>}<ManualAllocationEditor item={item} payables={payables} onAdd={(allocation) => setManualAllocations((current) => [...current, allocation])} /></div></td></tr>)}</tbody></table></div></section> : null}
-          {manualAllocations.length ? <section className="purchase-allocation-summary" aria-labelledby="allocation-title"><h3 id="allocation-title">Repartos preparados</h3><ul>{manualAllocations.map((allocation, index) => { const payable = payables.find((item) => item.id === allocation.payableId); return <li key={`${allocation.transactionId}-${allocation.payableId}-${index}`}><span>{payable?.supplierName ?? payable?.description ?? 'CxP'} · ${formatAmount(allocation.amount)}</span><ErpButton variant="ghost" onClick={() => setManualAllocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Quitar</ErpButton></li> })}</ul><ErpButton variant="secondary" disabled={review.isPending} onClick={() => review.mutate()}>Revisar reparto</ErpButton></section> : null}
+          {manualAllocations.length ? <section className="purchase-allocation-summary" aria-labelledby="allocation-title"><h3 id="allocation-title">Repartos preparados</h3><ul>{manualAllocations.map((allocation, index) => { const payable = payables.find((item) => item.id === allocation.payableId); return <li key={`${allocation.transactionId}-${allocation.payableId}-${index}`}><span>{payable?.supplierName ?? payable?.description ?? 'CxP'} · ${formatAmount(allocation.amount)}</span><ErpButton variant="ghost" onClick={() => setManualAllocations((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Quitar</ErpButton></li> })}</ul><ErpButton variant="secondary" disabled={bankRequestPending} onClick={() => review.mutate()}>Revisar reparto</ErpButton></section> : null}
           {applyMatches.error ? <p className="form-error" role="alert">{applyMatches.error.message}</p> : null}
-          <ErpButton variant="primary" disabled={applyMatches.isPending || preview.matchedCount + preview.manualCorrectionCount + preview.payableMatchedCount === 0} onClick={() => applyMatches.mutate()}>{applyMatches.isPending ? 'Aplicando…' : `Confirmar ${preview.matchedCount + preview.manualCorrectionCount + preview.payableMatchedCount} cruces`}</ErpButton>
+          <ErpButton variant="primary" disabled={bankRequestPending || preview.matchedCount + preview.manualCorrectionCount + preview.payableMatchedCount === 0} onClick={() => applyMatches.mutate()}>{applyMatches.isPending ? 'Aplicando…' : `Confirmar ${preview.matchedCount + preview.manualCorrectionCount + preview.payableMatchedCount} cruces`}</ErpButton>
         </div>
       ) : null}
     </ErpPanel>

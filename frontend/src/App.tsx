@@ -89,6 +89,7 @@ import { ErpModal } from './components/erp/ErpModal'
 import { ErpConfirmDialog } from './components/erp/ErpConfirmDialog'
 import { AnalyticClassificationPicker } from './components/analytics/AnalyticClassificationPicker'
 import { AnalyticClassificationSettings } from './components/analytics/AnalyticClassificationSettings'
+import { BankCreditReviews } from './components/banking/BankCreditReviews'
 // Code-splitting (Sprint 7): la sección CRM arrastra dependencias pesadas
 // (@dnd-kit + framer-motion) y es la menos usada en el arranque; se carga
 // bajo demanda para reducir el bundle inicial.
@@ -3123,14 +3124,15 @@ function BankStatementImportForm({
       onRegistered()
     },
   })
+  const bankRequestPending = previewStatement.isPending || registerMatches.isPending
 
   return (
     <ErpFormPanel
       eyebrow="Bancos"
       title="Conciliar estado bancario"
       submitLabel="Revisar movimientos"
-      pendingLabel="Revisando…"
-      pending={previewStatement.isPending}
+      pendingLabel={registerMatches.isPending ? 'Registrando…' : 'Revisando…'}
+      pending={bankRequestPending}
       error={previewStatement.error?.message}
       onSubmit={(event) => { event.preventDefault(); previewStatement.mutate() }}
       onCancel={onCancel}
@@ -3141,6 +3143,7 @@ function BankStatementImportForm({
         <input
           type="month"
           required
+          disabled={bankRequestPending}
           value={period}
           onChange={(event) => {
             setPeriod(event.target.value)
@@ -3155,6 +3158,7 @@ function BankStatementImportForm({
           type="file"
           accept=".txt,text/plain"
           required
+          disabled={bankRequestPending}
           onChange={(event) => {
             setFile(event.target.files?.[0] ?? null)
             setPreview(null)
@@ -3186,6 +3190,7 @@ function BankStatementImportForm({
           ]}
         />
           ) : null}
+          <BankCreditReviews statement={preview} />
           {preview.manualCorrections.length > 0 ? (
             <ErpDataTable
           ariaLabel="Correcciones de cobros manuales"
@@ -3236,7 +3241,7 @@ function BankStatementImportForm({
           {registerMatches.error ? <p className="form-error" role="alert">{registerMatches.error.message}</p> : null}
           {registered ? <p className="fine-print">La conciliación terminó. Solo los cobros indicados como registrados modificaron Cartera.</p> : null}
           {!registered ? (
-            <ErpButton variant="primary" disabled={(preview.matchedCount + preview.manualCorrectionCount + (preview.payableMatchedCount ?? 0)) === 0 || registerMatches.isPending} onClick={() => registerMatches.mutate()}>
+            <ErpButton variant="primary" disabled={(preview.matchedCount + preview.manualCorrectionCount + (preview.payableMatchedCount ?? 0)) === 0 || bankRequestPending} onClick={() => registerMatches.mutate()}>
               {registerMatches.isPending ? 'Registrando…' : `Confirmar ${preview.matchedCount + preview.manualCorrectionCount + (preview.payableMatchedCount ?? 0)} cambio${(preview.matchedCount + preview.manualCorrectionCount + (preview.payableMatchedCount ?? 0)) === 1 ? '' : 's'}`}
             </ErpButton>
           ) : null}
