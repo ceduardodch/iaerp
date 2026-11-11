@@ -140,7 +140,7 @@ def _ride_logo(logo_bytes: bytes | None) -> Image | None:
     try:
         image_reader = ImageReader(io.BytesIO(logo_bytes))
         width, height = image_reader.getSize()
-        scale = min((6.0 * cm) / width, (2.7 * cm) / height)
+        scale = min((7.0 * cm) / width, (3.0 * cm) / height)
         return Image(io.BytesIO(logo_bytes), width=width * scale, height=height * scale)
     except Exception:  # noqa: BLE001 - una imagen inválida no debe impedir facturar
         return None
@@ -193,7 +193,6 @@ def build_ride_pdf(
     )
     styles = getSampleStyleSheet()
     ink = colors.HexColor("#18233A")
-    blue = colors.HexColor("#263A72")
     medium_gray = colors.HexColor("#D1D5DB")
     border = colors.HexColor("#80858D")
     tiny_style = ParagraphStyle(
@@ -208,9 +207,6 @@ def build_ride_pdf(
     heading_style = ParagraphStyle(
         "ride-heading", parent=styles["Normal"], fontSize=10, leading=12, textColor=ink
     )
-    brand_style = ParagraphStyle(
-        "ride-brand", parent=styles["Title"], fontSize=26, leading=28, textColor=blue
-    )
     document_type_style = ParagraphStyle(
         "ride-document", parent=styles["Normal"], fontSize=13, leading=16, textColor=ink
     )
@@ -219,12 +215,11 @@ def build_ride_pdf(
     full_number = _full_document_number(establishment, emission_point, document)
     authorization_number = document.authorization_number or "PENDIENTE DE AUTORIZACIÓN"
 
-    issuer_brand = _ride_logo(logo_bytes) or Paragraph(
-        "<b>B<span color='#A6C737'>2</span>B</b>", brand_style
-    )
+    issuer_logo = _ride_logo(logo_bytes)
+    logo_rows = [[issuer_logo]] if issuer_logo is not None else []
     issuer = Table(
-        [
-            [issuer_brand],
+        logo_rows
+        + [
             [_paragraph(tenant_legal_name, heading_style)],
             [_paragraph(f"Emisor: {tenant_legal_name}", body_style)],
             [_paragraph(f"Matriz: {establishment.address}", body_style)],
@@ -235,6 +230,8 @@ def build_ride_pdf(
     issuer.setStyle(
         TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)])
     )
+    if issuer_logo is not None:
+        issuer.setStyle(TableStyle([("ALIGN", (0, 0), (0, 0), "CENTER")]))
 
     document_box = Table(
         [
