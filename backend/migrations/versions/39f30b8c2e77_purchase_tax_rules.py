@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "39f30b8c2e77"
-down_revision = "a123bc456def"
+revision: str = "39f30b8c2e77"  # pragma: allowlist secret -- Alembic revision ID
+down_revision: str | None = "a123bc456def"  # pragma: allowlist secret -- Alembic revision ID
 branch_labels = None
 depends_on = None
 

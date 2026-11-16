@@ -41,3 +41,9 @@
 - MCP público aceptó el token de BTOB y listó `tax.process_received_reports`.
   La ruta de metadatos pública aún devuelve HTML. El despliegue depende de
   integrar el PR en `main`.
+
+## En revisión
+
+- Cambios en `release`. [PR #97](https://github.com/ceduardodch/iaerp/pull/97).
+- La automatización existente conserva las 08:00 de Ecuador y apunta a los
+  cuatro perfiles dedicados. Sigue pausada hasta verificar una descarga real.
