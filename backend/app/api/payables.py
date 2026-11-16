@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Path, Query, UploadFile
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,8 +35,10 @@ from app.schemas.payables import (
     PayableReversalCreate,
     PaymentScheduleCreate,
     PaymentScheduleRead,
+    PurchaseTaxRuleRead,
+    PurchaseTaxRuleUpdate,
 )
-from app.services import bank_reconciliation, payables
+from app.services import bank_reconciliation, payables, purchase_tax_rules
 from app.services.unit_of_work import execute_idempotent
 
 router = APIRouter(tags=["payables"])
@@ -583,6 +585,47 @@ async def get_expense_rules(
 ) -> list[ExpenseRuleRead]:
     items = await payables.list_rules(session, tenant_id=context.tenant_id)
     return [ExpenseRuleRead.model_validate(item) for item in items]
+
+
+@router.get("/purchase-tax-rules", response_model=list[PurchaseTaxRuleRead])
+async def get_purchase_tax_rules(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("payables:read"))],
+) -> list[PurchaseTaxRuleRead]:
+    rules = await purchase_tax_rules.list_rules(session, context)
+    return [PurchaseTaxRuleRead.model_validate(rule) for rule in rules]
+
+
+@router.put("/purchase-tax-rules/{supplier_ruc}", response_model=PurchaseTaxRuleRead)
+async def put_purchase_tax_rule(
+    supplier_ruc: Annotated[str, Path(pattern=r"^[0-9]{13}$")],
+    data: PurchaseTaxRuleUpdate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[
+        AuthContext, Depends(require_scopes("organization:write", "payables:write"))
+    ],
+) -> dict[str, object]:
+    if context.actor_type != "USER" or not context.roles.intersection({"owner", "admin"}):
+        raise HTTPException(status_code=403, detail="Solo un administrador puede guardar reglas")
+
+    async def save() -> tuple[str, dict[str, object]]:
+        rule = await purchase_tax_rules.save_rule(session, context, supplier_ruc, data)
+        return str(rule.id), PurchaseTaxRuleRead.model_validate(rule).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="purchase_tax_rules.save",
+        idempotency_key=idempotency_key,
+        request_payload={"supplierRuc": supplier_ruc, **data.model_dump(mode="json")},
+        action="purchase_tax_rule.saved",
+        entity_type="purchase_tax_rule",
+        callback=save,
+        audit_details={"active": data.active, "tax_classification": data.tax_classification},
+    )
 
 
 @router.post(

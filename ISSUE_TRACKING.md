@@ -1,5 +1,10 @@
 # Issue Tracking - Sesión por Sesión
 
+> 2026-11-16. [Compras SRI, reglas y MCP](openspec/changes/compras-sri-reglas-mcp/tasks.md).
+> Tablero, reglas y corrección del descubrimiento OAuth verificados en local.
+> Acceso SRI con BTOB y catálogo MCP público autenticado verificados.
+> Quedan la descarga con CAPTCHA resuelto y publicar el arreglo de OAuth.
+
 > Corte 2026-10-13: Cartera cruza retenciones tributarias autorizadas y prepara
 > el cobro neto; banco compara contra ese neto sin guardar en vista previa.
 > 80 pruebas PostgreSQL, 38 repetidas tras locks y 40 E2E verdes; fiscal y QA GO.

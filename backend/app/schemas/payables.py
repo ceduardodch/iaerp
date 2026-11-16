@@ -140,7 +140,7 @@ class PayableClassificationUpdate(APIModel):
 
 class PayableBulkClassificationUpdate(APIModel):
     payable_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
-    tax_classification: Literal["DEDUCTIBLE_CONFIRMED", "NON_DEDUCTIBLE"] | None = None
+    tax_classification: TaxClassification | None = None
     internal_classification: Literal["REAL", "DECLARATION_ONLY"] | None = None
     reason: str | None = Field(default=None, min_length=3, max_length=300)
     analytic_change: Literal["KEEP_EXISTING", "REPLACE"] = "KEEP_EXISTING"
@@ -269,6 +269,16 @@ class ExpenseRuleCreate(APIModel):
 
 class ExpenseRuleRead(ExpenseRuleCreate):
     id: uuid.UUID
+
+
+class PurchaseTaxRuleUpdate(APIModel):
+    tax_classification: Literal["DEDUCTIBLE_CONFIRMED", "NON_DEDUCTIBLE"]
+    active: bool
+
+
+class PurchaseTaxRuleRead(PurchaseTaxRuleUpdate):
+    id: uuid.UUID
+    supplier_ruc: str
 
 
 class BankDebitAllocationInput(APIModel):

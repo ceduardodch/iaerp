@@ -10,6 +10,7 @@ import {
   type Payable,
   type PayableMovement,
   type PurchaseDocument,
+  type TenantContext,
 } from '../../api'
 import {
   ErpButton,
@@ -24,6 +25,7 @@ import {
 import { AnalyticClassificationPicker } from '../analytics/AnalyticClassificationPicker'
 import { BankCreditReviews } from '../banking/BankCreditReviews'
 import { ErpConfirmDialog } from '../erp/ErpConfirmDialog'
+import { PurchaseClassificationBoard } from './PurchaseClassificationBoard'
 import './PurchasesPage.css'
 
 const amountFormatter = new Intl.NumberFormat('es-EC', {
@@ -708,15 +710,15 @@ function PayableDetail({ token, payable, onClose }: { token: string; payable: Pa
 export function PurchasesPage({
   token,
   partyFilterId,
+  context,
 }: {
   token: string
   /** Llega con valor al abrir Compras desde la ficha de un proveedor. */
   partyFilterId?: string
+  context: TenantContext
 }) {
   const queryClient = useQueryClient()
-  // Antes había seis pestañas y tres de ellas eran solo un filtro de estado
-  // del mismo listado. Quedan tres destinos reales y el estado se elige dentro.
-  const [view, setView] = useState<'SRI' | 'LIST' | 'BANK'>('LIST')
+  const [view, setView] = useState<'SRI' | 'LIST' | 'BOARD' | 'BANK'>('LIST')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'SETTLED'>('ALL')
   const [taxFilter, setTaxFilter] = useState<'ALL' | 'DECLARABLE' | 'NON_DEDUCTIBLE' | 'PENDING'>('ALL')
   const [internalFilter, setInternalFilter] = useState<'ALL' | 'REAL' | 'DECLARATION_ONLY' | 'PENDING'>('ALL')
@@ -756,7 +758,11 @@ export function PurchasesPage({
   })
   const fiscalQuery = useQuery({ queryKey: ['tax', 'purchases'], queryFn: () => apiRequest<PurchaseDocument[]>(token, '/tax/purchases') })
   const classificationsQuery = useQuery({ queryKey: ['analytic-classifications'], queryFn: () => apiRequest<AnalyticClassification[]>(token, '/analytic-classifications') })
-  const payables = (payablesQuery.data ?? []).filter((item) => {
+  const matchingPayables = (payablesQuery.data ?? []).filter((item) => {
+    const haystack = `${item.supplierName ?? ''} ${item.description} ${item.documentNumber ?? ''} ${item.category}`.toLocaleLowerCase()
+    return !deferredQuery || haystack.includes(deferredQuery)
+  })
+  const payables = matchingPayables.filter((item) => {
     const statusMatches = statusFilter === 'ALL' || (statusFilter === 'OPEN' && ['OPEN', 'PARTIAL'].includes(item.status)) || (statusFilter === 'SETTLED' && item.status === 'SETTLED')
     const taxMatches = taxFilter === 'ALL'
       || (taxFilter === 'DECLARABLE' && item.taxClassification === 'DEDUCTIBLE_CONFIRMED')
@@ -764,8 +770,7 @@ export function PurchasesPage({
       || (taxFilter === 'PENDING' && item.taxClassification === 'DEDUCTIBLE_PENDING_REVIEW')
     const internalMatches = internalFilter === 'ALL'
       || item.internalClassification === internalFilter
-    const haystack = `${item.supplierName ?? ''} ${item.description} ${item.documentNumber ?? ''} ${item.category}`.toLocaleLowerCase()
-    return statusMatches && taxMatches && internalMatches && (!deferredQuery || haystack.includes(deferredQuery))
+    return statusMatches && taxMatches && internalMatches
   })
   const linkedFiscalIds = new Set((payablesQuery.data ?? []).map((item) => item.fiscalDocumentId).filter(Boolean))
   const fiscalById = new Map((fiscalQuery.data ?? []).map((item) => [item.id, item]))
@@ -895,13 +900,14 @@ export function PurchasesPage({
           tabs={[
             { value: 'SRI', label: `Pendientes SRI (${pendingFiscal.length})` },
             { value: 'LIST', label: 'Compras' },
+            { value: 'BOARD', label: 'Clasificar' },
             { value: 'BANK', label: 'Banco' },
           ]}
         />
         {view === 'LIST' ? <label className="search-field"><span>Estado</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="ALL">Todas</option><option value="OPEN">Por pagar</option><option value="SETTLED">Pagadas</option></select></label> : null}
         {view === 'LIST' ? <label className="search-field"><span>Uso fiscal</span><select value={taxFilter} onChange={(event) => setTaxFilter(event.target.value as typeof taxFilter)}><option value="ALL">Todos</option><option value="DECLARABLE">Para declaración</option><option value="NON_DEDUCTIBLE">No deducibles</option><option value="PENDING">Pendientes de revisar</option></select></label> : null}
         {view === 'LIST' ? <label className="search-field"><span>Control interno</span><select value={internalFilter} onChange={(event) => setInternalFilter(event.target.value as typeof internalFilter)}><option value="ALL">Todos</option><option value="REAL">Gastos reales</option><option value="DECLARATION_ONLY">Solo tributarios</option><option value="PENDING">Pendientes de revisar</option></select></label> : null}
-        {view === 'LIST' ? <label className="search-field"><span>Buscar compra</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Proveedor, concepto o número" /></label> : null}
+        {view === 'LIST' || view === 'BOARD' ? <label className="search-field"><span>Buscar compra</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Proveedor, concepto o número" /></label> : null}
         {view === 'LIST' && (classificationsQuery.data ?? []).length ? <label className="search-field"><span>Agrupar por tag</span><select value={groupByClassificationId} onChange={(event) => setGroupByClassificationId(event.target.value)}><option value="">Sin agrupación</option>{classificationsQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
       </ErpToolbar>}
       {reviewNotice ? <p className="purchase-review-status" role="status" tabIndex={-1} ref={reviewStatusRef}>{reviewNotice}</p> : null}
@@ -947,6 +953,17 @@ export function PurchasesPage({
         </ErpPanel>
       ) : null}
       {view === 'BANK' ? <><BankReconciliation token={token} payables={payablesQuery.data ?? []} onCreateExpense={(expenseDraft) => { setDraft(expenseDraft); setIsCreating(true) }} /><RuleManager token={token} /></> : null}
+      {view === 'BOARD' ? payablesQuery.isPending ? <p aria-busy="true">Cargando compras…</p> :
+        payablesQuery.error ? <p className="form-error" role="alert">{payablesQuery.error.message}</p> :
+        <PurchaseClassificationBoard
+          token={token}
+          tenantId={context.tenantId}
+          items={matchingPayables}
+          documents={fiscalQuery.data ?? []}
+          canEdit={context.scopes.includes('payables:write')}
+          canManageRules={context.scopes.includes('payables:write') && context.scopes.includes('organization:write') && context.roles.some((role) => role === 'owner' || role === 'admin')}
+          automationEnabled={context.automationWritesEnabled}
+        /> : null}
       
       {view === 'LIST' ? bulkClassificationOpen ? (
         <PayableBulkClassificationEditor

@@ -10,6 +10,7 @@ facturacion ni finanzas.
 
 - Streamable HTTP en `/mcp`.
 - OAuth 2.1 con Keycloak y Protected Resource Metadata.
+- El proxy web sirve los metadatos en `/.well-known/oauth-protected-resource/mcp`.
 - SDK oficial Python estable fijado a `>=1.27,<2` inicialmente.
 - Respuestas estructuradas con modelos Pydantic.
 - Sin transporte SSE heredado para nuevas integraciones.

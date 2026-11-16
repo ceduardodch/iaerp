@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
 from app.core.config import get_settings
-from app.models.platform import TenantFiscalSettings
+from app.models.platform import Tenant, TenantFiscalSettings
 from app.schemas.platform import (
     FiscalSettingsRead,
     FiscalSettingsUpdate,
@@ -125,6 +125,15 @@ async def update_sri_portal_credentials(
     data: SriPortalCredentialsUpdate,
 ) -> FiscalSettingsRead:
     """Guarda la clave de acceso al portal, sin incluirla nunca en una respuesta web."""
+    if context.actor_type != "USER" or not context.roles.intersection({"owner", "admin"}):
+        raise HTTPException(
+            status_code=403, detail="Solo un administrador puede guardar el acceso SRI"
+        )
+    tenant = await session.get(Tenant, context.tenant_id)
+    if tenant is None or data.ruc != tenant.ruc:
+        raise HTTPException(
+            status_code=409, detail="El RUC de acceso debe coincidir con el de la empresa"
+        )
     entity = await get_or_create(session, context.tenant_id)
     entity.sri_portal_ruc = data.ruc
     entity.sri_portal_password_encrypted = encrypt_secret(data.password)

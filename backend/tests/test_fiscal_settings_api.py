@@ -133,14 +133,20 @@ async def test_update_sri_environment_never_exposes_secret(client) -> None:
 @pytest.mark.asyncio
 async def test_sri_portal_credentials_are_encrypted_and_not_exposed_to_users(client) -> None:
     token = await _token(client, ["organization:read", "organization:write", "tax:write"])
+    mismatched = await client.put(
+        "/api/v1/organization/sri-portal-credentials",
+        headers=_headers(token, "sri-portal-wrong-tenant"),
+        json={"ruc": "1799999999002", "password": "portal-secret"},  # pragma: allowlist secret
+    )
+    assert mismatched.status_code == 409
     saved = await client.put(
         "/api/v1/organization/sri-portal-credentials",
         headers=_headers(token, "sri-portal-credentials-key"),
-        json={"ruc": "1793113192001", "password": "portal-secret"},  # pragma: allowlist secret
+        json={"ruc": "1799999999001", "password": "portal-secret"},  # pragma: allowlist secret
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["sriPortalConfigured"] is True
-    assert saved.json()["sriPortalRuc"] == "1793113192001"
+    assert saved.json()["sriPortalRuc"] == "1799999999001"
     assert "portal-secret" not in saved.text
 
     user_read = await client.get(
@@ -164,7 +170,7 @@ async def test_sri_portal_credentials_are_encrypted_and_not_exposed_to_users(cli
         credentials = await fiscal_settings.read_sri_portal_credentials_for_automation(
             session, automation_context
         )
-        assert credentials.ruc == "1793113192001"
+        assert credentials.ruc == "1799999999001"
         assert credentials.password == "portal-secret"  # pragma: allowlist secret
 
 

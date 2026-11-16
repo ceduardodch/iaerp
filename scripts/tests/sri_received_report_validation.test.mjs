@@ -86,19 +86,23 @@ test("runCompany validates with the populated RUC before clearing and uploading"
   assert.ok(uploadIndex > clearIndex);
 });
 
-test("runCompany uses a clean temporary browser profile before opening the portal", () => {
+test("runCompany reuses the profile for one company and only deletes its temporary downloads", () => {
   const scriptPath = fileURLToPath(
     new URL("../sri_received_reports_to_iaerp.mjs", import.meta.url),
   );
   const source = readFileSync(scriptPath, "utf8");
   const runCompany = source.slice(source.indexOf("async function runCompany"));
-  const temporaryProfileIndex = runCompany.indexOf(
-    "join(runtimeDir, company.browserProfile)",
+  const persistentProfileIndex = runCompany.indexOf(
+    "join(PROFILE_ROOT, company.browserProfile)",
   );
-  const openPortalIndex = runCompany.indexOf("await openReceivedReports(page, sriCredentials);");
+  const openPortalIndex = runCompany.indexOf("await openReceivedReports(page, sriCredentials, existingSession);");
 
-  assert.ok(temporaryProfileIndex >= 0);
-  assert.ok(openPortalIndex > temporaryProfileIndex);
+  assert.ok(persistentProfileIndex >= 0);
+  assert.ok(openPortalIndex > persistentProfileIndex);
+  assert.match(runCompany, /launchPersistentContext\(\s*profileDir,/);
+  assert.match(runCompany, /pages\.find\(\(candidate\) => isSriReceivedModuleUrl\(candidate\.url\(\)\)\)/);
+  assert.doesNotMatch(runCompany, /rmSync\(profileDir/);
+  assert.match(runCompany, /rmSync\(runtimeDir/);
 });
 
 test("runCompany enters the SRI module only once per company run", () => {
@@ -107,7 +111,7 @@ test("runCompany enters the SRI module only once per company run", () => {
   );
   const source = readFileSync(scriptPath, "utf8");
   const runCompany = source.slice(source.indexOf("async function runCompany"));
-  const calls = runCompany.match(/await openReceivedReports\(page, sriCredentials\);/g);
+  const calls = runCompany.match(/await openReceivedReports\(page, sriCredentials, existingSession\);/g);
 
   assert.equal(calls?.length, 1);
 });

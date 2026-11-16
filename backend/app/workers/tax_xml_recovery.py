@@ -16,6 +16,7 @@ from app.integrations.sri.protocol import SRIClient
 from app.integrations.sri.soap import SoapSRIClient
 from app.models.platform import OutboxEvent, Tenant
 from app.models.tax import FiscalDocument, TaxPeriod, TaxXmlRecoveryItem, TaxXmlRecoveryJob
+from app.services import purchase_tax_rules
 from app.services.tax import evidence, ingest, periods
 from app.services.tax.identification import receiver_matches_tenant
 from app.services.tax.sri_xml import parse_authorized_document
@@ -300,6 +301,7 @@ async def run_recovery_job(
                     origin="SRI_AUTHORIZATION_WS",
                     tax_period_id=job.tax_period_id,
                 )
+                was_preliminary = current.is_preliminary
                 recovered, _created = await ingest.upsert_parsed_document(
                     session,
                     context,
@@ -311,6 +313,10 @@ async def run_recovery_job(
                     recovered.id == current.id and recovered.tax_period_id == job.tax_period_id,
                     "Recovered XML does not match queued fiscal document",
                 )
+                if was_preliminary:
+                    await purchase_tax_rules.apply_recovered_invoice_rule(
+                        session, context, document=recovered, period=period, job_id=job.id
+                    )
                 await periods.refresh_period_statuses(
                     session,
                     context,

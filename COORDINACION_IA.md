@@ -41,6 +41,7 @@
 
 | Sesión / IA | Estado | Área / archivos | Desde |
 | --- | --- | --- | --- |
+| Codex (Compras SRI, reglas y MCP) | 🟡 EN VALIDACIÓN | Tablero, reglas y proxy OAuth probados. BTOB inicia sesión en SRI y MCP acepta su token. Descarga pendiente del CAPTCHA. Autorizados push a `release` y PR. | 2026-11-16 |
 | Codex (este hilo, Cartera y retenciones) | 🟡 EN VALIDACIÓN FINAL | Cruce automático desde XML tributario, preparación de cobro neto y conciliación de depósitos descontando retenciones; 80 pruebas PostgreSQL y 40 E2E pasan, fiscal GO. Publicación autorizada; notificaciones y scripts SRI pendientes quedan fuera. | 2026-10-13 |
 | Claude (orquestador) | ⚪ obsoleta (2026-08-29) | Calidad de tests a11y RESTAURADA; Sprint 4 se completó después por Codex. Fila marcada 🟢 durante más de un mes con decenas de sesiones cerradas encima: ya no bloquea a nadie | 2026-07-21 |
 | Codex (GPT-5.6, vía Claude) | ⚪ detenido | Se colgó por `approval_mode="approve"` en modo no interactivo; para usarlo hay que invocarlo con `--full-auto`/`-a never`. Alcanzó a hacer 2 mejoras menores (auth.tsx, ErpModal.tsx) que se conservaron | 2026-07-21 |

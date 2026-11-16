@@ -141,3 +141,15 @@ async def test_mcp_transport_scopes_kill_switch_and_idempotency(client):
             )
             assert search.isError is False
             assert [item["name"] for item in search.structuredContent["result"]] == ["Cliente MCP"]
+
+
+async def test_mcp_oauth_discovery_returns_json(client):
+    challenge = await client.get("/mcp")
+    assert challenge.status_code == 401
+    metadata_path = "/.well-known/oauth-protected-resource/mcp"
+    assert f'{metadata_path}"' in challenge.headers["www-authenticate"]
+    metadata = await client.get(metadata_path)
+    assert metadata.status_code == 200
+    assert metadata.headers["content-type"].startswith("application/json")
+    assert metadata.json()["resource"].endswith("/mcp")
+    assert metadata.json()["authorization_servers"]
