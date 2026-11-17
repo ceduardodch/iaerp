@@ -9,7 +9,7 @@ import { chromium } from '../../frontend/node_modules/playwright/index.mjs'
 import { SRI_RECEIVED_COMPANIES } from '../../scripts/sri_received_companies.mjs'
 import { fiscalPeriodForYesterday, runCompany } from '../../scripts/sri_received_reports_to_iaerp.mjs'
 import { profileRoot } from '../../scripts/sri_received_runtime.mjs'
-import { fiscalDay, importIsDue } from './schedule.mjs'
+import { fiscalDay, importIsDue, interruptRun, recoverRunState } from './schedule.mjs'
 
 const statePath = '/data/status.json'
 const controlPath = '/data/request.json'
@@ -17,10 +17,8 @@ const children = []
 const contexts = new Map()
 let stopping = false
 let running = false
-const status = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {}
+const status = recoverRunState(existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {})
 status.results ??= {}
-if (status.running) status.lastAttemptDay = null
-status.running = false
 
 function saveStatus() {
   status.updatedAt = new Date().toISOString()
@@ -31,6 +29,8 @@ function saveStatus() {
 async function stop() {
   if (stopping) return
   stopping = true
+  interruptRun(status)
+  saveStatus()
   for (const context of contexts.values()) await context.close().catch(() => {})
   for (const child of children) child.kill('SIGTERM')
   process.exit(0)
@@ -156,7 +156,7 @@ while (!stopping) {
       process.stderr.write('SRI_CONTROL_REQUEST_INVALID\n')
     }
   }
-  if (process.env.IAERP_SRI_SCHEDULE_ENABLED === 'true' && importIsDue(status.lastAttemptDay)) {
+  if (!stopping && process.env.IAERP_SRI_SCHEDULE_ENABLED === 'true' && importIsDue(status.lastAttemptDay)) {
     status.lastAttemptDay = fiscalDay()
     saveStatus()
     await runImports(SRI_RECEIVED_COMPANIES.map((company) => company.id))

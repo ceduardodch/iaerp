@@ -246,6 +246,21 @@ class FiscalDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Bas
             "doc_type IN ('FACTURA', 'NOTA_CREDITO', 'NOTA_DEBITO', 'RETENCION', 'LIQUIDACION')",
             name="doc_type_valid",
         ),
+        ForeignKeyConstraint(
+            ["tenant_id", "cancellation_evidence_id"],
+            ["tax_evidence.tenant_id", "tax_evidence.id"],
+            name="fk_fiscal_documents_cancellation_evidence",
+        ),
+        CheckConstraint(
+            "(cancelled_at IS NULL AND cancellation_date IS NULL AND "
+            "cancellation_reason IS NULL AND cancellation_evidence_id IS NULL AND "
+            "cancelled_by_actor_id IS NULL) OR "
+            "(cancelled_at IS NOT NULL AND cancellation_date IS NOT NULL AND "
+            "cancellation_reason IS NOT NULL AND cancellation_evidence_id IS NOT NULL AND "
+            "cancelled_by_actor_id IS NOT NULL AND direction = 'RECIBIDO' AND "
+            "doc_type = 'FACTURA' AND cancellation_date >= issue_date)",
+            name="cancellation_complete",
+        ),
         Index("ix_fiscal_documents_tenant_issue_date", "tenant_id", "issue_date"),
         Index("ix_fiscal_documents_tenant_period", "tenant_id", "tax_period_id"),
         Index(
@@ -289,6 +304,12 @@ class FiscalDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Bas
     # Emitido propio: enlace al comprobante que IAERP ya genero.
     sales_document_id: Mapped[uuid.UUID | None]
     evidence_id: Mapped[uuid.UUID | None]
+    # Confirmación local respaldada; nunca cambia el XML ni pide anular al SRI.
+    cancellation_date: Mapped[date | None] = mapped_column(Date)
+    cancellation_reason: Mapped[str | None] = mapped_column(String(500))
+    cancellation_evidence_id: Mapped[uuid.UUID | None]
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by_actor_id: Mapped[str | None] = mapped_column(String(200))
 
 
 class FiscalDocumentTax(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):

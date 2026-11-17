@@ -11,6 +11,12 @@ Las cuatro cuentas técnicas están en
 permisos 0600. El archivo entra al contenedor en modo lectura. Los accesos al
 SRI siguen cifrados en la configuración de cada empresa de IAERP.
 
+El almacenamiento de ese archivo en Coolify fija `chmod=600`. Coolify añade
+el bit de ejecución a los archivos montados si ese campo queda vacío; por
+eso debe conservarse el permiso explícito. El registro no guarda contenido
+de cuentas en Coolify y mantiene el propietario 1000. Configuración verificada
+el 17 de noviembre de 2026.
+
 ## Acceso al navegador
 
 El escritorio se publica solo en `127.0.0.1:18229` del servidor y en una red

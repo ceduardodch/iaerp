@@ -20,7 +20,8 @@ def missing_tax_detail_document_ids(
     return {
         document.id
         for document in documents
-        if document.doc_type in TAX_DETAIL_DOCUMENT_TYPES
+        if document.cancelled_at is None
+        and document.doc_type in TAX_DETAIL_DOCUMENT_TYPES
         and document.id not in tax_document_ids
     }
 

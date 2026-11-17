@@ -118,7 +118,7 @@ async def compute_iva(
     """Calcula el IVA del periodo a partir de sus comprobantes."""
     amounts = {key: TracedAmount() for key in AMOUNT_KEYS}
 
-    documents = list(
+    source_documents = list(
         await session.scalars(
             select(FiscalDocument).where(
                 FiscalDocument.tenant_id == context.tenant_id,
@@ -126,6 +126,7 @@ async def compute_iva(
             )
         )
     )
+    documents = [document for document in source_documents if document.cancelled_at is None]
     documents_by_id = {document.id: document for document in documents}
 
     preliminary_reasons: list[str] = []
@@ -135,12 +136,13 @@ async def compute_iva(
         # en vez de simular un calculo sin evidencia.
         for amount in amounts.values():
             amount.value = quantize_amount(amount.value)
-        preliminary_reasons.append(
-            "El periodo no tiene comprobantes cargados: sube la evidencia del SRI."
-        )
+        if not source_documents:
+            preliminary_reasons.append(
+                "El periodo no tiene comprobantes cargados: sube la evidencia del SRI."
+            )
         return IvaSummary(
             amounts=amounts,
-            is_preliminary=True,
+            is_preliminary=bool(preliminary_reasons),
             preliminary_reasons=preliminary_reasons,
             document_count=0,
             pending_purchase_count=0,

@@ -7,16 +7,30 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Compras SRI, reglas y MCP, 2026-11-16. Validado en local sobre `release`.
-  Administración fija el RUC de la empresa y el importador ofrece una prueba
-  de acceso antes de cargar comprobantes. Compras permite clasificar por
-  arrastre o por lotes y aplica reglas por proveedor al recuperar XML.
-  El proxy local sirve metadatos OAuth y permite listar y consultar MCP.
-  BTOB abrió el módulo SRI. El SRI pide CAPTCHA al consultar con una sesión
-  nueva. La prueba de descarga conserva la ventana para resolverlo. El MCP
-  público aceptó la cuenta técnica BTOB y filtró el catálogo. Queda publicar
-  la ruta de descubrimiento OAuth y verificar la descarga de BTOB.
+- Compras SRI, reglas y MCP en producción, 2026-11-17. PR #97–#100,
+  revisión `1444bdd`, CI/Coolify `44150525336` correctos. API, PostgreSQL,
+  Redis, OAuth JSON, catálogo MCP autenticado BTOB y paquete web verificados.
+  El servidor b2b mantiene cuatro navegadores, perfiles persistentes y la
+  ejecución diaria de las 08:00 Guayaquil. Escritorio por túnel SSH con clave
+  VNC privada; Coolify conserva chmod 600 para el archivo de cuentas.
+  BTOB abrió el SRI y descargó un TXT de facturas de noviembre: 16 filas,
+  3103 bytes, receptor y tenant validados. Prueba sin importación; el lote
+  espera CAPTCHA en liquidaciones de compra en esa misma sesión. DATA-CLIP
+  y LEXCODE requieren iniciar sus sesiones del servidor. ANA KARINA requiere
+  guardar su acceso SRI en Empresa. La automatización del Mac sigue pausada.
   [Tareas y pruebas](../openspec/changes/compras-sri-reglas-mcp/tasks.md).
+
+- Anulaciones de compras listas para publicar, 2026-11-17. Conservan factura,
+  XML e historial; requieren confirmación humana, fecha, motivo y respaldo.
+  Protegen cierres declarados y pagos/retenciones/NC. Las anuladas salen de
+  deuda, IVA, ATS y gastos abiertos, y no se reactivan al importar otra vez.
+  28 casos dirigidos PostgreSQL 15, 10 E2E nuevos y 36 regresiones pasan.
+  Suite general: 867 correctas y 30 omisiones previas; la prueba de salud
+  falló por Redis local ausente y pasó al habilitarlo (868 correctas en total).
+  Migración upgrade/downgrade/upgrade, Ruff y mypy correctos; revisiones
+  independientes fiscal y seguridad GO. También se protege la recuperación
+  del importador SRI durante un apagado ordenado con cuatro pruebas Node.
+  [Tareas y pruebas](../openspec/changes/compras-anulaciones-recibidas/tasks.md).
 
 - ATS, advertencias de compras, 2026-10-28: EN PRODUCCIÓN por PR #92/#93,
   revisión 076150f. Omite formasDePago en compras con bases+IVA+ICE <=500,

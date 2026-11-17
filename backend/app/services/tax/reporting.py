@@ -15,6 +15,7 @@ from app.core.auth import AuthContext
 from app.models.billing import SalesDocument
 from app.models.payables import Payable
 from app.models.tax import FiscalDocument, FiscalDocumentTax, FiscalRetention, TaxPeriod
+from app.schemas.tax import PurchaseCancellationRead
 from app.services.tax.completeness import missing_tax_detail_document_ids
 from app.services.tax.iva import compute_iva
 
@@ -47,6 +48,8 @@ class PurchaseRecord:
     payment_methods: list[str]
     is_preliminary: bool
     taxes: list[PurchaseTaxLine] = field(default_factory=list)
+    lifecycle_status: Literal["ACTIVE", "CANCELLED"] = "ACTIVE"
+    cancellation: PurchaseCancellationRead | None = None
 
 
 @dataclass(frozen=True)
@@ -202,6 +205,7 @@ async def _annual_fiscal_snapshot(
             select(FiscalDocument).where(
                 FiscalDocument.tenant_id == context.tenant_id,
                 FiscalDocument.direction == "RECIBIDO",
+                FiscalDocument.cancelled_at.is_(None),
                 FiscalDocument.doc_type.in_(_PURCHASE_DOCUMENT_TYPES),
                 FiscalDocument.issue_date >= year_start,
                 FiscalDocument.issue_date < cutoff,
@@ -559,6 +563,7 @@ async def list_purchases(
     *,
     year: int | None = None,
     month: int | None = None,
+    document_id: uuid.UUID | None = None,
 ) -> list[PurchaseRecord]:
     """Lista compras creadas desde evidencia recibida, con su desglose real."""
     query = select(FiscalDocument).where(
@@ -566,6 +571,8 @@ async def list_purchases(
         FiscalDocument.direction == "RECIBIDO",
         FiscalDocument.doc_type.in_(_PURCHASE_DOCUMENT_TYPES),
     )
+    if document_id is not None:
+        query = query.where(FiscalDocument.id == document_id)
     if year is not None:
         query = query.where(
             FiscalDocument.issue_date >= date(year, month or 1, 1),
@@ -622,6 +629,14 @@ async def list_purchases(
                 document.is_preliminary or document.id in missing_tax_detail_ids
             ),
             taxes=taxes_by_document.get(document.id, []),
+            lifecycle_status="CANCELLED" if document.cancelled_at is not None else "ACTIVE",
+            cancellation=(PurchaseCancellationRead(
+                effective_date=document.cancellation_date,
+                reason=document.cancellation_reason,
+                evidence_id=document.cancellation_evidence_id,
+                recorded_at=document.cancelled_at,
+                actor_id=document.cancelled_by_actor_id,
+            ) if document.cancelled_at is not None else None),
         )
         for document in documents
     ]
@@ -754,6 +769,7 @@ async def dashboard_tax_report(
             select(FiscalDocument).where(
                 FiscalDocument.tenant_id == context.tenant_id,
                 FiscalDocument.tax_period_id == period.id,
+                FiscalDocument.cancelled_at.is_(None),
             )
         )
     )

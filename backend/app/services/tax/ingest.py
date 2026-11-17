@@ -23,7 +23,7 @@ import zipfile
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
@@ -107,6 +107,56 @@ async def _resolve_related_access_key(
         )
     )
     document.related_access_key = matches[0].access_key if len(matches) == 1 else None
+
+
+async def _ensure_purchase_support_is_active(
+    session: AsyncSession, context: AuthContext, *, document: FiscalDocument
+) -> None:
+    """Una NC/retención posterior no puede rebajar otra vez una compra anulada."""
+    if document.doc_type not in {"NOTA_CREDITO", "RETENCION"}:
+        return
+    numbers = {document.related_document_number} if document.related_document_number else set()
+    if document.doc_type == "RETENCION":
+        numbers.update(await session.scalars(
+            select(FiscalRetention.supporting_document_number).where(
+                FiscalRetention.tenant_id == context.tenant_id,
+                FiscalRetention.fiscal_document_id == document.id,
+            )
+        ))
+    normalized = {normalize_sri_document_number(number) for number in numbers if number}
+    matching_direction = (
+        document.direction == "RECIBIDO" if document.doc_type == "NOTA_CREDITO"
+        else document.direction == "EMITIDO"
+    )
+    candidates = [FiscalDocument.access_key == document.related_access_key] if (
+        document.related_access_key
+    ) else []
+    if matching_direction and normalized:
+        candidates.append(
+            FiscalDocument.counterparty_identification == document.counterparty_identification
+        )
+    if not candidates:
+        return
+    cancelled_sources = await session.scalars(select(FiscalDocument).where(
+        FiscalDocument.tenant_id == context.tenant_id,
+        FiscalDocument.direction == "RECIBIDO",
+        FiscalDocument.cancelled_at.is_not(None),
+        or_(*candidates),
+    ))
+    for source in cancelled_sources:
+        number = normalize_sri_document_number("-".join(
+            part or "" for part in (
+                source.establishment_code, source.emission_point_code, source.sequential
+            )
+        ))
+        if (document.related_access_key and source.access_key == document.related_access_key) or (
+            number and number in normalized
+        ):
+            raise HTTPException(
+                409,
+                "El comprobante modifica una compra anulada localmente. Requiere revisión "
+                "contable antes de aplicar otra rebaja; la evidencia original se conserva",
+            )
 
 
 async def _sync_related_credit_notes(
@@ -299,6 +349,7 @@ async def upsert_parsed_document(
     from app.services import payables
 
     await _resolve_related_access_key(session, context, document=document)
+    await _ensure_purchase_support_is_active(session, context, document=document)
     await payables.sync_fiscal_document(session, context, document=document)
     await _sync_related_credit_notes(session, context, source=document)
     if document.doc_type == "RETENCION" and document.direction == "RECIBIDO":
@@ -376,6 +427,7 @@ async def _upsert_txt_row(
     from app.services import payables
 
     await _resolve_related_access_key(session, context, document=document)
+    await _ensure_purchase_support_is_active(session, context, document=document)
     await payables.sync_fiscal_document(session, context, document=document)
     await _sync_related_credit_notes(session, context, source=document)
     return created, False

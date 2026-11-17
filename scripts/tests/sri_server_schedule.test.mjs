@@ -3,7 +3,7 @@ import test from 'node:test'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fiscalDay, importIsDue } from '../../infra/sri-importer/schedule.mjs'
+import { fiscalDay, importIsDue, interruptRun, recoverRunState } from '../../infra/sri-importer/schedule.mjs'
 import { profileRoot, readServiceAccount } from '../sri_received_runtime.mjs'
 
 test('server runs at 08:00 Ecuador and catches up after a restart', () => {
@@ -38,4 +38,17 @@ test('server profile root is explicit and keeps Mac compatibility', () => {
   assert.equal(profileRoot({ IAERP_SRI_PROFILE_ROOT: '/data/profiles' }, 'linux'), '/data/profiles')
   assert.match(profileRoot({}, 'linux'), /\.local\/share\/iaerp\/sri-profiles$/)
   assert.match(profileRoot({}, 'darwin'), /Library\/Application Support\/IAERP$/)
+})
+
+test('shutdown interruption survives the import cleanup and is retried on restart', () => {
+  const state = { running: true, lastAttemptDay: '2026-11-17', results: { btob: { status: 'ATTENTION' } } }
+  interruptRun(state)
+  state.running = false // A closing browser lets the import finally block run.
+  const recovered = recoverRunState(state)
+  assert.equal(recovered.running, false)
+  assert.equal(recovered.interrupted, false)
+  assert.equal(recovered.lastAttemptDay, null)
+  assert.equal(importIsDue(recovered.lastAttemptDay, new Date('2026-11-17T20:00:00Z')), true)
+  assert.equal(recovered.results.btob.status, 'ATTENTION')
+  assert.equal(recoverRunState({ running: false, lastAttemptDay: '2026-11-17' }).lastAttemptDay, '2026-11-17')
 })

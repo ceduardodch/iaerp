@@ -38,6 +38,7 @@ async def generate_ats(
     documents = list(
         await session.scalars(
             select(FiscalDocument).where(
+                    FiscalDocument.cancelled_at.is_(None),
                 FiscalDocument.tenant_id == context.tenant_id,
                 FiscalDocument.tax_period_id == period.id,
             )
@@ -54,6 +55,7 @@ async def generate_ats(
         related_documents = list(
             await session.scalars(
                 select(FiscalDocument).where(
+                    FiscalDocument.cancelled_at.is_(None),
                     FiscalDocument.tenant_id == context.tenant_id,
                     FiscalDocument.access_key.in_(related_keys),
                 )

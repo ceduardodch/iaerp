@@ -175,7 +175,10 @@ async def refresh_period_statuses(
         )
         if not documents:
             period.status = "PENDIENTE_DESCARGA"
-        elif any(document.is_preliminary for document in documents) or (
+        elif any(
+                document.is_preliminary and document.cancelled_at is None
+                for document in documents
+            ) or (
             missing_tax_detail_document_ids(documents, tax_document_ids)
         ):
             period.status = "EVIDENCIA_INCOMPLETA"

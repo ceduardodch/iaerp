@@ -1,9 +1,13 @@
 # Issue Tracking - Sesión por Sesión
 
-> 2026-11-16. [Compras SRI, reglas y MCP](openspec/changes/compras-sri-reglas-mcp/tasks.md).
-> Tablero, reglas y corrección del descubrimiento OAuth verificados en local.
-> Acceso SRI con BTOB y catálogo MCP público autenticado verificados.
-> Quedan la descarga con CAPTCHA resuelto y publicar el arreglo de OAuth.
+> 2026-11-17. [Compras SRI, reglas y MCP](openspec/changes/compras-sri-reglas-mcp/tasks.md):
+> PR #97–#100 en producción `1444bdd`; CI/Coolify `44150525336` correctos.
+> MCP/OAuth autenticado y cuatro navegadores en b2b verificados. BTOB descargó
+> 16 facturas de noviembre, receptor validado, sin importar; CAPTCHA pendiente
+> en liquidaciones. Horario servidor 08:00 Guayaquil; Mac pausado.
+> [Anulaciones recibidas](openspec/changes/compras-anulaciones-recibidas/tasks.md):
+> implementación revisada y probada, pendiente publicar. Sin cambios a la
+> factura real del ejemplo; el registro requiere respaldo del estado SRI.
 
 > Corte 2026-10-13: Cartera cruza retenciones tributarias autorizadas y prepara
 > el cobro neto; banco compara contra ese neto sin guardar en vista previa.

@@ -49,6 +49,7 @@ from app.schemas.tax import (
     IvaSummaryRead,
     MonthlySalesTrendRead,
     OwnDocumentsResultRead,
+    PurchaseCancellationCreate,
     PurchaseDocumentRead,
     PurchaseTaxLineRead,
     ReceivedReportsPreflight,
@@ -70,7 +71,13 @@ from app.services.tax import ats_customers as ats_customers_service
 from app.services.tax import bulk as bulk_service
 from app.services.tax import dossier as dossier_service
 from app.services.tax import evidence as evidence_service
-from app.services.tax import form_fields, historical_exception, own_documents, xml_recovery
+from app.services.tax import (
+    form_fields,
+    historical_exception,
+    own_documents,
+    purchase_cancellations,
+    xml_recovery,
+)
 from app.services.tax import ingest as ingest_service
 from app.services.tax import iva as iva_service
 from app.services.tax import periods as periods_service
@@ -242,33 +249,77 @@ async def get_purchases(
         year=year,
         month=month,
     )
-    return [
-        PurchaseDocumentRead(
-            id=record.id,
-            doc_type=record.doc_type,
-            access_key=record.access_key,
-            issue_date=record.issue_date,
-            document_number=record.document_number,
-            supplier_identification=record.supplier_identification,
-            supplier_name=record.supplier_name,
-            subtotal=format_amount(record.subtotal),
-            tax_total=format_amount(record.tax_total),
-            total=format_amount(record.total),
-            payment_methods=record.payment_methods,
-            is_preliminary=record.is_preliminary,
-            taxes=[
-                PurchaseTaxLineRead(
-                    sri_tax_code=tax.sri_tax_code,
-                    tax_bracket=tax.tax_bracket,
-                    rate=format_amount(tax.rate),
-                    base_amount=format_amount(tax.base_amount),
-                    tax_amount=format_amount(tax.tax_amount),
-                )
-                for tax in record.taxes
-            ],
+    return [_purchase_to_read(record) for record in records]
+
+
+def _purchase_to_read(record: reporting_service.PurchaseRecord) -> PurchaseDocumentRead:
+    return PurchaseDocumentRead(
+        id=record.id,
+        doc_type=record.doc_type,
+        access_key=record.access_key,
+        issue_date=record.issue_date,
+        document_number=record.document_number,
+        supplier_identification=record.supplier_identification,
+        supplier_name=record.supplier_name,
+        subtotal=format_amount(record.subtotal),
+        tax_total=format_amount(record.tax_total),
+        total=format_amount(record.total),
+        payment_methods=record.payment_methods,
+        is_preliminary=record.is_preliminary,
+        lifecycle_status=record.lifecycle_status,
+        cancellation=record.cancellation,
+        taxes=[
+            PurchaseTaxLineRead(
+                sri_tax_code=tax.sri_tax_code,
+                tax_bracket=tax.tax_bracket,
+                rate=format_amount(tax.rate),
+                base_amount=format_amount(tax.base_amount),
+                tax_amount=format_amount(tax.tax_amount),
+            )
+            for tax in record.taxes
+        ],
+    )
+
+@router.post(
+    "/purchases/{document_id}/cancellation",
+    response_model=PurchaseDocumentRead,
+    summary="Registrar localmente una factura ya anulada en el SRI",
+)
+async def post_purchase_cancellation(
+    document_id: uuid.UUID,
+    data: PurchaseCancellationCreate,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("tax:write", "payables:write"))],
+) -> dict[str, object]:
+    async def cancel() -> tuple[str, dict[str, object]]:
+        document = await purchase_cancellations.cancel_purchase(
+            session, context, document_id=document_id, data=data
         )
-        for record in records
-    ]
+        records = await reporting_service.list_purchases(
+            session, context, document_id=document.id
+        )
+        return str(document.id), _purchase_to_read(records[0]).model_dump(
+            mode="json", by_alias=True
+        )
+
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="tax.purchase.cancellation",
+        idempotency_key=idempotency_key,
+        request_payload={"document_id": str(document_id), **data.model_dump(mode="json")},
+        action="tax.purchase.cancelled_locally",
+        entity_type="fiscal_document",
+        callback=cancel,
+        audit_details={
+            "sri_status_confirmed": data.sri_status,
+            "effective_date": data.effective_date.isoformat(),
+            "reason": data.reason,
+            "evidence_id": str(data.evidence_id),
+        },
+    )
+
 
 
 @router.get("/periods", response_model=list[TaxPeriodRead])

@@ -82,6 +82,7 @@ async def create_job(
             await session.scalars(
                 select(FiscalDocument)
                 .where(
+                    FiscalDocument.cancelled_at.is_(None),
                     FiscalDocument.tenant_id == context.tenant_id,
                     FiscalDocument.tax_period_id == period_id,
                     FiscalDocument.direction == "RECIBIDO",
@@ -117,6 +118,7 @@ async def create_job(
         await session.scalars(
             select(FiscalDocument)
             .where(
+                FiscalDocument.cancelled_at.is_(None),
                 FiscalDocument.tenant_id == context.tenant_id,
                 FiscalDocument.tax_period_id == period_id,
                 FiscalDocument.direction == "RECIBIDO",
