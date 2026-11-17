@@ -728,7 +728,7 @@ test('Compras conserva pago y tags al clasificar una CxP que ya tuvo movimientos
   await page.getByRole('radio', { name: /^No deducible/ }).check()
   await page.getByRole('radio', { name: /Solo tributario/ }).check()
   await page.getByRole('button', { name: 'Guardar revisión' }).click()
-  expect(reviewBody).toMatchObject({
+  await expect.poll(() => reviewBody).toMatchObject({
     paymentState: 'KEEP_EXISTING',
     taxClassification: 'NON_DEDUCTIBLE',
     internalClassification: 'DECLARATION_ONLY',
