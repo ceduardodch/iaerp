@@ -215,6 +215,7 @@ class PayableRead(APIModel):
     open_amount: Decimal
     currency: Literal["USD"] = "USD"
     status: PayableStatus
+    payment_status: Literal["OPEN", "PARTIAL", "SETTLED"] = "OPEN"
     tax_classification: TaxClassification
     internal_classification: InternalClassification
     evidence_status: EvidenceStatus

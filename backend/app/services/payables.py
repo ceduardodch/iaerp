@@ -87,6 +87,8 @@ async def _active_movements(
 async def compute_open_amount(
     session: AsyncSession, *, tenant_id: uuid.UUID, payable: Payable
 ) -> Decimal:
+    if payable.status == "VOID":
+        return Decimal("0.00")
     active = await _active_movements(session, tenant_id=tenant_id, payable_id=payable.id)
     applied = sum((movement.amount for movement in active), Decimal("0.00"))
     return max(payable.total - applied, Decimal("0.00"))
@@ -103,7 +105,13 @@ def _public_status(payable: Payable, open_amount: Decimal) -> str:
 
 
 async def to_read(session: AsyncSession, *, tenant_id: uuid.UUID, payable: Payable) -> PayableRead:
-    open_amount = await compute_open_amount(session, tenant_id=tenant_id, payable=payable)
+    active = await _active_movements(session, tenant_id=tenant_id, payable_id=payable.id)
+    paid = sum((item.amount for item in active), Decimal("0.00"))
+    open_amount = (
+        Decimal("0.00") if payable.status == "VOID"
+        else max(payable.total - paid, Decimal("0.00"))
+    )
+    payment_status = "SETTLED" if paid >= payable.total else "PARTIAL" if paid else "OPEN"
     return PayableRead(
         id=payable.id,
         supplier_id=payable.supplier_id,
@@ -119,6 +127,7 @@ async def to_read(session: AsyncSession, *, tenant_id: uuid.UUID, payable: Payab
         open_amount=open_amount,
         currency=payable.currency,
         status=_public_status(payable, open_amount),
+        payment_status=payment_status,
         tax_classification=payable.tax_classification,
         internal_classification=payable.internal_classification,
         evidence_status=payable.evidence_status,
@@ -295,6 +304,14 @@ async def update_payable_classification(
     data: PayableClassificationUpdate,
 ) -> PayableRead:
     payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    if payable.status == "VOID":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "La compra anulada conserva su historial y no admite cambios "
+                "operativos"
+            ),
+        )
     classification_changed = payable.tax_classification != data.tax_classification
     if classification_changed and not data.reason:
         raise HTTPException(status_code=422, detail="Indica por qué cambias el uso fiscal")
@@ -361,6 +378,14 @@ async def update_payable_bulk_classification(
     data: PayableBulkClassificationUpdate,
 ) -> tuple[PayableRead, str | None]:
     payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    if payable.status == "VOID":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "La compra anulada conserva su historial y no admite cambios "
+                "operativos"
+            ),
+        )
     fiscal_protection_detail: str | None = None
     if data.tax_classification is not None:
         classification_changed = payable.tax_classification != data.tax_classification
@@ -429,6 +454,13 @@ async def review_fiscal_document(
     )
     if document is None:
         raise HTTPException(status_code=404, detail="Fiscal document not found")
+    if document.cancelled_at is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "La compra está anulada y conserva su historial"
+            ),
+        )
     synced = await sync_fiscal_document(session, context, document=document)
     if synced is None:
         raise HTTPException(
@@ -549,6 +581,8 @@ async def prepare_bulk_fiscal_review(
     )
     if document is None:
         raise HTTPException(status_code=404, detail="Fiscal document not found")
+    if document.cancelled_at is not None:
+        raise HTTPException(409, "La compra está anulada y conserva su historial")
     payable = await sync_fiscal_document(session, context, document=document)
     if payable is None:
         raise HTTPException(
@@ -624,6 +658,8 @@ async def _record_application(
     method: str | None,
     reference: str | None,
 ) -> None:
+    if payable.status == "VOID":
+        raise HTTPException(409, "La compra anulada no admite pagos ni ajustes")
     open_amount = await compute_open_amount(session, tenant_id=context.tenant_id, payable=payable)
     if amount > open_amount:
         raise HTTPException(status_code=422, detail="Movement exceeds payable open amount")
@@ -714,6 +750,14 @@ async def record_adjustment(
     data: PayableAdjustmentCreate,
 ) -> PayableRead:
     payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    if payable.status == "VOID":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "La compra anulada conserva su historial y no admite cambios "
+                "operativos"
+            ),
+        )
     await _record_application(
         session,
         context,
@@ -737,6 +781,14 @@ async def reverse_movement(
     effective_date: date,
 ) -> PayableRead:
     payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    if payable.status == "VOID":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "La compra anulada conserva su historial y no admite cambios "
+                "operativos"
+            ),
+        )
     movement = await session.scalar(
         select(PayableMovement).where(
             PayableMovement.tenant_id == context.tenant_id,
@@ -799,6 +851,14 @@ async def schedule_payment(
     data: PaymentScheduleCreate,
 ) -> SupplierPaymentSchedule:
     payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    if payable.status == "VOID":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "La compra anulada conserva su historial y no admite cambios "
+                "operativos"
+            ),
+        )
     open_amount = await compute_open_amount(session, tenant_id=context.tenant_id, payable=payable)
     if data.amount > open_amount:
         raise HTTPException(status_code=422, detail="Schedule exceeds payable open amount")
@@ -876,6 +936,12 @@ async def sync_fiscal_document(
     *,
     document: FiscalDocument,
 ) -> Payable | None:
+    if document.cancelled_at is not None:
+        cancelled_payable = await session.scalar(select(Payable).where(
+            Payable.tenant_id == context.tenant_id,
+            Payable.fiscal_document_id == document.id,
+        ))
+        return cancelled_payable
     if document.direction != "RECIBIDO":
         return None
     if document.doc_type == "NOTA_CREDITO":

@@ -93,7 +93,10 @@ async def generate_tax_tasks_once() -> int:
                     ),
                 )
                 continue
-            if any(document.is_preliminary for document in documents) or (
+            if any(
+                document.is_preliminary and document.cancelled_at is None
+                for document in documents
+            ) or (
                 missing_tax_detail_document_ids(documents, tax_document_ids)
             ):
                 created += await _ensure_task(

@@ -52,7 +52,8 @@ async def apply_recovered_invoice_rule(
 ) -> None:
     """El worker llama aquí tras validar el XML y con el tenant bloqueado."""
     if (
-        document.direction != "RECIBIDO"
+        document.cancelled_at is not None
+        or document.direction != "RECIBIDO"
         or document.doc_type != "FACTURA"
         or document.is_preliminary
         or period.status == "DECLARADO"

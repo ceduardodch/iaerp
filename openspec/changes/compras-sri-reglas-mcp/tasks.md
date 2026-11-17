@@ -57,7 +57,7 @@
 - [x] 5.2 Mantener cuatro contextos de navegador y perfiles persistentes separados.
 - [x] 5.3 Programar las 08:00 de Guayaquil y conservar el estado de cada corrida.
 - [x] 5.4 Preparar acceso local por túnel SSH para continuar un CAPTCHA en la misma consulta.
-- [ ] 5.5 Publicar el servicio por Coolify y comprobar navegadores, credenciales y programación en b2b.
+- [x] 5.5 Publicar el servicio por Coolify y comprobar navegadores, credenciales y programación en b2b.
 - [ ] 5.6 Comprobar la descarga de BTOB y registrar cualquier atención pendiente.
 
 ## Publicación verificada del 17 de noviembre
@@ -66,3 +66,14 @@ PR #97 y #98 publicados en `7fc3f81` por
 [CI/Coolify](https://github.com/ceduardodch/iaerp/actions/runs/44139651424).
 API, base, Redis, OAuth JSON, catálogo MCP de BTOB, OpenAPI y paquete web
 verificados. La tarea del Mac permanece pausada durante el traslado al servidor.
+
+## Servicio publicado en b2b, 17 de noviembre
+
+PR #99/#100, `1444bdd`, CI/Coolify `44150525336` correctos. Cuatro contextos,
+VNC con autenticación y puerto localhost verificados. El archivo de cuentas
+conserva 600 por configuración persistente de Coolify. BTOB inició sesión y
+descargó factura.txt de noviembre: 3103 bytes, 16 filas y receptor validado
+con el preflight del tenant. Prueba sin carga. El lote espera CAPTCHA en
+liquidaciones de compra; 5.6 sigue pendiente hasta completar todos los tipos.
+ANA KARINA no tiene acceso SRI configurado; las otras sesiones necesitan
+su primera entrada en el servidor. La tarea del Mac sigue pausada.

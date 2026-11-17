@@ -251,7 +251,29 @@ class PurchaseTaxLineRead(APIModel):
     tax_amount: str
 
 
+class PurchaseCancellationCreate(APIModel):
+    sri_status: Literal["ANULADO"]
+    effective_date: date
+    reason: str = Field(min_length=3, max_length=500, pattern=r"\S")
+    evidence_id: uuid.UUID
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def strip_reason(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class PurchaseCancellationRead(APIModel):
+    effective_date: date
+    reason: str
+    evidence_id: uuid.UUID
+    recorded_at: datetime
+    actor_id: str
+
+
 class PurchaseDocumentRead(APIModel):
+    lifecycle_status: Literal["ACTIVE", "CANCELLED"] = "ACTIVE"
+    cancellation: PurchaseCancellationRead | None = None
     id: uuid.UUID
     doc_type: str
     access_key: str | None = None

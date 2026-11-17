@@ -496,6 +496,7 @@ export type Payable = {
   openAmount: string
   currency: 'USD'
   status: PayableStatus
+  paymentStatus?: Exclude<PayableStatus, 'VOIDED'>
   taxClassification: 'DEDUCTIBLE_PENDING_REVIEW' | 'DEDUCTIBLE_CONFIRMED' | 'NON_DEDUCTIBLE'
   internalClassification: 'PENDING_REVIEW' | 'REAL' | 'DECLARATION_ONLY'
   evidenceStatus: 'NONE' | 'ATTACHED' | 'PRELIMINARY' | 'FISCAL_XML'
@@ -1396,6 +1397,14 @@ export type PurchaseTaxLine = {
   taxAmount: string
 }
 
+export type PurchaseCancellation = {
+  effectiveDate: string
+  reason: string
+  evidenceId: string
+  recordedAt: string
+  actorId: string
+}
+
 export type PurchaseDocument = {
   id: string
   docType: 'FACTURA' | 'NOTA_CREDITO' | 'NOTA_DEBITO' | 'LIQUIDACION'
@@ -1410,6 +1419,8 @@ export type PurchaseDocument = {
   paymentMethods: string[]
   isPreliminary: boolean
   taxes: PurchaseTaxLine[]
+  lifecycleStatus?: 'ACTIVE' | 'CANCELLED'
+  cancellation?: PurchaseCancellation | null
 }
 
 export type MonthlySalesTrend = {

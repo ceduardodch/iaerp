@@ -189,8 +189,12 @@ async def run_recovery_job(
             )
             access_key = document.access_key if document is not None else None
             already_complete = document is not None and not document.is_preliminary
+            cancelled = document is not None and document.cancelled_at is not None
         if document is None or access_key is None:
             await _mark_item(job_id, document_id=str(document_id), status="FAILED")
+            continue
+        if cancelled:
+            await _mark_item(job_id, document_id=str(document_id), status="UNAVAILABLE")
             continue
         if already_complete:
             await _mark_item(job_id, document_id=str(document_id), status="RECOVERED")
@@ -266,6 +270,10 @@ async def run_recovery_job(
                 assert tenant is not None
                 assert period is not None
                 assert current is not None
+                if current.cancelled_at is not None:
+                    # La confirmación pudo llegar mientras el SRI respondía.
+                    _apply_item_status(job, item=item, status="UNAVAILABLE")
+                    continue
                 _reject_unless(
                     receiver_matches_tenant(parsed.receiver_identification, tenant.ruc),
                     "SRI response receiver does not match tenant",

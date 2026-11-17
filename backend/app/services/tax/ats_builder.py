@@ -92,6 +92,7 @@ def build_ats_input(
     del operador para ventas sin dato. Sin elección usa el valor 20 autorizado
     por defecto. Las compras conservan sus validaciones.
     """
+    documents = [document for document in documents if document.cancelled_at is None]
     if missing_sales_payment_method is None:
         missing_sales_payment_method = "20"
     if missing_sales_payment_method not in {"01", "20"}:

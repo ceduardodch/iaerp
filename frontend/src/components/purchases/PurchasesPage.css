@@ -193,3 +193,9 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.purchase-rule-form .purchase-cancellation-confirm { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: start; gap: .5rem; min-height: 44px; cursor: pointer; }
+.purchase-cancellation-confirm input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+
+.purchase-rule-form.purchase-cancellation-form { padding: 0; }
+.purchase-cancellation-form p { margin: 0; }
