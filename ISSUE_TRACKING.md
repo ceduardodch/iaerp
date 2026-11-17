@@ -6,10 +6,12 @@
 > 16 facturas de noviembre, receptor validado, sin importar; CAPTCHA pendiente
 > en liquidaciones. Horario servidor 08:00 Guayaquil; Mac pausado.
 > [Anulaciones recibidas](openspec/changes/compras-anulaciones-recibidas/tasks.md):
-> PR #101 no desplegado: CI main cancelado por P1 ERP. El ajuste exige
-> confirmar también operación cancelada y saldo extinguido, lo audita y
-> rechaza compra vigente/refacturación. 31 PostgreSQL y 14 E2E pasan.
-> La factura real sigue intacta; decisión económica del ejemplo pendiente.
+> PR #101/#102 publicados en `b586aeb`, CI/Coolify `44161725575` correctos.
+> Operación cancelada y saldo extinguido requieren confirmación separada.
+> 871 backend y 412 UI correctos; MCP, API y migración verificados.
+> SRI requiere recuperar enlaces Singleton tras reiniciar; el arreglo conserva
+> perfiles y cookies y ya pasó pruebas Docker. Factura real intacta;
+> decisión económica del ejemplo pendiente.
 
 > Corte 2026-10-13: Cartera cruza retenciones tributarias autorizadas y prepara
 > el cobro neto; banco compara contra ese neto sin guardar en vista previa.

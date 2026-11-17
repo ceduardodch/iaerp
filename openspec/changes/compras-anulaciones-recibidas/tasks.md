@@ -10,7 +10,7 @@
 - [x] 2.1 Añadir acción de registro, confirmación y estado visible en Compras.
 - [x] 2.2 Cubrir aceptación con pruebas de integración, contrato, interfaz y accesibilidad.
 - [x] 2.3 Revisar dominio fiscal, seguridad y plataforma con expertos independientes.
-- [ ] 2.4 Publicar por release → PR → main y verificar el entorno publicado.
+- [x] 2.4 Publicar por release → PR → main y verificar el entorno publicado.
 
 ## Evidencia
 
@@ -29,3 +29,10 @@ rechazan sin cambios. 31 pruebas dirigidas PostgreSQL pasan tras el ajuste.
 La producción sigue en `1444bdd`; la factura del ejemplo sigue intacta.
 
 P1 cerrado tras revisión ERP independiente y seguridad/contrato: doble confirmación, petición obligatoria y respuesta coherente. POST y GET reales devuelven la decisión económica. 31 PostgreSQL y 14 E2E correctos; Ruff, mypy, build, teclado, axe y geometría móvil pasan. Publicación aún pendiente.
+
+Publicación verificada de la función: PR #101/#102 en `b586aeb`,
+CI/Coolify `44161725575` correctos; contrato obligatorio, API, paquete web,
+migración y MCP autenticado verificados. 871 backend y 412 E2E correctos
+(30/4 omisiones previas). La función sólo admite operación cancelada y saldo
+extinguido; no se aplicó a la factura real. El arreglo del reinicio SRI sigue
+las tareas del cambio `compras-sri-reglas-mcp`.

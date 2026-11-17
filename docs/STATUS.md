@@ -8,9 +8,9 @@ alcance y las decisiones.
 ## Corte verificado
 
 - Compras SRI, reglas y MCP en producción, 2026-11-17. PR #97–#100,
-  revisión `1444bdd`, CI/Coolify `44150525336` correctos. API, PostgreSQL,
+  revisión `b586aeb`, CI/Coolify `44161725575` correctos. API, PostgreSQL,
   Redis, OAuth JSON, catálogo MCP autenticado BTOB y paquete web verificados.
-  El servidor b2b mantiene cuatro navegadores, perfiles persistentes y la
+  El servidor b2b conserva cuatro perfiles y la programación diaria de la
   ejecución diaria de las 08:00 Guayaquil. Escritorio por túnel SSH con clave
   VNC privada; Coolify conserva chmod 600 para el archivo de cuentas.
   BTOB abrió el SRI y descargó un TXT de facturas de noviembre: 16 filas,
@@ -18,22 +18,22 @@ alcance y las decisiones.
   espera CAPTCHA en liquidaciones de compra en esa misma sesión. LEXCODE también inició sesión.
   DATA-CLIP requiere atención de acceso SRI. ANA KARINA requiere
   guardar su acceso SRI en Empresa. La automatización del Mac sigue pausada.
+  Tras esta publicación, SRI reinicia por bloqueos Singleton de Chrome
+  heredados del contenedor anterior. El volumen y las cookies se conservan.
+  Arreglo preparado con bloqueo exclusivo y limpieza limitada a enlaces
+  obsoletos; prueba Docker de caída abrupta y nuevo contenedor conserva
+  cuatro cookies y perfiles. Pendiente publicar y verificar servicio sano.
   [Tareas y pruebas](../openspec/changes/compras-sri-reglas-mcp/tasks.md).
 
-- Anulación de compras: alcance acotado a operación cancelada y saldo
-  extinguido. Se exige `economicOutcome=OPERATION_CANCELLED`, sin valor por
-  defecto, y dos confirmaciones en pantalla. Estado SRI, decisión económica,
-  fecha, motivo y respaldo quedan auditados. Compra vigente o refacturación
-  se rechazan sin cambiar deuda, gasto ni impuestos.
-  PR #101 se integró en `7b09469`, pero CI `44157431870` se canceló antes de
-  desplegar por el P1 detectado en revisión ERP. Producción sigue `1444bdd`.
-  Ajuste validado con 31 casos PostgreSQL 15, 14 E2E y 36 regresiones previas.
-  La suite general previa y CI de PR #101 validaron 868 casos backend.
-  Ruff, mypy, build, accesibilidad y geometría móvil correctos. Migración
-  upgrade/downgrade/upgrade verificada. ERP y fiscal revisaron el alcance;
-  publicación del ajuste pendiente. Factura real intacta: falta conocer si
-  también se canceló la operación o si existe una factura de reemplazo.
-  [Tareas y pruebas](../openspec/changes/compras-anulaciones-recibidas/tasks.md).
+- Anulación de compras en producción: PR #101/#102, `b586aeb`,
+  CI/Coolify `44161725575` correctos. Alcance: operación cancelada y saldo
+  extinguido, confirmación económica obligatoria separada del estado SRI.
+  Compra vigente/refacturación se rechaza sin cambios. 871 backend y 412
+  interfaz correctos (30/4 omisiones previas), 31 PostgreSQL15 dirigidos y
+  14 E2E nuevos; revisiones fiscal, ERP y seguridad/contrato GO.
+  API, paquete web, contrato, migración `5d6e7f8a9b0c` y MCP autenticado
+  verificados. La factura real sigue intacta, pendiente conocer su caso.
+  [Tareas](../openspec/changes/compras-anulaciones-recibidas/tasks.md).
 
 - ATS, advertencias de compras, 2026-10-28: EN PRODUCCIÓN por PR #92/#93,
   revisión 076150f. Omite formasDePago en compras con bases+IVA+ICE <=500,

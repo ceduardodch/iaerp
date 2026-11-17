@@ -31,7 +31,7 @@ async function stop() {
   stopping = true
   interruptRun(status)
   saveStatus()
-  for (const context of contexts.values()) await context.close().catch(() => {})
+  await Promise.all([...contexts.values()].map((context) => context.close().catch(() => {})))
   for (const child of children) child.kill('SIGTERM')
   process.exit(0)
 }
