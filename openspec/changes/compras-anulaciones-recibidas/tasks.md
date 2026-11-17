@@ -57,9 +57,19 @@ PR #101/#102, revisión `fb0537e`, [CI/Coolify](https://github.com/ceduardodch/i
 - [x] 4.1 Mostrar `Anular` bajo el número de la compra, sin entrar en `Pagar`.
 - [x] 4.2 Reutilizar permisos, modal, respaldo y protecciones; conservar borrador al cancelar y cerrar edición al guardar.
 - [x] 4.3 Automatizar escritorio/móvil, teclado, foco, permisos y regresiones: 18 E2E dirigidos y 36 regresiones Compras/dashboard pasan; build/lint correctos. Revisión frontend/a11y independiente GO, incluido objetivo táctil de 44×44 px.
-- [ ] 4.4 Revisión independiente y publicación por release → PR → main con verificación del paquete servido.
+- [x] 4.4 Revisión independiente y publicación por release → PR → main con verificación del paquete servido.
 
 Validación PR #105: release `44176683958` pasó 416 E2E; el PR detectó
 una carrera en una aserción de revisión móvil existente. Se espera la petición
 asíncrona con `expect.poll` conservando los cuatro campos y la aserción de foco.
 20 repeticiones dirigidas (10 por tamaño) pasan; se repite CI completo.
+
+Cierre: PR #105 publicado en `e8b4fc0`; CI/Coolify `44181463258` correctos.
+416 E2E pasan (4 omisiones previas). API, contrato, paquete con Anular en fila,
+MCP autenticado BTOB y perfiles/horario persistentes verificados. Registro
+real pendiente de respaldo SRI, sin inferir una anulación desde la captura.
+
+Comprobación visual en la sesión humana de producción: botón visible bajo
+la compra, modal abierto directamente, Guardar deshabilitado sin respaldo y
+confirmaciones; Cancelar cierra y devuelve foco al botón. No se subió
+evidencia ni se registró una anulación real durante esta comprobación.

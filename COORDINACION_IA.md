@@ -41,7 +41,7 @@
 
 | Sesión / IA | Estado | Área / archivos | Desde |
 | --- | --- | --- | --- |
-| Codex (Compras SRI, reglas y MCP) | 🚀 EN PROMOCIÓN | Acceso directo Anular bajo el número de compra en su fila; 18 E2E + 36 regresiones, build/lint correctos; revisión frontend/a11y GO. Frontend/CSS/tests y OpenSpec; publicación autorizada. Producción previa fb0537e; datos reales intactos. | 2026-11-17 |
+| Codex (Compras SRI, reglas y MCP) | ✅ EN PRODUCCIÓN | Anular directo en fila, PR #105 e8b4fc0, CI/Coolify 44181463258 verdes; 416 E2E y revisión frontend/a11y GO. API/MCP/perfiles b2b verificados. Registro real pendiente de respaldo SRI; lote CAPTCHA sigue diferido por el usuario. | 2026-11-17 |
 | Codex (este hilo, Cartera y retenciones) | 🟡 EN VALIDACIÓN FINAL | Cruce automático desde XML tributario, preparación de cobro neto y conciliación de depósitos descontando retenciones; 80 pruebas PostgreSQL y 40 E2E pasan, fiscal GO. Publicación autorizada; notificaciones y scripts SRI pendientes quedan fuera. | 2026-10-13 |
 | Claude (orquestador) | ⚪ obsoleta (2026-08-29) | Calidad de tests a11y RESTAURADA; Sprint 4 se completó después por Codex. Fila marcada 🟢 durante más de un mes con decenas de sesiones cerradas encima: ya no bloquea a nadie | 2026-07-21 |
 | Codex (GPT-5.6, vía Claude) | ⚪ detenido | Se colgó por `approval_mode="approve"` en modo no interactivo; para usarlo hay que invocarlo con `--full-auto`/`-a never`. Alcanzó a hacer 2 mejoras menores (auth.tsx, ErpModal.tsx) que se conservaron | 2026-07-21 |

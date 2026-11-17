@@ -7,11 +7,16 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Anular directo en la fila de Compras, 2026-11-17: botón bajo el número
-  de compra, visible sin entrar en Pagar ni desplazar la tabla a la derecha.
-  Reutiliza el modal y sus permisos/protecciones; cancelar conserva el
-  borrador y guardar cierra la edición. 18 E2E escritorio/móvil correctos,
-  teclado y axe incluidos; build/lint correctos. Revisión frontend/a11y GO; publicación pendiente.
+- Anular directo en la fila de Compras en producción, 2026-11-17:
+  PR #105, revisión `e8b4fc0`, [CI/Coolify](https://github.com/ceduardodch/iaerp/actions/runs/44181463258) correctos.
+  Botón bajo el número de compra, visible sin entrar en Pagar ni desplazar
+  la tabla a la derecha. Mismo modal, permisos, respaldo y protecciones;
+  cancelar conserva el borrador y guardar cierra la edición. Revisión
+  frontend/a11y independiente GO, objetivo táctil de 44 px. 416 E2E en CI
+  (4 omisiones previas), 18 dirigidos y 36 regresiones locales correctos.
+  API, paquete web con botón directo, MCP autenticado BTOB, migración,
+  perfiles persistentes y horario del importador verificados después de publicar.
+  Registro real de anulación pendiente de respaldo SRI.
 
 - Compras SRI, reglas y MCP en producción, 2026-11-17. PR #97–#103,
   revisión `fb0537e`, CI/Coolify `44169331013` correctos. API, PostgreSQL,
