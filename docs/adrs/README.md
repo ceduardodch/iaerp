@@ -24,3 +24,4 @@ sustituya.
 | 0014 | CxP operativa y conciliacion bancaria compartida | Proposed |
 | 0015 | Clasificaciones analiticas por tenant | Proposed |
 | [0019](0019-purchase-tax-classification-rules.md) | Reglas fiscales para facturas recibidas | Proposed |
+| [0020](0020-sri-importer-on-b2b.md) | Descarga SRI en b2b con sesiones persistentes | Accepted |

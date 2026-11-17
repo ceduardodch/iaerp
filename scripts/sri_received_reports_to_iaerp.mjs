@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -11,8 +10,9 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 
 import { chromium } from "../frontend/node_modules/playwright/index.mjs";
@@ -24,6 +24,7 @@ import {
 } from "./sri_received_access.mjs";
 import { selectSriReceivedCompanies } from "./sri_received_companies.mjs";
 import { validateDownloadedReports } from "./sri_received_report_validation.mjs";
+import { profileRoot, readServiceAccount } from "./sri_received_runtime.mjs";
 
 const SRI_RECEIVED_URL =
   "https://srienlinea.sri.gob.ec/tuportal-internet/" +
@@ -31,7 +32,7 @@ const SRI_RECEIVED_URL =
 const IAERP_URL = "https://iaerp.b2b.com.ec";
 const TOKEN_URL =
   "https://iaerp-auth.b2b.com.ec/realms/iaerp/protocol/openid-connect/token";
-const PROFILE_ROOT = join(homedir(), "Library", "Application Support", "IAERP");
+const PROFILE_ROOT = profileRoot();
 const MONTH_NAMES = [
   "Enero",
   "Febrero",
@@ -55,23 +56,7 @@ const REPORT_TYPES = [
   ["retencion", "Comprobante de Retención"],
 ];
 
-function readKeychain(service, account) {
-  return execFileSync(
-    "/usr/bin/security",
-    ["find-generic-password", "-s", service, "-a", account, "-w"],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-  ).trim();
-}
-
-function readCompanyKeychain(service, account, companyId) {
-  try {
-    return readKeychain(service, account);
-  } catch {
-    throw new Error(`KEYCHAIN_CONFIGURATION_MISSING_${companyId}`);
-  }
-}
-
-function fiscalPeriodForYesterday() {
+export function fiscalPeriodForYesterday() {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Guayaquil",
@@ -184,7 +169,7 @@ async function firstVisible(locators, label) {
   throw new Error(`SRI_CONTROL_NOT_FOUND_${label}`);
 }
 
-async function queryAndDownload(page, runtimeDir, slug, label, manualCaptcha) {
+async function queryAndDownload(page, runtimeDir, slug, label, manualCaptcha, captchaHandler) {
   await page.locator("#frmPrincipal\\:cmbTipoComprobante").selectOption({ label });
   await page.waitForTimeout(500);
   const queryButton = await firstVisible([
@@ -199,15 +184,19 @@ async function queryAndDownload(page, runtimeDir, slug, label, manualCaptcha) {
   const captchaRejected = (text) => /captcha/i.test(text) && /(error|incorrect|inválid|invalido)/i.test(text);
   let bodyText = await page.locator("body").innerText();
   if (captchaRejected(bodyText)) {
-    if (!manualCaptcha) throw new Error("SRI_CAPTCHA_REQUIRED");
-    const terminal = createInterface({ input: process.stdin, output: process.stderr });
-    try {
-      await terminal.question(
-        `SRI_CAPTCHA_MANUAL_${slug}: resuelve el CAPTCHA y pulsa Consultar en Chrome. Cuando aparezca el resultado, presiona Enter aquí.\n`,
-        { signal: AbortSignal.timeout(10 * 60_000) },
-      );
-    } finally {
-      terminal.close();
+    if (captchaHandler) {
+      await captchaHandler(page, slug);
+    } else {
+      if (!manualCaptcha) throw new Error("SRI_CAPTCHA_REQUIRED");
+      const terminal = createInterface({ input: process.stdin, output: process.stderr });
+      try {
+        await terminal.question(
+          `SRI_CAPTCHA_MANUAL_${slug}: resuelve el CAPTCHA y pulsa Consultar en Chrome. Cuando aparezca el resultado, presiona Enter aquí.\n`,
+          { signal: AbortSignal.timeout(10 * 60_000) },
+        );
+      } finally {
+        terminal.close();
+      }
     }
     bodyText = await page.locator("body").innerText();
     if (captchaRejected(bodyText)) throw new Error("SRI_CAPTCHA_REQUIRED");
@@ -229,16 +218,7 @@ async function queryAndDownload(page, runtimeDir, slug, label, manualCaptcha) {
 }
 
 async function getIaerpToken(company) {
-  let clientId = readCompanyKeychain(
-    company.iaerpKeychainService,
-    "client_id",
-    company.id,
-  );
-  let clientSecret = readCompanyKeychain(
-    company.iaerpKeychainService,
-    "client_secret",
-    company.id,
-  );
+  let { clientId, clientSecret } = readServiceAccount(company);
   const body = new URLSearchParams({
     grant_type: "client_credentials",
     client_id: clientId,
@@ -346,7 +326,9 @@ function summarizeImport(company, period, reportCount, result = {}) {
   };
 }
 
-async function runCompany(company, period, { mode, manualCaptcha, existingSession }) {
+export async function runCompany(company, period, {
+  mode, manualCaptcha, existingSession, browserContext, captchaHandler,
+}) {
   const runtimeDir = mkdtempSync(join(tmpdir(), `iaerp-sri-${company.id}-`));
   chmodSync(runtimeDir, 0o700);
   let context;
@@ -365,7 +347,7 @@ async function runCompany(company, period, { mode, manualCaptcha, existingSessio
     const profileDir = join(PROFILE_ROOT, company.browserProfile);
     if (existingSession && !existsSync(profileDir)) throw new Error("SRI_PROFILE_REQUIRED");
     mkdirSync(profileDir, { recursive: true, mode: 0o700 });
-    context = await chromium.launchPersistentContext(
+    context = browserContext ?? await chromium.launchPersistentContext(
       profileDir,
       {
         channel: "chrome",
@@ -390,7 +372,7 @@ async function runCompany(company, period, { mode, manualCaptcha, existingSessio
     for (const [slug, label] of REPORT_TYPES) {
       stage = `sri-${slug}`;
       await selectPeriod(page, period.year, period.month);
-      const filePath = await queryAndDownload(page, runtimeDir, slug, label, manualCaptcha);
+      const filePath = await queryAndDownload(page, runtimeDir, slug, label, manualCaptcha, captchaHandler);
       if (filePath) downloaded.push({ slug, filePath });
     }
 
@@ -422,7 +404,7 @@ async function runCompany(company, period, { mode, manualCaptcha, existingSessio
     sriCredentials = { ruc: "", password: "" };
     token = "";
     try {
-      if (context) await context.close();
+      if (context && !browserContext) await context.close();
     } catch {
       throw new Error("STAGE_browser-cleanup: CHECK_FAILED");
     } finally {
@@ -431,24 +413,25 @@ async function runCompany(company, period, { mode, manualCaptcha, existingSessio
   }
 }
 
-let companies;
-let verification;
-try {
-  verification = parseSriReceivedMode(process.argv.slice(2));
-  companies = selectSriReceivedCompanies(verification.companyArgs);
-} catch (error) {
-  process.stderr.write(`SRI_RECEIVED_FAILED: ${error.message}\n`);
-  process.exit(1);
-}
-
-const period = fiscalPeriodForYesterday();
-let failed = false;
-for (const company of companies) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  let companies;
+  let verification;
   try {
-    process.stdout.write(`${JSON.stringify(await runCompany(company, period, verification))}\n`);
+    verification = parseSriReceivedMode(process.argv.slice(2));
+    companies = selectSriReceivedCompanies(verification.companyArgs);
   } catch (error) {
-    process.stderr.write(`SRI_RECEIVED_FAILED_${company.id}: ${error.message}\n`);
-    failed = true;
+    process.stderr.write(`SRI_RECEIVED_FAILED: ${error.message}\n`);
+    process.exit(1);
   }
+  const period = fiscalPeriodForYesterday();
+  let failed = false;
+  for (const company of companies) {
+    try {
+      process.stdout.write(`${JSON.stringify(await runCompany(company, period, verification))}\n`);
+    } catch (error) {
+      process.stderr.write(`SRI_RECEIVED_FAILED_${company.id}: ${error.message}\n`);
+      failed = true;
+    }
+  }
+  if (failed) process.exitCode = 1;
 }
-if (failed) process.exitCode = 1;

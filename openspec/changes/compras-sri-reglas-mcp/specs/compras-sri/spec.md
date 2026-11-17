@@ -24,3 +24,15 @@ El importador SHALL distinguir acceso guardado, sesión validada y errores del S
 - **WHEN** el importador procesa todas las empresas en modo de sesión existente
 - **THEN** reusa el perfil dedicado de cada empresa y avisa si el SRI pide iniciar sesión
 - **AND** continúa con las empresas restantes
+
+### Requirement: Importador administrado en b2b
+El servidor b2b SHALL ejecutar el importador como servicio de Coolify a las 08:00 de Guayaquil con un navegador persistente por empresa.
+
+#### Scenario: Recuperación después de reiniciar
+- **WHEN** el servicio reinicia después de las 08:00 y queda una corrida pendiente o interrumpida
+- **THEN** procesa el mes de ayer con los casos de uso e idempotencia existentes
+
+#### Scenario: Intervención por CAPTCHA
+- **WHEN** una consulta exige CAPTCHA
+- **THEN** conserva la página y permite al operador resolverlo por el escritorio local del servidor
+- **AND** consume el resultado de esa consulta antes de continuar
