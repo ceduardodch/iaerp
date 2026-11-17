@@ -58,3 +58,15 @@ atención y la corrida continúa con las demás. La cuenta ANA KARINA requiere
 guardar su acceso SRI en Empresa, según la verificación del 17 de noviembre.
 
 La automatización del Mac permanece pausada para evitar corridas duplicadas.
+
+## Perfiles bloqueados después de reiniciar
+
+El servicio se protege con un bloqueo exclusivo en `/data/importer.lock`.
+No borrar ni recrear ese archivo. Si otra instancia lo conserva, el arranque
+responde `SRI_IMPORTER_ALREADY_RUNNING` y espera el siguiente reinicio; revisar
+que Coolify haya detenido la versión anterior.
+
+Los enlaces Singleton obsoletos se retiran bajo ese bloqueo. El servicio no
+borra cookies, sesiones ni perfiles. Si encuentra Chrome usando el perfil o
+un archivo inesperado en lugar de un enlace, se detiene para revisión.
+No resolver el bloqueo creando un perfil vacío ni borrando el directorio.

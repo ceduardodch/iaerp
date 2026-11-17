@@ -551,29 +551,13 @@ jobs:
           docker compose -f compose.coolify.yaml config --quiet
 
       - name: Validate SRI server scheduler
-        run: node --test scripts/tests/sri_received*.test.mjs scripts/tests/sri_server_schedule.test.mjs
+        run: node --test scripts/tests/sri_received*.test.mjs scripts/tests/sri_server*.test.mjs
 
       - name: Build SRI browser service
         run: docker build --file infra/sri-importer/Dockerfile --tag iaerp-sri-importer:ci .
 
-      - name: Smoke test isolated SRI browsers
-        run: |
-          docker run -d --name iaerp-sri-smoke --shm-size=1g \
-            --security-opt seccomp=infra/sri-importer/seccomp_profile.json \
-            --env IAERP_SRI_BROWSER_SMOKE=1 iaerp-sri-importer:ci
-          for attempt in $(seq 1 30); do
-            if docker exec iaerp-sri-smoke node -e "fetch('http://127.0.0.1:6081').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
-              docker exec iaerp-sri-smoke node infra/sri-importer/check-vnc-auth.mjs
-              exit 0
-            fi
-            sleep 2
-          done
-          docker logs iaerp-sri-smoke
-          exit 1
-
-      - name: Stop SRI browser smoke test
-        if: always()
-        run: docker rm -f iaerp-sri-smoke || true
+      - name: Verify SRI browser restart, persistent sessions and exclusive lock
+        run: sh infra/sri-importer/restart-smoke.sh iaerp-sri-importer:ci
 
   deploy-production:
     name: Deploy production to Coolify

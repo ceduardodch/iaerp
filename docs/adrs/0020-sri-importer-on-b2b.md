@@ -24,3 +24,18 @@ abiertas después de cada corrida.
 
 El perfil seccomp procede de
 [Playwright 1.61.1](https://github.com/microsoft/playwright/blob/v1.61.1/utils/docker/seccomp_profile.json).
+
+## Recuperación del perfil después de una caída
+
+Un cierre abrupto puede dejar enlaces Singleton de Chrome que apuntan al
+hostname del contenedor anterior. El arranque toma primero un bloqueo de
+archivo exclusivo de todo el importador y conserva su inode durante la vida
+del proceso. Con esa exclusión, retira sólo SingletonSocket, SingletonCookie
+y SingletonLock obsoletos: nunca Cookies, Local State ni el directorio del
+perfil. Un Chrome activo con ese perfil impide la limpieza. La transición
+desde una versión sin bloqueo exige detener antes el contenedor anterior;
+Coolify hace esa sustitución.
+
+La aceptación automatizada simula SIGKILL y un hostname nuevo, comprueba
+cuatro cookies persistentes y rechaza un segundo orquestador sin tocar sus
+enlaces. El cierre normal de contextos se hace en paralelo.

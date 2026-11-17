@@ -77,3 +77,15 @@ con el preflight del tenant. Prueba sin carga. El lote espera CAPTCHA en
 liquidaciones de compra; 5.6 sigue pendiente hasta completar todos los tipos.
 ANA KARINA no tiene acceso SRI configurado; las otras sesiones necesitan
 su primera entrada en el servidor. La tarea del Mac sigue pausada.
+
+## 6. Persistencia después de reiniciar
+
+- [x] 6.1 Reproducir el bloqueo Singleton heredado al reemplazar el contenedor.
+- [x] 6.2 Tomar un bloqueo exclusivo antes de limpiar enlaces y abrir perfiles.
+- [x] 6.3 Probar SIGKILL, contenedor nuevo, cuatro cookies conservadas y exclusión de una segunda instancia.
+- [ ] 6.4 Publicar por CI/Coolify y comprobar cuatro perfiles sanos sin borrar las sesiones existentes.
+
+Las anulaciones se publicaron en `b586aeb`, CI/Coolify `44161725575` correctos;
+el reinicio de SRI expuso enlaces de la instancia anterior y exige este
+arreglo de arranque. Sólo se limpiarán los tres enlaces previstos tras
+excluir cualquier otro orquestador. Node, Docker y revisión de seguridad GO.
