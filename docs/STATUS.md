@@ -15,21 +15,24 @@ alcance y las decisiones.
   VNC privada; Coolify conserva chmod 600 para el archivo de cuentas.
   BTOB abrió el SRI y descargó un TXT de facturas de noviembre: 16 filas,
   3103 bytes, receptor y tenant validados. Prueba sin importación; el lote
-  espera CAPTCHA en liquidaciones de compra en esa misma sesión. DATA-CLIP
-  y LEXCODE requieren iniciar sus sesiones del servidor. ANA KARINA requiere
+  espera CAPTCHA en liquidaciones de compra en esa misma sesión. LEXCODE también inició sesión.
+  DATA-CLIP requiere atención de acceso SRI. ANA KARINA requiere
   guardar su acceso SRI en Empresa. La automatización del Mac sigue pausada.
   [Tareas y pruebas](../openspec/changes/compras-sri-reglas-mcp/tasks.md).
 
-- Anulaciones de compras listas para publicar, 2026-11-17. Conservan factura,
-  XML e historial; requieren confirmación humana, fecha, motivo y respaldo.
-  Protegen cierres declarados y pagos/retenciones/NC. Las anuladas salen de
-  deuda, IVA, ATS y gastos abiertos, y no se reactivan al importar otra vez.
-  28 casos dirigidos PostgreSQL 15, 10 E2E nuevos y 36 regresiones pasan.
-  Suite general: 867 correctas y 30 omisiones previas; la prueba de salud
-  falló por Redis local ausente y pasó al habilitarlo (868 correctas en total).
-  Migración upgrade/downgrade/upgrade, Ruff y mypy correctos; revisiones
-  independientes fiscal y seguridad GO. También se protege la recuperación
-  del importador SRI durante un apagado ordenado con cuatro pruebas Node.
+- Anulación de compras: alcance acotado a operación cancelada y saldo
+  extinguido. Se exige `economicOutcome=OPERATION_CANCELLED`, sin valor por
+  defecto, y dos confirmaciones en pantalla. Estado SRI, decisión económica,
+  fecha, motivo y respaldo quedan auditados. Compra vigente o refacturación
+  se rechazan sin cambiar deuda, gasto ni impuestos.
+  PR #101 se integró en `7b09469`, pero CI `44157431870` se canceló antes de
+  desplegar por el P1 detectado en revisión ERP. Producción sigue `1444bdd`.
+  Ajuste validado con 31 casos PostgreSQL 15, 14 E2E y 36 regresiones previas.
+  La suite general previa y CI de PR #101 validaron 868 casos backend.
+  Ruff, mypy, build, accesibilidad y geometría móvil correctos. Migración
+  upgrade/downgrade/upgrade verificada. ERP y fiscal revisaron el alcance;
+  publicación del ajuste pendiente. Factura real intacta: falta conocer si
+  también se canceló la operación o si existe una factura de reemplazo.
   [Tareas y pruebas](../openspec/changes/compras-anulaciones-recibidas/tasks.md).
 
 - ATS, advertencias de compras, 2026-10-28: EN PRODUCCIÓN por PR #92/#93,

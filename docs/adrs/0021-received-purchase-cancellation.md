@@ -10,9 +10,11 @@ Un documento recibido puede seguir en Compras tras su anulación. El XML autoriz
 
 ## Decisión
 
-Registrar una anulación ya efectuada ante el SRI mediante un caso de uso de dominio único. La acción humana exige permiso, tenant autenticado, fecha efectiva, motivo, respaldo y clave de idempotencia. Guarda auditoría y conserva documento, XML, importe y movimientos históricos. No envía solicitudes de anulación al SRI.
+Registrar una anulación ya efectuada ante el SRI mediante un caso de uso de dominio único, sólo cuando también se canceló la operación comercial y dejó de existir el saldo original. El estado SRI por sí solo no acredita esa decisión económica. La acción humana exige permiso, tenant autenticado, fecha efectiva, motivo, respaldo, clave de idempotencia y `economicOutcome=OPERATION_CANCELLED` sin valor por defecto. La interfaz pide una confirmación separada de la cancelación de la compra y la extinción de ese saldo; la auditoría conserva ambas decisiones. Guarda auditoría y conserva documento, XML, importe y movimientos históricos. No envía solicitudes de anulación al SRI.
 
 La compra anulada deja de sumar deuda y reportes fiscales abiertos. La reimportación no la reactiva. La interfaz mantiene el historial y separa el estado del documento del estado de pago.
+
+Una compra que sigue vigente, espera una factura sustituta o sólo tiene un cambio documental requiere conciliar el estado fiscal y la obligación comercial por separado; este primer flujo rechaza esos casos sin alterar la compra ni la deuda. No sustituye el registro de una factura de reemplazo.
 
 Cuando hay un período declarado, pagos, retenciones o notas de crédito aplicadas, se rechaza la aplicación automática con un motivo concreto. El operador debe conciliar los movimientos y revisar el ajuste fiscal antes de registrar la anulación. No se inventan reembolsos ni saldos a favor y no se reescriben declaraciones cerradas.
 

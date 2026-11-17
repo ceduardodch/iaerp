@@ -630,7 +630,10 @@ async def list_purchases(
             ),
             taxes=taxes_by_document.get(document.id, []),
             lifecycle_status="CANCELLED" if document.cancelled_at is not None else "ACTIVE",
+            # El único flujo local admitido exige y audita operación cancelada;
+            # se proyecta esa invariante, nunca se deduce del estado SRI solo.
             cancellation=(PurchaseCancellationRead(
+                economic_outcome="OPERATION_CANCELLED",
                 effective_date=document.cancellation_date,
                 reason=document.cancellation_reason,
                 evidence_id=document.cancellation_evidence_id,

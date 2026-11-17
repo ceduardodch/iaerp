@@ -69,7 +69,7 @@ async function openDialog(page: Page) {
   return page.getByRole('dialog', { name: 'Registrar anulación de compra' })
 }
 
-async function completeForm(page: Page) {
+async function completeForm(page: Page, confirmOperation = true) {
   const dialog = page.getByRole('dialog', { name: 'Registrar anulación de compra' })
   await dialog.getByLabel('Fecha de anulación en el SRI').fill('2026-08-05')
   await dialog.getByLabel('Motivo de la anulación').fill('Constancia de anulación verificada')
@@ -77,6 +77,7 @@ async function completeForm(page: Page) {
     name: 'constancia-sintetica.txt', mimeType: 'text/plain', buffer: Buffer.from('Fixture sintético de anulación; sin datos reales.'),
   })
   await dialog.getByLabel('Confirmo que la factura consta ANULADA en el SRI').check()
+  if (confirmOperation) await dialog.getByLabel('Confirmo que también se canceló la compra y que este saldo ya no se debe pagar').check()
   return dialog
 }
 
@@ -87,12 +88,13 @@ test('registra anulación respaldada, conserva historial y excluye de pendientes
   await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
   await expect(dialog).toHaveCount(0)
   expect(state.requests).toHaveLength(1)
-  expect(state.requests[0].body).toEqual({ effectiveDate: '2026-08-05', reason: 'Constancia de anulación verificada', evidenceId, sriStatus: 'ANULADO' })
+  expect(state.requests[0].body).toEqual({ effectiveDate: '2026-08-05', reason: 'Constancia de anulación verificada', evidenceId, sriStatus: 'ANULADO', economicOutcome: 'OPERATION_CANCELLED' })
   expect(state.requests[0].key).toBeTruthy()
   expect(state.uploads()).toBe(1)
   await expect(page.getByRole('status').filter({ hasText: 'Anulación registrada' })).toBeVisible()
   const row = page.getByRole('row').filter({ hasText: 'Compra sintética' })
   await expect(row.getByText('Anulada', { exact: true })).toBeVisible()
+  await expect(page.getByText('También se confirmó que la compra se canceló y que el saldo ya no se debe pagar.', { exact: true })).toBeVisible()
   await expect(row.getByRole('checkbox')).toBeDisabled()
   await expect(row.getByRole('button', { name: 'Editar clasificación' })).toBeDisabled()
   await expect(page.getByRole('link', { name: 'Ver respaldo de la anulación' })).toHaveAttribute('href', 'https://example.invalid/synthetic-evidence.pdf')
@@ -114,12 +116,17 @@ test('requiere respaldo y confirmación, respeta teclado y pasa axe en el diálo
   await page.keyboard.press('Tab')
   await expect(dialog.getByRole('button', { name: 'Cerrar ventana' })).toBeFocused()
   expect((await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations).toEqual([])
-  const confirmation = dialog.getByLabel('Confirmo que la factura consta ANULADA en el SRI')
-  await confirmation.scrollIntoViewIfNeeded()
-  const confirmationBounds = await confirmation.locator('..').boundingBox()
-  const confirmationTextBounds = await confirmation.locator('..').locator('span').boundingBox()
-  expect(confirmationTextBounds!.height).toBeLessThanOrEqual(confirmationBounds!.height)
-  expect(confirmationTextBounds!.x + confirmationTextBounds!.width).toBeLessThanOrEqual(confirmationBounds!.x + confirmationBounds!.width + 1)
+  for (const label of ['Confirmo que la factura consta ANULADA en el SRI', 'Confirmo que también se canceló la compra y que este saldo ya no se debe pagar']) {
+    const confirmation = dialog.getByLabel(label)
+    await confirmation.locator('..').scrollIntoViewIfNeeded()
+    const confirmationBounds = await confirmation.locator('..').boundingBox()
+    const confirmationTextBounds = await confirmation.locator('..').locator('span').boundingBox()
+    const bodyBounds = await dialog.locator('.erp-modal-body').boundingBox()
+    expect(confirmationTextBounds!.y).toBeGreaterThanOrEqual(bodyBounds!.y - 1)
+    expect(confirmationTextBounds!.y + confirmationTextBounds!.height).toBeLessThanOrEqual(bodyBounds!.y + bodyBounds!.height + 1)
+    expect(confirmationTextBounds!.height).toBeLessThanOrEqual(confirmationBounds!.height)
+    expect(confirmationTextBounds!.x + confirmationTextBounds!.width).toBeLessThanOrEqual(confirmationBounds!.x + confirmationBounds!.width + 1)
+  }
   await page.screenshot({ path: `/tmp/iaerp-cancellation-${testInfo.project.name}.png` })
   const geometry = await dialog.boundingBox()
   expect(geometry!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
@@ -170,4 +177,46 @@ test('conserva respaldo e historial de una anulación SRI sin cuenta por pagar',
   await expect(page.getByText('Constancia de anulación verificada', { exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Ver respaldo de la anulación' })).toBeVisible()
   expect(state.requests).toHaveLength(1)
+})
+
+
+test('exige ambas confirmaciones para retirar la deuda y no aplica si hay refacturación pendiente', async ({ page }) => {
+  const state = await setup(page)
+  await openDialog(page)
+  const dialog = await completeForm(page, false)
+  await expect(dialog.getByText('Si la compra continúa o está pendiente de refacturación', { exact: false })).toBeVisible()
+  const save = dialog.getByRole('button', { name: 'Guardar', exact: true })
+  const sriConfirmation = dialog.getByLabel('Confirmo que la factura consta ANULADA en el SRI')
+  const operationConfirmation = dialog.getByLabel('Confirmo que también se canceló la compra y que este saldo ya no se debe pagar')
+  await expect(save).toBeDisabled()
+  await dialog.getByLabel('Motivo de la anulación').press('Enter')
+  expect(state.requests).toHaveLength(0)
+  expect(state.uploads()).toBe(0)
+  await operationConfirmation.check()
+  await expect(save).toBeEnabled()
+  await sriConfirmation.uncheck()
+  await expect(save).toBeDisabled()
+  await sriConfirmation.focus()
+  await page.keyboard.press('Space')
+  await page.keyboard.press('Tab')
+  await expect(operationConfirmation).toBeFocused()
+  await page.keyboard.press('Space')
+  await expect(save).toBeDisabled()
+  expect(state.requests).toHaveLength(0)
+  expect(state.uploads()).toBe(0)
+})
+
+
+test('cambiar el motivo tras un rechazo conserva el respaldo y usa otra clave de operación', async ({ page }) => {
+  const state = await setup(page, { protectedMessage: 'Se requiere conciliación antes de cancelar la compra.' })
+  await openDialog(page)
+  const dialog = await completeForm(page)
+  await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('Se requiere conciliación antes de cancelar la compra.')
+  await dialog.getByLabel('Motivo de la anulación').fill('Operación cancelada y saldo revisado')
+  await dialog.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect.poll(() => state.requests.length).toBe(2)
+  expect(state.requests[0].key).not.toBe(state.requests[1].key)
+  expect(state.requests[1].body.economicOutcome).toBe('OPERATION_CANCELLED')
+  expect(state.uploads()).toBe(1)
 })

@@ -17,3 +17,15 @@
 Solicitud del usuario del 17 de noviembre de 2026. La captura identifica una compra que el usuario informa anulada; no constituye por sí misma respaldo del estado SRI. No se cambiará esa compra por una inferencia de la imagen.
 
 Validación local: 28 pruebas dirigidas PostgreSQL 15, 10 E2E nuevos y 36 regresiones Compras/dashboard; accesibilidad y geometría escritorio/móvil. Migración upgrade, downgrade y upgrade en PostgreSQL 15. Ruff y mypy correctos. Revisiones independientes fiscal y seguridad GO. Suite general verificada: 867 correctas, 30 omisiones previas; la prueba de salud pasó después de iniciar Redis local (868 en total). Publicación pendiente.
+
+## Revisión ERP antes de publicar
+
+PR #101 quedó integrado en `7b09469`, pero la corrida main `44157431870` se
+canceló antes del despliegue por un P1 de revisión ERP: una factura anulada no
+prueba por sí sola que se extinguieron la operación, deuda y gasto reales.
+El ajuste exige `economicOutcome=OPERATION_CANCELLED`, una confirmación
+separada en pantalla y su auditoría. Ausencia, compra vigente y reemplazo se
+rechazan sin cambios. 31 pruebas dirigidas PostgreSQL pasan tras el ajuste.
+La producción sigue en `1444bdd`; la factura del ejemplo sigue intacta.
+
+P1 cerrado tras revisión ERP independiente y seguridad/contrato: doble confirmación, petición obligatoria y respuesta coherente. POST y GET reales devuelven la decisión económica. 31 PostgreSQL y 14 E2E correctos; Ruff, mypy, build, teclado, axe y geometría móvil pasan. Publicación aún pendiente.

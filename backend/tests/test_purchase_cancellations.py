@@ -100,6 +100,7 @@ async def _case(client, *, with_payable=True):
     assert response.status_code == 201, response.text
     payload = {
         "sriStatus": "ANULADO",
+        "economicOutcome": "OPERATION_CANCELLED",
         "effectiveDate": "2026-08-02",
         "reason": "Estado ANULADO confirmado para la clave exacta",
         "evidenceId": response.json()["id"],
@@ -140,6 +141,7 @@ async def test_cancel_preserves_history_excludes_tax_dashboard_and_debt(client, 
     assert response.json()["lifecycleStatus"] == "CANCELLED"
     assert response.json()["total"] == "115.00"
     assert response.json()["cancellation"]["evidenceId"] == payload["evidenceId"]
+    assert response.json()["cancellation"]["economicOutcome"] == "OPERATION_CANCELLED"
     replay = await _cancel(client, token, doc_id, payload)
     assert replay.json() == response.json()
     conflict = await _cancel(client, token, doc_id, {**payload, "reason": "Otra razón"})
@@ -147,6 +149,7 @@ async def test_cancel_preserves_history_excludes_tax_dashboard_and_debt(client, 
     rows = await client.get("/api/v1/tax/purchases", headers=auth(token))
     assert len(rows.json()) == 1
     assert rows.json()[0]["lifecycleStatus"] == "CANCELLED"
+    assert rows.json()[0]["cancellation"]["economicOutcome"] == "OPERATION_CANCELLED"
     paid = await client.get(f"/api/v1/payables/{payable['id']}", headers=auth(token))
     assert paid.json()["status"] == "VOIDED"
     assert paid.json()["paymentStatus"] == "OPEN"
@@ -185,6 +188,10 @@ async def test_cancel_preserves_history_excludes_tax_dashboard_and_debt(client, 
             )
             == 1
         )
+        audit = await session.scalar(
+            select(AuditEvent).where(AuditEvent.action == "tax.purchase.cancelled_locally")
+        )
+        assert audit.details["economic_outcome"] == "OPERATION_CANCELLED"
         assert document.total == Decimal("115.00")
         assert len(taxes) == 1
         assert await session.scalar(select(func.count()).select_from(TaxEvidence)) == 1
@@ -605,6 +612,7 @@ async def test_concurrent_writes_serialize_without_payment_or_fiscal_race(
 
         monkeypatch.setattr(payables, "record_payment", hold)
         first_task = asyncio.create_task(pay())
+
         async def next_operation():
             return await _cancel(client, token, doc_id, payload)
     else:
@@ -626,8 +634,10 @@ async def test_concurrent_writes_serialize_without_payment_or_fiscal_race(
                 json={"targetStatus": "DECLARADO", "confirmed": True},
             )
         )
+
         async def next_operation():
             return await _cancel(client, token, doc_id, payload)
+
     try:
         await asyncio.wait_for(entered.wait(), 5)
         second_task = asyncio.create_task(next_operation())
@@ -645,3 +655,30 @@ async def test_concurrent_writes_serialize_without_payment_or_fiscal_race(
         movements = await session.scalar(select(func.count()).select_from(PayableMovement))
         assert (document.cancelled_at is not None) == (first == "cancellation")
         assert movements == (1 if first == "payment" else 0)
+
+
+@pytest.mark.parametrize("outcome", [None, "PURCHASE_CONTINUES", "INVOICE_REPLACED"])
+async def test_fiscal_annulment_alone_cannot_extinguish_purchase(client, private_storage, outcome):
+    token, doc_id, period_id, payable, payload = await _case(client)
+    if outcome is None:
+        payload.pop("economicOutcome")
+    else:
+        payload["economicOutcome"] = outcome
+    result = await _cancel(client, token, doc_id, payload)
+    assert result.status_code == 422, result.text
+    async with SessionFactory() as session:
+        document = await session.get(FiscalDocument, uuid.UUID(doc_id))
+        item = await session.get(Payable, uuid.UUID(payable["id"]))
+        assert document.cancelled_at is None
+        assert item.status == "OPEN"
+        period = await session.get(TaxPeriod, uuid.UUID(period_id))
+        summary = await iva.compute_iva(session, _context(), period=period)
+        assert summary.value("iva_credito_tributario") == Decimal("15.00")
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "tax.purchase.cancelled_locally")
+            )
+            == 0
+        )
