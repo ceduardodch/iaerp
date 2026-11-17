@@ -35,3 +35,10 @@ IAERP SHALL permitir a un usuario autorizado registrar una factura recibida ya a
 - **WHEN** falta la decisión económica o se indica compra vigente o factura reemplazada
 - **THEN** IAERP rechaza la operación sin cambiar documento, saldo ni impuestos
 - **AND** explica que el cambio documental requiere conciliar por separado la compra o la factura sustituta
+
+#### Scenario: Anulación directa desde la fila de compra
+- **WHEN** un usuario con `tax:write` y `payables:write` ve una factura SRI vigente vinculada a una compra no anulada
+- **THEN** ve `Anular` bajo la identificación de esa compra en su propia fila, en escritorio y móvil
+- **AND** abre la confirmación sin pasar por `Pagar`, con las mismas validaciones y respaldo obligatorio
+- **AND** cancelar devuelve el foco al botón y conserva cualquier borrador de clasificación sin guardar
+- **AND** guardar una anulación válida cierra la edición de clasificación y deja sólo el historial de la compra anulada

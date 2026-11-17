@@ -7,6 +7,12 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Anular directo en la fila de Compras, 2026-11-17: botón bajo el número
+  de compra, visible sin entrar en Pagar ni desplazar la tabla a la derecha.
+  Reutiliza el modal y sus permisos/protecciones; cancelar conserva el
+  borrador y guardar cierra la edición. 18 E2E escritorio/móvil correctos,
+  teclado y axe incluidos; build/lint correctos. Revisión frontend/a11y GO; publicación pendiente.
+
 - Compras SRI, reglas y MCP en producción, 2026-11-17. PR #97–#103,
   revisión `fb0537e`, CI/Coolify `44169331013` correctos. API, PostgreSQL,
   Redis, OAuth JSON, catálogo MCP autenticado BTOB y paquete web verificados.

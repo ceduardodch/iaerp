@@ -30,6 +30,9 @@ de introducir variantes locales.
 - `ErpPanel`: tabla o tarjetas con conteo visible.
 - La ultima columna se llama `Acciones`.
 - `Editar` es accion directa; acciones secundarias van en menu contextual.
+- Excepcion Compras (2026-11-17): `Anular` va visible bajo el numero de la
+  compra en su fila, para no depender de `Pagar` ni del desplazamiento horizontal.
+  Abre el modal de confirmacion existente; nunca aplica el cambio al pulsarlo.
 - La seleccion masiva, cuando exista, reemplaza temporalmente la toolbar.
 
 ### Ficha

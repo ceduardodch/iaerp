@@ -1,5 +1,9 @@
 # Issue Tracking - Sesión por Sesión
 
+> 2026-11-17: acceso directo `Anular` en la fila, bajo el número de compra,
+> sin entrar en Pagar. Mismas confirmaciones, respaldo y permisos; 18 E2E
+> escritorio/móvil y build/lint correctos. Revisión frontend/a11y GO; publicación pendiente.
+
 > 2026-11-17. [Compras SRI, reglas y MCP](openspec/changes/compras-sri-reglas-mcp/tasks.md):
 > PR #97–#100 en producción `1444bdd`; CI/Coolify `44150525336` correctos.
 > MCP/OAuth autenticado y cuatro navegadores en b2b verificados. BTOB descargó
