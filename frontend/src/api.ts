@@ -1398,6 +1398,7 @@ export type PurchaseTaxLine = {
 }
 
 export type PurchaseCancellation = {
+  economicOutcome: 'OPERATION_CANCELLED'
   effectiveDate: string
   reason: string
   evidenceId: string

@@ -6,8 +6,10 @@
 > 16 facturas de noviembre, receptor validado, sin importar; CAPTCHA pendiente
 > en liquidaciones. Horario servidor 08:00 Guayaquil; Mac pausado.
 > [Anulaciones recibidas](openspec/changes/compras-anulaciones-recibidas/tasks.md):
-> implementación revisada y probada, pendiente publicar. Sin cambios a la
-> factura real del ejemplo; el registro requiere respaldo del estado SRI.
+> PR #101 no desplegado: CI main cancelado por P1 ERP. El ajuste exige
+> confirmar también operación cancelada y saldo extinguido, lo audita y
+> rechaza compra vigente/refacturación. 31 PostgreSQL y 14 E2E pasan.
+> La factura real sigue intacta; decisión económica del ejemplo pendiente.
 
 > Corte 2026-10-13: Cartera cruza retenciones tributarias autorizadas y prepara
 > el cobro neto; banco compara contra ese neto sin guardar en vista previa.

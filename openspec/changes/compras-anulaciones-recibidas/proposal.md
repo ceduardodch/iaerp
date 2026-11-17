@@ -4,7 +4,8 @@ Una factura recibida puede anularse después de importarla. La compra aún apare
 
 ## What Changes
 
-- Registrar la anulación ya efectuada ante el SRI con fecha, motivo y respaldo.
+- Registrar la anulación ya efectuada ante el SRI con fecha, motivo y respaldo, sólo si también se canceló la compra y se extinguió ese saldo.
+- Exigir y auditar una confirmación económica separada, sin asumir que el estado SRI extingue la deuda. Compras vigentes y refacturación requieren otro tratamiento.
 - Conservar el documento original y mostrar su estado en Compras.
 - Excluir las anuladas de deuda vigente y cálculos fiscales abiertos.
 - Proteger períodos declarados y movimientos aplicados; exigir su revisión previa.

@@ -19,6 +19,7 @@ export function PurchaseCancellationDialog({ token, document, onClose, onSaved }
   const [reason, setReason] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [confirmed, setConfirmed] = useState(false)
+  const [operationCancelled, setOperationCancelled] = useState(false)
   const [fileError, setFileError] = useState('')
   const requestKey = useRef(idempotencyKey('web-purchase-cancellation'))
   const uploadKey = useRef(idempotencyKey('web-purchase-cancellation-evidence'))
@@ -37,7 +38,7 @@ export function PurchaseCancellationDialog({ token, document, onClose, onSaved }
       return apiRequest<PurchaseDocument>(token, `/tax/purchases/${document.id}/cancellation`, {
         method: 'POST',
         headers: { 'Idempotency-Key': requestKey.current },
-        body: JSON.stringify({ effectiveDate, reason: reason.trim(), evidenceId: uploadedEvidence.current.id, sriStatus: 'ANULADO' }),
+        body: JSON.stringify({ effectiveDate, reason: reason.trim(), evidenceId: uploadedEvidence.current.id, sriStatus: 'ANULADO', economicOutcome: 'OPERATION_CANCELLED' }),
       })
     },
     onSuccess: () => {
@@ -52,13 +53,14 @@ export function PurchaseCancellationDialog({ token, document, onClose, onSaved }
   }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!confirmed || !file || fileError || reason.trim().length < 3) return
+    if (!confirmed || !operationCancelled || !file || fileError || reason.trim().length < 3) return
     save.mutate()
   }
   return <ErpModal title="Registrar anulación de compra" onClose={onClose} closeDisabled={save.isPending} initialFocusSelector='input[name="cancellationDate"]'>
     <form className="purchase-rule-form purchase-cancellation-form" onSubmit={submit} aria-describedby="purchase-cancellation-description">
       <p id="purchase-cancellation-description">Registra una anulación ya realizada en el SRI. Este paso no envía una solicitud de anulación al SRI.</p>
       <p><strong>{document.documentNumber ?? 'Sin número'}</strong> · {document.supplierName ?? 'Sin proveedor'}</p>
+      <p className="fine-print">Si la compra continúa o está pendiente de refacturación, no uses este flujo: requiere conciliación. Anular la factura en el SRI no implica por sí solo que la deuda desapareció.</p>
       <p className="fine-print">La compra queda en el historial y deja de contar entre las vigentes. Si tiene pagos, retenciones, notas de crédito o un período declarado, IAERP pedirá revisar esos vínculos antes de guardar.</p>
       <label>Fecha de anulación en el SRI<input name="cancellationDate" type="date" required min={document.issueDate} max={fiscalToday()} value={effectiveDate} disabled={save.isPending} onChange={(event) => { setEffectiveDate(event.target.value); changeRequest() }} /></label>
       <label>Motivo de la anulación<textarea required minLength={3} maxLength={500} value={reason} disabled={save.isPending} onChange={(event) => { setReason(event.target.value); changeRequest() }} /></label>
@@ -71,11 +73,12 @@ export function PurchaseCancellationDialog({ token, document, onClose, onSaved }
         changeRequest()
       }} /></label><small id="purchase-cancellation-file-help">Adjunta la constancia o captura que muestre el estado Anulado en el SRI. Máximo 25 MB.</small>
       {fileError ? <p className="form-error" role="alert">{fileError}</p> : null}
-      <label className="purchase-cancellation-confirm"><input type="checkbox" required checked={confirmed} disabled={save.isPending} onChange={(event) => { setConfirmed(event.target.checked); changeRequest() }} /><span>Confirmo que la factura consta ANULADA en el SRI</span></label>
+      <label className="purchase-cancellation-confirm"><input type="checkbox" name="sriCancellationConfirmed" required checked={confirmed} disabled={save.isPending} onChange={(event) => { setConfirmed(event.target.checked); changeRequest() }} /><span>Confirmo que la factura consta ANULADA en el SRI</span></label>
+      <label className="purchase-cancellation-confirm"><input type="checkbox" name="operationCancellationConfirmed" required checked={operationCancelled} disabled={save.isPending} onChange={(event) => { setOperationCancelled(event.target.checked); changeRequest() }} /><span>Confirmo que también se canceló la compra y que este saldo ya no se debe pagar</span></label>
       {save.error ? <p className="form-error" role="alert">{save.error.message}</p> : null}
-      <div className="erp-form-actions">
+      <div className="erp-form-actions erp-confirm-actions">
         <ErpButton variant="secondary" onClick={onClose} disabled={save.isPending}>Cancelar</ErpButton>
-        <ErpButton variant="primary" type="submit" disabled={save.isPending || !confirmed || !file || Boolean(fileError) || reason.trim().length < 3}>{save.isPending ? 'Guardando…' : 'Guardar'}</ErpButton>
+        <ErpButton variant="primary" type="submit" disabled={save.isPending || !confirmed || !operationCancelled || !file || Boolean(fileError) || reason.trim().length < 3}>{save.isPending ? 'Guardando…' : 'Guardar'}</ErpButton>
       </div>
     </form>
   </ErpModal>
@@ -92,6 +95,7 @@ export function PurchaseCancellationDetails({ token, document }: { token: string
   return <>
     <p><strong>Anulación registrada</strong> · {cancellation.effectiveDate}</p>
     <p>{cancellation.reason}</p>
+    {cancellation.economicOutcome === 'OPERATION_CANCELLED' ? <p>También se confirmó que la compra se canceló y que el saldo ya no se debe pagar.</p> : null}
     <p className="fine-print">El documento original se conserva. No cuenta entre las compras vigentes.</p>
     {evidence.data ? <a href={evidence.data.url} target="_blank" rel="noopener noreferrer">Ver respaldo de la anulación</a> : null}
     {evidence.error ? <p className="form-error" role="alert">No se pudo abrir el respaldo: {evidence.error.message}</p> : null}

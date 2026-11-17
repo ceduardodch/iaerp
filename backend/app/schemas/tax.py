@@ -253,6 +253,9 @@ class PurchaseTaxLineRead(APIModel):
 
 class PurchaseCancellationCreate(APIModel):
     sri_status: Literal["ANULADO"]
+    economic_outcome: Literal["OPERATION_CANCELLED"] = Field(
+        description="Confirmación humana de que la operación se canceló y su deuda se extinguió"
+    )
     effective_date: date
     reason: str = Field(min_length=3, max_length=500, pattern=r"\S")
     evidence_id: uuid.UUID
@@ -264,6 +267,7 @@ class PurchaseCancellationCreate(APIModel):
 
 
 class PurchaseCancellationRead(APIModel):
+    economic_outcome: Literal["OPERATION_CANCELLED"]
     effective_date: date
     reason: str
     evidence_id: uuid.UUID

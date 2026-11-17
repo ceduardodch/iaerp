@@ -314,6 +314,7 @@ async def post_purchase_cancellation(
         callback=cancel,
         audit_details={
             "sri_status_confirmed": data.sri_status,
+            "economic_outcome": data.economic_outcome,
             "effective_date": data.effective_date.isoformat(),
             "reason": data.reason,
             "evidence_id": str(data.evidence_id),

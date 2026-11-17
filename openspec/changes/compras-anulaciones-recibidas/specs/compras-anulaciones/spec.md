@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Registro de anulación con respaldo
-IAERP SHALL permitir a un usuario autorizado registrar una factura recibida ya anulada ante el SRI con fecha, motivo y evidencia, conservando el original.
+IAERP SHALL permitir a un usuario autorizado registrar una factura recibida ya anulada ante el SRI con fecha, motivo y evidencia, conservando el original, sólo si el usuario confirma por separado que también se canceló la operación comercial y ese saldo ya no debe pagarse.
 
 #### Scenario: Compra pendiente sin movimientos
-- **WHEN** el usuario confirma la anulación con respaldo válido y permiso de escritura
+- **WHEN** el usuario confirma la anulación documental y `economicOutcome=OPERATION_CANCELLED` con respaldo válido y permiso de escritura
 - **THEN** la compra queda anulada con historial auditable e idempotencia
 - **AND** deja de aumentar la deuda y los totales fiscales abiertos
 
@@ -30,3 +30,8 @@ IAERP SHALL permitir a un usuario autorizado registrar una factura recibida ya a
 - **WHEN** el operador abre una compra anulada
 - **THEN** ve el estado, motivo, fecha y respaldo
 - **AND** no puede registrar pagos ni volver a clasificarla como compra vigente
+
+#### Scenario: Factura anulada con compra vigente o en refacturación
+- **WHEN** falta la decisión económica o se indica compra vigente o factura reemplazada
+- **THEN** IAERP rechaza la operación sin cambiar documento, saldo ni impuestos
+- **AND** explica que el cambio documental requiere conciliar por separado la compra o la factura sustituta
