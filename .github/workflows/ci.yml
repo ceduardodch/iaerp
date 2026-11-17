@@ -82,7 +82,7 @@ jobs:
           # SRI, facturación, migraciones y configuración de plataforma no
           # pueden tomar atajos: exigen el recorrido completo antes de producción.
           strict=false
-          if changed '^(backend/(app/services/(access_key|billing|fiscal_settings|signing|sri_xml)\.py|app/integrations/sri/|migrations/)|compose\.ya?ml|compose\.coolify\.yaml|contracts/)'; then
+          if changed '^(backend/(app/services/(access_key|billing|fiscal_settings|signing|sri_xml)\.py|app/integrations/sri/|migrations/)|infra/sri-importer/|scripts/sri_received|compose\.ya?ml|compose\.coolify\.yaml|contracts/)'; then
             strict=true
           fi
 
@@ -91,8 +91,8 @@ jobs:
           if changed '^frontend/' || [[ "$strict" == true ]]; then frontend=true; fi
           if changed '^(backend/app/core/|backend/app/api/auth|backend/app/services/(auth|identity)|frontend/src/(auth|oidc)|frontend/nginx\.conf$|compose\.ya?ml|compose\.ci\.yaml|infra/minio-ci/|scripts/tests/test_ci_minio\.py|infra/keycloak/)' || [[ "$strict" == true ]]; then oidc=true; fi
           if changed '^(contracts/|backend/app/(api|mcp)/|\.github/workflows/)'; then contracts=true; fi
-          if changed '^(compose\.coolify\.yaml|compose\.ya?ml|Dockerfile|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/)'; then deployment_config=true; fi
-          if changed '^(backend/app/|frontend/src/|compose\.ya?ml|compose\.coolify\.yaml|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/)' ; then deploy=true; fi
+          if changed '^(compose\.coolify\.yaml|compose\.ya?ml|Dockerfile|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/|infra/sri-importer/)'; then deployment_config=true; fi
+          if changed '^(backend/app/|frontend/src/|compose\.ya?ml|compose\.coolify\.yaml|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/|infra/sri-importer/|scripts/sri_received)' ; then deploy=true; fi
 
           set_output backend "$backend"
           set_output migrations "$migrations"
@@ -549,6 +549,30 @@ jobs:
           IAERP_SECRETS_ENCRYPTION_KEY
           EOF
           docker compose -f compose.coolify.yaml config --quiet
+
+      - name: Validate SRI server scheduler
+        run: node --test scripts/tests/sri_received*.test.mjs scripts/tests/sri_server_schedule.test.mjs
+
+      - name: Build SRI browser service
+        run: docker build --file infra/sri-importer/Dockerfile --tag iaerp-sri-importer:ci .
+
+      - name: Smoke test isolated SRI browsers
+        run: |
+          docker run -d --name iaerp-sri-smoke --shm-size=1g \
+            --security-opt seccomp=infra/sri-importer/seccomp_profile.json \
+            --env IAERP_SRI_BROWSER_SMOKE=1 iaerp-sri-importer:ci
+          for attempt in $(seq 1 30); do
+            if docker exec iaerp-sri-smoke node -e "fetch('http://127.0.0.1:6081').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs iaerp-sri-smoke
+          exit 1
+
+      - name: Stop SRI browser smoke test
+        if: always()
+        run: docker rm -f iaerp-sri-smoke || true
 
   deploy-production:
     name: Deploy production to Coolify

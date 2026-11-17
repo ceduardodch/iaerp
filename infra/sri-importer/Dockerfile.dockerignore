@@ -1,0 +1,6 @@
+**
+!scripts/
+!scripts/*.mjs
+!infra/
+!infra/sri-importer/
+!infra/sri-importer/*

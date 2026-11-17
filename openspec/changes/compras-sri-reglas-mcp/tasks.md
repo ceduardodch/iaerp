@@ -21,7 +21,7 @@
 - [x] 4.1 Reproducir el problema del descubrimiento de OAuth y correr pruebas MCP locales.
 - [x] 4.2 Corregir el proxy y verificar los metadatos, el catálogo y una consulta autenticada en el entorno local.
 - [x] 4.3 Validar OpenSpec, migraciones y pruebas, y registrar los resultados.
-- [ ] 4.4 Verificar en release y en el entorno publicado según autorización.
+- [x] 4.4 Verificar en release y en el entorno publicado según autorización.
 
 ## Evidencia del 16 de noviembre de 2026
 
@@ -49,3 +49,20 @@
   autorizada y documentada en `docs/security-exceptions.md` para continuar la publicación.
 - La automatización existente conserva las 08:00 de Ecuador y apunta a los
   cuatro perfiles dedicados. Sigue pausada hasta verificar una descarga real.
+
+
+## 5. Ejecución en b2b
+
+- [x] 5.1 Separar el acceso técnico del Llavero y mantenerlo en un archivo privado del servidor.
+- [x] 5.2 Mantener cuatro contextos de navegador y perfiles persistentes separados.
+- [x] 5.3 Programar las 08:00 de Guayaquil y conservar el estado de cada corrida.
+- [x] 5.4 Preparar acceso local por túnel SSH para continuar un CAPTCHA en la misma consulta.
+- [ ] 5.5 Publicar el servicio por Coolify y comprobar navegadores, credenciales y programación en b2b.
+- [ ] 5.6 Comprobar la descarga de BTOB y registrar cualquier atención pendiente.
+
+## Publicación verificada del 17 de noviembre
+
+PR #97 y #98 publicados en `7fc3f81` por
+[CI/Coolify](https://github.com/ceduardodch/iaerp/actions/runs/44139651424).
+API, base, Redis, OAuth JSON, catálogo MCP de BTOB, OpenAPI y paquete web
+verificados. La tarea del Mac permanece pausada durante el traslado al servidor.
