@@ -515,7 +515,8 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm audit --audit-level=high
+          node --test ../scripts/tests/frontend_audit.test.mjs
+          node ../scripts/audit_frontend_dependencies.mjs
 
   deployment-config:
     name: Coolify deployment config
