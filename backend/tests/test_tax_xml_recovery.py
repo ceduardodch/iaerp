@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 from app.db.session import SessionFactory
 from app.integrations.sri.protocol import AuthorizationResult
 from app.models.payables import Payable, PayableInstallment, PayableMovement
-from app.models.platform import AuditEvent, OutboxEvent, Tenant
+from app.models.platform import AuditEvent, AutomationSettings, Membership, OutboxEvent, Tenant
 from app.models.tax import (
     FiscalDocument,
     FiscalDocumentTax,
@@ -363,6 +363,132 @@ async def test_recovery_job_ingests_xml_and_completes_period(client, monkeypatch
     assert len(stored) == 1
     assert len(audits) == 1
     assert len(events) == 1
+
+
+@pytest.mark.parametrize(
+    "condition", ["eligible", "disabled", "inactive", "declared", "credit_note", "manual", "other"]
+)
+async def test_purchase_tax_rule_only_classifies_eligible_xml(client, monkeypatch, condition):
+    period_id, document_id, key = await _seed_preliminary()
+    tenant_b = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    admin_scopes = ["organization:write", "payables:read", "payables:write"]
+    admin = await _token(client, scopes=admin_scopes)
+    other = await _token(client, tenant_id=tenant_b, email="b@iaerp.local", scopes=admin_scopes)
+    rule_path = f"/api/v1/purchase-tax-rules/{ISSUER_RUC}"
+    rule_body = {
+        "taxClassification": "DEDUCTIBLE_CONFIRMED",
+        "active": condition != "inactive",
+    }
+    forbidden = await client.put(
+        rule_path,
+        headers=_auth(await _token(client, scopes=["payables:write"]), "forbidden-rule-save"),
+        json=rule_body,
+    )
+    assert forbidden.status_code == 403
+
+    headers = _auth(other if condition == "other" else admin, "create-purchase-rule-0001")
+    rule = await client.put(rule_path, headers=headers, json=rule_body)
+    assert rule.status_code == 200, rule.text
+    replay = await client.put(rule_path, headers=headers, json=rule_body)
+    assert replay.json() == rule.json()
+    listed = await client.get("/api/v1/purchase-tax-rules", headers=_auth(admin))
+    assert listed.json() == ([] if condition == "other" else [rule.json()])
+
+    async with SessionFactory() as session, session.begin():
+        policy = await session.get(AutomationSettings, TENANT_A)
+        assert policy is not None
+        policy.writes_enabled = condition != "disabled"
+        if condition == "credit_note":
+            declared = TaxPeriod(
+                tenant_id=TENANT_A, year=2025, month=12, obligation_type="IVA", status="DECLARADO"
+            )
+            session.add(declared)
+            await session.flush()
+            session.add(
+                FiscalDocument(
+                    tenant_id=TENANT_A,
+                    tax_period_id=declared.id,
+                    direction="RECIBIDO",
+                    doc_type="NOTA_CREDITO",
+                    issue_date=date(2025, 12, 12),
+                    counterparty_identification=ISSUER_RUC,
+                    related_access_key=key,
+                )
+            )
+        if condition == "manual":
+            session.add(
+                Payable(
+                    tenant_id=TENANT_A,
+                    fiscal_document_id=document_id,
+                    description="Compra revisada",
+                    issue_date=date(2025, 11, 11),
+                    due_date=date(2025, 12, 1),
+                    total=Decimal("15.10"),
+                    tax_classification="NON_DEDUCTIBLE",
+                    evidence_status="PRELIMINARY",
+                    internal_classification="REAL",
+                )
+            )
+
+    async def fake_upload(**_kwargs) -> None:
+        pass
+
+    monkeypatch.setattr(evidence_service.storage, "upload_private_object", fake_upload)
+    token = await _token(client)
+    created = await client.post(
+        f"/api/v1/tax/periods/{period_id}/xml-recovery",
+        headers=_auth(token, "recover-xml-purchase-rule"),
+    )
+    assert created.status_code == 201, created.text
+    job_id = uuid.UUID(created.json()["id"])
+    if condition == "declared":
+        async with SessionFactory() as session, session.begin():
+            period = await session.get(TaxPeriod, period_id)
+            assert period is not None
+            period.status = "DECLARADO"
+
+    fake = FakeSRIClient(_authorized_xml(key))
+    await run_recovery_job(job_id, sri_client=fake)
+    await run_recovery_job(job_id, sri_client=fake)
+
+    async with SessionFactory() as session:
+        payable = await session.scalar(
+            select(Payable).where(Payable.fiscal_document_id == document_id)
+        )
+        assert payable is not None
+        audits = list(
+            await session.scalars(
+                select(AuditEvent).where(AuditEvent.action == "payable.purchase_tax_rule_applied")
+            )
+        )
+        expected = {
+            "eligible": "DEDUCTIBLE_CONFIRMED",
+            "manual": "NON_DEDUCTIBLE",
+        }.get(condition, "DEDUCTIBLE_PENDING_REVIEW")
+        assert payable.tax_classification == expected
+        if condition == "manual":
+            assert payable.internal_classification == "REAL"
+            assert payable.due_date == date(2025, 12, 1)
+        if condition == "eligible":
+            assert len(audits) == 1
+            assert audits[0].details["rule_id"] == rule.json()["id"]
+            assert audits[0].entity_id == str(payable.id)
+        else:
+            assert audits == []
+
+
+async def test_purchase_tax_rule_requires_admin_membership(client):
+    token = await _token(client, scopes=["organization:write", "payables:write"])
+    async with SessionFactory() as session, session.begin():
+        await session.execute(
+            update(Membership).where(Membership.tenant_id == TENANT_A).values(roles=["operator"])
+        )
+    response = await client.put(
+        f"/api/v1/purchase-tax-rules/{ISSUER_RUC}",
+        headers=_auth(token, "operator-create-rule-0001"),
+        json={"taxClassification": "DEDUCTIBLE_CONFIRMED", "active": True},
+    )
+    assert response.status_code == 403
 
 
 async def test_recovery_completion_requeues_when_monthly_refresh_added_pending_items(

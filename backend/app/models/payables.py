@@ -185,6 +185,21 @@ class SupplierPaymentSchedule(
     status: Mapped[str] = mapped_column(String(20), default="SCHEDULED")
 
 
+class PurchaseTaxRule(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
+    __tablename__ = "purchase_tax_rules"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "supplier_ruc", name="uq_purchase_tax_rules_supplier"),
+        CheckConstraint(
+            "tax_classification IN ('DEDUCTIBLE_CONFIRMED', 'NON_DEDUCTIBLE')",
+            name="tax_classification_valid",
+        ),
+    )
+
+    supplier_ruc: Mapped[str] = mapped_column(String(13))
+    tax_classification: Mapped[str] = mapped_column(String(40))
+    active: Mapped[bool] = mapped_column(Boolean)
+
+
 class ExpenseRecognitionRule(
     UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base
 ):

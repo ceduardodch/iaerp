@@ -7,8 +7,8 @@ Para volver a configurar accesos, cuentas IAERP o perfiles de Chrome, seguir
 
 Ejecutar en el Mac del operador la consulta mensual del portal SRI, subir los
 reportes con datos a IAERP y pedir al SRI los XML autorizados. El
-navegador y su sesión quedan en el Mac; IAERP no guarda la clave ni las cookies
-del portal.
+navegador y su sesión quedan en el Mac. IAERP guarda la clave del portal cifrada
+en la configuración de cada empresa.
 
 ## Periodos y tipos
 
@@ -26,15 +26,16 @@ del portal.
 
 ## Flujo
 
-1. Ejecutar `node scripts/sri_received_reports_to_iaerp.mjs --all` para todas
+1. Ejecutar `node scripts/sri_received_reports_to_iaerp.mjs --all --existing-session` para todas
    las empresas o `--company=btob` para una sola. El navegador
    visible entra por `SRI en Línea` y abre comprobantes electrónicos recibidos;
    no usa el módulo legado `facturacion-internet` ni un scraper remoto.
-2. El ejecutor lee RUC y clave desde un servicio distinto del Llavero de macOS
-   por empresa y los escribe en la pantalla oficial sin imprimirlos. También
-   usa una cuenta IAERP de servicio y un perfil de navegador separados por
-   empresa. No guardar la contraseña en IAERP, `.env` ni el repositorio. Si el
-   SRI exige CAPTCHA o MFA, parar y pedir atención humana.
+2. El ejecutor lee del Llavero de macOS la cuenta técnica de IAERP. Con su
+   token obtiene el RUC y la clave que se guardaron en Empresa, verifica su
+   correspondencia con el tenant y reusa el perfil de Chrome de esa empresa.
+   En modo `--existing-session`, si el portal pide iniciar sesión, el ejecutor
+   avisa y pasa a la siguiente empresa. Los archivos temporales se limpian y
+   el perfil se conserva entre corridas.
 3. Calcular la fecha de ayer y seleccionar su año y mes, con el día en `Todos`.
 4. Consultar los cinco tipos, uno por uno, solo para ese mes.
 5. Descargar cada reporte que tenga filas.
@@ -43,9 +44,7 @@ del portal.
    solo si el RUC es válido y termina en `001`. El lote completo se valida antes
    de la primera subida, así una sesión persistente de otra empresa no guarda
    evidencia cruzada.
-7. Antes de subir, llamar el preflight REST autenticado y confirmar que el RUC
-   del portal coincide con el tenant fijado por la cuenta IAERP. Un cruce corta
-   el flujo sin crear evidencia.
+7. Cuando ningún tipo tiene filas, terminar con conteo cero y sin cargar archivos.
 8. Subir cada TXT a `POST /api/v1/tax/evidence` con origen `PORTAL_SRI` y una
    clave idempotente distinta por archivo.
 9. Llamar `POST /api/v1/tax/received-reports/process` por REST con los IDs devueltos,
@@ -74,6 +73,30 @@ del portal.
   borra la evidencia ya guardada.
 - Si aparece CAPTCHA, bloqueo, error de autenticación o cambio del portal, parar
   y avisar. No intentar saltarlo.
+
+## Probar el acceso
+
+Guardar en Empresa confirma el cifrado. Para comprobar que el perfil local
+abre el módulo de recibidos, ejecutar desde la raíz:
+
+```bash
+node scripts/sri_received_reports_to_iaerp.mjs --company=btob --check-access
+```
+
+El resultado `SRI_ACCESS_VERIFIED` confirma el acceso para el tenant de la
+cuenta técnica de ese perfil. Esta comprobación registra la lectura auditada
+ya prevista por IAERP y termina antes de descargar o importar comprobantes.
+
+Para probar la descarga con una sesión guardada en el perfil de BTOB, ejecutar:
+
+```bash
+node scripts/sri_received_reports_to_iaerp.mjs --company=btob --existing-session --download-only --manual-captcha
+```
+
+Cuando el SRI pida CAPTCHA al consultar, resolverlo en la ventana abierta y
+pulsar **Consultar**. Al aparecer el resultado, pulsar Enter en la terminal.
+El ejecutor valida al receptor de cada fila, muestra conteos y limpia los
+archivos temporales. La subida se omite en este modo.
 
 ## Programación local
 

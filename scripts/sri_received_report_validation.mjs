@@ -35,11 +35,12 @@ export function validateReceivedReportBytes(bytes, expectedRuc) {
       throw new Error("SRI_REPORT_RECEIVER_MISMATCH");
     }
   }
+  return lines.length - 1;
 }
 
 export function validateDownloadedReports(downloaded, expectedRuc) {
   // Valida el lote completo antes de que el ejecutor inicie la primera subida.
-  for (const report of downloaded) {
-    validateReceivedReportBytes(readFileSync(report.filePath), expectedRuc);
-  }
+  return downloaded.reduce((rows, report) => (
+    rows + validateReceivedReportBytes(readFileSync(report.filePath), expectedRuc)
+  ), 0);
 }

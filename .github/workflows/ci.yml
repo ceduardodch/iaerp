@@ -89,7 +89,7 @@ jobs:
           if changed '^backend/'; then backend=true; fi
           if changed '^(backend/(migrations/|app/models/)|compose\.ya?ml|compose\.coolify\.yaml)' || [[ "$strict" == true ]]; then migrations=true; fi
           if changed '^frontend/' || [[ "$strict" == true ]]; then frontend=true; fi
-          if changed '^(backend/app/core/|backend/app/api/auth|backend/app/services/(auth|identity)|frontend/src/(auth|oidc)|compose\.ya?ml|compose\.ci\.yaml|infra/minio-ci/|scripts/tests/test_ci_minio\.py|infra/keycloak/)' || [[ "$strict" == true ]]; then oidc=true; fi
+          if changed '^(backend/app/core/|backend/app/api/auth|backend/app/services/(auth|identity)|frontend/src/(auth|oidc)|frontend/nginx\.conf$|compose\.ya?ml|compose\.ci\.yaml|infra/minio-ci/|scripts/tests/test_ci_minio\.py|infra/keycloak/)' || [[ "$strict" == true ]]; then oidc=true; fi
           if changed '^(contracts/|backend/app/(api|mcp)/|\.github/workflows/)'; then contracts=true; fi
           if changed '^(compose\.coolify\.yaml|compose\.ya?ml|Dockerfile|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/)'; then deployment_config=true; fi
           if changed '^(backend/app/|frontend/src/|compose\.ya?ml|compose\.coolify\.yaml|backend/Dockerfile|frontend/Dockerfile|infra/keycloak/)' ; then deploy=true; fi
@@ -429,6 +429,12 @@ jobs:
       - name: Validate Keycloak compatibility profile
         working-directory: backend
         run: uv run --frozen python ../scripts/keycloak_poc.py
+
+      - name: Validate MCP OAuth discovery through Nginx
+        run: |
+          curl --fail --retry 5 --retry-delay 1 --retry-connrefused \
+            http://127.0.0.1:8088/.well-known/oauth-protected-resource/mcp \
+            | python -c 'import json, sys; data = json.load(sys.stdin); assert data["resource"].endswith("/mcp") and data["authorization_servers"]'
 
       - name: Validate dynamic service-account lifecycle
         working-directory: backend

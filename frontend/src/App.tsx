@@ -4582,6 +4582,7 @@ function OrganizationPage({
   }
 
   const fiscal = fiscalQuery.data
+  const sriPortalRucMismatch = fiscal?.sriPortalConfigured && fiscal.sriPortalRuc !== context.ruc
   const managedEstablishments = allEstablishmentsQuery.data ?? establishments
   const managedEmissionPoints = allEmissionPointsQuery.data ?? emissionPoints
   return (
@@ -4655,17 +4656,20 @@ function OrganizationPage({
         </ErpPanel>
         <ErpPanel
           title="Comprobantes recibidos del SRI"
-          actions={fiscal?.sriPortalConfigured ? <ErpStatusBadge tone="success">Configurado</ErpStatusBadge> : <ErpStatusBadge tone="warning">Pendiente</ErpStatusBadge>}
+          actions={fiscal?.sriPortalConfigured && !sriPortalRucMismatch ? <ErpStatusBadge tone="success">Acceso guardado</ErpStatusBadge> : <ErpStatusBadge tone="warning">Pendiente</ErpStatusBadge>}
           className="fiscal-settings-panel"
         >
           <div className="fiscal-panel-body">
-            <p className="fiscal-panel-copy">IAERP usa este acceso solo para descargar los comprobantes recibidos de esta empresa. La clave queda cifrada y no se muestra después de guardarla.</p>
+            <p className="fiscal-panel-copy">El importador local usa este acceso para descargar los comprobantes recibidos de esta empresa. Guardar la clave la cifra. El importador confirma el acceso al iniciar sesión en el SRI.</p>
             <form className="certificate-form" onSubmit={submitSriPortalCredentials}>
-              <label>RUC de acceso al SRI<input name="ruc" inputMode="numeric" pattern="[0-9]{13}" defaultValue={fiscal?.sriPortalRuc ?? context.ruc} required /></label>
+              <label>RUC de acceso al SRI<input name="ruc" value={context.ruc} readOnly /></label>
+              {sriPortalRucMismatch ? (
+                <p className="form-error" role="alert">El acceso guardado corresponde a otro RUC. Guarda la clave de esta empresa.</p>
+              ) : null}
               <label>{fiscal?.sriPortalConfigured ? 'Nueva clave SRI' : 'Clave SRI'}<input name="password" type="password" autoComplete="new-password" required /></label>
               {fiscal?.sriPortalCredentialsUpdatedAt ? <p className="fiscal-panel-copy">Actualizada el {new Date(fiscal.sriPortalCredentialsUpdatedAt).toLocaleDateString('es-EC')}.</p> : null}
               {saveSriPortalCredentials.error ? <p className="form-error" role="alert">{saveSriPortalCredentials.error.message}</p> : null}
-              <ErpButton variant="primary" type="submit" disabled={saveSriPortalCredentials.isPending || !context.scopes.includes('organization:write')}>
+              <ErpButton variant="primary" type="submit" disabled={saveSriPortalCredentials.isPending || !context.scopes.includes('organization:write') || !context.roles.some((role) => role === 'owner' || role === 'admin')}>
                 {saveSriPortalCredentials.isPending ? 'Guardando…' : fiscal?.sriPortalConfigured ? 'Actualizar acceso SRI' : 'Guardar acceso SRI'}
               </ErpButton>
             </form>
@@ -4970,7 +4974,7 @@ function Workspace() {
         {section === 'purchases' ? (
           <ErrorBoundary label="Compras">
             <Suspense fallback={<SectionLoadingSkeleton label="Cargando compras…" />}>
-              <PurchasesPage token={token} partyFilterId={partyFilterId} />
+              <PurchasesPage token={token} partyFilterId={partyFilterId} context={contextQuery.data} />
             </Suspense>
           </ErrorBoundary>
         ) : null}

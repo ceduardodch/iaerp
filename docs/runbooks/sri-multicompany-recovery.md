@@ -27,15 +27,14 @@ el RUC escrito en el portal.
 | ANA KARINA DIAZ CHAVEZ | `IAERP SRI Daily Import ANA KARINA` | `client_id` | ID de la cuenta IAERP |
 | ANA KARINA DIAZ CHAVEZ | `IAERP SRI Daily Import ANA KARINA` | `client_secret` | Secreto de la cuenta IAERP |
 
-Cada corrida crea un perfil de navegador temporal y lo elimina al terminar.
-No reutiliza sesiones del SRI: siempre inicia con el RUC completo de 13 dígitos
-y la clave cifrada de la configuración de IAERP. Esto evita que el lanzador
-cierre una pestaña asociada a una sesión anterior y mantiene aisladas las empresas.
+Cada empresa tiene su perfil dedicado bajo `~/Library/Application Support/IAERP`.
+El ejecutor conserva el perfil y reutiliza una sesión vigente. En modo
+`--existing-session` informa si hace falta que el operador inicie sesión.
 
 La tarea local `SRI recibidos a IAERP` ejecuta todos los días a las 08:00:
 
 ```bash
-node scripts/sri_received_reports_to_iaerp.mjs --all
+node scripts/sri_received_reports_to_iaerp.mjs --all --existing-session
 ```
 
 ## Cambiar RUC o clave del SRI
@@ -43,10 +42,11 @@ node scripts/sri_received_reports_to_iaerp.mjs --all
 1. Pausar `SRI recibidos a IAERP` desde Automations en Codex.
 2. Abrir **Empresa → Configuración → Comprobantes recibidos del SRI** en la
    empresa correcta.
-3. Ingresar el RUC completo de 13 dígitos usado como usuario y su clave. No
-   reemplazar el RUC por la cédula.
+3. Confirmar el RUC completo de 13 dígitos que muestra Empresa e ingresar
+   la clave que corresponde a ese acceso en el SRI.
 4. Guardar. IAERP cifra la clave y no vuelve a mostrarla.
-5. Probar solo esa empresa con el comando de la sección de validación.
+5. Probar el acceso con `--check-access` para ese perfil y confirmar que su
+   cuenta técnica está asignada a la empresa correcta.
 6. Reactivar la tarea únicamente después de una prueba correcta.
 
 ## Reemitir una cuenta IAERP
@@ -88,7 +88,8 @@ Desde la raíz del proyecto:
 
 ```bash
 node --check scripts/sri_received_reports_to_iaerp.mjs
-node --test scripts/tests/sri_received_companies.test.mjs
+node --test scripts/tests/sri_received*.test.mjs
+node scripts/sri_received_reports_to_iaerp.mjs --company=btob --check-access
 node scripts/sri_received_reports_to_iaerp.mjs --company=data-clip
 node scripts/sri_received_reports_to_iaerp.mjs --company=btob
 node scripts/sri_received_reports_to_iaerp.mjs --company=lexcode
@@ -108,10 +109,13 @@ documentos o secretos en consola.
 | --- | --- |
 | `KEYCHAIN_CONFIGURATION_MISSING_*` | Revisar servicio y cuenta exactos en el Llavero. |
 | `SRI_CREDENTIAL_FIELD_MISMATCH` | Cerrar Chrome, revisar el perfil de esa empresa y repetir. |
-| `SRI_AUTHENTICATION_REJECTED` | Probar RUC y clave manualmente; luego corregir solo esa entrada del Llavero. |
+| `SRI_AUTHENTICATION_REJECTED` | Probar RUC y clave manualmente y actualizar el acceso en Empresa. |
 | `SRI_CAPTCHA_REQUIRED` | Detener esa empresa y completar la revisión humana; no intentar saltarla. |
 | `SRI_MFA_REQUIRED` | Completar o redefinir el segundo factor con el dueño de la cuenta. |
+| `SRI_SESSION_REQUIRED` | El operador debe iniciar sesión en el perfil dedicado de la empresa antes de repetir. |
 | `STAGE_iaerp-token` | Revisar vigencia, revocación y Llavero de la cuenta IAERP. |
+| `IAERP_SRI_CREDENTIALS_FAILED_409` | Guardar el acceso SRI en Empresa para el tenant de la cuenta técnica. |
+| `IAERP_TENANT_PREFLIGHT_FAILED_409` | Confirmar que el RUC en Empresa corresponde al tenant de la cuenta técnica. |
 | `STAGE_iaerp-evidence-*` | Confirmar API, scope `tax:write` y política de automatización del tenant. |
 | `STAGE_iaerp-process` | Revisar el lote y los eventos de IAERP sin volver a cargarlo a otro tenant. |
 

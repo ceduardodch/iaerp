@@ -7,6 +7,17 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- Compras SRI, reglas y MCP, 2026-11-16. Validado en local sobre `release`.
+  Administración fija el RUC de la empresa y el importador ofrece una prueba
+  de acceso antes de cargar comprobantes. Compras permite clasificar por
+  arrastre o por lotes y aplica reglas por proveedor al recuperar XML.
+  El proxy local sirve metadatos OAuth y permite listar y consultar MCP.
+  BTOB abrió el módulo SRI. El SRI pide CAPTCHA al consultar con una sesión
+  nueva. La prueba de descarga conserva la ventana para resolverlo. El MCP
+  público aceptó la cuenta técnica BTOB y filtró el catálogo. Queda publicar
+  la ruta de descubrimiento OAuth y verificar la descarga de BTOB.
+  [Tareas y pruebas](../openspec/changes/compras-sri-reglas-mcp/tasks.md).
+
 - ATS, advertencias de compras, 2026-10-28: EN PRODUCCIÓN por PR #92/#93,
   revisión 076150f. Omite formasDePago en compras con bases+IVA+ICE <=500,
   conserva métodos fuente y ventas; suma exento/ICE en el umbral compartido.

@@ -126,7 +126,7 @@ async function mockApi(page: Page) {
       ruc: '1799999999001',
       name: 'IAERP Demo',
       roles: ['owner'],
-      scopes: ['context:read', 'tax:read'],
+      scopes: ['context:read', 'tax:read', 'payables:write', 'organization:write'],
       automationWritesEnabled: false,
       defaultPaymentTermsDays: 0,
     },
@@ -853,15 +853,11 @@ test('el panel de revisión masiva no desborda a 400% de zoom', async ({ page })
 })
 
 test('las pestañas de Compras se anuncian y se recorren con flechas', async ({ page }) => {
-  // Antes eran seis botones sueltos: se anunciaban como "botón" en vez de
-  // "pestaña 2 de 3", no decían cuál estaba activa y había que tabular por
-  // cada una. Tres de esas seis eran solo un filtro de estado del mismo
-  // listado, así que ahora se elige dentro.
   await page.route('**/api/v1/payables**', (route) => route.fulfill({ json: [] }))
   await navigateToSection(page, 'Compras')
 
   const pestanas = page.getByRole('tab')
-  await expect(pestanas).toHaveCount(3)
+  await expect(pestanas).toHaveCount(4)
   await expect(page.getByRole('tab', { name: 'Compras' })).toHaveAttribute('aria-selected', 'true')
 
   // Las pestañas que se fueron ya no existen como destino.
@@ -872,9 +868,118 @@ test('las pestañas de Compras se anuncian y se recorren con flechas', async ({ 
   // Solo la pestaña activa entra en el orden de tabulación; las flechas mueven.
   await page.getByRole('tab', { name: 'Compras' }).focus()
   await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab', { name: 'Clasificar' })).toBeFocused()
+  await expect(page.getByRole('tab', { name: 'Clasificar' })).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('ArrowRight')
   await expect(page.getByRole('tab', { name: 'Banco' })).toBeFocused()
   await expect(page.getByRole('tab', { name: 'Banco' })).toHaveAttribute('aria-selected', 'true')
   // Y desde la última vuelve a la primera.
   await page.keyboard.press('ArrowRight')
   await expect(page.getByRole('tab', { name: /Pendientes SRI/ })).toBeFocused()
+})
+
+test('tablero de Compras clasifica, edita etiquetas y guarda la regla por proveedor', async ({ page, isMobile }) => {
+  const payableId = '99999999-2222-4333-8444-555555555555'
+  const projectId = '44444444-5555-4666-8777-888888888888'
+  let taxClassification = 'DEDUCTIBLE_PENDING_REVIEW'
+  let internalClassification = 'PENDING_REVIEW'
+  let assignments: unknown[] = []
+  const updates: Array<Record<string, unknown>> = []
+
+  await page.route('**/api/v1/payables', (route) => route.fulfill({ json: [{
+    id: payableId,
+    supplierName: 'Proveedor Demo',
+    fiscalDocumentId: purchases[0].id,
+    description: 'Compra de prueba',
+    documentType: 'INVOICE',
+    documentNumber: '001-001-000000123',
+    issueDate: '2026-08-01',
+    total: '115.00',
+    openAmount: '115.00',
+    status: 'OPEN',
+    taxClassification,
+    internalClassification,
+    evidenceStatus: 'FISCAL_XML',
+    analyticAssignments: assignments,
+  }] }))
+  await page.route('**/api/v1/payables/classifications/bulk', (route) => {
+    const payload = route.request().postDataJSON()
+    updates.push(payload)
+    taxClassification = payload.taxClassification ?? taxClassification
+    internalClassification = payload.internalClassification ?? internalClassification
+    if (payload.analyticChange === 'REPLACE') {
+      assignments = [{ valueId: projectId, path: [{ name: 'IAERP' }] }]
+    }
+    return route.fulfill({ json: { updatedCount: 1, items: [{ status: 'UPDATED', fiscalUseProtected: false }] } })
+  })
+  await page.route('**/api/v1/purchase-tax-rules', (route) => route.fulfill({ json: [] }))
+  let ruleBody: { taxClassification: string; active: boolean } | undefined
+  const supplierRuc = '1799999999001'
+  await page.route('**/api/v1/purchase-tax-rules', (route) =>
+    route.fulfill({ json: ruleBody ? [{ id: 'rule-demo', supplierRuc, ...ruleBody }] : [] })
+  )
+  await page.route(`**/api/v1/purchase-tax-rules/${supplierRuc}`, (route) => {
+    ruleBody = route.request().postDataJSON()
+    return route.fulfill({ json: { id: 'rule-demo', supplierRuc, ...ruleBody } })
+  })
+
+  await navigateToSection(page, 'Compras')
+  await page.getByRole('tab', { name: 'Clasificar' }).click()
+  const pending = page.getByRole('region', { name: 'Por revisar', exact: true })
+  const deductible = page.getByRole('region', { name: 'Deducibles', exact: true })
+  await expect(pending.getByText('Proveedor Demo')).toBeVisible()
+  if (isMobile) {
+    await pending.getByRole('button', { name: 'Marcar deducible' }).press('Enter')
+  } else {
+    const grip = pending.getByRole('button', { name: 'Arrastrar compra 001-001-000000123' })
+    const origin = (await grip.boundingBox())!
+    const destination = (await deductible.boundingBox())!
+    await page.mouse.move(origin.x + origin.width / 2, origin.y + origin.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(destination.x + destination.width / 2, destination.y + 70, { steps: 12 })
+    await page.mouse.up()
+  }
+  const move = page.getByRole('dialog', { name: 'Marcar deducible' })
+  await move.getByLabel('Motivo').fill('Servicio de la empresa')
+  await move.getByRole('button', { name: 'Guardar' }).click()
+  await expect(deductible.getByText('Proveedor Demo')).toBeVisible()
+  expect(updates[0]).toEqual({
+    payableIds: [payableId],
+    taxClassification: 'DEDUCTIBLE_CONFIRMED',
+    reason: 'Servicio de la empresa',
+    analyticChange: 'KEEP_EXISTING',
+  })
+
+  await deductible.getByRole('button', { name: 'Etiquetas y control' }).click()
+  const tags = page.getByRole('dialog', { name: 'Etiquetas y control' })
+  await tags.getByLabel('Control interno').selectOption('REAL')
+  await tags.getByLabel('Proyecto').selectOption(projectId)
+  await tags.getByRole('button', { name: 'Guardar' }).click()
+  await expect(deductible.getByText('Gasto real')).toBeVisible()
+  await expect(deductible.getByText('IAERP', { exact: true })).toBeVisible()
+  expect(updates[1]).toEqual({
+    payableIds: [payableId],
+    internalClassification: 'REAL',
+    analyticChange: 'REPLACE',
+    analyticValueIds: [projectId],
+  })
+
+  await page.getByRole('button', { name: 'Reglas por proveedor' }).click()
+  const rules = page.getByRole('dialog', { name: 'Reglas por proveedor' })
+  await rules.getByLabel('RUC del proveedor').fill('1799999999001')
+  await expect(rules.getByRole('button', { name: 'Guardar' })).toBeDisabled()
+  await rules.getByRole('checkbox', { name: 'Confirmo que esta clasificación', exact: false }).check()
+  await rules.getByRole('button', { name: 'Guardar' }).click()
+  await expect(rules).toBeHidden()
+  expect(ruleBody).toEqual({ taxClassification: 'DEDUCTIBLE_CONFIRMED', active: true })
+  await page.getByRole('button', { name: 'Reglas por proveedor' }).click()
+  await rules.getByLabel('RUC del proveedor').fill(supplierRuc)
+  await rules.getByLabel('Activar regla').uncheck()
+  await rules.getByRole('button', { name: 'Guardar' }).click()
+  await expect(rules).toBeHidden()
+  expect(ruleBody).toEqual({ taxClassification: 'DEDUCTIBLE_CONFIRMED', active: false })
+
+  const viewportWidth = await page.evaluate(() => document.documentElement.clientWidth)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewportWidth)
+  expect((await new AxeBuilder({ page }).include('.purchase-board').analyze()).violations).toEqual([])
 })

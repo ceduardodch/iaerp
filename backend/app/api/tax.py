@@ -438,11 +438,15 @@ async def _tenant_ruc(session: AsyncSession, context: AuthContext) -> str:
 async def get_sri_portal_credentials_for_automation(
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("tax:write"))],
+    response: Response,
 ) -> dict[str, str]:
     """Entrega el acceso SRI únicamente a la cuenta técnica local del tenant."""
     if session.in_transaction():
         await session.rollback()
     async with session.begin():
+        await session.scalar(
+            select(Tenant.id).where(Tenant.id == context.tenant_id).with_for_update()
+        )
         credentials = await fiscal_settings.read_sri_portal_credentials_for_automation(
             session, context
         )
@@ -456,6 +460,7 @@ async def get_sri_portal_credentials_for_automation(
             idempotency_key="automation-sri-portal-credentials-read",
             details={"source": "local_sri_received_importer"},
         )
+    response.headers["Cache-Control"] = "no-store"
     return credentials.model_dump()
 
 
