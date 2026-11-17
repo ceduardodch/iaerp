@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
@@ -99,10 +100,15 @@ async function runImports(companyIds, mode = 'IMPORT') {
 process.on('SIGTERM', () => { void stop() })
 process.on('SIGINT', () => { void stop() })
 mkdirSync(profileRoot(), { recursive: true, mode: 0o700 })
+// Coolify may attach a shared internal network; require VNC authentication too.
+const vncPasswordPath = '/data/vnc-password'
+if (!existsSync(vncPasswordPath)) {
+  writeFileSync(vncPasswordPath, randomBytes(6).toString('base64'), { mode: 0o600, flag: 'wx' })
+}
 start('Xvfb', [':99', '-screen', '0', '1440x1000x24', '-nolisten', 'tcp', '-ac'])
 await delay(1000)
 start('openbox', [])
-start('x11vnc', ['-display', ':99', '-localhost', '-forever', '-shared', '-nopw', '-rfbport', '5900'])
+start('x11vnc', ['-display', ':99', '-localhost', '-forever', '-shared', '-passwdfile', vncPasswordPath, '-rfbport', '5900'])
 start('websockify', ['--web=/usr/share/novnc', '0.0.0.0:6080', '127.0.0.1:5900'])
 
 for (const company of SRI_RECEIVED_COMPANIES) {

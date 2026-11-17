@@ -14,7 +14,9 @@ con las claves de idempotencia actuales. Se mantiene la validación de cada
 receptor y del tenant antes de importar.
 
 La interacción humana para login o CAPTCHA usa un escritorio en localhost,
-accesible por túnel SSH. El contenedor usa usuario sin privilegios, el perfil
+accesible por túnel SSH y protegido por una clave VNC privada persistente.
+Coolify puede añadir su red compartida, por lo que no se confía sólo en el
+aislamiento de red. El contenedor usa usuario sin privilegios, el perfil
 seccomp oficial de Playwright 1.61.1 y una red dedicada. Las sesiones permanecen
 abiertas después de cada corrida.
 

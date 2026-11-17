@@ -20,7 +20,11 @@ Docker dedicada. Para abrirlo desde el Mac:
 ssh -N -L 18229:127.0.0.1:18229 b2b-server
 ```
 
-Abrir `http://127.0.0.1:18229/vnc.html`. Cada ventana corresponde a un perfil
+Abrir `http://127.0.0.1:18229/vnc.html`. El escritorio exige la clave privada
+que el servicio genera en `/data/vnc-password` (0600); el administrador puede
+consultarla desde la terminal privada de Coolify. No guardarla en URLs,
+logs ni capturas. Esta segunda protección se mantiene aunque Coolify añada
+el servicio a su red compartida. Cada ventana corresponde a un perfil
 separado. La primera sesión o un acceso caducado puede exigir que el operador
 complete el login o un CAPTCHA en el SRI.
 
