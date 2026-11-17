@@ -19,7 +19,7 @@ const payable = {
   evidenceStatus: 'FISCAL_XML', analyticAssignments: [],
 }
 
-async function setup(page: Page, { protectedMessage = '', canWrite = true, linked = true } = {}) {
+async function setup(page: Page, { protectedMessage = '', canWrite = true, linked = true, fiscalLinked = true, docType = 'FACTURA', scopes = canWrite ? ['payables:write', 'tax:write'] : [] } = {}) {
   let cancelled = false
   let cancellation: Record<string, unknown> | null = null
   let uploadCount = 0
@@ -28,15 +28,15 @@ async function setup(page: Page, { protectedMessage = '', canWrite = true, linke
   await page.route('**/api/v1/dev/token', (route) => route.fulfill({ json: { accessToken: 'synthetic-token' } }))
   await page.route('**/api/v1/context', (route) => route.fulfill({ json: {
     tenantId: '11111111-1111-4111-8111-111111111111', name: 'Empresa sintética', roles: ['owner'],
-    scopes: ['context:read', 'payables:read', ...(canWrite ? ['payables:write', 'tax:write'] : [])],
+    scopes: ['context:read', 'payables:read', ...scopes],
     automationWritesEnabled: false,
   } }))
   await page.route('**/api/v1/payables', (route) => route.fulfill({ json: linked ? [{
-    ...payable, status: cancelled ? 'VOIDED' : 'OPEN', paymentStatus: 'OPEN',
+    ...payable, fiscalDocumentId: fiscalLinked ? documentId : null, status: cancelled ? 'VOIDED' : 'OPEN', paymentStatus: 'OPEN',
     openAmount: cancelled ? '0.00' : '115.00',
   }] : [] }))
   await page.route('**/api/v1/tax/purchases', (route) => route.fulfill({ json: [{
-    ...purchase, lifecycleStatus: cancelled ? 'CANCELLED' : 'ACTIVE', cancellation,
+    ...purchase, docType, lifecycleStatus: cancelled ? 'CANCELLED' : 'ACTIVE', cancellation,
   }] }))
   await page.route('**/api/v1/tax/evidence', async (route) => {
     uploadCount += 1
@@ -64,8 +64,7 @@ async function setup(page: Page, { protectedMessage = '', canWrite = true, linke
 }
 
 async function openDialog(page: Page) {
-  await page.getByRole('button', { name: 'Pagar', exact: true }).click()
-  await page.getByRole('button', { name: 'Registrar anulación', exact: true }).click()
+  await page.getByRole('button', { name: `Anular compra ${purchase.documentNumber}`, exact: true }).click()
   return page.getByRole('dialog', { name: 'Registrar anulación de compra' })
 }
 
@@ -94,6 +93,8 @@ test('registra anulación respaldada, conserva historial y excluye de pendientes
   await expect(page.getByRole('status').filter({ hasText: 'Anulación registrada' })).toBeVisible()
   const row = page.getByRole('row').filter({ hasText: 'Compra sintética' })
   await expect(row.getByText('Anulada', { exact: true })).toBeVisible()
+  await expect(row.getByRole('button', { name: /^Anular compra/ })).toHaveCount(0)
+  await row.getByRole('button', { name: 'Historial', exact: true }).click()
   await expect(page.getByText('También se confirmó que la compra se canceló y que el saldo ya no se debe pagar.', { exact: true })).toBeVisible()
   await expect(row.getByRole('checkbox')).toBeDisabled()
   await expect(row.getByRole('button', { name: 'Editar clasificación' })).toBeDisabled()
@@ -132,7 +133,7 @@ test('requiere respaldo y confirmación, respeta teclado y pasa axe en el diálo
   expect(geometry!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Registrar anulación', exact: true })).toBeFocused()
+  await expect(page.getByRole('button', { name: `Anular compra ${purchase.documentNumber}`, exact: true })).toBeFocused()
   expect(state.requests).toHaveLength(0)
   expect(state.uploads()).toBe(0)
 })
@@ -219,4 +220,51 @@ test('cambiar el motivo tras un rechazo conserva el respaldo y usa otra clave de
   expect(state.requests[0].key).not.toBe(state.requests[1].key)
   expect(state.requests[1].body.economicOutcome).toBe('OPERATION_CANCELLED')
   expect(state.uploads()).toBe(1)
+})
+
+
+test('anula desde la fila sin abrir Pagar y cancelar conserva la clasificación en edición', async ({ page }, testInfo) => {
+  const state = await setup(page)
+  const row = page.getByRole('row').filter({ hasText: 'Compra sintética' })
+  const cancel = row.getByRole('button', { name: `Anular compra ${purchase.documentNumber}`, exact: true })
+  await expect(cancel).toHaveText('Anular')
+  await cancel.scrollIntoViewIfNeeded()
+  const buttonBounds = await cancel.boundingBox()
+  const purchaseBounds = await row.getByRole('cell').nth(1).boundingBox()
+  expect(buttonBounds!.x).toBeGreaterThanOrEqual(purchaseBounds!.x)
+  expect(buttonBounds!.x + buttonBounds!.width).toBeLessThanOrEqual(purchaseBounds!.x + purchaseBounds!.width)
+  expect(buttonBounds!.width).toBeGreaterThanOrEqual(44)
+  expect(buttonBounds!.height).toBeGreaterThanOrEqual(44)
+  if (testInfo.project.name.includes('mobile')) expect(buttonBounds!.x + buttonBounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+  await page.screenshot({ path: `/tmp/iaerp-row-cancel-${testInfo.project.name}.png` })
+  await row.getByRole('button', { name: 'Editar clasificación', exact: true }).click()
+  await page.getByLabel('Motivo del cambio').fill('Borrador sin guardar')
+  await cancel.focus()
+  await page.keyboard.press('Enter')
+  const dialog = page.getByRole('dialog', { name: 'Registrar anulación de compra' })
+  await expect(dialog).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Anulación de compra', exact: true })).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(cancel).toBeFocused()
+  await expect(page.getByLabel('Motivo del cambio')).toHaveValue('Borrador sin guardar')
+  expect(state.requests).toHaveLength(0)
+  expect(state.uploads()).toBe(0)
+  await openDialog(page)
+  await completeForm(page)
+  await page.getByRole('dialog').getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByLabel('Motivo del cambio')).toHaveCount(0)
+  await expect(row.getByText('Anulada', { exact: true })).toBeVisible()
+})
+
+test('oculta Anular sin ambos permisos, sin factura SRI o para una nota de crédito', async ({ page }) => {
+  for (const options of [
+    { scopes: ['payables:write'] }, { scopes: ['tax:write'] }, { canWrite: false },
+    { fiscalLinked: false }, { docType: 'NOTA_CREDITO' },
+  ]) {
+    await setup(page, options)
+    const row = page.getByRole('row').filter({ hasText: 'Compra sintética' })
+    await expect(row).toBeVisible()
+    await expect(row.getByRole('button', { name: /^Anular compra/ })).toHaveCount(0)
+  }
 })

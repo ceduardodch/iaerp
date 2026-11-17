@@ -199,3 +199,5 @@
 
 .purchase-rule-form.purchase-cancellation-form { padding: 0; }
 .purchase-cancellation-form p { margin: 0; }
+
+.purchase-row-cancel { margin-top: .5rem; min-height: 44px; min-width: 44px; }
