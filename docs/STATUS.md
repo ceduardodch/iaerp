@@ -7,33 +7,36 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- Compras SRI, reglas y MCP en producción, 2026-11-17. PR #97–#100,
-  revisión `b586aeb`, CI/Coolify `44161725575` correctos. API, PostgreSQL,
+- Compras SRI, reglas y MCP en producción, 2026-11-17. PR #97–#103,
+  revisión `fb0537e`, CI/Coolify `44169331013` correctos. API, PostgreSQL,
   Redis, OAuth JSON, catálogo MCP autenticado BTOB y paquete web verificados.
-  El servidor b2b conserva cuatro perfiles y la programación diaria de la
-  ejecución diaria de las 08:00 Guayaquil. Escritorio por túnel SSH con clave
+  El servidor b2b mantiene cuatro navegadores con perfiles persistentes y
+  ejecuta la tarea diaria a las 08:00 Guayaquil. Escritorio por túnel SSH con clave
   VNC privada; Coolify conserva chmod 600 para el archivo de cuentas.
   BTOB abrió el SRI y descargó un TXT de facturas de noviembre: 16 filas,
-  3103 bytes, receptor y tenant validados. Prueba sin importación; el lote
-  espera CAPTCHA en liquidaciones de compra en esa misma sesión. LEXCODE también inició sesión.
-  DATA-CLIP requiere atención de acceso SRI. ANA KARINA requiere
+  3103 bytes, receptor y tenant validados. Prueba sin importación: la descarga
+  completa quedó pendiente de un CAPTCHA que el usuario retomará después.
+  LEXCODE también inició sesión; DATA-CLIP requiere revisar el acceso SRI. ANA KARINA requiere
   guardar su acceso SRI en Empresa. La automatización del Mac sigue pausada.
-  Tras esta publicación, SRI reinicia por bloqueos Singleton de Chrome
-  heredados del contenedor anterior. El volumen y las cookies se conservan.
-  Arreglo preparado con bloqueo exclusivo y limpieza limitada a enlaces
-  obsoletos; prueba Docker de caída abrupta y nuevo contenedor conserva
-  cuatro cookies y perfiles. Pendiente publicar y verificar servicio sano.
+  El arranque conserva las cookies al cambiar de contenedor y recupera
+  enlaces obsoletos bajo un bloqueo exclusivo. Cuatro navegadores sanos,
+  permisos privados y rechazo de una segunda instancia verificados.
   [Tareas y pruebas](../openspec/changes/compras-sri-reglas-mcp/tasks.md).
 
-- Anulación de compras en producción: PR #101/#102, `b586aeb`,
-  CI/Coolify `44161725575` correctos. Alcance: operación cancelada y saldo
-  extinguido, confirmación económica obligatoria separada del estado SRI.
-  Compra vigente/refacturación se rechaza sin cambios. 871 backend y 412
-  interfaz correctos (30/4 omisiones previas), 31 PostgreSQL15 dirigidos y
-  14 E2E nuevos; revisiones fiscal, ERP y seguridad/contrato GO.
-  API, paquete web, contrato, migración `5d6e7f8a9b0c` y MCP autenticado
-  verificados. La factura real sigue intacta, pendiente conocer su caso.
-  [Tareas](../openspec/changes/compras-anulaciones-recibidas/tasks.md).
+- Anulación de compras en producción, 2026-11-17: PR #101/#102,
+  revisión `fb0537e`, CI/Coolify `44169331013` correctos. Alcance exclusivo:
+  operación cancelada y saldo extinguido. La API exige esa decisión sin
+  defecto y el formulario pide dos confirmaciones; factura vigente o
+  refacturación se rechazan sin alterar deuda, gasto ni impuestos.
+  Respaldo, historia y XML se conservan. Pagos, retenciones, NC y períodos
+  declarados mantienen sus protecciones. API, contrato obligatorio, paquete
+  web, migración `5d6e7f8a9b0c`, OAuth y MCP autenticado verificados.
+  871 pruebas backend y 412 recorridos de interfaz pasan en CI; 30/4
+  omisiones previas. 31 casos dirigidos PostgreSQL15 y 14 E2E nuevos,
+  revisiones independientes fiscal, ERP y seguridad/contrato GO.
+  El usuario confirmó que también se canceló la compra; la factura real
+  sigue intacta, pendiente de respaldo SRI y registro autorizado.
+  [Tareas y pruebas](../openspec/changes/compras-anulaciones-recibidas/tasks.md).
 
 - ATS, advertencias de compras, 2026-10-28: EN PRODUCCIÓN por PR #92/#93,
   revisión 076150f. Omite formasDePago en compras con bases+IVA+ICE <=500,

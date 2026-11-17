@@ -36,3 +36,18 @@ migración y MCP autenticado verificados. 871 backend y 412 E2E correctos
 (30/4 omisiones previas). La función sólo admite operación cancelada y saldo
 extinguido; no se aplicó a la factura real. El arreglo del reinicio SRI sigue
 las tareas del cambio `compras-sri-reglas-mcp`.
+
+## Aplicación al caso indicado
+
+El usuario confirmó que también se canceló la compra. La decisión económica
+ya está aclarada y corresponde a OPERATION_CANCELLED. Falta adjuntar el
+respaldo SRI y registrar la acción desde una sesión humana autorizada; no se
+ha modificado la compra productiva del ejemplo.
+
+## Publicación verificada
+
+PR #101/#102, revisión `fb0537e`, [CI/Coolify](https://github.com/ceduardodch/iaerp/actions/runs/44169331013) correctos. API, contrato obligatorio de decisión económica, paquete web, migración, perfiles SRI y MCP autenticado verificados. 871 backend y 412 E2E correctos (30/4 omisiones previas). Alcance publicado sólo para operación cancelada; factura real no modificada y registro real pendiente de respaldo SRI; el usuario ya confirmó la compra cancelada.
+
+- [x] 3.1 Confirmar que también se canceló la compra: confirmado por el usuario.
+- [ ] 3.2 Adjuntar el respaldo del estado SRI y su fecha efectiva.
+- [ ] 3.3 Revisar cierres y movimientos, registrar desde la sesión humana autorizada si procede y comprobar el resultado.

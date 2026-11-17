@@ -6,12 +6,11 @@
 > 16 facturas de noviembre, receptor validado, sin importar; CAPTCHA pendiente
 > en liquidaciones. Horario servidor 08:00 Guayaquil; Mac pausado.
 > [Anulaciones recibidas](openspec/changes/compras-anulaciones-recibidas/tasks.md):
-> PR #101/#102 publicados en `b586aeb`, CI/Coolify `44161725575` correctos.
-> Operación cancelada y saldo extinguido requieren confirmación separada.
-> 871 backend y 412 UI correctos; MCP, API y migración verificados.
-> SRI requiere recuperar enlaces Singleton tras reiniciar; el arreglo conserva
-> perfiles y cookies y ya pasó pruebas Docker. Factura real intacta;
-> decisión económica del ejemplo pendiente.
+> PR #101/#102 publicados en `fb0537e`; CI/Coolify `44169331013` correctos.
+> Operación cancelada y saldo extinguido requieren confirmación explícita
+> separada del estado SRI. 871 pruebas backend y 412 de interfaz correctas;
+> contrato, migración, paquete web y MCP autenticado verificados.
+> La compra cancelada está confirmada; el registro real requiere respaldo SRI.
 
 > Corte 2026-10-13: Cartera cruza retenciones tributarias autorizadas y prepara
 > el cobro neto; banco compara contra ese neto sin guardar en vista previa.
