@@ -44,6 +44,8 @@
 
 ## En revisión
 
-- Cambios en `release`. [PR #97](https://github.com/ceduardodch/iaerp/pull/97).
+- [PR #97](https://github.com/ceduardodch/iaerp/pull/97) integrado a `main`
+  el 17 de noviembre de 2026 como `3077ee6`. Excepción puntual de picomatch
+  autorizada y documentada en `docs/security-exceptions.md` para continuar la publicación.
 - La automatización existente conserva las 08:00 de Ecuador y apunta a los
   cuatro perfiles dedicados. Sigue pausada hasta verificar una descarga real.
