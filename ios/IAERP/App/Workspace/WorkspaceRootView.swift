@@ -73,6 +73,7 @@ struct WorkspaceRootView: View {
 
 struct WorkspaceHomeView: View {
     let store: WorkspaceStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var composer: ComposerRoute?
     @State private var savedInvoice: ERPInvoice?
 
@@ -86,17 +87,14 @@ struct WorkspaceHomeView: View {
                     }
                     Text(store.context?.name ?? "Empresa")
                         .font(.title.bold())
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                 }
                 .padding(.vertical, 4)
                 if store.canCreate {
-                    Button { composer = ComposerRoute() } label: {
-                        Label("Nueva factura", systemImage: "plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(ERPPrimaryActionStyle())
-                    .disabled(!store.canStartInvoice)
-                    .accessibilityIdentifier("home-new-invoice")
+                    newInvoiceButton
+                        .disabled(!store.canStartInvoice)
+                        .accessibilityIdentifier("home-new-invoice")
                 }
             }
             if let savedInvoice {
@@ -114,7 +112,8 @@ struct WorkspaceHomeView: View {
             InvoiceRecoverySection(store: store)
             Section {
                 if !store.canReadDashboard {
-                    Label("Tu perfil no tiene permiso para consultar la cartera.", systemImage: "lock")
+                    Text("Tu perfil no tiene permiso para consultar la cartera.")
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("home-dashboard-permission")
                 } else if let error = store.dashboardError {
                     ERPErrorState(message: error) { await store.loadDashboard() }
@@ -125,6 +124,7 @@ struct WorkspaceHomeView: View {
                             .font(.largeTitle.bold())
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, 10)
                     .foregroundStyle(.white)
                     .listRowBackground(Color.accentColor)
@@ -135,6 +135,7 @@ struct WorkspaceHomeView: View {
                            detail: "Incluye efectivo y retenciones.", identifier: "home-metric-collected")
                     Text("Resumen del \(ERPDisplay.longFiscalDate(summary.asOf))")
                         .font(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("home-as-of")
                 } else {
                     ProgressView("Consultando cartera…")
@@ -152,6 +153,28 @@ struct WorkspaceHomeView: View {
         .refreshable { if store.canReadDashboard { await store.loadDashboard() } }
     }
 
+    @ViewBuilder private var newInvoiceButton: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Button { composer = ComposerRoute() } label: {
+                Text("Nueva factura")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(store.canStartInvoice ? Color.primary : Color.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button { composer = ComposerRoute() } label: {
+                Label("Nueva factura", systemImage: "plus")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ERPPrimaryActionStyle())
+        }
+    }
+
     private func metric(_ title: String, value: Decimal, currency: String,
                         detail: String? = nil, identifier: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -159,6 +182,7 @@ struct WorkspaceHomeView: View {
             Text(ERPDisplay.money(value, currency: currency)).font(.title2.weight(.semibold))
             if let detail { Text(detail).font(.footnote) }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(identifier)

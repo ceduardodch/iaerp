@@ -196,6 +196,7 @@ struct InvoiceComposerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmDiscard = false
+    @State private var pickingCustomer = false
     @State private var didConfigure = false
     @State private var isAtEnd = false
     @State private var measuredAtEnd = false
@@ -213,19 +214,35 @@ struct InvoiceComposerView: View {
             VStack(spacing: 0) {
                 ScrollViewReader { proxy in
                     Form {
-                        WorkspaceContextSection(store: store)
                         if let error = store.catalogError {
                             Section { ERPErrorState(message: error) { await store.loadCatalog() } }
                         }
                         Section {
-                            NavigationLink {
-                                CustomerPicker(store: store, selection: $draft.customerId)
-                            } label: {
-                                ERPDetailRow(title: "Cliente", value: draft.customerId.map(store.customerName) ?? "Seleccionar")
+                            Button { pickingCustomer = true } label: {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Cliente").font(.subheadline)
+                                        Text(draft.customerId.map(store.customerName) ?? "Seleccionar")
+                                            .font(.headline)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right").accessibilityHidden(true)
+                                }
+                                .foregroundStyle(Color.primary)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .disabled(!draft.canEdit)
                             .accessibilityIdentifier("draft-customer")
-                        } header: { Text("Cliente").foregroundStyle(Color.primary) }
-                        .disabled(!draft.canEdit)
+                        } header: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(store.context?.name ?? "Empresa").font(.headline)
+                                if store.isDemo { Text("Datos de prueba.").font(.footnote) }
+                            }
+                            .textCase(nil)
+                            .foregroundStyle(Color.primary)
+                        }
                         Section {
                             LabeledContent("Plazo (días)") {
                                 TextField("Días de plazo", value: $draft.paymentTermsDays, format: .number.grouping(.never))
@@ -390,6 +407,9 @@ struct InvoiceComposerView: View {
                 formActions
             }
             .navigationTitle("Nueva factura")
+            .navigationDestination(isPresented: $pickingCustomer) {
+                CustomerPicker(store: store, selection: $draft.customerId)
+            }
             .toolbarTitleDisplayMode(.inline)
             .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
             .toolbarBackgroundVisibility(.visible, for: .navigationBar)

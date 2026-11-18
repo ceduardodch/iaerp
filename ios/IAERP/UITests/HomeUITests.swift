@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 final class HomeUITests: XCTestCase {
@@ -106,6 +107,11 @@ final class HomeUITests: XCTestCase {
 
     @MainActor func testDraftCreatedFromHomeCanBeOpenedAndCancelDoesNotCreateAnother() {
         let app = launch()
+        let fiscalMonth = DateFormatter()
+        fiscalMonth.locale = Locale(identifier: "en_US_POSIX")
+        fiscalMonth.timeZone = TimeZone(identifier: "America/Guayaquil")
+        fiscalMonth.dateFormat = "yyyy-MM"
+        let createdMonth = fiscalMonth.string(from: Date())
         app.buttons["home-new-invoice"].tap()
         app.buttons["draft-customer"].tap()
         app.buttons["pick-customer-00000000-0000-4000-8000-000000000101"].tap()
@@ -131,11 +137,23 @@ final class HomeUITests: XCTestCase {
         reveal(create, in: app, earlier: true); create.tap()
         app.buttons["Cancelar"].tap()
         app.buttons["Descartar borrador"].tap()
-        app.tabBars.buttons["Facturas"].tap()
-        let month = app.buttons["invoice-month-2026-11"]
-        XCTAssertTrue(month.waitForExistence(timeout: 5))
-        XCTAssertTrue(month.label.contains("4 facturas"), month.label)
-        XCTAssertTrue(month.label.contains("$460,00"), month.label)
+        XCTAssertTrue(app.navigationBars["Inicio"].waitForExistence(timeout: 5))
+        let invoicesTab = app.tabBars.buttons["Facturas"]
+        let tabIsOperable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: invoicesTab)
+        XCTAssertEqual(XCTWaiter.wait(for: [tabIsOperable], timeout: 5), .completed,
+                       "Facturas debe volver a ser operable tras cerrar el formulario")
+        invoicesTab.tap()
+        let month = app.buttons["invoice-month-\(createdMonth)"]
+        reveal(month, in: app)
+        let expectedCount: String
+        let expectedTotal: String
+        switch createdMonth {
+        case "2026-11": (expectedCount, expectedTotal) = ("4 facturas", "$460,00")
+        case "2026-10": (expectedCount, expectedTotal) = ("3 facturas", "$345,00")
+        default: (expectedCount, expectedTotal) = ("1 factura", "$115,00")
+        }
+        XCTAssertTrue(month.label.contains(expectedCount), month.label)
+        XCTAssertTrue(month.label.contains(expectedTotal), month.label)
     }
 
     @MainActor func testMonthGroupsUseServerCountsAndOnlyRevealTheirOwnDocuments() {
@@ -165,9 +183,18 @@ final class HomeUITests: XCTestCase {
         let fourth = element("workspace-invoice-00000000-0000-4000-8000-000000000604", in: app)
         reveal(fourth, in: app)
         XCTAssertTrue(fourth.label.contains("2026-10"))
+        let originalPosition = fourth.frame
         fourth.tap()
         XCTAssertTrue(app.navigationBars["Factura"].waitForExistence(timeout: 4))
         app.navigationBars["Factura"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Facturas"].waitForExistence(timeout: 4))
+        // Observe the restored viewport before any reveal can repair its position.
+        XCTAssertEqual(october.value as? String, "Expandido")
+        XCTAssertEqual(november.value as? String, "Contraído")
+        XCTAssertTrue(fourth.isHittable)
+        XCTAssertEqual(fourth.frame.minY, originalPosition.minY, accuracy: 8,
+                       "Volver del detalle debe conservar la posición en octubre")
+        snapshot("Facturas-octubre-restaurado", app: app)
         let search = app.textFields["erp-search-field"]
         reveal(search, in: app, earlier: true)
         search.tap(); search.typeText("000000004")
