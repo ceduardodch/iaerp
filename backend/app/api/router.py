@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Path, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,7 @@ from app.schemas.billing import (
     CreditNoteInput,
     DocumentArtifactRead,
     InvoiceCollectionUpdate,
+    InvoiceDraftRequestRead,
     InvoiceEmailInput,
     InvoiceEmailPreviewRead,
     InvoiceEmailRead,
@@ -113,6 +114,7 @@ from app.schemas.receivables import (
 from app.services import (
     bank_reconciliation,
     billing,
+    draft_requests,
     fiscal_settings,
     historical_invoice_pdf,
     legal_commercial,
@@ -1639,6 +1641,29 @@ async def put_invoice_collection_policy(
         entity_type="sales_document",
         callback=update,
     )
+
+
+@router.get(
+    "/invoices/draft-requests/{idempotency_key}",
+    response_model=InvoiceDraftRequestRead,
+    operation_id="getCompletedInvoiceDraftRequest",
+)
+async def get_completed_draft_request(
+    idempotency_key: Annotated[
+        str,
+        Path(
+            min_length=36,
+            max_length=36,
+            pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        ),
+    ],
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+) -> InvoiceDraftRequestRead:
+    invoice_id = await draft_requests.find_completed_draft_request(
+        session, context, idempotency_key
+    )
+    return InvoiceDraftRequestRead(invoice_id=invoice_id)
 
 
 @router.get("/invoices", response_model=list[SalesDocumentRead])

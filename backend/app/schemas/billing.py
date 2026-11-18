@@ -74,6 +74,10 @@ class InvoicePreviewInput(APIModel):
     lines: list[InvoiceLineInput] = Field(min_length=1)
 
 
+class InvoiceDraftRequestRead(APIModel):
+    invoice_id: uuid.UUID
+
+
 class InvoicePreviewLineRead(APIModel):
     description: str
     quantity: Decimal

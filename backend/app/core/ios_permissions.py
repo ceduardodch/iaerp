@@ -1,0 +1,64 @@
+"""Permissions for the first native iOS client, not a global ERP role matrix.
+
+The signed client identity chooses this policy; active tenant membership is
+still resolved from IAERP on every request. Unknown or unrelated roles never
+gain invoice writes. Existing web and service-account policies stay unchanged.
+"""
+
+from collections.abc import Iterable
+
+IOS_CLIENT_ID = "iaerp-ios"
+IOS_READ_SCOPES = frozenset(
+    {
+        "context:read",
+        "memberships:read",
+        "organization:read",
+        "parties:read",
+        "products:read",
+        "invoices:read",
+    }
+)
+# Initial business roles are documented in docs/02-scope-and-restrictions.md.
+# Seed-only labels such as operator/accountant do not imply billing authority.
+IOS_INVOICE_WRITER_ROLES = frozenset({"owner", "admin", "billing"})
+
+
+def is_ios_client(payload: dict[str, object]) -> bool:
+    """Either signed identity claim activates the restriction, never bypasses it."""
+    return any(payload.get(claim) == IOS_CLIENT_ID for claim in ("azp", "client_id"))
+
+
+def validate_ios_client(
+    payload: dict[str, object], *, api_audience: str, mcp_audience: str
+) -> None:
+    for claim in ("azp", "client_id"):
+        value = payload.get(claim)
+        if value is not None and value != IOS_CLIENT_ID:
+            raise ValueError("Inconsistent native client identity")
+    value = payload.get("aud")
+    audiences = [value] if isinstance(value, str) else value
+    if (
+        not isinstance(audiences, list)
+        or not all(isinstance(item, str) for item in audiences)
+        or api_audience not in audiences
+        or mcp_audience in audiences
+    ):
+        raise ValueError("Native client requires the API audience without MCP access")
+
+
+def ios_effective_scopes(scopes: Iterable[str], membership_roles: Iterable[str]) -> frozenset[str]:
+    allowed = IOS_READ_SCOPES
+    if IOS_INVOICE_WRITER_ROLES.intersection(membership_roles):
+        allowed = allowed | {"invoices:write"}
+    return frozenset(scopes).intersection(allowed)
+
+
+def ios_request_permitted(method: str, route_path: str, *, api_prefix: str) -> bool:
+    if method in {"GET", "HEAD", "OPTIONS"}:
+        return True
+    # invoices:write is shared by issue/email/void and draft in the legacy API.
+    # The native pilot permits only draft creation and the read-only preview.
+    return method == "POST" and route_path in {
+        f"{api_prefix}/invoices",
+        f"{api_prefix}/invoices/preview",
+    }
