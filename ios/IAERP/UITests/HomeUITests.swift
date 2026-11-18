@@ -41,10 +41,19 @@ final class HomeUITests: XCTestCase {
 
     @MainActor private func assertMetric(_ identifier: String, title: String, amount: String,
                                         in app: XCUIApplication) {
-        let metric = element(identifier, in: app)
-        reveal(metric, in: app)
-        XCTAssertTrue(metric.label.contains(title), metric.label)
-        XCTAssertTrue(metric.label.contains(amount), metric.label)
+        // Scope the AX query to the visible home content. An untyped query
+        // across the replaced tab hierarchy can stall after switching company.
+        let metric = app.scrollViews.firstMatch.staticTexts[identifier]
+        XCTAssertTrue(metric.waitForExistence(timeout: 5))
+        let top = app.navigationBars["Inicio"].frame.maxY
+        let bottom = app.tabBars.firstMatch.frame.minY
+        let frame = metric.frame
+        if !metric.isHittable || frame.minY < top || frame.maxY > bottom {
+            reveal(metric, in: app)
+        }
+        let label = metric.label
+        XCTAssertTrue(label.contains(title), label)
+        XCTAssertTrue(label.contains(amount), label)
     }
 
     @MainActor private func snapshot(_ name: String, app: XCUIApplication) {
@@ -101,7 +110,7 @@ final class HomeUITests: XCTestCase {
         assertMetric("home-metric-receivable", title: "Por cobrar", amount: "$80,40", in: app)
         assertMetric("home-metric-overdue", title: "Vencido", amount: "$0,00", in: app)
         assertMetric("home-metric-collected", title: "Cobrado este mes", amount: "$40,20", in: app)
-        XCTAssertFalse(element("home-metric-receivable", in: app).label.contains("$350,25"))
+        XCTAssertFalse(app.staticTexts["home-metric-receivable"].label.contains("$350,25"))
         app.tabBars.buttons["Facturas"].tap()
         let secondCompanyInvoice = element("workspace-invoice-00000000-0000-4000-8000-000000001601", in: app)
         reveal(secondCompanyInvoice, in: app)
@@ -220,10 +229,24 @@ final class HomeUITests: XCTestCase {
         let app = launch(largestText: true)
         snapshot("Inicio-texto-maximo", app: app)
         try app.performAccessibilityAudit()
+        let viewCollections = app.buttons["home-view-collections"]
+        XCTAssertTrue(viewCollections.isHittable)
+        viewCollections.tap()
         let collected = element("home-metric-collected", in: app)
-        reveal(collected, in: app)
+        XCTAssertTrue(collected.waitForExistence(timeout: 5))
+        XCTAssertTrue(collected.isHittable)
+        XCTAssertGreaterThanOrEqual(collected.frame.minY, app.navigationBars["Inicio"].frame.maxY)
+        XCTAssertLessThanOrEqual(collected.frame.maxY, app.tabBars.firstMatch.frame.minY)
         snapshot("Inicio-cobros-texto-maximo", app: app)
         try app.performAccessibilityAudit()
+        app.swipeRight()
+        XCTAssertTrue(viewCollections.waitForExistence(timeout: 5))
+        XCTAssertTrue(viewCollections.isHittable)
+        app.swipeLeft()
+        XCTAssertTrue(collected.waitForExistence(timeout: 5))
+        XCTAssertTrue(collected.isHittable)
+        XCTAssertGreaterThanOrEqual(collected.frame.minY, app.navigationBars["Inicio"].frame.maxY)
+        XCTAssertLessThanOrEqual(collected.frame.maxY, app.tabBars.firstMatch.frame.minY)
         app.terminate()
         let dark = launch(dark: true)
         snapshot("Inicio-oscuro", app: dark)

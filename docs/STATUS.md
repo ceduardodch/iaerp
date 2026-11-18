@@ -14,6 +14,11 @@ alcance y las decisiones.
   desarrollo la posición al volver del detalle, la lectura de controles y el
   foco al editar el plazo. El iPhone sigue con 0.4.2 hasta el cierre de QA,
   CI y publicación del servidor. [Backlog y prueba física](backlog/ios-evaluacion-2026-11-18.md).
+  El candidato `1153c68` pasó 154 pruebas locales. En iOS 27.2 aparecieron
+  un nombre de empresa truncado, contraste bajo la barra de Facturas y una
+  espera agotada al cambiar de empresa. La revisión siguiente ajusta el área
+  visible de la lista, presenta la empresa a ancho completo y termina de
+  cerrar el selector antes de cambiar la empresa de prueba.
 
 - iOS 0.4.2 (6), 2026-11-18. La solicitud interactiva de 0.4.1 combinaba
   el selector de organización con el permiso explícito `organization:read`.

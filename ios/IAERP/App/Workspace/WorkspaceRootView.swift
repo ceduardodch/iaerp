@@ -77,35 +77,52 @@ struct WorkspaceHomeView: View {
     @State private var savedInvoice: ERPInvoice?
     @State private var showingCutoff = false
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var page: SummaryPage = .balances
+
+    private enum SummaryPage: Hashable { case balances, collections }
+
     var body: some View {
         GeometryReader { viewport in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if let savedInvoice {
-                        Text(savedInvoice.status == "DRAFT" ? "Borrador guardado. No se ha emitido al SRI." : "Guardado confirmado.")
-                            .accessibilityIdentifier("workspace-notice")
-                        NavigationLink {
-                            WorkspaceInvoiceDetail(store: store, invoiceId: savedInvoice.id)
-                        } label: {
-                            Label(savedInvoice.status == "DRAFT" ? "Ver borrador" : "Ver factura", systemImage: "doc.text")
+            Group {
+                if dynamicTypeSize >= .accessibility3, store.canReadDashboard,
+                   store.dashboardError == nil, let summary = store.dashboard {
+                    TabView(selection: $page) {
+                        scrollContent {
+                            balances
+                            Button("Ver cobros") { page = .collections }
+                                .frame(minHeight: 44)
+                                .accessibilityIdentifier("home-view-collections")
                         }
-                        .accessibilityIdentifier("home-open-draft")
+                        .tag(SummaryPage.balances)
+                        scrollContent {
+                            companyTitle
+                            collections(summary)
+                            Button("Ver saldos") { page = .balances }
+                                .frame(minHeight: 44)
+                        }
+                        .tag(SummaryPage.collections)
                     }
-                    InvoiceRecoverySection(store: store)
-                    summaryContent
+                    .tabViewStyle(.page(indexDisplayMode: .always))
+                    .indexViewStyle(.page(backgroundDisplayMode: .always))
+                } else {
+                    scrollContent {
+                        balances
+                        if store.canReadDashboard, store.dashboardError == nil, let summary = store.dashboard {
+                            collections(summary)
+                        }
+                    }
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: viewport.size.width, height: viewport.size.height, alignment: .top)
+            .frame(width: viewport.size.width, height: max(0, viewport.size.height - viewport.safeAreaInsets.bottom),
+                   alignment: .top)
             .clipped()
-            .refreshable { if store.canReadDashboard { await store.loadDashboard() } }
+            .padding(.bottom, viewport.safeAreaInsets.bottom)
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .navigationTitle("Inicio")
-        .navigationSubtitle(Text(verbatim: store.displayCompany))
         .toolbar {
             if let summary = store.dashboard {
                 ToolbarItem(placement: .topBarLeading) {
@@ -138,9 +155,52 @@ struct WorkspaceHomeView: View {
         }
         .toolbarTitleDisplayMode(.inline)
         .sheet(item: $composer) { route in
-            InvoiceComposerView(store: store, initialCustomerId: route.customerId) { savedInvoice = $0 }
+            InvoiceComposerView(store: store, initialCustomerId: route.customerId) { invoice in
+                savedInvoice = invoice
+                page = .balances
+            }
         }
         .task { if store.canReadDashboard { await store.loadDashboard() } }
+    }
+
+    private func scrollContent<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16, content: content)
+                .padding(16)
+                .padding(.bottom, dynamicTypeSize >= .accessibility3 ? 32 : 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .refreshable { if store.canReadDashboard { await store.loadDashboard() } }
+    }
+
+    private var companyTitle: some View {
+        Text(verbatim: store.displayCompany)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.primary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    @ViewBuilder private var balances: some View {
+        companyTitle
+        if let savedInvoice {
+            Text(savedInvoice.status == "DRAFT" ? "Borrador guardado. No se ha emitido al SRI." : "Guardado confirmado.")
+                .accessibilityIdentifier("workspace-notice")
+            NavigationLink {
+                WorkspaceInvoiceDetail(store: store, invoiceId: savedInvoice.id)
+            } label: {
+                Label(savedInvoice.status == "DRAFT" ? "Ver borrador" : "Ver factura", systemImage: "doc.text")
+            }
+            .accessibilityIdentifier("home-open-draft")
+        }
+        InvoiceRecoverySection(store: store)
+        summaryContent
+    }
+
+    private func collections(_ summary: ERPHomeSummary) -> some View {
+        metricCard("Cobrado este mes", amount: summary.collectedThisMonth, currency: summary.currency,
+                   identifier: "home-metric-collected")
     }
 
     @ViewBuilder private var summaryContent: some View {
@@ -156,18 +216,17 @@ struct WorkspaceHomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(.white)
                 .background(Color("AccentColor"), in: RoundedRectangle(cornerRadius: 16))
-            VStack(alignment: .leading, spacing: 12) {
-                metric("Vencido", value: summary.overdue, currency: summary.currency, identifier: "home-metric-overdue")
-                Divider()
-                metric("Cobrado este mes", value: summary.collectedThisMonth, currency: summary.currency,
-                       identifier: "home-metric-collected")
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+            metricCard("Vencido", amount: summary.overdue, currency: summary.currency, identifier: "home-metric-overdue")
         } else {
             ProgressView("Consultando cartera…")
         }
+    }
+
+    private func metricCard(_ title: String, amount: Decimal, currency: String, identifier: String) -> some View {
+        metric(title, value: amount, currency: currency, identifier: identifier)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
     }
 
     private func shortDate(_ fiscalDate: String) -> String {
@@ -498,6 +557,7 @@ struct WorkspaceAccountView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var confirmExit = false
     @State private var profile: CompanyProfileRoute?
+    @State private var nextDemoCompany: DemoCompany?
     var body: some View {
         List {
             WorkspaceContextSection(store: store)
@@ -547,7 +607,18 @@ struct WorkspaceAccountView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
-        .sheet(item: $profile) { CompanyProfileView(store: store, context: $0.context) }
+        .sheet(item: $profile, onDismiss: {
+            guard let company = nextDemoCompany else { return }
+            nextDemoCompany = nil
+            guard store.isDemo else { return }
+            let readOnly = !store.canCreate
+            Task { await store.startDemo(secondary: company == .secondary, readOnly: readOnly) }
+        }) { route in
+            CompanyProfileView(store: store, context: route.context) { company in
+                nextDemoCompany = company
+                profile = nil
+            }
+        }
         .confirmationDialog("¿Cerrar sesión?", isPresented: $confirmExit, titleVisibility: .visible) {
             Button("Cerrar sesión", role: .destructive) { Task { await store.logout() } }
             Button("Cancelar", role: .cancel) { }
@@ -558,7 +629,7 @@ struct WorkspaceAccountView: View {
 struct CompanyProfileView: View {
     let store: WorkspaceStore
     let context: ERPContext
-    @Environment(\.dismiss) private var dismiss
+    let selectDemoCompany: (DemoCompany) -> Void
     var body: some View {
         NavigationStack {
             List {
@@ -571,10 +642,7 @@ struct CompanyProfileView: View {
                 if store.isDemo {
                     Section {
                         Button("Cambiar empresa de prueba") {
-                            let secondary = context.tenantId == DemoCompany.primary.tenantId
-                            let readOnly = !store.canCreate
-                            dismiss()
-                            Task { await store.startDemo(secondary: secondary, readOnly: readOnly) }
+                            selectDemoCompany(context.tenantId == DemoCompany.primary.tenantId ? .secondary : .primary)
                         }
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("switch-demo-company")

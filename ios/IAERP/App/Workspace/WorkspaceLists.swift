@@ -148,38 +148,45 @@ struct WorkspaceInvoicesView: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                ERPSearchField(text: $query, prompt: "Número o clave de acceso")
-                Picker("Estado", selection: $status) {
-                    Text("Todos").tag("")
-                    Text("Borradores").tag("DRAFT")
-                    Text("Autorizadas").tag("AUTHORIZED")
+        GeometryReader { viewport in
+            List {
+                Section {
+                    ERPSearchField(text: $query, prompt: "Número o clave de acceso")
+                    Picker("Estado", selection: $status) {
+                        Text("Todos").tag("")
+                        Text("Borradores").tag("DRAFT")
+                        Text("Autorizadas").tag("AUTHORIZED")
+                    }
+                }
+                InvoiceRecoverySection(store: store)
+                if let notice = store.notice {
+                    Text(notice).accessibilityIdentifier("workspace-notice")
+                }
+                if request.query.count == 1 {
+                    Text("Escribe al menos dos caracteres para buscar.")
+                } else if appliedRequest == request, let error = store.invoiceError {
+                    ERPErrorState(message: error) { await reload(request) }
+                } else if appliedRequest != request || store.loadingInvoices {
+                    ProgressView("Buscando facturas…")
+                } else if store.invoiceMonths.isEmpty {
+                    ContentUnavailableView(
+                        request.query.isEmpty && status.isEmpty ? "Sin facturas" : "Sin resultados",
+                        systemImage: "doc.text", description: Text("Revisa el filtro o la búsqueda.")
+                    )
+                } else {
+                    ForEach(store.invoiceMonths, id: \.id) { month in
+                        monthSection(month)
+                    }
                 }
             }
-            InvoiceRecoverySection(store: store)
-            if let notice = store.notice {
-                Text(notice).accessibilityIdentifier("workspace-notice")
-            }
-            if request.query.count == 1 {
-                Text("Escribe al menos dos caracteres para buscar.")
-            } else if appliedRequest == request, let error = store.invoiceError {
-                ERPErrorState(message: error) { await reload(request) }
-            } else if appliedRequest != request || store.loadingInvoices {
-                ProgressView("Buscando facturas…")
-            } else if store.invoiceMonths.isEmpty {
-                ContentUnavailableView(
-                    request.query.isEmpty && status.isEmpty ? "Sin facturas" : "Sin resultados",
-                    systemImage: "doc.text", description: Text("Revisa el filtro o la búsqueda.")
-                )
-            } else {
-                ForEach(store.invoiceMonths, id: \.id) { month in
-                    monthSection(month)
-                }
-            }
+            .accessibilityIdentifier("invoice-list")
+            .frame(width: viewport.size.width,
+                   height: max(0, viewport.size.height - viewport.safeAreaInsets.bottom), alignment: .top)
+            .clipped()
+            .padding(.bottom, viewport.safeAreaInsets.bottom)
+            .scrollEdgeEffectStyle(.hard, for: .all)
+            .scrollEdgeEffectHidden(true, for: .all)
         }
-        .scrollEdgeEffectStyle(.hard, for: .all)
-        .scrollEdgeEffectHidden(true, for: .all)
         .navigationTitle("Facturas")
         .navigationSubtitle(Text(verbatim: store.displayCompany))
         .toolbarTitleDisplayMode(.inline)

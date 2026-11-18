@@ -248,6 +248,10 @@ final class WorkspaceUITests: XCTestCase {
         try app.performAccessibilityAudit()
         app.navigationBars["Cliente"].buttons.firstMatch.tap()
         app.tabBars.buttons["Facturas"].tap()
+        let list = app.collectionViews["invoice-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(list.frame.maxY, app.tabBars.firstMatch.frame.minY + 1,
+                                 "Las facturas deben desplazarse por encima de la barra de pestañas")
         snapshot("Facturas-texto-maximo", app: app)
         try app.performAccessibilityAudit()
         app.tabBars.buttons["Cuenta"].tap()
