@@ -38,16 +38,30 @@ struct WorkspaceStateTests {
         #expect(await composer.save(using: service, setup: setup) == nil)
     }
 
-    @Test func clearingWorkspaceInvalidatesSavedResults() async {
+    @Test func clearingWorkspaceInvalidatesSavedResults() async throws {
         let store = WorkspaceStore()
         await store.startDemo()
         let previous = store.generation
-        let invoice = store.invoices.first
+        let service = try #require(store.service)
+        let invoice = try #require(try await service.invoices(query: "", status: nil).first)
+        store.acceptSaved(invoice, generation: previous)
+        await store.loadDashboard()
+        await store.loadInvoices()
+        let group = try #require(store.invoiceMonths.first)
+        await store.loadInvoiceMonth(group)
+        #expect(store.dashboard != nil)
+        #expect(!store.invoiceMonths.isEmpty)
+        #expect(store.monthRows[group.id]?.isEmpty == false)
+        #expect(!store.invoices.isEmpty)
         store.clear()
-        if let invoice { store.acceptSaved(invoice, generation: previous) }
+        store.acceptSaved(invoice, generation: previous)
         #expect(store.context == nil)
         #expect(store.customers.isEmpty)
         #expect(store.invoices.isEmpty)
+        #expect(store.dashboard == nil && store.dashboardError == nil)
+        #expect(store.invoiceMonths.isEmpty && store.monthRows.isEmpty)
+        #expect(store.monthErrors.isEmpty && store.loadingMonths.isEmpty && store.moreMonths.isEmpty)
+        #expect(!store.loadingDashboard && !store.loadingInvoices)
         #expect(store.setup == nil)
     }
 

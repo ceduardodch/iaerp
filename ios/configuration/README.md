@@ -56,3 +56,5 @@ lo emite al SRI. Los tests sintéticos no sustituyen esa prueba autenticada.
 No existe acción de emisión fiscal en esta versión.
 
 [Evidencia actual](../validation/2026-11-18-live-connection.md).
+
+La versión 0.5.0 añade `receivables:read` al cliente nativo para el resumen de Inicio. El backend comprueba rol, empresa y ruta en cada petición. Una sesión que aún tenga el token anterior puede requerir renovarlo o volver a entrar para obtener el permiso. [ADR 0026](../../docs/adrs/0026-ios-receivables-overview.md).

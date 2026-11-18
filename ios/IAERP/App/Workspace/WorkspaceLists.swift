@@ -96,53 +96,51 @@ struct WorkspaceInvoicesView: View {
     @State private var query = ""
     @State private var status = ""
     @State private var composer: ComposerRoute?
-    private var visible: [ERPInvoice] {
-        store.invoices.filter { invoice in
-            (status.isEmpty || invoice.status == status) &&
-            (query.count != 1 || invoice.sequential.localizedStandardContains(query))
-        }
+    @State private var expandedMonths: [String: Bool] = [:]
+    @State private var appliedRequest: InvoiceListRequest?
+
+    private struct InvoiceListRequest: Equatable {
+        let query: String
+        let status: String
+        let revision: Int
     }
+
+    private var request: InvoiceListRequest {
+        InvoiceListRequest(query: query.trimmingCharacters(in: .whitespacesAndNewlines),
+                           status: status, revision: store.invoiceListRevision)
+    }
+
     var body: some View {
         List {
             Section {
                 ERPSearchField(text: $query, prompt: "Número o clave de acceso")
-                if store.invoiceError == nil && !store.loadingInvoices { ERPListSummary(count: visible.count) }
-            }
-            WorkspaceContextSection(store: store)
-            InvoiceRecoverySection(store: store)
-            Section {
                 Picker("Estado", selection: $status) {
                     Text("Todos").tag("")
                     Text("Borradores").tag("DRAFT")
                     Text("Autorizadas").tag("AUTHORIZED")
                 }
-                if let notice = store.notice { Text(notice).accessibilityIdentifier("workspace-notice") }
             }
-            Section {
-                if store.loadingInvoices { ProgressView("Buscando facturas…") }
-                if let error = store.invoiceError {
-                    ERPErrorState(message: error) { await store.loadInvoices(query: query, status: status.isEmpty ? nil : status) }
-                } else if visible.isEmpty && !store.loadingInvoices {
-                    ContentUnavailableView(query.isEmpty && status.isEmpty ? "Sin facturas" : "Sin resultados", systemImage: "doc.text",
-                                           description: Text("Revisa el filtro o crea un borrador."))
-                } else {
-                    ForEach(visible) { invoice in
-                        NavigationLink {
-                            WorkspaceInvoiceDetail(store: store, invoiceId: invoice.id)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(store.invoiceNumber(invoice)).font(.headline).foregroundStyle(Color.primary)
-                                Text(store.customerName(invoice.partyId)).foregroundStyle(Color.primary)
-                                Text("\(invoice.issueDate) · \(ERPDisplay.money(invoice.total, currency: invoice.currency))").foregroundStyle(Color.primary)
-                                Text(ERPDisplay.status(invoice.status)).font(.subheadline.weight(.medium)).foregroundStyle(Color.primary)
-                            }
-                            .foregroundStyle(Color.primary)
-                            .padding(.vertical, 4)
-                        }
-                        .accessibilityIdentifier("workspace-invoice-\(invoice.id.uuidString)")
-                    }
+            WorkspaceContextSection(store: store)
+            InvoiceRecoverySection(store: store)
+            if let notice = store.notice {
+                Text(notice).accessibilityIdentifier("workspace-notice")
+            }
+            if request.query.count == 1 {
+                Text("Escribe al menos dos caracteres para buscar.")
+            } else if appliedRequest == request, let error = store.invoiceError {
+                ERPErrorState(message: error) { await reload(request) }
+            } else if appliedRequest != request || store.loadingInvoices {
+                ProgressView("Buscando facturas…")
+            } else if store.invoiceMonths.isEmpty {
+                ContentUnavailableView(
+                    request.query.isEmpty && status.isEmpty ? "Sin facturas" : "Sin resultados",
+                    systemImage: "doc.text", description: Text("Revisa el filtro o la búsqueda.")
+                )
+            } else {
+                ForEach(store.invoiceMonths, id: \.id) { month in
+                    monthSection(month)
                 }
-            } header: { Text("Facturas").foregroundStyle(Color.primary) }
+            }
         }
         .scrollEdgeEffectStyle(.hard, for: .all)
         .scrollEdgeEffectHidden(true, for: .bottom)
@@ -158,11 +156,94 @@ struct WorkspaceInvoicesView: View {
             }
         }
         .sheet(item: $composer) { InvoiceComposerView(store: store, initialCustomerId: $0.customerId) }
-        .task(id: "\(query)|\(status)") {
+        .task(id: request) {
+            let next = request
+            guard next != appliedRequest, next.query.count != 1 else { return }
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
-            await store.loadInvoices(query: query, status: status.isEmpty ? nil : status)
+            await reload(next)
         }
-        .refreshable { await store.loadInvoices(query: query, status: status.isEmpty ? nil : status) }
+        .refreshable { if request.query.count != 1 { await reload(request) } }
+    }
+
+    private func reload(_ next: InvoiceListRequest) async {
+        if next.query != appliedRequest?.query || next.status != appliedRequest?.status {
+            expandedMonths.removeAll()
+        }
+        appliedRequest = nil
+        await store.loadInvoices(query: next.query, status: next.status.isEmpty ? nil : next.status)
+        if !Task.isCancelled, request == next { appliedRequest = next }
+    }
+
+    private func monthSection(_ group: ERPInvoiceMonth) -> some View {
+        let month = group.month
+        let key = group.id
+        let accessibilityKey = group.currency == "USD" ? month : "\(month)-\(group.currency)"
+        let expanded = expandedMonths[key] ?? (key == store.invoiceMonths.first?.id)
+        let count = group.count == 1 ? "1 factura" : "\(group.count) facturas"
+        let amount = ERPDisplay.money(group.total, currency: group.currency)
+        let groupTotal = group.currency == "USD" ? amount : "\(amount) \(group.currency)"
+        return Section {
+            Button {
+                expandedMonths[key] = !expanded
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(ERPDisplay.longFiscalDate(month)).font(.headline)
+                        Text("\(count) · \(groupTotal)")
+                            .font(.subheadline)
+                    }
+                    Spacer()
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down").accessibilityHidden(true)
+                }
+                .foregroundStyle(Color.primary)
+                .padding(.vertical, 4)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(expanded ? "Expandido" : "Contraído")
+            .accessibilityIdentifier("invoice-month-\(accessibilityKey)")
+            if expanded {
+                ForEach(store.monthRows[key] ?? [], id: \.id) { invoice in
+                    NavigationLink {
+                        WorkspaceInvoiceDetail(store: store, invoiceId: invoice.id, listedNumber: invoice.number,
+                                               listedCustomerName: invoice.customerName)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(invoice.number).font(.headline)
+                            Text(invoice.customerName)
+                            Text("\(invoice.issueDate) · \(ERPDisplay.money(invoice.total, currency: invoice.currency))")
+                            Text(ERPDisplay.status(invoice.status)).font(.subheadline.weight(.medium))
+                            if let collection = invoice.collectionStatus {
+                                Text("Cobro: \(ERPDisplay.status(collection))").font(.subheadline)
+                            }
+                        }
+                        .foregroundStyle(Color.primary)
+                        .padding(.vertical, 4)
+                    }
+                    .accessibilityIdentifier("workspace-invoice-\(invoice.id.uuidString)")
+                }
+                if let error = store.monthErrors[key] {
+                    ERPErrorState(message: error) {
+                        await store.loadInvoiceMonth(group, more: !(store.monthRows[key] ?? []).isEmpty)
+                    }
+                } else if store.loadingMonths.contains(key) || store.monthRows[key] == nil {
+                    ProgressView("Cargando facturas…")
+                        .onAppear {
+                            // A quick collapse or tab switch may hide this row while its page loads.
+                            // Let the store finish the read for the active query and company.
+                            guard store.monthRows[key] == nil, !store.loadingMonths.contains(key) else { return }
+                            Task { await store.loadInvoiceMonth(group, more: false) }
+                        }
+                } else if store.moreMonths.contains(key) {
+                    Button("Ver más facturas") {
+                        Task { await store.loadInvoiceMonth(group, more: true) }
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("invoice-month-more-\(accessibilityKey)")
+                }
+            }
+        }
     }
 }
 

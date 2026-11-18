@@ -85,9 +85,11 @@ public struct IdentityConfiguration: Codable, Equatable, Sendable {
         )
     }
 
+    // Keycloak accepts one organization selector. The API read permission
+    // organization:read is already a default scope of the native client.
     public var scopes: [String] {
         ["openid", "profile", "organization:\(organizationAlias)",
-         "context:read", "memberships:read", "organization:read", "parties:read", "products:read",
+         "context:read", "memberships:read", "parties:read", "products:read",
          "invoices:read", "invoices:write"]
     }
 

@@ -47,8 +47,7 @@ struct ConfigurationTests {
 
     @Test func scopesBindOneOrganizationAndOnlyNeededCapabilities() throws {
         let config = try configuration()
-        #expect(config.scopes.contains("organization:empresa-demo"))
-        #expect(config.scopes.contains("organization:read"))
+        #expect(config.scopes.filter { $0.hasPrefix("organization:") } == ["organization:empresa-demo"])
         #expect(!config.scopes.contains("invoices:issue"))
         #expect(!config.scopes.contains("offline_access"))
         #expect(!config.scopes.contains("parties:write"))

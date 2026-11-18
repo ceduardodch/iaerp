@@ -24,7 +24,7 @@ BACKEND_FILES = frozenset({
 })
 DEFAULT_SCOPES = frozenset({
     "profile", "context:read", "memberships:read", "organization:read",
-    "parties:read", "products:read", "invoices:read", "invoices:write",
+    "parties:read", "products:read", "invoices:read", "invoices:write", "receivables:read",
 })
 
 

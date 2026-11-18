@@ -33,11 +33,11 @@ nonisolated enum WorkspaceQuery: CaseIterable, Sendable {
     case customers, invoices, products
 }
 
-private actor ConcurrentERPService: ERPService {
+private actor ConcurrentERPService: ERPService, ERPSalesOverviewService {
     nonisolated enum SaveFailure: Sendable { case rejected, forbidden, responseLost }
     let demo = DemoERPService()
     let oldCustomers = WorkspaceResponse<[ERPParty]>()
-    let oldInvoices = WorkspaceResponse<[ERPInvoice]>()
+    let oldInvoices = WorkspaceResponse<[ERPInvoiceMonth]>()
     let oldProducts = WorkspaceResponse<[ERPProduct]>()
     let delayedPreview: WorkspaceResponse<ERPInvoicePreview>?
     private let heldQuery: WorkspaceQuery?
@@ -65,9 +65,16 @@ private actor ConcurrentERPService: ERPService {
         return try await demo.customers(query: query)
     }
     func invoices(query: String, status: String?) async throws -> [ERPInvoice] {
-        if heldQuery == .invoices, query == "old" { return try await oldInvoices.value() }
-        if heldQuery == .invoices, query == "new" { return Array(try await demo.invoices(query: "", status: status).prefix(1)) }
         return try await demo.invoices(query: query, status: status)
+    }
+    func homeSummary() async throws -> ERPHomeSummary { try await demo.homeSummary() }
+    func invoiceMonths(query: String, status: String?) async throws -> [ERPInvoiceMonth] {
+        if heldQuery == .invoices, query == "old" { return try await oldInvoices.value() }
+        if heldQuery == .invoices, query == "new" { return Array(try await demo.invoiceMonths(query: "", status: status).prefix(1)) }
+        return try await demo.invoiceMonths(query: query, status: status)
+    }
+    func monthPage(_ month: String, currency: String, query: String, status: String?, cursor: String?) async throws -> ERPInvoicePage {
+        try await demo.monthPage(month, currency: currency, query: query, status: status, cursor: cursor)
     }
     func products(query: String) async throws -> [ERPProduct] {
         if heldQuery == .products, query == "old" { return try await oldProducts.value() }
@@ -194,7 +201,10 @@ struct WorkspaceConcurrencyTests {
         let store = WorkspaceStore(service: service)
         await store.loadWorkspace()
         let originalCustomers = store.customers
-        let originalInvoices = store.invoices
+        // Login does not preload the invoice list. The new query owns monthly
+        // server headers; use a nonempty baseline to keep the race meaningful.
+        let originalInvoices = try await service.demo.invoiceMonths(query: "", status: nil)
+        #expect(originalInvoices.count >= 2)
         let originalProducts = store.products
         let earlier = Task {
             switch kind {
@@ -223,7 +233,7 @@ struct WorkspaceConcurrencyTests {
             #expect(store.customers == Array(originalCustomers.prefix(1)))
             #expect(!store.loadingCustomers)
         case .invoices:
-            #expect(store.invoices == Array(originalInvoices.prefix(1)))
+            #expect(store.invoiceMonths == Array(originalInvoices.prefix(1)))
             #expect(!store.loadingInvoices)
         case .products:
             #expect(store.products == Array(originalProducts.prefix(1)))

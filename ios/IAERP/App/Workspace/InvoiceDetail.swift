@@ -16,6 +16,8 @@ struct InvoicePaymentRow: Identifiable {
 struct WorkspaceInvoiceDetail: View {
     let store: WorkspaceStore
     let invoiceId: UUID
+    var listedNumber: String? = nil
+    var listedCustomerName: String? = nil
     @State private var invoice: ERPInvoice?
     @State private var artifacts: [ERPArtifact] = []
     @State private var error: String?
@@ -32,8 +34,8 @@ struct WorkspaceInvoiceDetail: View {
             if let error { Section { ERPErrorState(message: error) { await load() } } }
             if let invoice {
                 Section {
-                    ERPDetailRow(title: "Número", value: store.invoiceNumber(invoice))
-                    ERPDetailRow(title: "Cliente", value: store.customerName(invoice.partyId))
+                    ERPDetailRow(title: "Número", value: listedNumber ?? store.invoiceNumber(invoice))
+                    ERPDetailRow(title: "Cliente", value: listedCustomerName ?? store.customerName(invoice.partyId))
                     ERPDetailRow(title: "Fecha", value: invoice.issueDate)
                     ERPDetailRow(title: "Total", value: ERPDisplay.money(invoice.total, currency: invoice.currency))
                 } header: { Text("Factura").foregroundStyle(Color.primary) }

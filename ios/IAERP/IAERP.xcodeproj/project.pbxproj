@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		09A870EB70414798D243308F /* AuthenticationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97EF4F7F805F1C3BF60753B /* AuthenticationController.swift */; };
 		0C1EDF3D25A52379613587FD /* IAERPIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = F065DA62A6B8B2A22D7AFA32 /* IAERPIdentity */; };
+		10EDFEE203496592326412FF /* HomeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31BF382B51328CA896647678 /* HomeUITests.swift */; };
 		12D39A5D66EBB256E92BAC6F /* InvoicePaymentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E33A00880FA15CD1413B28 /* InvoicePaymentTests.swift */; };
 		2D727C3E4F3285B5BC76435C /* IAERPClient in Frameworks */ = {isa = PBXBuildFile; productRef = 96013C487CE9030808EC5431 /* IAERPClient */; };
 		36C3CE8571357578A96A7872 /* IAERPIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = 79033927CA56E0337031201B /* IAERPIdentity */; };
@@ -22,6 +23,7 @@
 		5E95C94590ABBA63A5DE552B /* WorkspaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA41DAB311450DDB91F74E5 /* WorkspaceUITests.swift */; };
 		60B902DA572341D61202866D /* SavedAccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC7B4D29DA82766499CC936F /* SavedAccountTests.swift */; };
 		6260E7142D482095F9688BC9 /* ThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = EF88DBC0965E7B94D6EB1BBF /* ThirdPartyNotices.txt */; };
+		67034DCBF714B1172FFDE5F2 /* HomePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D405492677F91856B30FAD5 /* HomePresentationTests.swift */; };
 		73F3FA126EE0935B0DA9A04F /* InvoiceRecoveryProcessFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16BADB2271AE15B4499EB72A /* InvoiceRecoveryProcessFixture.swift */; };
 		7521CDC0BC2E831D83070BC1 /* InvoiceRecoveryJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E88E83C9809DF31B0CF78408 /* InvoiceRecoveryJournal.swift */; };
 		799D96BA3CC8D369B6495F44 /* InvoiceRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE0DC32DF1A916FE45A7400 /* InvoiceRecoveryTests.swift */; };
@@ -66,6 +68,8 @@
 		257B79B79BBD5A4C021C8F00 /* SavedAccountsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedAccountsUITests.swift; sourceTree = "<group>"; };
 		27072CEE475945FB537D36C8 /* DemoClientsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoClientsView.swift; sourceTree = "<group>"; };
 		2AE0DC32DF1A916FE45A7400 /* InvoiceRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceRecoveryTests.swift; sourceTree = "<group>"; };
+		31BF382B51328CA896647678 /* HomeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeUITests.swift; sourceTree = "<group>"; };
+		3D405492677F91856B30FAD5 /* HomePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePresentationTests.swift; sourceTree = "<group>"; };
 		3E5931BFE0278DA3F53537D3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		42C2F2CB65C4F411281EB5FA /* WorkspaceRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRootView.swift; sourceTree = "<group>"; };
 		48B49BD05192C6926640BD11 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
@@ -185,6 +189,7 @@
 		BC58F0245EA9B803074661BA /* AppTests */ = {
 			isa = PBXGroup;
 			children = (
+				3D405492677F91856B30FAD5 /* HomePresentationTests.swift */,
 				B7E33A00880FA15CD1413B28 /* InvoicePaymentTests.swift */,
 				2AE0DC32DF1A916FE45A7400 /* InvoiceRecoveryTests.swift */,
 				BC7B4D29DA82766499CC936F /* SavedAccountTests.swift */,
@@ -216,6 +221,7 @@
 		EE2576B47090A5836A676ABD /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				31BF382B51328CA896647678 /* HomeUITests.swift */,
 				9161A866C1B78531BF0C565F /* InvoiceRecoveryProcessUITests.swift */,
 				93DF2EA5185EF75FBBC96FBB /* LaunchUITests.swift */,
 				257B79B79BBD5A4C021C8F00 /* SavedAccountsUITests.swift */,
@@ -354,6 +360,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				67034DCBF714B1172FFDE5F2 /* HomePresentationTests.swift in Sources */,
 				12D39A5D66EBB256E92BAC6F /* InvoicePaymentTests.swift in Sources */,
 				799D96BA3CC8D369B6495F44 /* InvoiceRecoveryTests.swift in Sources */,
 				60B902DA572341D61202866D /* SavedAccountTests.swift in Sources */,
@@ -366,6 +373,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				10EDFEE203496592326412FF /* HomeUITests.swift in Sources */,
 				4F5F0AD203513F1921FD8D95 /* InvoiceRecoveryProcessUITests.swift in Sources */,
 				7C207158265FB7E69CBDE7B1 /* LaunchUITests.swift in Sources */,
 				3B51A7E168DF8EBA7A63998C /* SavedAccountsUITests.swift in Sources */,
@@ -465,7 +473,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 7;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -484,7 +492,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.4.1;
+				MARKETING_VERSION = 0.5.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -599,7 +607,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 7;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -612,7 +620,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.4.1;
+				MARKETING_VERSION = 0.5.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

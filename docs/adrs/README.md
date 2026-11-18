@@ -30,3 +30,4 @@ sustituya.
 | [0023](0023-ios-saved-accounts.md) | Cuentas guardadas y desbloqueo local en iPhone | Accepted |
 | [0024](0024-ios-production-connection-policy.md) | Conexión iOS y permisos efectivos del piloto | Accepted |
 | [0025](0025-ios-durable-draft-recovery.md) | Recuperación durable de un borrador desde iPhone | Accepted |
+| [0026](0026-ios-receivables-overview.md) | Resumen móvil de cartera y facturas por mes | Accepted |

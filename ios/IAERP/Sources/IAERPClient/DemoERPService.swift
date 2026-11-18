@@ -12,7 +12,7 @@ public enum DemoCompany: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// In-memory fixtures, not a fiscal engine. Each instance belongs to one demo company.
-public actor DemoERPService: ERPService {
+public actor DemoERPService: ERPService, ERPSalesOverviewService {
     public let company: DemoCompany
     public let readOnly: Bool
     private var drafts: [ERPInvoice] = []
@@ -21,7 +21,7 @@ public actor DemoERPService: ERPService {
 
     public func context() throws -> ERPContext {
         ERPContext(tenantId: company.tenantId, ruc: "DEMO-SIN-RUC", name: company.name,
-                   roles: [readOnly ? "READER" : "BILLING"], scopes: ["context:read", "memberships:read", "organization:read", "parties:read", "products:read", "invoices:read"] + (readOnly ? [] : ["invoices:write"]))
+                   roles: [readOnly ? "READER" : "BILLING"], scopes: ["context:read", "memberships:read", "organization:read", "parties:read", "products:read", "invoices:read"] + (readOnly ? [] : ["invoices:write", "receivables:read"]))
     }
     public func memberships() throws -> [ERPMembership] {
         DemoCompany.allCases.map { ERPMembership(tenantId: $0.tenantId, organizationId: $0.alias, ruc: "DEMO-SIN-RUC", tenantName: $0.name, roles: [readOnly ? "READER" : "BILLING"], active: true) }
@@ -52,8 +52,43 @@ public actor DemoERPService: ERPService {
     public func invoices(query: String, status: String?) throws -> [ERPInvoice] {
         let all = Array(drafts.reversed()) + seedInvoices()
         let matchingStatus = all.filter { status == nil || status!.isEmpty || $0.status == status }
-        return filter(matchingStatus, query: query) { [$0.sequential, $0.accessKey ?? ""] }
+        return filter(matchingStatus, query: query) { [$0.sequential, "001-001-\($0.sequential)", $0.accessKey ?? ""] }
     }
+    public func homeSummary() throws -> ERPHomeSummary {
+        guard !readOnly else { throw ERPClientError.forbidden }
+        let primary = company == .primary
+        return ERPHomeSummary(asOf: "2026-11-18", currency: "USD",
+                              receivable: Self.decimal(primary ? "350.25" : "80.40"),
+                              overdue: Self.decimal(primary ? "100.50" : "0"),
+                              collectedThisMonth: Self.decimal(primary ? "230.75" : "40.20"))
+    }
+
+    public func invoiceMonths(query: String, status: String?) throws -> [ERPInvoiceMonth] {
+        let groups = Dictionary(grouping: try invoices(query: query, status: status)) { String($0.issueDate.prefix(7)) }
+        return groups.keys.sorted(by: >).map { month in
+            let rows = groups[month, default: []]
+            return ERPInvoiceMonth(month: month, count: rows.count, total: rows.reduce(0) { $0 + $1.total }, currency: "USD")
+        }
+    }
+
+    public func monthPage(_ month: String, currency: String, query: String, status: String?, cursor: String?) throws -> ERPInvoicePage {
+        let names = Dictionary(uniqueKeysWithValues: try customers(query: "").map { ($0.id, $0.name) })
+        let invoices = try invoices(query: query, status: status)
+            .filter { $0.issueDate.hasPrefix(month + "-") && $0.currency == currency }
+            .sorted { ($0.issueDate, $0.id.uuidString) > ($1.issueDate, $1.id.uuidString) }
+        let start: Int
+        if let cursor {
+            guard let index = invoices.firstIndex(where: { $0.id.uuidString == cursor }) else { throw ERPClientError.invalidInput("Página no válida.") }
+            start = index + 1
+        } else { start = 0 }
+        let slice = invoices.dropFirst(start).prefix(50)
+        let rows = slice.map {
+            ERPMonthInvoice(id: $0.id, number: "001-001-\($0.sequential)", customerName: names[$0.partyId] ?? "Cliente de prueba",
+                            issueDate: $0.issueDate, status: $0.status, total: $0.total, currency: $0.currency, collectionStatus: $0.collectionStatus)
+        }
+        return ERPInvoicePage(items: rows, nextCursor: start + rows.count < invoices.count ? rows.last?.id.uuidString : nil)
+    }
+
     public func invoice(id: UUID) throws -> ERPInvoice {
         guard let value = (drafts + seedInvoices()).first(where: { $0.id == id }) else { throw ERPClientError.notFound }
         return value
@@ -135,7 +170,7 @@ public actor DemoERPService: ERPService {
     private func seedInvoices() -> [ERPInvoice] {
         let states = ["AUTHORIZED", "PENDING_AUTHORIZATION", "REJECTED", "DRAFT", "HISTORICAL_ISSUED"]
         return states.enumerated().map { index, status in
-            ERPInvoice(id: DemoCompany.uuid(company.offset + 601 + index), status: status, sequential: String(format: "%09d", index + 1), issueDate: "2026-11-17", accessKey: status == "DRAFT" ? nil : "DEMO-\(company.alias)-\(index + 1)", subtotal: 100, tax: 15, total: 115, partyId: DemoCompany.uuid(company.offset + 101), establishmentId: DemoCompany.uuid(company.offset + 401), emissionPointId: DemoCompany.uuid(company.offset + 501), authorizationNumber: status == "AUTHORIZED" ? "DEMO-SIN-VALIDEZ-FISCAL" : nil, authorizedAt: status == "AUTHORIZED" ? "2026-11-17T12:00:00-05:00" : nil, sriTransmission: status == "PENDING_AUTHORIZATION" ? ERPSRITransmission(status: status, message: "Respuesta ficticia pendiente.", lastAttemptAt: "2026-11-17T12:00:00-05:00") : nil, collectionStatus: status == "AUTHORIZED" ? "OPEN" : nil, lines: [ERPInvoiceLine(id: DemoCompany.uuid(company.offset + 30_000 + index), lineNumber: 1, productId: DemoCompany.uuid(company.offset + 201), description: "Servicio de ejemplo", quantity: 1, unitPrice: 100, discount: 0, baseAmount: 100, taxCode: "4", taxRate: 15, taxAmount: 15)])
+            ERPInvoice(id: DemoCompany.uuid(company.offset + 601 + index), status: status, sequential: String(format: "%09d", index + 1), issueDate: index < 3 ? "2026-11-17" : "2026-10-15", accessKey: status == "DRAFT" ? nil : "DEMO-\(company.alias)-\(index + 1)", subtotal: 100, tax: 15, total: 115, partyId: DemoCompany.uuid(company.offset + 101), establishmentId: DemoCompany.uuid(company.offset + 401), emissionPointId: DemoCompany.uuid(company.offset + 501), authorizationNumber: status == "AUTHORIZED" ? "DEMO-SIN-VALIDEZ-FISCAL" : nil, authorizedAt: status == "AUTHORIZED" ? "2026-11-17T12:00:00-05:00" : nil, sriTransmission: status == "PENDING_AUTHORIZATION" ? ERPSRITransmission(status: status, message: "Respuesta ficticia pendiente.", lastAttemptAt: "2026-11-17T12:00:00-05:00") : nil, collectionStatus: status == "AUTHORIZED" ? "OPEN" : nil, lines: [ERPInvoiceLine(id: DemoCompany.uuid(company.offset + 30_000 + index), lineNumber: 1, productId: DemoCompany.uuid(company.offset + 201), description: "Servicio de ejemplo", quantity: 1, unitPrice: 100, discount: 0, baseAmount: 100, taxCode: "4", taxRate: 15, taxAmount: 15)])
         }
     }
     private func makeDocument(_ invoice: ERPInvoice, type: String) -> ERPDocument {

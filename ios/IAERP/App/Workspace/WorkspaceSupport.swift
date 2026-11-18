@@ -22,6 +22,18 @@ enum ERPDisplay {
         guard let dueDate = calendar.date(byAdding: .day, value: days, to: date) else { return nil }
         return fiscalDate(dueDate)
     }
+    static func longFiscalDate(_ value: String) -> String {
+        let parts = value.split(separator: "-")
+        guard parts.count == 2 || parts.count == 3, parts[0].count == 4,
+              let month = Int(parts[1]), (1...12).contains(month) else { return value }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "es_EC")
+        let monthName = calendar.monthSymbols[month - 1]
+        if parts.count == 3, let day = Int(parts[2]) {
+            return "\(day) de \(monthName) de \(parts[0])"
+        }
+        return "\(monthName.capitalized) de \(parts[0])"
+    }
     static func status(_ raw: String) -> String {
         switch raw {
         case "DRAFT": "Borrador"

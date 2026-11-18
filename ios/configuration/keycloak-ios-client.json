@@ -27,7 +27,8 @@
     "parties:read",
     "products:read",
     "invoices:read",
-    "invoices:write"
+    "invoices:write",
+    "receivables:read"
   ],
   "optionalClientScopes": [
     "organization"

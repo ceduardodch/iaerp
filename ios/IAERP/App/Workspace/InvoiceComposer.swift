@@ -191,6 +191,7 @@ enum InvoiceInputFocus: Hashable {
 
 struct InvoiceComposerView: View {
     let store: WorkspaceStore
+    let onSaved: ((ERPInvoice) -> Void)?
     @State private var draft: InvoiceComposer
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -201,8 +202,9 @@ struct InvoiceComposerView: View {
     @State private var userScrollInFlight = false
     @FocusState private var focusedInput: InvoiceInputFocus?
 
-    init(store: WorkspaceStore, initialCustomerId: UUID?) {
+    init(store: WorkspaceStore, initialCustomerId: UUID?, onSaved: ((ERPInvoice) -> Void)? = nil) {
         self.store = store
+        self.onSaved = onSaved
         draft = InvoiceComposer(customerId: initialCustomerId)
     }
     var body: some View {
@@ -310,6 +312,7 @@ struct InvoiceComposerView: View {
                             Section { Text(error).foregroundStyle(Color.primary).accessibilityIdentifier("draft-error").id("invoice-error-end") }
                         }
                     }
+                    .accessibilityIdentifier("invoice-form")
                     .scrollDismissesKeyboard(.interactively)
                     .scrollEdgeEffectStyle(.hard, for: .all)
                     .scrollEdgeEffectHidden(for: .all)
@@ -472,6 +475,7 @@ struct InvoiceComposerView: View {
         }
         if let invoice, epoch == store.generation {
             store.acceptSaved(invoice, generation: epoch)
+            onSaved?(invoice)
             dismiss()
         }
     }

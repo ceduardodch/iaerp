@@ -40,6 +40,35 @@ private func demoInput(_ api: DemoERPService, quantity: Decimal = 1) async throw
 }
 
 struct ERPClientTests {
+    @Test func mixedCurrencyDashboardDoesNotReportADraftConflict() async throws {
+        let api = try service(MockHTTP([ERPHTTPResponse(statusCode: 409, data: Data())]))
+        await #expect(throws: ERPClientError.unsupportedOverviewCurrency) { try await api.homeSummary() }
+    }
+
+    @Test func overviewAndMonthlyRoutesPreserveMoneyFiltersAndCursor() async throws {
+        let http = MockHTTP([
+            ok(Data(#"{"asOf":"2026-11-18","currency":"USD","outstanding":"1000000000.01","overdue":"12.34","collectedThisMonth":"0.02"}"#.utf8)),
+            ok(Data(#"[{"month":"2026-11","currency":"USD","count":151,"total":"200.01"}]"#.utf8)),
+            ok(Data(#"{"items":[{"id":"00000000-0000-4000-8000-000000000601","number":"001-001-000000001","customerName":"Ejemplo","issueDate":"2026-11-17","status":"AUTHORIZED","total":"7.50","currency":"USD","collectionStatus":"OPEN"}],"nextCursor":"next"}"#.utf8))
+        ])
+        let api = try service(http)
+        let home = try await api.homeSummary()
+        #expect(home.receivable == Decimal(string: "1000000000.01"))
+        #expect(home.collectedThisMonth == Decimal(string: "0.02"))
+        let months = try await api.invoiceMonths(query: "001-001-000000001", status: "AUTHORIZED")
+        #expect(months.first?.count == 151)
+        let page = try await api.monthPage("2026-11", currency: "USD", query: "001-001-000000001", status: "AUTHORIZED", cursor: "opaque:1")
+        #expect(page.items.first?.collectionStatus == "OPEN")
+        #expect(page.items.first?.total == Decimal(string: "7.50"))
+        #expect(page.nextCursor == "next")
+        let requests = await http.captured()
+        #expect(requests.compactMap { $0.url?.path } == ["/api/v1/receivables/overview", "/api/v1/invoices/months", "/api/v1/invoices/months/2026-11"])
+        let url = try #require(requests.last?.url)
+        let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(Dictionary(uniqueKeysWithValues: params.map { ($0.name, $0.value) }) ==
+                    ["q": "001-001-000000001", "status": "AUTHORIZED", "currency": "USD", "cursor": "opaque:1"])
+    }
+
     @Test func draftLookupKeepsTheOriginalCaseSensitiveKey() async throws {
         let key = "ABCDEFAB-1234-4ABC-8123-ABCDEFABCDEF"
         let invoiceID = UUID(uuidString: "00000000-0000-4000-8000-000000000601")!

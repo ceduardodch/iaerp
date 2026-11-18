@@ -55,7 +55,7 @@ public actor ERPURLSessionTransport: ERPHTTPTransport {
 }
 
 /// API base must include /api/v1. Identity derives tenant exclusively from the bearer token.
-public struct LiveERPService: ERPService, ERPInvoiceDraftLookup {
+public struct LiveERPService: ERPService, ERPInvoiceDraftLookup, ERPSalesOverviewService {
     private let baseURL: URL
     private let tokenProvider: @Sendable (Bool) async throws -> String
     private let transport: any ERPHTTPTransport
@@ -90,6 +90,31 @@ public struct LiveERPService: ERPService, ERPInvoiceDraftLookup {
         if let status, !status.isEmpty { items.append(URLQueryItem(name: "status", value: status)) }
         return try await get("invoices", query: items)
     }
+    public func homeSummary() async throws -> ERPHomeSummary {
+        do { return try await get("receivables/overview") }
+        catch ERPClientError.idempotencyConflict { throw ERPClientError.unsupportedOverviewCurrency }
+    }
+
+    private func monthFilters(query: String, status: String?) throws -> [URLQueryItem] {
+        var items = queryItems(try validatedQuery(query))
+        if let status, !status.isEmpty { items.append(URLQueryItem(name: "status", value: status)) }
+        return items
+    }
+
+    public func invoiceMonths(query: String, status: String?) async throws -> [ERPInvoiceMonth] {
+        try await get("invoices/months", query: monthFilters(query: query, status: status))
+    }
+
+    public func monthPage(_ month: String, currency: String, query: String, status: String?, cursor: String?) async throws -> ERPInvoicePage {
+        guard month.wholeMatch(of: /[0-9]{4}-(0[1-9]|1[0-2])/) != nil else {
+            throw ERPClientError.invalidInput("Mes no válido.")
+        }
+        var items = try monthFilters(query: query, status: status)
+        items.append(URLQueryItem(name: "currency", value: currency))
+        if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
+        return try await get("invoices/months/\(month)", query: items)
+    }
+
     public func invoice(id: UUID) async throws -> ERPInvoice { try await get("invoices/\(id.uuidString)") }
     public func findDraft(idempotencyKey: String) async throws -> UUID? {
         guard idempotencyKey.utf8.count == 36, UUID(uuidString: idempotencyKey) != nil else {

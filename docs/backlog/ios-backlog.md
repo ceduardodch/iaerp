@@ -1,7 +1,8 @@
 # IAERP para iPhone: backlog y avance
 
 - Fecha: 2026-11-18, America/Guayaquil.
-- Estado: **0.4.1 validada localmente; conexión configurada, firma física bloqueada**.
+- **0.4.2 (6) instalada en el iPhone. Carlos confirma el ingreso.**
+- [Evaluación de producto y UX, comparativa y próximas tres entregas](ios-evaluacion-2026-11-18.md).
 - Objetivo: instalar IAERP en el iPhone de Carlos y sumar funciones por entregas pequeñas.
 - Decisión de arquitectura: [ADR 0022, Accepted](../adrs/0022-native-ios-client.md).
 - Calidad: [Definition of Done vigente](../09-testing-quality.md).
@@ -27,7 +28,7 @@ consulta y documentos. Las pruebas/revisiones y el cierre físico siguen
 pendientes donde corresponda; esta autorización no habilita producción,
 emisión SRI real, push ni distribución. No equivale a promesa de paridad web.
 
-## Conexión autorizada — 0.4.1
+## Historial de conexión — 0.4.1
 
 Carlos pide conectar a IAERP, hacer lo necesario y avisar cuando pueda instalar
 para probar. Después conecta el teléfono y autoriza continuar. Esto amplía la
@@ -313,10 +314,7 @@ filtros, límites, decimales, errores y completitud de cada lista.
 
 ## Próximo trabajo
 
-Cuando Carlos conecte el iPhone, confirmar versión, confianza/Developer Mode y
-cuenta/Team; firmar, instalar y revisar la demo para cerrar **IOS-004**.
-El build y las pruebas de simulador ya están correctos. El login y clientes
-reales entran en la siguiente parte, tras su revisión de esta entrega.
+Revisar la [propuesta de Inicio, facturas por mes y emisión con envío por correo](ios-evaluacion-2026-11-18.md). La instalación y el ingreso ya se comprobaron en el iPhone. Sigue pendiente probar el circuito de guardado en una empresa de pruebas.
 
 ## Revisión de esta propuesta
 

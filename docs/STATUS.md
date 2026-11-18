@@ -7,6 +7,29 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- iOS 0.4.2 (6), 2026-11-18. La solicitud interactiva de 0.4.1 combinaba
+  el selector de organización con el permiso explícito `organization:read`.
+  El endpoint público devolvía `invalid_scope` por redirección antes del login.
+  El permiso ya forma parte de los scopes por defecto del cliente. Al omitirlo
+  de la solicitud se conserva un único selector y el proveedor muestra el
+  formulario de acceso (HTTP 200). Regresión del selector único y 80 pruebas
+  de paquete correctas. Actualización instalada en el iPhone de Carlos.
+  Carlos confirmó después que pudo ingresar en el iPhone. El guardado físico
+  de un borrador sigue pendiente. Producto y UX revisaron el recorrido de
+  clientes y facturación. Carlos prioriza Inicio con resumen, facturas por mes y el recorrido de emisión y correo. Las entregas se proponen para
+  revisión en la [evaluación iOS](backlog/ios-evaluacion-2026-11-18.md).
+
+- 2026-11-18, instalación local completada en el iPhone 14 Pro del titular.
+  La cuenta nueva en Xcode mostró Personal Team con cero dispositivos antes
+  de firmar. Xcode compiló IAERP 0.4.1 (5) en Debug para el equipo nuevo,
+  con el identificador original. La verificación de firma pasó y devicectl
+  confirmó la instalación. El primer lanzamiento fue denegado por seguridad
+  del dispositivo. Tras confirmar la confianza y reiniciar el iPhone, se
+  restableció el emparejamiento por cable. iOS aceptó la apertura y devicectl
+  confirmó el proceso activo. El primer acceso a IAERP sigue pendiente. El perfil
+  vence el 25 de noviembre a las 11:23 (Guayaquil). Este corte sustituye el
+  bloqueo histórico de instalación de la cuenta anterior.
+
 - iOS **0.4.1 (5)** en PR #108 de borrador, 2026-11-18. API/backend de
   PR #107 publicados como `2bcd013`, CI/Coolify `44314403923` correctos. Cuatro
   huellas del contenedor API coinciden; siete sondas puras verifican la política.

@@ -13,17 +13,22 @@ final class WorkspaceUITests: XCTestCase {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
+        XCTAssertTrue(app.navigationBars["Inicio"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.tabBars.buttons["Clientes"].waitForExistence(timeout: 8))
+        app.tabBars.buttons["Clientes"].tap()
         return app
     }
 
     @MainActor private func reveal(_ element: XCUIElement, in app: XCUIApplication, searchEarlier: Bool = false) {
         var lastViewport = CGRect.zero
         for _ in 0..<24 {
-            let scroll = app.collectionViews.allElementsBoundByIndex.last
-            let bounds = scroll?.frame ?? app.frame
-            let navigation = app.navigationBars.allElementsBoundByIndex.last
-            let top = max(bounds.minY, navigation?.frame.maxY ?? bounds.minY)
+            // Resolve queries anew on each pass. An index captured while a
+            // sheet changes can refer to a collection that no longer exists.
+            let form = app.collectionViews["invoice-form"]
+            let scroll = form.exists ? form : app.collectionViews.firstMatch
+            let bounds = scroll.exists ? scroll.frame : app.frame
+            let navigation = currentNavigationBar(in: app)
+            let top = max(bounds.minY, navigation.exists ? navigation.frame.maxY : bounds.minY)
             var bottom = bounds.maxY
             if app.tabBars.firstMatch.exists && app.tabBars.firstMatch.isHittable {
                 bottom = min(bottom, app.tabBars.firstMatch.frame.minY - 8)
@@ -49,6 +54,16 @@ final class WorkspaceUITests: XCTestCase {
         XCTFail("El control debe estar completo y operable. Target: \(targetFrame), viewport: \(lastViewport)")
     }
 
+    @MainActor private func currentNavigationBar(in app: XCUIApplication) -> XCUIElement {
+        // Prefer the presented screen over the workspace beneath its sheet.
+        for title in ["Elegir cliente", "Elegir producto", "Nueva factura", "Empresa", "RIDE",
+                      "Factura", "Cliente", "Cuenta", "Facturas", "Clientes", "Inicio"] {
+            let bar = app.navigationBars[title]
+            if bar.exists && bar.isHittable { return bar }
+        }
+        return app.navigationBars.firstMatch
+    }
+
     @MainActor private func snapshot(_ name: String, app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
@@ -59,9 +74,9 @@ final class WorkspaceUITests: XCTestCase {
     /// Observe the current viewport without scrolling to repair a regression.
     @MainActor private func assertEntireInvoiceControl(_ element: XCUIElement, in app: XCUIApplication,
                                                        file: StaticString = #filePath, line: UInt = #line) {
-        guard element.exists,
-              let form = app.collectionViews.allElementsBoundByIndex.last,
-              let navigation = app.navigationBars.allElementsBoundByIndex.last else {
+        let form = app.collectionViews["invoice-form"]
+        let navigation = app.navigationBars["Nueva factura"]
+        guard element.exists, form.exists, navigation.exists else {
             XCTFail("El formulario y su control deben seguir presentes", file: file, line: line)
             return
         }
@@ -194,6 +209,8 @@ final class WorkspaceUITests: XCTestCase {
         app.buttons["company-profile"].tap()
         let button = app.buttons["switch-demo-company"]
         reveal(button, in: app); button.tap()
+        XCTAssertTrue(app.navigationBars["Inicio"].waitForExistence(timeout: 6))
+        app.tabBars.buttons["Clientes"].tap()
         XCTAssertTrue(app.staticTexts["Cliente de ejemplo Río"].waitForExistence(timeout: 6))
         XCTAssertFalse(app.staticTexts["Cliente de ejemplo Álamo"].exists)
         app.tabBars.buttons["Cuenta"].tap()
@@ -293,15 +310,16 @@ final class WorkspaceUITests: XCTestCase {
         // Reach the actual end of the form, including its bottom content
         // margin. Stopping when the note first appears leaves part of the
         // preceding IVA amount under the opaque navigation bar.
-        let form = app.collectionViews.allElementsBoundByIndex.last!
+        let form = app.collectionViews["invoice-form"]
+        XCTAssertTrue(form.exists)
         let endStart = app.coordinate(withNormalizedOffset: .zero).withOffset(
             CGVector(dx: form.frame.minX + 8, dy: form.frame.midY))
         endStart.press(forDuration: 0.05,
             thenDragTo: endStart.withOffset(CGVector(dx: 0, dy: -120)),
             withVelocity: .slow, thenHoldForDuration: 0.3)
         XCTAssertTrue(app.buttons["review-totals"].isHittable)
-        let top = app.navigationBars.allElementsBoundByIndex.last!.frame.maxY
-        let bottom = app.collectionViews.allElementsBoundByIndex.last!.frame.maxY
+        let top = app.navigationBars["Nueva factura"].frame.maxY
+        let bottom = form.frame.maxY
         for element in [totalCell, app.buttons["review-totals"], note] {
             XCTAssertGreaterThanOrEqual(element.frame.minY, top)
             XCTAssertLessThanOrEqual(element.frame.maxY, bottom)
@@ -332,7 +350,9 @@ final class WorkspaceUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-workspace-demo", "-dark-mode"]
         app.launch()
+        XCTAssertTrue(app.navigationBars["Inicio"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.tabBars.buttons["Clientes"].waitForExistence(timeout: 8))
+        app.tabBars.buttons["Clientes"].tap()
         snapshot("Clientes-oscuro", app: app)
         try app.performAccessibilityAudit()
         app.tabBars.buttons["Facturas"].tap()

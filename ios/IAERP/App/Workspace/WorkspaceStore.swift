@@ -13,6 +13,20 @@ final class WorkspaceStore {
     private(set) var customers: [ERPParty] = []
     private var customerNames: [UUID: ERPParty] = [:]
     private(set) var invoices: [ERPInvoice] = []
+    private(set) var invoiceMonths: [ERPInvoiceMonth] = []
+    private(set) var monthRows: [String: [ERPMonthInvoice]] = [:]
+    private(set) var monthErrors: [String: String] = [:]
+    private(set) var loadingMonths: Set<String> = []
+    private var monthCursors: [String: String] = [:]
+    var moreMonths: Set<String> { Set(monthCursors.keys) }
+    private var invoiceQuery = ""
+    private var invoiceStatus: String?
+    private(set) var invoiceListRevision = 0
+    private(set) var dashboard: ERPHomeSummary?
+    private(set) var loadingDashboard = false
+    private(set) var dashboardError: String?
+    private var dashboardRequest = UUID()
+    var canReadDashboard: Bool { context?.permits("receivables:read") == true }
     private(set) var products: [ERPProduct] = []
     private(set) var setup: ERPInvoiceSetup?
     private(set) var memberships: [ERPMembership] = []
@@ -189,6 +203,12 @@ final class WorkspaceStore {
         service = nil
         context = nil
         customers = []; invoices = []; products = []; memberships = []
+        resetMonths()
+        invoiceQuery = ""
+        invoiceStatus = nil
+        dashboard = nil
+        dashboardError = nil
+        loadingDashboard = false
         customerNames = [:]
         setup = nil
         customerError = nil; invoiceError = nil; catalogError = nil
@@ -268,10 +288,9 @@ final class WorkspaceStore {
             phase = .ready
             refreshInvoiceRecovery()
             async let clients: Void = loadCustomers()
-            async let bills: Void = loadInvoices()
             async let catalog: Void = loadCatalog()
             async let companies: Void = loadMemberships()
-            _ = await (clients, bills, catalog, companies)
+            _ = await (clients, catalog, companies)
         } catch {
             guard epoch == generation else { return }
             connectionError = friendlyError(error)
@@ -298,21 +317,81 @@ final class WorkspaceStore {
         if epoch == generation && request == customerRequest { loadingCustomers = false }
     }
 
-    func loadInvoices(query: String = "", status: String? = nil) async {
-        guard let service else { return }
+    func loadDashboard() async {
+        guard canReadDashboard, let api = service as? any ERPSalesOverviewService else { return }
         let epoch = generation
-        let request = UUID(); invoiceRequest = request
+        let request = UUID()
+        dashboardRequest = request
+        loadingDashboard = true
+        dashboardError = nil
+        defer {
+            if epoch == generation && request == dashboardRequest { loadingDashboard = false }
+        }
+        do {
+            let result = try await api.homeSummary()
+            guard epoch == generation, request == dashboardRequest, !Task.isCancelled else { return }
+            dashboard = result
+        } catch {
+            guard epoch == generation, request == dashboardRequest, !Task.isCancelled else { return }
+            dashboard = nil
+            dashboardError = friendlyError(error)
+        }
+    }
+
+    private func resetMonths() {
+        invoiceMonths = []
+        monthRows = [:]
+        monthCursors = [:]
+        monthErrors = [:]
+        loadingMonths = []
+    }
+
+    func loadInvoices(query: String = "", status: String? = nil) async {
+        guard let api = service as? any ERPSalesOverviewService else { return }
+        let epoch = generation
+        let request = UUID()
+        invoiceRequest = request
+        invoiceQuery = query
+        invoiceStatus = status
+        resetMonths()
         loadingInvoices = true
         invoiceError = nil
+        defer {
+            if epoch == generation && request == invoiceRequest { loadingInvoices = false }
+        }
         do {
-            let result = try await service.invoices(query: query.count >= 2 ? query : "", status: status)
+            let result = try await api.invoiceMonths(query: query, status: status)
             guard epoch == generation, request == invoiceRequest, !Task.isCancelled else { return }
-            invoices = result.filter { $0.type == "INVOICE" }
+            invoiceMonths = result
         } catch {
             guard epoch == generation, request == invoiceRequest, !Task.isCancelled else { return }
             invoiceError = friendlyError(error)
         }
-        if epoch == generation && request == invoiceRequest { loadingInvoices = false }
+    }
+
+    func loadInvoiceMonth(_ group: ERPInvoiceMonth, more: Bool = false) async {
+        let month = group.id
+        guard let api = service as? any ERPSalesOverviewService,
+              invoiceMonths.contains(group),
+              !loadingMonths.contains(month) else { return }
+        let cursor = monthCursors[month]
+        guard more ? cursor != nil : monthRows[month] == nil else { return }
+        let epoch = generation
+        let request = invoiceRequest
+        loadingMonths.insert(month)
+        monthErrors[month] = nil
+        defer {
+            if epoch == generation && request == invoiceRequest { loadingMonths.remove(month) }
+        }
+        do {
+            let page = try await api.monthPage(group.month, currency: group.currency, query: invoiceQuery, status: invoiceStatus, cursor: more ? cursor : nil)
+            guard epoch == generation, request == invoiceRequest, !Task.isCancelled else { return }
+            monthRows[month, default: []].append(contentsOf: page.items)
+            monthCursors[month] = page.nextCursor
+        } catch {
+            guard epoch == generation, request == invoiceRequest, !Task.isCancelled else { return }
+            monthErrors[month] = friendlyError(error)
+        }
     }
 
     func loadProducts(query: String = "") async {
@@ -401,6 +480,7 @@ final class WorkspaceStore {
         guard expected == generation else { return }
         invoices.removeAll { $0.id == invoice.id }
         invoices.insert(invoice, at: 0)
+        invoiceListRevision += 1
         notice = invoice.status == "DRAFT" ? "Borrador guardado. No se ha emitido al SRI." :
             "Guardado confirmado. Estado: \(ERPDisplay.status(invoice.status))."
     }

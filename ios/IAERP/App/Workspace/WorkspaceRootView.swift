@@ -8,6 +8,7 @@ struct WorkspaceRootView: View {
     @State private var store: WorkspaceStore
     @State private var didPrepare = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
 
     init() {
         #if DEBUG && targetEnvironment(simulator)
@@ -28,6 +29,9 @@ struct WorkspaceRootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
                 TabView {
+                    Tab("Inicio", systemImage: "house") {
+                        NavigationStack { WorkspaceHomeView(store: store) }
+                    }
                     Tab("Clientes", systemImage: "person.2") {
                         NavigationStack { WorkspaceClientsView(store: store) }
                     }
@@ -38,6 +42,8 @@ struct WorkspaceRootView: View {
                         NavigationStack { WorkspaceAccountView(store: store) }
                     }
                 }
+                .tint(colorScheme == .dark ? Color(red: 0.60, green: 0.76, blue: 1) :
+                            Color(red: 0.09, green: 0.28, blue: 0.65))
                 .id(store.generation)
             }
         }
@@ -62,6 +68,100 @@ struct WorkspaceRootView: View {
                 await store.startDemo(readOnly: ProcessInfo.processInfo.arguments.contains("-read-only"))
             }
         }
+    }
+}
+
+struct WorkspaceHomeView: View {
+    let store: WorkspaceStore
+    @State private var composer: ComposerRoute?
+    @State private var savedInvoice: ERPInvoice?
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    if store.isDemo {
+                        ERPStatusBadge(text: "Demo", systemImage: "testtube.2")
+                            .accessibilityLabel("Modo de demostración")
+                    }
+                    Text(store.context?.name ?? "Empresa")
+                        .font(.title.bold())
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .padding(.vertical, 4)
+                if store.canCreate {
+                    Button { composer = ComposerRoute() } label: {
+                        Label("Nueva factura", systemImage: "plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ERPPrimaryActionStyle())
+                    .disabled(!store.canStartInvoice)
+                    .accessibilityIdentifier("home-new-invoice")
+                }
+            }
+            if let savedInvoice {
+                Section {
+                    Text(savedInvoice.status == "DRAFT" ? "Borrador guardado. No se ha emitido al SRI." : "Guardado confirmado.")
+                        .accessibilityIdentifier("workspace-notice")
+                    NavigationLink {
+                        WorkspaceInvoiceDetail(store: store, invoiceId: savedInvoice.id)
+                    } label: {
+                        Label(savedInvoice.status == "DRAFT" ? "Ver borrador" : "Ver factura", systemImage: "doc.text")
+                    }
+                    .accessibilityIdentifier("home-open-draft")
+                }
+            }
+            InvoiceRecoverySection(store: store)
+            Section {
+                if !store.canReadDashboard {
+                    Label("Tu perfil no tiene permiso para consultar la cartera.", systemImage: "lock")
+                        .accessibilityIdentifier("home-dashboard-permission")
+                } else if let error = store.dashboardError {
+                    ERPErrorState(message: error) { await store.loadDashboard() }
+                } else if let summary = store.dashboard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Por cobrar").font(.headline)
+                        Text(ERPDisplay.money(summary.receivable, currency: summary.currency))
+                            .font(.largeTitle.bold())
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 10)
+                    .foregroundStyle(.white)
+                    .listRowBackground(Color.accentColor)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("home-metric-receivable")
+                    metric("Vencido", value: summary.overdue, currency: summary.currency, identifier: "home-metric-overdue")
+                    metric("Cobrado este mes", value: summary.collectedThisMonth, currency: summary.currency,
+                           detail: "Incluye efectivo y retenciones.", identifier: "home-metric-collected")
+                    Text("Resumen del \(ERPDisplay.longFiscalDate(summary.asOf))")
+                        .font(.footnote)
+                        .accessibilityIdentifier("home-as-of")
+                } else {
+                    ProgressView("Consultando cartera…")
+                }
+            } header: {
+                Text("Caja y cobranza").foregroundStyle(Color.primary)
+            }
+        }
+        .navigationTitle("Inicio")
+        .toolbarTitleDisplayMode(.inline)
+        .sheet(item: $composer) { route in
+            InvoiceComposerView(store: store, initialCustomerId: route.customerId) { savedInvoice = $0 }
+        }
+        .task { if store.canReadDashboard { await store.loadDashboard() } }
+        .refreshable { if store.canReadDashboard { await store.loadDashboard() } }
+    }
+
+    private func metric(_ title: String, value: Decimal, currency: String,
+                        detail: String? = nil, identifier: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.subheadline)
+            Text(ERPDisplay.money(value, currency: currency)).font(.title2.weight(.semibold))
+            if let detail { Text(detail).font(.footnote) }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -370,6 +470,7 @@ struct CompanyProfileRoute: Identifiable {
 
 struct WorkspaceAccountView: View {
     let store: WorkspaceStore
+    @Environment(\.colorScheme) private var colorScheme
     @State private var confirmExit = false
     @State private var profile: CompanyProfileRoute?
     var body: some View {
@@ -382,30 +483,45 @@ struct WorkspaceAccountView: View {
                 }
             }
             Section {
-                Button("Mi empresa", systemImage: "building.2") {
+                Button {
                     if let context = store.context { profile = CompanyProfileRoute(context: context) }
+                } label: {
+                    Label("Mi empresa", systemImage: "building.2")
+                        .foregroundStyle(Color.primary)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
-                .frame(minHeight: 44)
+                .buttonStyle(.plain)
                 .accessibilityIdentifier("company-profile")
                 Button {
                     Task { await store.showSavedAccounts() }
                 } label: {
-                    Text("Cambiar cuenta").fixedSize(horizontal: false, vertical: true)
+                    Text("Cambiar cuenta").foregroundStyle(Color.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
-                .frame(minHeight: 44)
+                .buttonStyle(.plain)
                 .accessibilityIdentifier("switch-account")
-                Button("Cerrar sesión", role: .destructive) { confirmExit = true }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("sign-out")
+                Button(role: .destructive) { confirmExit = true } label: {
+                    Text("Cerrar sesión")
+                        .foregroundStyle(colorScheme == .dark ? Color(red: 1, green: 0.62, blue: 0.60) :
+                                            Color(red: 0.65, green: 0.12, blue: 0.13))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("sign-out")
             }
         }
         .scrollEdgeEffectStyle(.hard, for: .all)
-        .scrollEdgeEffectHidden(true, for: .bottom)
+        .scrollEdgeEffectHidden(true, for: .all)
         .navigationTitle("Cuenta")
         .toolbarTitleDisplayMode(.inline)
         .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .scrollEdgeEffectHidden(true, for: .top)
+        .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .sheet(item: $profile) { CompanyProfileView(store: store, context: $0.context) }
         .confirmationDialog("¿Cerrar sesión?", isPresented: $confirmExit, titleVisibility: .visible) {
             Button("Cerrar sesión", role: .destructive) { Task { await store.logout() } }

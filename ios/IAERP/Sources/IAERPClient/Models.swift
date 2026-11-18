@@ -28,6 +28,7 @@ public enum ERPClientError: Error, Equatable, Sendable, LocalizedError {
     case invalidInput(String)
     case fixtureUnsupported
     case idempotencyConflict
+    case unsupportedOverviewCurrency
     case documentTooLarge
     public var errorDescription: String? {
         switch self {
@@ -40,6 +41,7 @@ public enum ERPClientError: Error, Equatable, Sendable, LocalizedError {
         case .server: "El servicio no está disponible. Inténtalo más tarde."
         case .invalidInput(let message): message
         case .fixtureUnsupported: "La demo admite los productos de ejemplo, cantidades 1, 2 o 3, sus precios originales y descuento cero."
+        case .unsupportedOverviewCurrency: "La cartera incluye cuentas en otra moneda. El resumen está disponible para cartera en dólares."
         case .idempotencyConflict: "La operación cambió. Revisa el borrador antes de guardarlo otra vez."
         case .documentTooLarge: "El documento supera el tamaño permitido."
         }
