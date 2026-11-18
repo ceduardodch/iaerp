@@ -137,8 +137,13 @@ final class HomeUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Factura"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Borrador guardado. No se ha emitido al SRI."].exists)
         app.navigationBars["Factura"].buttons.firstMatch.tap()
-        let create = app.buttons["home-new-invoice"]
-        reveal(create, in: app, earlier: true); create.tap()
+        let navigation = app.navigationBars["Inicio"]
+        let create = navigation.buttons["home-new-invoice"]
+        XCTAssertTrue(create.waitForExistence(timeout: 5))
+        XCTAssertTrue(create.isHittable)
+        XCTAssertTrue(navigation.frame.contains(create.frame))
+        create.tap()
+        XCTAssertTrue(app.navigationBars["Nueva factura"].waitForExistence(timeout: 5))
         app.buttons["Cancelar"].tap()
         app.buttons["Descartar borrador"].tap()
         XCTAssertTrue(app.navigationBars["Inicio"].waitForExistence(timeout: 5))

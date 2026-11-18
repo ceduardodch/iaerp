@@ -39,12 +39,16 @@ private actor ConcurrentERPService: ERPService, ERPSalesOverviewService {
     let oldCustomers = WorkspaceResponse<[ERPParty]>()
     let oldInvoices = WorkspaceResponse<[ERPInvoiceMonth]>()
     let oldProducts = WorkspaceResponse<[ERPProduct]>()
+    let oldDashboard = WorkspaceResponse<ERPHomeSummary>()
+    let oldMonthPage = WorkspaceResponse<ERPInvoicePage>()
+    private let holdSalesReads: Bool
     let delayedPreview: WorkspaceResponse<ERPInvoicePreview>?
     private let heldQuery: WorkspaceQuery?
     private var nextSaveFailure: SaveFailure?
     private var writes: [(ERPInvoiceInput, String)] = []
 
-    init(heldQuery: WorkspaceQuery? = nil, delayPreview: Bool = false) {
+    init(heldQuery: WorkspaceQuery? = nil, delayPreview: Bool = false, holdSalesReads: Bool = false) {
+        self.holdSalesReads = holdSalesReads
         self.heldQuery = heldQuery
         self.delayedPreview = delayPreview ? WorkspaceResponse() : nil
     }
@@ -67,14 +71,18 @@ private actor ConcurrentERPService: ERPService, ERPSalesOverviewService {
     func invoices(query: String, status: String?) async throws -> [ERPInvoice] {
         return try await demo.invoices(query: query, status: status)
     }
-    func homeSummary() async throws -> ERPHomeSummary { try await demo.homeSummary() }
+    func homeSummary() async throws -> ERPHomeSummary {
+        if holdSalesReads { return try await oldDashboard.value() }
+        return try await demo.homeSummary()
+    }
     func invoiceMonths(query: String, status: String?) async throws -> [ERPInvoiceMonth] {
         if heldQuery == .invoices, query == "old" { return try await oldInvoices.value() }
         if heldQuery == .invoices, query == "new" { return Array(try await demo.invoiceMonths(query: "", status: status).prefix(1)) }
         return try await demo.invoiceMonths(query: query, status: status)
     }
     func monthPage(_ month: String, currency: String, query: String, status: String?, cursor: String?) async throws -> ERPInvoicePage {
-        try await demo.monthPage(month, currency: currency, query: query, status: status, cursor: cursor)
+        if holdSalesReads { return try await oldMonthPage.value() }
+        return try await demo.monthPage(month, currency: currency, query: query, status: status, cursor: cursor)
     }
     func products(query: String) async throws -> [ERPProduct] {
         if heldQuery == .products, query == "old" { return try await oldProducts.value() }
@@ -193,6 +201,85 @@ struct WorkspaceConcurrencyTests {
         let drafts = try await service.demo.invoices(query: "", status: "DRAFT")
         #expect(drafts.count == 2) // One seed plus the first, recovered commit.
         #expect(drafts.filter { $0.id == recovered.id }.count == 1)
+    }
+
+    @Test func loadingTheNextMonthPageAppendsTheRemainingInvoicesOnce() async throws {
+        let service = DemoERPService()
+        let (composer, setup) = try await workspaceComposer(using: service)
+        let input = try composer.buildInput(setup: setup)
+        var createdIDs: [UUID] = []
+        for index in 0..<51 {
+            let document = try await service.createDraft(input, idempotencyKey: "synthetic-page-draft-\(index)")
+            createdIDs.append(document.id)
+        }
+        let store = WorkspaceStore(service: service)
+        await store.loadWorkspace()
+        await store.loadInvoices(status: "DRAFT")
+        let group = try #require(store.invoiceMonths.first { $0.month == "2026-11" })
+        #expect(group.count == createdIDs.count)
+        let expected = createdIDs.sorted { $0.uuidString > $1.uuidString }
+
+        await store.loadInvoiceMonth(group)
+        let firstPage = try #require(store.monthRows[group.id])
+        #expect(firstPage.map(\.id) == Array(expected.prefix(50)))
+        #expect(store.moreMonths.contains(group.id))
+
+        await store.loadInvoiceMonth(group, more: true)
+        #expect(store.monthRows[group.id]?.map(\.id) == expected)
+        #expect(!store.moreMonths.contains(group.id))
+        await store.loadInvoiceMonth(group, more: true)
+        #expect(store.monthRows[group.id]?.map(\.id) == expected)
+        #expect(store.monthErrors[group.id] == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func oldCompanyCannotPublishDashboardOrMonthPage(afterNewReads: Bool) async throws {
+        let primary = ConcurrentERPService(holdSalesReads: true)
+        let store = WorkspaceStore(service: primary, resetDocuments: { _ in })
+        await store.loadWorkspace()
+        await store.loadInvoices()
+        let group = try #require(store.invoiceMonths.first)
+        let oldSummary = try await primary.demo.homeSummary()
+        let oldPage = try await primary.demo.monthPage(
+            group.month, currency: group.currency, query: "", status: nil, cursor: nil
+        )
+        let secondary = DemoERPService(company: .secondary)
+        let newSummary = try await secondary.homeSummary()
+        let newPage = try await secondary.monthPage(
+            group.month, currency: group.currency, query: "", status: nil, cursor: nil
+        )
+        #expect(oldSummary != newSummary)
+        #expect(!oldPage.items.isEmpty && !newPage.items.isEmpty)
+        #expect(Set(oldPage.items.map(\.id)).isDisjoint(with: newPage.items.map(\.id)))
+
+        let dashboardRead = Task { await store.loadDashboard() }
+        let monthRead = Task { await store.loadInvoiceMonth(group) }
+        await primary.oldDashboard.waitUntilRequested()
+        await primary.oldMonthPage.waitUntilRequested()
+        await store.startDemo(secondary: true)
+        if afterNewReads {
+            await store.loadDashboard()
+            await store.loadInvoices()
+            if let matchingGroup = store.invoiceMonths.first(where: { $0.id == group.id }) {
+                await store.loadInvoiceMonth(matchingGroup)
+            }
+        }
+
+        await primary.oldDashboard.resolve(oldSummary)
+        await primary.oldMonthPage.resolve(oldPage)
+        await dashboardRead.value
+        await monthRead.value
+        #expect(store.context?.tenantId == DemoCompany.secondary.tenantId)
+        if afterNewReads {
+            #expect(store.dashboard == newSummary)
+            #expect(store.monthRows[group.id] == newPage.items)
+        } else {
+            #expect(store.dashboard == nil)
+            #expect(store.monthRows.isEmpty)
+        }
+        #expect(!store.loadingDashboard && store.loadingMonths.isEmpty)
+        #expect(store.dashboardError == nil && store.monthErrors.isEmpty)
+        #expect(store.moreMonths.isEmpty)
     }
 
     @Test(arguments: WorkspaceQuery.allCases)
