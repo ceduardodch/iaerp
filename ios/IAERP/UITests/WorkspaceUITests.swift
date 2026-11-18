@@ -170,9 +170,12 @@ final class WorkspaceUITests: XCTestCase {
         // preview and resizing for the keyboard must not jump back to totals.
         let quantity = app.textFields["field-Cantidad"]
         reveal(quantity, in: app, searchEarlier: true)
-        quantity.doubleTap()
+        quantity.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
+        // The AX frame includes the leading label. Select the value explicitly
+        // so a tap in that label cannot leave the caret before the old digit.
+        quantity.typeKey("a", modifierFlags: .command)
         quantity.typeText("2")
         XCTAssertEqual(quantity.value as? String, "2")
         assertEntireInvoiceControl(quantity, in: app)
@@ -185,13 +188,13 @@ final class WorkspaceUITests: XCTestCase {
 
         // A second real edit proves the retained field is still operable,
         // rather than merely displaying a stale value after losing focus.
-        quantity.tap()
+        quantity.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
         assertEntireInvoiceControl(quantity, in: app)
-        quantity.doubleTap()
+        quantity.typeKey("a", modifierFlags: .command)
         quantity.typeText("3")
         XCTAssertEqual(quantity.value as? String, "3")
-        quantity.doubleTap()
+        quantity.typeKey("a", modifierFlags: .command)
         quantity.typeText("2")
         XCTAssertEqual(quantity.value as? String, "2")
         done.tap()
