@@ -1,6 +1,7 @@
 import Foundation
 import IAERPClient
 import Observation
+import OSLog
 import SwiftUI
 
 struct DraftLine: Identifiable, Equatable {
@@ -169,8 +170,12 @@ final class InvoiceComposer {
             }
             hasUncertainResult = pendingInput != nil
             let message = (error as? InvoiceRecoveryError)?.localizedDescription ?? friendlyError(error)
-            self.error = pendingInput == nil ? message :
-                "No se confirmó el guardado. \(message) Reintentar conserva la misma operación."
+            if pendingInput == nil { self.error = message }
+            else if recoveryJournal != nil {
+                self.error = "No se confirmó el guardado. \(message) Se conserva la referencia pendiente."
+            } else {
+                self.error = "No se confirmó el guardado. \(message) Reintentar conserva la misma operación."
+            }
             return nil
         }
     }
@@ -191,6 +196,7 @@ struct InvoiceComposerView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmDiscard = false
     @State private var didConfigure = false
+    @State private var isAtEnd = false
     @FocusState private var focusedInput: InvoiceInputFocus?
 
     init(store: WorkspaceStore, initialCustomerId: UUID?) {
@@ -304,6 +310,33 @@ struct InvoiceComposerView: View {
                 .scrollEdgeEffectStyle(.hard, for: .all)
                 .scrollEdgeEffectHidden(for: .all)
                 .contentMargins(.bottom, 32, for: .scrollContent)
+                .defaultScrollAnchor(isAtEnd && focusedInput == nil ? .bottom : nil, for: .sizeChanges)
+                .onScrollGeometryChange(for: ScrollGeometry.self) { $0 } action: { _, geometry in
+                    let atEnd = geometry.contentSize.height > 0 &&
+                        geometry.visibleRect.maxY >= geometry.contentSize.height + geometry.contentInsets.bottom - 1
+                    if isAtEnd != atEnd { isAtEnd = atEnd }
+                    #if DEBUG && targetEnvironment(simulator)
+                    if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
+                        let value = "offset=\(geometry.contentOffset) content=\(geometry.contentSize) container=\(geometry.containerSize) insets=\(geometry.contentInsets) visible=\(geometry.visibleRect)"
+                        Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
+                            .notice("INVOICE_LAYOUT \(value, privacy: .public)")
+                    }
+                    #endif
+                }
+                #if DEBUG && targetEnvironment(simulator)
+                .onAppear {
+                    if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
+                        Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
+                            .notice("TRACE_ENABLED")
+                    }
+                }
+                .onChange(of: dynamicTypeSize) { oldValue, newValue in
+                    if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
+                        Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
+                            .notice("INVOICE_TYPE \(String(describing: oldValue), privacy: .public) -> \(String(describing: newValue), privacy: .public)")
+                    }
+                }
+                #endif
                 formActions
             }
             .navigationTitle("Nueva factura")
@@ -319,11 +352,11 @@ struct InvoiceComposerView: View {
                 }
             }
             .interactiveDismissDisabled()
-            .confirmationDialog("¿Descartar este borrador?", isPresented: $confirmDiscard, titleVisibility: .visible) {
-                Button("Descartar borrador", role: .destructive) { dismiss() }
+            .confirmationDialog(draft.pendingInput == nil ? "¿Descartar este borrador?" : "¿Cerrar el formulario?", isPresented: $confirmDiscard, titleVisibility: .visible) {
+                Button(draft.pendingInput == nil ? "Descartar borrador" : "Cerrar formulario", role: draft.pendingInput == nil ? .destructive : nil) { dismiss() }
                 Button("Seguir editando", role: .cancel) { }
             } message: {
-                Text(draft.pendingInput == nil ? "Se perderán los cambios sin guardar." : "El servidor pudo guardar la factura. Consulta Facturas antes de crear otra.")
+                Text(draft.pendingInput == nil ? "Se perderán los cambios sin guardar." : "El guardado pendiente se conserva. Consulta su estado desde Facturas antes de continuar.")
             }
             .onChange(of: draft.fingerprint) { _, _ in draft.invalidatePreview() }
             .onChange(of: draft.establishmentId) { _, id in
@@ -351,13 +384,22 @@ struct InvoiceComposerView: View {
                 .tint(Color.primary)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .disabled(draft.working)
-            Button(draft.working && draft.pendingInput != nil ? "Guardando…" : (draft.pendingInput == nil ? "Guardar" : "Reintentar guardado")) { Task { await save() } }
+            Button(saveActionTitle) { Task { await save() } }
                 .buttonStyle(ERPPrimaryActionStyle())
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .disabled(draft.working || draft.preview == nil)
                 .accessibilityIdentifier("save-draft")
         }
         .padding().background(Color(uiColor: .systemBackground))
+    }
+
+    private var saveActionTitle: String {
+        if draft.working && draft.pendingInput != nil { return "Guardando…" }
+        guard draft.pendingInput != nil else { return "Guardar" }
+        if store.isDemo { return "Reintentar guardado" }
+        guard let pending = store.pendingInvoiceRecovery else { return "Guardar" }
+        return pending.attemptCount == 0 && pending.confirmedInvoiceID == nil
+            ? "Continuar guardado" : "Consultar guardado"
     }
 
     private func save() async {

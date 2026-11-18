@@ -7,24 +7,32 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- iOS 0.4.0 (4), conexión IAERP en validación, 2026-11-18: Carlos autorizó
-  conectar e instalar. API/issuer/documentos vienen preparados en la app.
-  Backend limita el cliente nativo a consultas y borradores según membresía;
-  ADR 0024 y PR #107 integrados en main `2bcd013`: 918 backend correctas,
-  web/OIDC/seguridad/migraciones/contrato verdes. CI/Coolify de main en curso.
-  Keycloak `iaerp-ios` creado
-  **deshabilitado** hasta verificar el despliegue de esa política. No hay login
-  móvil autenticado, guardado real ni emisión SRI comprobados todavía.
-  ADR 0025 acepta el registro mínimo de recuperación en Keychain: conserva
-  clave/payload y concilia tras reiniciar, sin crear otra factura a ciegas.
-  **80 SwiftPM y 41 AppHost correctas**; prueba UI de tres terminaciones reales
-  correcta. Auditoría máxima del formulario y regresión completa en curso.
-  Teléfono físico emparejado por cable, iOS 26.0.1. Apple ID actualizado por el
-  titular tras sesión vencida; la firma ahora falla por límite de iPhones registrados del Personal Team;
-  se pidió otra cuenta/equipo al titular. Instalación y primer acceso pendientes.
+- iOS **0.4.1 (5)** en PR #108 de borrador, 2026-11-18. API/backend de
+  PR #107 publicados como `2bcd013`, CI/Coolify `44314403923` correctos. Cuatro
+  huellas del contenedor API coinciden; siete sondas puras verifican la política.
+  Keycloak `iaerp-ios` **habilitado** tras esa comprobación: code/S256 abre login,
+  sin PKCE devuelve error sin código, callback ajeno 400 y lookup anónimo 401.
+  [Representación final](../ios/validation/2026-11-18-native-client.json).
+  No hay login nativo autenticado, borrador real ni emisión fiscal desde la app.
+
+- Recuperación 0.4.1: intento previo sin lookup positivo nunca vuelve a POST,
+  con independencia del reloj local. Contador cero permite primer envío; un
+  resultado desconocido exige conciliación y conserva el bloqueo de Nuevo.
+  Producto y seguridad revisaron el caso de 26 h reales y reloj local de 2 h.
+  **80 SwiftPM y 42 AppHost correctas**; un test con tres cierres reales del
+  proceso correcto. 0.4.0 full-1: **17/18 UI**, un fallo de auditoría del
+  formulario (IOS-017, sin filtros). 0.4.1 full-2 está en curso con diagnóstico
+  OSLog de geometría sólo Debug/simulador. El primer workflow iOS no inició por
+  contexto runner.temp en job.env; corregido a steps.env, nueva CI pendiente.
   [Evidencia actual](../ios/validation/2026-11-18-live-connection.md).
 
-Los cortes siguientes son históricos; no sustituyen el estado 0.4.0 anterior.
+- Instalación física: iPhone emparejado por cable, iOS 26.0.1 compatible. El
+  titular actualizó Apple ID, pero la firma falla por límite de iPhones de
+  Personal Team y Carlos confirma que no tiene otra cuenta. Apple indica
+  caducidad de registros a siete días; no conocemos su fecha de liberación.
+  No hay app instalada, primer login ni Face ID/VoiceOver físicos comprobados.
+
+Los cortes siguientes son históricos; no sustituyen el estado 0.4.1 anterior.
 
 - iOS 0.3.0 (3), cuentas guardadas solicitadas el 2026-11-18: múltiples usuarios
   y empresas en Keychain, selector distinguible por usuario, Face ID/código por

@@ -46,6 +46,9 @@ private actor RecoveryERPService: ERPService, ERPInvoiceDraftLookup {
     private var lookupEnabled = true
     private var writable = true
     private var membershipActive = true
+    private var expiredServerIdempotency = false
+    private var createdInvoiceIDs: Set<UUID> = []
+    private var lookups = 0
     init(gate: RecoveryContextGate? = nil) { self.gate = gate }
     func loseNextResponse() { loseResponse = true }
     func failNextConfirmationRead() { failGet = true }
@@ -53,7 +56,13 @@ private actor RecoveryERPService: ERPService, ERPInvoiceDraftLookup {
     func useLookup(_ enabled: Bool) { lookupEnabled = enabled }
     func revoke(write: Bool) { if write { writable = false } else { membershipActive = false } }
     func capturedWrites() -> [(String, Data)] { writes }
-    func createdCount() -> Int { Set(createdIDs.values).count }
+    func createdCount() -> Int { createdInvoiceIDs.count }
+    func lookupCount() -> Int { lookups }
+    func expireIdempotencyEvidence(afterServerElapsed elapsed: TimeInterval) {
+        guard elapsed >= 24 * 3600 else { return }
+        createdIDs = [:]
+        expiredServerIdempotency = true
+    }
     func context() async throws -> ERPContext {
         if let gate { await gate.pause() }
         let value = try await demo.context()
@@ -66,7 +75,10 @@ private actor RecoveryERPService: ERPService, ERPInvoiceDraftLookup {
                 tenantName: $0.tenantName, roles: $0.roles, active: membershipActive)
         }
     }
-    func findDraft(idempotencyKey: String) async throws -> UUID? { lookupEnabled ? createdIDs[idempotencyKey] : nil }
+    func findDraft(idempotencyKey: String) async throws -> UUID? {
+        lookups += 1
+        return lookupEnabled ? createdIDs[idempotencyKey] : nil
+    }
     func customers(query: String) async throws -> [ERPParty] { try await demo.customers(query: query) }
     func products(query: String) async throws -> [ERPProduct] { try await demo.products(query: query) }
     func invoiceSetup() async throws -> ERPInvoiceSetup { try await demo.invoiceSetup() }
@@ -76,8 +88,12 @@ private actor RecoveryERPService: ERPService, ERPInvoiceDraftLookup {
         let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
         writes.append((idempotencyKey, try encoder.encode(input)))
         if let failure { self.failure = nil; throw failure }
-        let value = try await demo.createDraft(input, idempotencyKey: idempotencyKey)
+        // A server whose idempotency evidence expired would treat a repeated
+        // key as a new creation while retaining the existing business document.
+        let serverKey = expiredServerIdempotency ? "\(idempotencyKey):expired:\(UUID().uuidString)" : idempotencyKey
+        let value = try await demo.createDraft(input, idempotencyKey: serverKey)
         createdIDs[idempotencyKey] = value.id
+        createdInvoiceIDs.insert(value.id)
         if loseResponse { loseResponse = false; throw URLError(.networkConnectionLost) }
         return value
     }
@@ -132,7 +148,7 @@ private actor RecoveryERPService: ERPService, ERPInvoiceDraftLookup {
         #expect(saved.partyId == original.customerId)
     }
 
-    @Test func relaunchAfterCommitLostResponseReplaysExactlyTheSameOperation() async throws {
+    @Test func relaunchAfterCommitLostResponseRequiresProofAndNeverPostsAgain() async throws {
         let service = RecoveryERPService()
         await service.useLookup(false)
         let (composer, setup) = try await composer(service)
@@ -144,11 +160,17 @@ private actor RecoveryERPService: ERPService, ERPInvoiceDraftLookup {
         let pending = try #require(try journal.pending(in: scope))
         #expect(pending.attemptCount == 1)
         let relaunched = InvoiceRecoveryJournal(vault: vault)
-        _ = try await relaunched.recover(in: scope, using: service) { scope }
+        await #expect(throws: InvoiceRecoveryError.reconciliationRequired) {
+            try await relaunched.recover(in: scope, using: service) { scope }
+        }
         let writes = await service.capturedWrites()
-        #expect(writes.count == 2)
+        #expect(writes.count == 1)
         #expect(writes.allSatisfy { $0.0 == pending.idempotencyKey && $0.1 == pending.requestPayload })
         #expect(await service.createdCount() == 1)
+        #expect(try relaunched.pending(in: scope) == pending)
+        await service.useLookup(true)
+        _ = try await relaunched.recover(in: scope, using: service) { scope }
+        #expect(await service.capturedWrites().count == 1)
         #expect(try relaunched.pending(in: scope) == nil)
     }
 
@@ -185,27 +207,30 @@ private actor RecoveryERPService: ERPService, ERPInvoiceDraftLookup {
     }
 
     @Test(arguments: [ERPClientError.authenticationRequired, .forbidden, .idempotencyConflict])
-    func authorizationOrConflictDoesNotDiscardAnUncertainWrite(_ rejection: ERPClientError) async throws {
+    func firstPostAuthorizationOrConflictFailureCannotPermitAnotherPost(_ rejection: ERPClientError) async throws {
         let service = RecoveryERPService()
         await service.useLookup(false)
         let (composer, setup) = try await composer(service)
         let scope = try scope(); let vault = RecoveryMemoryVault()
         let journal = InvoiceRecoveryJournal(vault: vault)
-        await service.loseNextResponse()
+        await service.rejectNextPost(rejection)
         _ = await composer.save(using: service, setup: setup, recoveryJournal: journal,
             recoveryScope: scope, authorizeRecoveryScope: { scope })
         let original = try #require(try journal.pending(in: scope))
-        await service.rejectNextPost(rejection)
-        await #expect(throws: rejection) { try await InvoiceRecoveryJournal(vault: vault).recover(in: scope, using: service) { scope } }
+        #expect(original.attemptCount == 1)
+        await #expect(throws: InvoiceRecoveryError.reconciliationRequired) {
+            try await InvoiceRecoveryJournal(vault: vault).recover(in: scope, using: service) { scope }
+        }
         let retained = try #require(try journal.pending(in: scope))
-        #expect(retained.id == original.id && retained.requestPayload == original.requestPayload)
+        #expect(retained == original)
         #expect(throws: InvoiceRecoveryError.pendingOperation) {
             try journal.prepare(input: original.input(), in: scope)
         }
-        #expect(await service.createdCount() == 1)
+        #expect(await service.capturedWrites().count == 1)
+        #expect(await service.createdCount() == 0)
     }
 
-    @Test func firstValidationRejectionCanBeCorrectedButUncertainValidationCannot() async throws {
+    @Test func firstValidationRejectionCanBeCorrectedWhileUncertainSaveNeverReposts() async throws {
         let service = RecoveryERPService(); await service.useLookup(false)
         let (composer, setup) = try await composer(service)
         let scope = try scope(); let vault = RecoveryMemoryVault(); let journal = InvoiceRecoveryJournal(vault: vault)
@@ -221,6 +246,38 @@ private actor RecoveryERPService: ERPService, ERPInvoiceDraftLookup {
         _ = await composer.save(using: service, setup: setup, recoveryJournal: journal,
             recoveryScope: scope, authorizeRecoveryScope: { scope })
         #expect(try !composer.canEdit && composer.pendingKey == key && journal.pending(in: scope) != nil)
+        #expect(await service.capturedWrites().count == 2) // Initial rejection and one lost response; no third POST.
+    }
+
+    @Test func partialClockRollbackAfterServerRetentionExpiresCannotDuplicateTheCommittedDraft() async throws {
+        let service = RecoveryERPService()
+        let (composer, setup) = try await composer(service)
+        let scope = try scope(); let vault = RecoveryMemoryVault()
+        let preparedAt = Date(timeIntervalSince1970: 1_795_000_000)
+        let journal = InvoiceRecoveryJournal(vault: vault, now: { preparedAt })
+        await service.loseNextResponse()
+        #expect(await composer.save(using: service, setup: setup, recoveryJournal: journal,
+            recoveryScope: scope, authorizeRecoveryScope: { scope }) == nil)
+        let original = try #require(try journal.pending(in: scope))
+        #expect(original.attemptCount == 1 && original.confirmedInvoiceID == nil)
+        #expect(await service.createdCount() == 1)
+
+        // The server independently advanced 26h and purged its key. After a
+        // restart the device reports only +2h: still >= createdAt and <23h.
+        // Neither local comparison is evidence that replay is safe.
+        await service.expireIdempotencyEvidence(afterServerElapsed: 26 * 3600)
+        let lookupsBefore = await service.lookupCount()
+        let restarted = InvoiceRecoveryJournal(vault: vault, now: { preparedAt.addingTimeInterval(2 * 3600) })
+        await #expect(throws: InvoiceRecoveryError.reconciliationRequired) {
+            try await restarted.recover(in: scope, using: service) { scope }
+        }
+        #expect(await service.lookupCount() == lookupsBefore + 1)
+        #expect(await service.capturedWrites().count == 1)
+        #expect(await service.createdCount() == 1)
+        #expect(try restarted.pending(in: scope) == original)
+        #expect(throws: InvoiceRecoveryError.pendingOperation) {
+            try restarted.prepare(input: original.input(), in: scope)
+        }
     }
 
     @Test func journalFailurePreventsAnyPost() async throws {

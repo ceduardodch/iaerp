@@ -29,10 +29,10 @@ tenant y los permisos proceden de la identidad autenticada y de la membresía
 del servidor. No hay contraseñas, secretos de cliente ni tokens incluidos en
 esta configuración pública.
 
-El cliente `iaerp-ios` fue creado en el servicio de acceso real, **deshabilitado**.
-La representación sanitizada observada queda en
-`/tmp/iaerp-ios-live-native-disabled.json`: `enabled: false`, callback exacto y
-scope `profile`. No confundir registrar el cliente con habilitarlo, autenticar
+El cliente `iaerp-ios` se preparó deshabilitado y después se habilitó al comprobar
+el despliegue. La representación final sanitizada está en
+[2026-11-18-native-client.json](2026-11-18-native-client.json): `enabled: true`,
+PKCE S256, callbacks y scopes exactos, sin grants de contraseña o servicio. No confundir registrar el cliente con habilitarlo, autenticar
 al usuario, probar la API o instalar la app.
 
 La política backend del cliente nativo limita los scopes al piloto y los cruza
@@ -56,8 +56,19 @@ Este backend y su contrato se versionaron en **`eec4b09`**, PR **#107**.
 `6b1e832` cambia un hash de fixture sintético para el escáner; su control de
 seguridad pasa. La PR #107 pasó el CI completo: 918 pruebas backend correctas (30 omisiones
 previas), migraciones, contrato, seguridad, web y OIDC. Se integró en main como
-`2bcd013`; CI/Coolify `44314403923` está en curso. El cliente permanece
-deshabilitado hasta comprobar el despliegue efectivo de la política.
+`2bcd013`; CI/Coolify `44314403923` terminó correctamente. Se comprobó el nuevo
+contenedor API: las cuatro huellas coinciden con las fuentes main. Siete sondas
+puras de la política verifican borrador permitido, emisión/anulación denegadas,
+consulta sin escritura, billing con escritura, scopes ajenos retirados y audience
+MCP rechazada. No son llamadas fiscales HTTP ni una prueba de usuario autenticado.
+El OpenAPI público tiene 168 rutas, incluido lookup; salud base/Redis correctas.
+
+Después se habilitó sólo el cliente nativo usando el script con esas huellas y
+se leyó su configuración final. El preflight code/S256 devuelve 200 con formulario
+de acceso; faltar PKCE devuelve al callback `invalid_request` sin código; callback
+ajeno devuelve 400 y lookup anónimo 401.
+[Resultados sanitizados](2026-11-18-auth-preflight.json). No se enviaron credenciales de usuario ni se obtuvo un token de usuario,
+y no se hizo login de una cuenta real.
 
 ## Recuperación durable
 
@@ -68,7 +79,7 @@ credenciales, documentos descargados ni una caché general de negocio.
 La identidad financiera incluye issuer, sujeto, organización, tenant y API
 canónica. Cambiar UUID de perfil, alias, cliente OIDC o host de archivos no oculta
 el pendiente ni permite otra clave. La configuración original completa sigue
-siendo obligatoria para reenviar; una configuración modificada sólo puede
+siendo obligatoria para un primer envío; una configuración modificada sólo puede
 conciliar por lookup/GET con la identidad actual revalidada.
 
 Cada recuperación comprueba contexto, membresía, identidad y generación después
@@ -78,12 +89,20 @@ Se validan los campos de la factura sin recalcular impuestos, se acepta la cuota
 por defecto si no se enviaron cuotas y no se exige DRAFT cuando el documento
 ya avanzó legítimamente.
 
-El contador de intentos también se persiste antes de la red. Un primer 400/422
-definitivo permite corregir; después de incertidumbre, 400/401/403/409 y errores
-de red conservan el UUID y payload. Con el TTL declarado de 24 horas, fuera de
-23 horas o con el reloj retrocedido no se reenvía sin evidencia autoritativa.
-Cancelar, salir, cambiar cuenta o terminar el proceso no descarta la operación.
-Nuevo permanece bloqueado hasta confirmar el pendiente; no hay borrado arbitrario.
+El contador de intentos se persiste antes de la red. En **0.4.1 (5)**, un intento
+previo sin ID confirmado ni lookup positivo exige conciliación y nunca autoriza
+otro POST. El reloj local no prueba la vigencia de la clave del servidor. El
+contador cero puede enviar por primera vez, dentro de la ventana cautelar de
+23 horas; después sólo consulta. Un primer 400/422 definitivo permite corregir.
+Cancelar, salir o terminar el proceso conserva el pendiente; Nuevo sigue bloqueado.
+
+Producto y seguridad aprobaron este límite tras revisar el caso de 26 horas
+reales y reloj local de sólo dos horas. El fake backend purga la evidencia de
+idempotencia y conserva la factura; el test exige un POST, una factura, la misma
+solicitud pendiente y rechazo de una nueva clave. Puede quedar bloqueado un
+primer envío que murió entre persistir el contador y salir a la red; se acepta
+conciliación humana antes que duplicar. «Continuar guardado» informa del primer
+envío; «Consultar guardado» sólo lee. Cerrar el formulario no borra la operación.
 
 ## Resultados observados
 
@@ -152,6 +171,22 @@ revisado; el fallo sigue abierto. El handler diagnóstico siempre devuelve false
 y no excluye hallazgos. Una CI iOS en PR de borrador comparará el runtime 27.2
 ya instalado en GitHub, sin descargarlo al Mac.
 
+## Corte 0.4.1 y CI de la app
+
+En `financial-1`, **42 AppHost correctas**, incluido retroceso parcial del reloj,
+y un test UI con las tres terminaciones de proceso correcto (39,714 s). El
+bundle general sigue fallido por IOS-017. El corte anterior `full-1` completó
+80 SwiftPM, 41 AppHost y 17/18 UI: un único fallo, la auditoría del formulario.
+`full-2` prueba 0.4.1 con trazas de geometría por OSLog, sólo Debug/simulador y
+argumento del test máximo, sin datos de negocio ni cambios en el auditor.
+
+La PR #108 sigue en borrador. Su primer workflow iOS no inició por `runner.temp`
+en el `env` del job: ese contexto sólo está permitido en los pasos. Se movió a
+`steps.env`; la ejecución remota corregida sigue pendiente de resultado. El
+[contexto permitido de GitHub](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability)
+confirma el cambio. Las otras comprobaciones CI de la PR sí pasan, pero no se
+confunden con pruebas iOS ejecutadas.
+
 ## Teléfono y límites del cierre
 
 El iPhone está emparejado y conectado por cable, con **iOS 26.0.1**. La sesión
@@ -163,8 +198,6 @@ estar conectado ni por haber actualizado la sesión.
 
 Pendientes que root debe cerrar y anotar en el corte final:
 
-- CI/merge/despliegue y verificación efectiva de la política backend; sólo entonces
-  habilitar el cliente nativo y conservar su representación sanitizada final.
 - Resultado final de la auditoría del formulario, sin excluir hallazgos ni limitar
   el tamaño de letra para aprobarla.
 - Build firmado, instalación y ejecución en el iPhone; Face ID/código, VoiceOver
@@ -177,3 +210,15 @@ app ni emisión fiscal real**. La creación del cliente deshabilitado es un camb
 de configuración del acceso; no equivale a esas operaciones. No se afirma
 «listo para instalar y probar» mientras la firma, la política publicada y los
 controles pendientes anteriores no estén verificados.
+
+## Diagnóstico del formulario y candidato de ajuste
+
+La captura OSLog `full-2-layout.log` prueba un offset fuera del contenido tras
+el ciclo de tamaños: al volver a accessibility5, offset y=3206,33 con contenido
+2047,33 y viewport562,33. El formulario queda vacío. El siguiente candidato
+conserva el final con `defaultScrollAnchor(.bottom, for: .sizeChanges)` sólo si
+ya estaba allí y no hay campo enfocado; el observador actualiza ese estado por
+geometría pública. No limita fuentes ni filtra el auditor. Un test nuevo edita
+cantidad y abre/cierra teclado; la auditoría exige contenido completo también
+al terminar, sin scroll reparador. `full-3` prueba las 19 UI, resultado pendiente.
+La CI corregida de la PR108 aún debe ejecutarse sobre este candidato.

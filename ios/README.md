@@ -4,7 +4,7 @@ Cliente SwiftUI en [IAERP.xcodeproj](IAERP/IAERP.xcodeproj), esquema `IAERP`.
 Fuente del proyecto: [project.yml](IAERP/project.yml), XcodeGen 2.45+.
 [Backlog](../docs/backlog/ios-backlog.md) · [ADR 0022](../docs/adrs/0022-native-ios-client.md).
 
-## Conexión IAERP — 0.4.0 (4), en validación
+## Conexión IAERP — 0.4.1 (5), en validación
 
 Carlos autorizó conectar la app a IAERP e instalarla en su iPhone. La pantalla
 de acceso trae la API, issuer, cliente público y host de documentos de IAERP;
@@ -14,22 +14,26 @@ No guarda contraseñas. La conexión nunca sustituye errores reales por datos de
 La política nativa del servidor cruza scopes con la membresía vigente de cada
 empresa. Sólo owner/admin/billing pueden crear borradores; el cliente iOS no
 puede emitir, anular ni enviar comprobantes aunque solicite esos scopes.
-La [PR #107](https://github.com/ceduardodch/iaerp/pull/107) está en validación;
-`iaerp-ios` ya está registrado en Keycloak, **deshabilitado** hasta comprobar
-el despliegue de esa política. Discovery y salud pública responden, pero eso no
-acredita un login autenticado desde el teléfono.
+La [PR #107](https://github.com/ceduardodch/iaerp/pull/107) está publicada como
+`2bcd013`, CI/Coolify correctos y cuatro huellas de backend verificadas.
+`iaerp-ios` está habilitado. El acceso code/PKCE abre el formulario de login;
+PKCE ausente y callback ajeno se rechazan. Eso no acredita un login autenticado
+desde el teléfono. La app sigue en [PR #108 de borrador](https://github.com/ceduardodch/iaerp/pull/108).
 
 Un guardado incierto conserva clave y solicitud en Keychain, ligados a usuario,
 organización y tenant. Tras reiniciar consulta el resultado y recupera el mismo
-borrador. No permite crear otro mientras quede pendiente. Fuera de la ventana
-segura sólo concilia; no cambia la clave ni vuelve a enviar a ciegas.
+borrador. No permite crear otro mientras quede pendiente. Después de un intento sólo concilia por lectura: un resultado desconocido
+requiere revisión y nunca autoriza otro POST por el reloj del teléfono.
+«Continuar guardado» puede enviar por primera vez; «Consultar guardado» sólo lee.
+Cerrar el formulario conserva el pendiente.
 [ADR 0024](../docs/adrs/0024-ios-production-connection-policy.md) y
 [ADR 0025](../docs/adrs/0025-ios-durable-draft-recovery.md).
 
-Pruebas dirigidas: **80 SwiftPM y 41 AppHost correctas**. Una prueba UI completó
+Pruebas: **80 SwiftPM y 42 AppHost correctas** (la 42 nueva cubre reloj local
+retrocedido parcialmente y caducidad del registro del servidor). Una prueba UI completó
 tres terminaciones reales del proceso y recuperó un único borrador sintético.
-La auditoría del formulario con texto máximo y la regresión completa aún se
-están cerrando. [Evidencia del corte](validation/2026-11-18-live-connection.md).
+La suite completa 0.4.0 pasó 17/18 UI; la auditoría del formulario con texto
+máximo sigue fallando. La regresión 0.4.1 está en curso, sin filtros. [Evidencia del corte](validation/2026-11-18-live-connection.md).
 
 Teléfono físico emparejado por cable, iOS 26.0.1 compatible con el mínimo 26.
 El titular actualizó la sesión de Apple. La firma ahora falla por límite de
@@ -159,10 +163,12 @@ firmada en el teléfono. TestFlight requiere una entrega y autorización aparte.
 4. Cuenta → Mi empresa → cambiar empresa; comprobar sus clientes distintos.
 5. Cerrar sesión, probar texto grande/modo oscuro y revisar VoiceOver.
 
-Sólo se mantienen herramientas y cachés necesarias. Corte del 18 de noviembre:
-unos 13 GiB libres; cachés activas de compilación/SwiftPM de 465/194 MiB y
-282 MiB de evidencia, conservando Accounts-4/7/9 y Tests-39, resúmenes y logs.
-Dos capturas nuevas útiles ocupan 368 KiB; se retiraron exports e intentos
-intermedios que ya no se usan. No se instaló nada adicional. No se publicó ni
-se inició sesión contra producción. Sólo se consultó el discovery OIDC público
-para verificar issuer/endpoints HTTPS y PKCE S256; eso no acredita un login.
+Sólo se mantienen herramientas y cachés necesarias. Se reutiliza el runtime
+26.5 y un simulador propio; no se instalaron más herramientas o dependencias.
+El acceso productivo quedó configurado y se comprobaron política, callbacks y
+PKCE sin credenciales ni documentos reales. No hubo login nativo autenticado,
+creación real de borrador ni emisión fiscal desde estas pruebas.
+
+Apple publica un límite de tres dispositivos en Personal Team y caducidad de
+siete días. No conocemos la fecha de liberación del cupo de esta cuenta.
+[Condiciones del equipo gratuito](https://developer.apple.com/help/account/basics/about-your-developer-account/).

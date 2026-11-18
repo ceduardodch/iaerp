@@ -34,8 +34,6 @@ jobs:
     timeout-minutes: 25
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
-      IAERP_RESULT_PATH: ${{ runner.temp }}/IAERP.xcresult
-      IAERP_DERIVED_DATA_PATH: ${{ runner.temp }}/IAERPDerived
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Check pinned toolchain and select an installed simulator
@@ -56,12 +54,18 @@ jobs:
               output.write('IAERP_SIMULATOR_ID=' + phone['udid'] + '\n')
           PY
       - name: Test Swift packages and native app
+        env:
+          IAERP_RESULT_PATH: ${{ runner.temp }}/IAERP.xcresult
+          IAERP_DERIVED_DATA_PATH: ${{ runner.temp }}/IAERPDerived
+          IAERP_LAYOUT_LOG_PATH: ${{ runner.temp }}/invoice-layout.log
         run: bash ios/scripts/test-ios.sh
       - name: Keep synthetic test results
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: iaerp-ios-tests
-          path: ${{ runner.temp }}/IAERP.xcresult
+          path: |
+            ${{ runner.temp }}/IAERP.xcresult
+            ${{ runner.temp }}/invoice-layout.log
           retention-days: 7
           if-no-files-found: warn

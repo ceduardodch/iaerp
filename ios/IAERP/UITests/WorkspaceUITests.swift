@@ -4,10 +4,11 @@ import UIKit
 final class WorkspaceUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
-    @MainActor private func app(readOnly: Bool = false, largestText: Bool = false) -> XCUIApplication {
+    @MainActor private func app(readOnly: Bool = false, largestText: Bool = false, traceInvoiceLayout: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-workspace-demo"]
         if readOnly { app.launchArguments.append("-read-only") }
+        if traceInvoiceLayout { app.launchArguments.append("-trace-invoice-layout") }
         if largestText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
@@ -51,6 +52,29 @@ final class WorkspaceUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    /// Observe the current viewport without scrolling to repair a regression.
+    @MainActor private func assertEntireInvoiceControl(_ element: XCUIElement, in app: XCUIApplication,
+                                                       file: StaticString = #filePath, line: UInt = #line) {
+        guard element.exists,
+              let form = app.collectionViews.allElementsBoundByIndex.last,
+              let navigation = app.navigationBars.allElementsBoundByIndex.last else {
+            XCTFail("El formulario y su control deben seguir presentes", file: file, line: line)
+            return
+        }
+        let top = max(form.frame.minY, navigation.frame.maxY)
+        var bottom = min(form.frame.maxY, app.frame.maxY)
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists { bottom = min(bottom, keyboard.frame.minY) }
+        let cancel = app.buttons["Cancelar"]
+        if cancel.exists && cancel.isHittable { bottom = min(bottom, cancel.frame.minY) }
+        let frame = element.frame
+        XCTAssertTrue(element.isHittable, file: file, line: line)
+        XCTAssertGreaterThan(frame.width, 0, file: file, line: line)
+        XCTAssertGreaterThan(frame.height, 0, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(frame.minY, top, file: file, line: line)
+        XCTAssertLessThanOrEqual(frame.maxY, bottom, file: file, line: line)
     }
 
     @MainActor func testCreateReviewSaveAndReopenDraft() throws {
@@ -97,6 +121,57 @@ final class WorkspaceUITests: XCTestCase {
         app.buttons["Descartar borrador"].tap()
         XCTAssertTrue(app.navigationBars["Facturas"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["Borrador guardado. No se ha emitido al SRI."].exists)
+    }
+
+    @MainActor func testEditingQuantityKeepsTheFieldVisibleAcrossKeyboardChanges() throws {
+        let app = app()
+        app.tabBars.buttons["Facturas"].tap()
+        app.buttons["new-invoice"].tap()
+        app.buttons["draft-customer"].tap()
+        app.buttons["pick-customer-00000000-0000-4000-8000-000000000101"].tap()
+        let add = app.buttons["add-product"]
+        reveal(add, in: app); add.tap()
+        app.buttons["pick-product-00000000-0000-4000-8000-000000000201"].tap()
+        let review = app.buttons["review-totals"]
+        reveal(review, in: app); review.tap()
+        let total = app.descendants(matching: .any)["draft-total"].firstMatch
+        reveal(total, in: app)
+        XCTAssertTrue(total.exists)
+
+        // Leave the end of the form to edit an earlier row. Removing the old
+        // preview and resizing for the keyboard must not jump back to totals.
+        let quantity = app.textFields["field-Cantidad"]
+        reveal(quantity, in: app)
+        quantity.doubleTap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
+        quantity.typeText("2")
+        XCTAssertEqual(quantity.value as? String, "2")
+        assertEntireInvoiceControl(quantity, in: app)
+        let done = app.buttons["dismiss-keyboard"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        done.tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3))
+        XCTAssertEqual(quantity.value as? String, "2")
+        assertEntireInvoiceControl(quantity, in: app)
+
+        // A second real edit proves the retained field is still operable,
+        // rather than merely displaying a stale value after losing focus.
+        quantity.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
+        assertEntireInvoiceControl(quantity, in: app)
+        quantity.typeText("0")
+        XCTAssertNotEqual(quantity.value as? String, "2")
+        quantity.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertEqual(quantity.value as? String, "2")
+        done.tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3))
+        assertEntireInvoiceControl(quantity, in: app)
+        snapshot("Cantidad-editada-sin-salto", app: app)
+
+        reveal(review, in: app); review.tap()
+        reveal(total, in: app)
+        XCTAssertEqual(total.label, "$230,00")
     }
 
     @MainActor func testReadOnlyUserDoesNotGetCreateAction() throws {
@@ -187,7 +262,7 @@ final class WorkspaceUITests: XCTestCase {
     }
 
     @MainActor func testInvoiceFormAndDetailAccessibilityAtLargestTextSize() throws {
-        let app = app(largestText: true)
+        let app = app(largestText: true, traceInvoiceLayout: true)
         app.tabBars.buttons["Facturas"].tap()
         app.buttons["new-invoice"].tap()
         snapshot("Nueva-factura-texto-maximo", app: app)
@@ -233,11 +308,14 @@ final class WorkspaceUITests: XCTestCase {
         totalsHierarchy.name = "Totales-hierarchy"
         totalsHierarchy.lifetime = .keepAlways
         self.add(totalsHierarchy)
-        try app.performAccessibilityAudit { issue in
-            print("Totals audit: \(issue.compactDescription): \(issue.detailedDescription)")
-            print("Audit element: \(issue.element?.debugDescription ?? "unavailable")")
-            return false
+        try app.performAccessibilityAudit()
+        // The audit changes Dynamic Type. Its return must leave the complete
+        // totals viewport usable, without a reveal that could hide a bad offset.
+        for element in [totalCell, review, note] {
+            assertEntireInvoiceControl(element, in: app)
         }
+        XCTAssertTrue(app.buttons["save-draft"].isHittable)
+        snapshot("Importes-despues-auditoria", app: app)
         app.buttons["Cancelar"].tap()
         app.buttons["Descartar borrador"].tap()
         let invoice = app.descendants(matching: .any)["workspace-invoice-00000000-0000-4000-8000-000000000601"].firstMatch

@@ -1,8 +1,10 @@
 # Conexión iOS a IAERP
 
 Corte 2026-11-18: Carlos autorizó conectar e instalar la app. El cliente público
-`iaerp-ios` está creado en Keycloak y permanece **deshabilitado** mientras se
-valida/publica la política del servidor en la PR #107.
+`iaerp-ios` está **habilitado** tras publicar la PR #107 y verificar la política
+en la API (`2bcd013`, CI/Coolify `44314403923`). Sus cuatro huellas coinciden con
+las fuentes revisadas. La plantilla sigue `enabled: false` para que importar
+una copia sin la puerta del script no abra acceso por defecto.
 
 | Campo | Valor preparado en la app |
 | --- | --- |
@@ -38,9 +40,11 @@ abrir la operación de negocio. Web y agentes conservan sus políticas existente
 
 Antes del POST, iOS guarda clave/payload en Keychain DeviceOnly. Un reinicio
 consulta `/invoices/draft-requests/{idempotency_key}` para el mismo usuario,
-tenant y operación. Si hace falta reintenta la solicitud original, con permisos
-vigentes y dentro de 23 horas, frente a una retención mínima de servidor de 24.
-Después sólo concilia: la ausencia de una clave caducada no autoriza otra factura.
+tenant y operación. Sólo un contador cero permite el primer envío original,
+con permisos vigentes. Después de un intento incierto sólo consulta y concilia:
+un 404 no autoriza otro POST, aunque el reloj del teléfono indique menos de
+23 horas. El contador cero conserva una ventana de vigencia del primer envío;
+la retención del servidor no se infiere de un reloj local.
 [ADR 0025](../../docs/adrs/0025-ios-durable-draft-recovery.md).
 
 ## Prueba física pendiente

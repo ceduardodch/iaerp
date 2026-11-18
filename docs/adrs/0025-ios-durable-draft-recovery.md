@@ -30,21 +30,29 @@ registro. Permitir normalización de cuotas del servidor cuando no se enviaron
 cuotas explícitas y estados que hayan avanzado legítimamente. No recalcular
 impuestos en el cliente.
 
-La conciliación por lookup/GET requiere consulta. El reenvío requiere además
-escritura vigente y configuración original completa; una conexión modificada
-puede conciliar por lectura, pero no trasladar ni reenviar el payload. Otro
-usuario, empresa o API no puede recuperar ni ver esa operación.
+La conciliación por lookup/GET requiere consulta. Un primer envío requiere
+además escritura vigente y configuración original completa; una conexión
+modificada sólo puede conciliar. Otro usuario, empresa o API no puede recuperar
+ni ver esa operación.
 
-El UOW declara retención de idempotencia de 24 horas. Antes de 23 horas, sin
-confirmación, se puede reenviar sólo la misma clave y payload. Fuera de esa
-ventana, con reloj retrocedido o configuración distinta, sólo conciliar por
-lectura: si no existe prueba autoritativa, bloquear sin generar otra clave.
-No asumir que un 404 demuestra ausencia después de vencer la retención.
+**Corrección de seguridad y producto en 0.4.1:** si ya se persistió al menos un
+intento y no hay ID confirmado ni lookup positivo, conservar el pendiente y
+exigir conciliación humana. No enviar otro POST, tampoco dentro del mismo
+proceso. La retención declarada de 24 horas y un reloj local de 23 horas no
+permiten probar que una clave sigue viva: un retroceso parcial del reloj puede
+superar `now >= createdAt`. Un 404 no demuestra que nunca existió una factura.
+
+El contador cero, persistido antes de toda llamada, acredita que todavía no hubo
+intento. Sólo ese caso puede iniciar el POST original. Se conserva una ventana
+cautelar de 23 horas para la vigencia del primer envío; no garantiza reenvíos.
+Si el proceso muere entre incrementar el contador y enviar, puede ser necesaria
+conciliación aunque la red nunca haya recibido nada. Producto acepta ese límite
+para evitar duplicados. Un ID confirmado siempre permite conciliar por GET.
 
 Persistir contador de intentos antes del POST y, cuando llegue respuesta válida,
 el ID confirmado antes del GET final. Un rechazo inicial definitivo 400/422
-permite editar; después de incertidumbre se conservan clave/payload incluso si
-un reintento recibe 400/401/403/409. Cancelar, cambiar cuenta, olvidar perfil,
+permite editar; 401/403/409, respuesta inválida o error de red conservan clave y
+payload para lookup/GET, sin autorizar otro POST. Cancelar, cambiar cuenta, olvidar perfil,
 logout o terminar iOS no descartan incertidumbre financiera. No hay un botón
 de borrado/reinicio arbitrario. Evitar concurrencia por UUID entre instancias
 del journal en el mismo proceso.
@@ -53,10 +61,15 @@ del journal en el mismo proceso.
 
 Al abrir una cuenta, revisar sus pendientes antes de habilitar Nuevo. Mostrar
 «Guardado pendiente» y Recuperar, sin datos de otra identidad. Se puede consultar
-clientes/facturas mientras la creación queda bloqueada. Una recuperación sólo
+clientes/facturas mientras la creación queda bloqueada. Contador cero usa
+«Continuar guardado» y explica que intentará enviar el borrador por primera vez;
+un intento previo usa «Consultar guardado» y sólo lee. Cerrar el formulario
+conserva la operación pendiente y no se presenta como borrado del guardado. Una recuperación sólo
 sale de pendiente tras confirmar el documento del servidor.
 
-Probar reinicio antes del envío, commit sin respuesta y respuesta antes de
+Probar purga tras 26 horas reales con reloj local de sólo dos horas: no hay
+segundo POST ni documento duplicado y el pendiente queda intacto. Probar además
+reinicio antes del envío, commit sin respuesta y respuesta antes de
 confirmación, manteniendo un único documento. Cubrir fallos de Keychain antes
 de red, permisos/tenant cambiados, expiración, respuesta inválida, cambio de
 configuración pública y dos instancias. Pruebas de proceso y Keychain usan sólo

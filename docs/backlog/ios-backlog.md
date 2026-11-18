@@ -1,7 +1,7 @@
 # IAERP para iPhone: backlog y avance
 
 - Fecha: 2026-11-18, America/Guayaquil.
-- Estado: **0.4.0 en validación; conexión productiva e instalación física en curso**.
+- Estado: **0.4.1 en validación; conexión productiva e instalación física en curso**.
 - Objetivo: instalar IAERP en el iPhone de Carlos y sumar funciones por entregas pequeñas.
 - Decisión de arquitectura: [ADR 0022, Accepted](../adrs/0022-native-ios-client.md).
 - Calidad: [Definition of Done vigente](../09-testing-quality.md).
@@ -27,7 +27,7 @@ consulta y documentos. Las pruebas/revisiones y el cierre físico siguen
 pendientes donde corresponda; esta autorización no habilita producción,
 emisión SRI real, push ni distribución. No equivale a promesa de paridad web.
 
-## Conexión autorizada — 0.4.0
+## Conexión autorizada — 0.4.1
 
 Carlos pide conectar a IAERP, hacer lo necesario y avisar cuando pueda instalar
 para probar. Después conecta el teléfono y autoriza continuar. Esto amplía la
@@ -37,16 +37,16 @@ producción ni cambios ajenos a esta conexión.
 
 | Historia | Estado del corte actual |
 | --- | --- |
-| IOS-004 | Teléfono emparejado por cable, iOS 26.0.1 compatible. Firma e instalación pendientes; el titular actualizó Apple ID. |
-| IOS-005/006/007 | Endpoints de IAERP preparados. Cliente `iaerp-ios` creado deshabilitado; PR #107 añade política por membresía y consulta de guardado. CI/publicación y login físico pendientes. |
-| IOS-009/010 | Registro durable Keychain y reconciliación implementados según ADR 0025. 41 AppHost correctas; UI termina/reabre el proceso en tres puntos con un único borrador. Guardado real y auditoría del servidor por comprobar. |
+| IOS-004 | Teléfono emparejado por cable, iOS 26.0.1 compatible. Firma bloqueada por cupo de Personal Team; Apple ID activo y sin otra cuenta. No instalada. |
+| IOS-005/006/007 | Endpoints de IAERP preparados. PR #107 publicada/verificada (`2bcd013`); `iaerp-ios` habilitado con PKCE/callbacks comprobados. Login nativo físico pendiente. |
+| IOS-009/010 | Registro durable Keychain y reconciliación implementados según ADR 0025. 42 AppHost correctas; un intento incierto sin lookup positivo nunca reenvía. UI termina/reabre el proceso en tres puntos con un único borrador. Guardado real y auditoría del servidor por comprobar. |
 | IOS-017 | Auditorías previas de cuentas/consultas correctas; formulario con texto máximo en validación. VoiceOver/horizontal físicos pendientes. |
 | IOS-020/026 | Múltiples perfiles guardados y bloqueo local implementados; prueba Face ID/código en el teléfono pendiente. |
 | IOS-021 | Workflow macOS preparado, sin ejecutar aún la CI iOS remota. Backend PR #107 tiene CI propia en curso. |
 
-**80 SwiftPM y 41 AppHost correctas**. Las fuentes locales resuelven los dos P1
-anteriores de permisos y recuperación, pero el acceso no se habilita hasta
-verificar el backend publicado. No hay emisión fiscal en la interfaz móvil.
+**80 SwiftPM y 42 AppHost correctas**. Las fuentes locales resuelven los dos P1
+anteriores de permisos y recuperación, con el acceso habilitado tras verificar el backend publicado. Una operación
+incierta sin resultado exige conciliación; no depende del reloj local. No hay emisión fiscal en la interfaz móvil.
 [Evidencia actual](../../ios/validation/2026-11-18-live-connection.md).
 Los apartados de avance anteriores que siguen conservan sus resultados históricos.
 

@@ -1,0 +1,11 @@
+{
+  "clientId": "iaerp-ios",
+  "authorizationS256Status": 200,
+  "loginFormPresent": true,
+  "missingPKCEStatus": 302,
+  "wrongCallbackStatus": 400,
+  "anonymousDraftLookupStatus": 401,
+  "missingPKCEError": "invalid_request",
+  "missingPKCEReason": "Missing parameter: code_challenge_method",
+  "missingPKCEHasCode": false
+}

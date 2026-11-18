@@ -1,5 +1,12 @@
 # Issue Tracking - Sesión por Sesión
 
+> 2026-11-18, corte 0.4.1 (5): PR #107 publicada como 2bcd013, CI/Coolify y
+> política efectiva verificados; cliente iOS habilitado con PKCE. PR #108 draft:
+> guardado incierto sin resultado nunca reenvía; 42 AppHost y tres cierres de
+> proceso correctos. IOS-017 sigue abierto; suite0.4.0 pasó17/18UI. Firma física
+> bloqueada por cupo Personal Team; no instalada ni login nativo real. Este corte
+> sustituye los estados iOS anteriores que siguen como historia.
+
 > 2026-11-18, iOS 0.4.0 en validación: 80 SwiftPM, 41 AppHost y una UI de
 > recuperación con tres terminaciones reales correctas. PR #107 prepara permisos
 > por membresía y consulta del borrador; CI pendiente. Cliente Keycloak creado

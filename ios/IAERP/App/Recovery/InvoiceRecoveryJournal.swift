@@ -62,7 +62,7 @@ nonisolated enum InvoiceRecoveryError: Error, LocalizedError, Equatable, Sendabl
         case .pendingOperation: "Hay una factura pendiente de confirmar en esta cuenta. Recupérala antes de crear otra."
         case .wrongIdentity: "Entra con el mismo usuario y empresa que inició este guardado."
         case .permissionDenied: "No tienes permiso vigente para recuperar este guardado en la empresa."
-        case .reconciliationRequired: "Este guardado necesita conciliación con el servidor. No se reenviará ni se creará otra operación."
+        case .reconciliationRequired: "El guardado necesita conciliación. Consulta Facturas. No se enviará otra operación."
         case .invalidConfirmation: "El servidor no confirmó la factura de esta operación. Se conserva el guardado pendiente."
         case .busy: "Ya se está comprobando este guardado. Espera a que termine."
         case .missingOperation: "El guardado pendiente ya no está disponible. Actualiza la cuenta."
@@ -130,9 +130,9 @@ nonisolated enum InvoiceRecoveryError: Error, LocalizedError, Equatable, Sendabl
     private let vault: any InvoiceRecoveryVault
     private let now: () -> Date
     private static var inFlight: Set<UUID> = []
-    // Backend UnitOfWork declares 24h retention. Stay inside that boundary;
-    // records older than this require authoritative/manual reconciliation.
-    private let retryWindow: TimeInterval = 23 * 60 * 60
+    // Local wall time only limits the freshness of a never-submitted request.
+    // It cannot establish server retention or authorize replay after restart.
+    private let initialSubmissionWindow: TimeInterval = 23 * 60 * 60
     private let maximumBytes = 2 * 1_024 * 1_024
 
     init(vault: any InvoiceRecoveryVault = KeychainInvoiceRecoveryVault(), now: @escaping () -> Date = Date.init) {
@@ -193,12 +193,16 @@ nonisolated enum InvoiceRecoveryError: Error, LocalizedError, Equatable, Sendabl
             }
         }
         if confirmed.confirmedInvoiceID == nil {
+            // A persisted attempt may already have committed. Even a small
+            // local-clock age cannot prove that its server key still exists.
+            // Without positive lookup evidence, never send another POST.
+            guard confirmed.attemptCount == 0 else { throw InvoiceRecoveryError.reconciliationRequired }
             guard record.scope.representsSameIdentity(as: scope) else {
                 throw InvoiceRecoveryError.reconciliationRequired
             }
             guard context.permits("invoices:write") else { throw InvoiceRecoveryError.permissionDenied }
             let instant = now()
-            guard instant >= record.createdAt, instant.timeIntervalSince(record.createdAt) < retryWindow else {
+            guard instant >= record.createdAt, instant.timeIntervalSince(record.createdAt) < initialSubmissionWindow else {
                 throw InvoiceRecoveryError.reconciliationRequired
             }
             let firstAttempt = confirmed.attemptCount == 0

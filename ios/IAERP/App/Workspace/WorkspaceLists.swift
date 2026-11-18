@@ -174,13 +174,19 @@ struct InvoiceRecoverySection: View {
             Section {
                 Text("Hay un guardado pendiente de confirmar en esta cuenta.")
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Antes de crear otra factura, comprueba el resultado en IAERP.")
+                Text(pending.attemptCount == 0 && pending.confirmedInvoiceID == nil
+                     ? "Continuar intentará enviar este borrador a IAERP por primera vez."
+                     : "Consulta el resultado en IAERP. No se enviará otra operación.")
                     .font(.footnote).fixedSize(horizontal: false, vertical: true)
                 Button {
                     Task { await store.recoverPendingInvoice() }
                 } label: {
                     if store.checkingInvoiceRecovery { ProgressView("Comprobando guardado…") }
-                    else { Text("Recuperar guardado").fixedSize(horizontal: false, vertical: true) }
+                    else {
+                        Text(pending.attemptCount == 0 && pending.confirmedInvoiceID == nil
+                             ? "Continuar guardado" : "Consultar guardado")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .frame(minHeight: 44)
                 .disabled(store.checkingInvoiceRecovery)

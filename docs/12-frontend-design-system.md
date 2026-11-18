@@ -6,6 +6,12 @@ de introducir variantes locales.
 
 ## Principios
 
+En la recuperación iOS (ADR 0025), «Continuar guardado» identifica un primer
+envío aún no intentado y lo explica antes de la acción. «Consultar guardado»
+queda reservado a lectura tras un intento; un resultado desconocido conserva
+el pendiente. Cerrar ese formulario no se describe como borrar la operación.
+Los estados iniciales mantienen Guardar y Cancelar.
+
 ### Cliente nativo iOS
 
 El selector de cuentas (ADR 0023) muestra nombre, usuario y empresa; distingue
