@@ -252,6 +252,9 @@ struct InvoiceComposerView: View {
                                     .multilineTextAlignment(.trailing)
                                     .accessibilityIdentifier("payment-terms-days")
                             }
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                            .onTapGesture { focusedInput = .paymentTerms }
                             ERPDetailRow(title: "Vencimiento", value: draft.dueDateString ?? "Revisar plazo")
                             Text("0 días es al contado. El plazo inicial procede del cliente o de la empresa.")
                                 .font(.footnote).foregroundStyle(Color.primary)

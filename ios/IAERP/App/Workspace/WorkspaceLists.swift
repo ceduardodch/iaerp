@@ -5,6 +5,7 @@ struct WorkspaceClientsView: View {
     let store: WorkspaceStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var query = ""
+    @State private var showingSearchSummary = false
     private var visible: [ERPParty] {
         guard !query.isEmpty else { return store.customers }
         return store.customers.filter { [$0.name, $0.identificationNumber].contains { $0.localizedStandardContains(query) } }
@@ -13,7 +14,6 @@ struct WorkspaceClientsView: View {
         List {
             Section {
                 ERPSearchField(text: $query, prompt: "Buscar clientes")
-
             }
             Section {
                 if store.loadingCustomers { ProgressView("Buscando clientes…") }
@@ -40,8 +40,6 @@ struct WorkspaceClientsView: View {
                         .accessibilityIdentifier("workspace-client-\(customer.id.uuidString)")
                     }
                 }
-            } footer: {
-                if store.customerError == nil && !store.loadingCustomers { ERPListSummary(count: visible.count) }
             }
         }
         .listSectionSpacing(.compact)
@@ -54,6 +52,26 @@ struct WorkspaceClientsView: View {
         .navigationTitle("Clientes")
         .navigationSubtitle(Text(verbatim: store.displayCompany))
         .toolbarTitleDisplayMode(.inline)
+        .toolbar {
+            if store.customerError == nil && !store.loadingCustomers {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showingSearchSummary = true } label: {
+                        Label("Resultados: \(visible.count)", systemImage: "info.circle")
+                            .labelStyle(.titleOnly)
+                    }
+                    .help("Ver resultados y límite de búsqueda")
+                    .accessibilityIdentifier("client-search-summary")
+                    .popover(isPresented: $showingSearchSummary) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ERPListSummary(count: visible.count)
+                            Button("Cerrar") { showingSearchSummary = false }
+                        }
+                        .padding()
+                        .presentationCompactAdaptation(.popover)
+                    }
+                }
+            }
+        }
         .task(id: query) {
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             await store.loadCustomers(query: query)

@@ -7,6 +7,14 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- **iOS 0.5.0 (7) en revisión · 18 de noviembre de 2026.** Inicio muestra
+  cartera por cobrar, vencida y cobrada en el mes. Facturas consulta los meses
+  y sus filas por empresa y moneda. Negocio comprobó las definiciones de la
+  web. UI/UX revisó capturas con texto máximo y modo oscuro. QA devolvió a
+  desarrollo la posición al volver del detalle, la lectura de controles y el
+  foco al editar el plazo. El iPhone sigue con 0.4.2 hasta el cierre de QA,
+  CI y publicación del servidor. [Backlog y prueba física](backlog/ios-evaluacion-2026-11-18.md).
+
 - iOS 0.4.2 (6), 2026-11-18. La solicitud interactiva de 0.4.1 combinaba
   el selector de organización con el permiso explícito `organization:read`.
   El endpoint público devolvía `invalid_scope` por redirección antes del login.

@@ -103,10 +103,14 @@ final class WorkspaceUITests: XCTestCase {
         app.buttons["pick-customer-00000000-0000-4000-8000-000000000101"].tap()
         let terms = app.textFields["payment-terms-days"]
         reveal(terms, in: app)
-        // Select the existing number: a single tap can place the caret before
-        // its first digit, where Backspace would leave that digit untouched.
-        terms.doubleTap()
+        // The field's AX frame includes its leading label. Focus the trailing
+        // number, then select it rather than tapping the label at frame center.
+        let termsValue = terms.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        termsValue.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        termsValue.doubleTap()
         terms.typeText("30")
+        XCTAssertEqual(terms.value as? String, "30")
         app.buttons["dismiss-keyboard"].tap()
         let add = app.buttons["add-product"]
         reveal(add, in: app); add.tap()
@@ -372,11 +376,17 @@ final class WorkspaceUITests: XCTestCase {
         let search = app.textFields["erp-search-field"]
         XCTAssertTrue(search.waitForExistence(timeout: 4))
         search.tap(); search.typeText("Costa")
-        XCTAssertTrue(app.staticTexts["Resultados: 1"].waitForExistence(timeout: 5))
+        let summary = app.buttons["client-search-summary"]
+        let oneResult = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label == %@", "client-search-summary", "Resultados: 1")).firstMatch
+        XCTAssertTrue(oneResult.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Cliente de ejemplo Costa"].exists)
         XCTAssertFalse(app.staticTexts["Cliente de ejemplo Álamo"].exists)
+        summary.tap()
+        XCTAssertTrue(app.staticTexts["Hasta 100 por consulta"].waitForExistence(timeout: 4))
+        app.buttons["Cerrar"].tap()
         app.buttons["Borrar búsqueda"].tap()
-        XCTAssertTrue(app.staticTexts["Resultados: 3"].waitForExistence(timeout: 5))
+        let allResults = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label == %@", "client-search-summary", "Resultados: 3")).firstMatch
+        XCTAssertTrue(allResults.waitForExistence(timeout: 5))
     }
 
     @MainActor func testPDFSnapshotIsCoveredWhenEnteringBackground() throws {

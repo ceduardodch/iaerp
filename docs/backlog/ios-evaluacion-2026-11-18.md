@@ -6,7 +6,7 @@ Carlos quiere reconocer en el iPhone su forma de trabajar en IAERP. Al entrar ve
 
 En la web, Facturas ya agrupa por mes y año de emisión, abre el período más reciente y muestra cantidad e importe por grupo. El tablero destaca por cobrar, vencido y cobrado este mes. La ficha de factura reutiliza los servicios de emisión, consulta previa de correo y envío confirmado. Estos son los puntos de referencia para el iPhone. [Interfaz web](../../frontend/src/App.tsx) · [Servicios de factura y correo](../../backend/app/api/router.py)
 
-## Qué hay hoy
+## Punto de partida · 0.4.2
 
 | Tarea | Disponible | Qué falta comprobar o desarrollar |
 | --- | --- | --- |
@@ -34,7 +34,7 @@ Orden propuesto dentro de cada entrega. S, M y L indican esfuerzo relativo. Las 
 
 ### Entrega 1 · Inicio y facturas por mes
 
-**En desarrollo.** Carlos aprobó IOS-034, IOS-035 y la consulta de IOS-028 necesaria para completos mensuales. El servidor devuelve totales de cartera, cabeceras por período y filas paginadas. El iPhone presenta esos datos, conserva el mes al volver del detalle y abre el formulario existente desde Inicio.
+Carlos aprobó IOS-034, IOS-035 y la búsqueda de IOS-028. La versión 0.5.0 muestra los tres saldos de cartera de la web. El servidor calcula los totales de cada mes y moneda antes de paginar las filas. Desde Inicio se puede abrir el formulario de factura y volver a consultar el borrador guardado.
 
 **Revisión por entrega.** Negocio contrasta saldos, reglas fiscales, roles y límites de empresa. UI/UX comprueba navegación, legibilidad y texto máximo. QA comprueba contratos, errores, regresiones y flujo completo con datos sintéticos. Cada hallazgo que incumpla un criterio vuelve a desarrollo y al revisor correspondiente. Tras las tres revisiones favorables y CI verde se publica por el flujo de IAERP y se instala por cable. Carlos autorizó las consultas de lectura y el permiso de resumen para perfiles autorizados.
 
@@ -44,7 +44,7 @@ Orden propuesto dentro de cada entrega. S, M y L indican esfuerzo relativo. Las 
 | 2 | **IOS-035 · M · Facturas agrupadas por mes.** Amplía IOS-012 y depende de la consulta completa de IOS-028. | Agrupar por fecha de emisión, con mes y año, más reciente abierto. Cada cabecera muestra cantidad y suma exacta de las facturas del grupo según filtros activos. Abrir un mes anterior, entrar a una factura y volver conserva mes y posición. Verificar dos años, meses con más de 100 documentos y notas de crédito fuera del total de facturas. |
 | 3 | **IOS-028 · M · Localizar una factura por su número.** Completa la búsqueda de IOS-012/014. | Pegar el número visible, por ejemplo `001-002-000000123`, devuelve el comprobante del establecimiento y punto correctos, aunque otro punto tenga el mismo secuencial. Se conserva la búsqueda por clave de acceso. El filtro por tipo se aplica antes del límite y hay continuidad entre páginas. Verificar con más de 100 documentos mixtos. |
 
-**Demostración de cierre.** Abrir IAERP, comprobar la empresa y las tres cifras contra la web, abrir octubre desde Facturas, consultar un documento y volver a octubre. Repetir con otra empresa y con un perfil de solo consulta. Probar VoiceOver y texto máximo. IOS-017/021 conservan tres fallos de CI abiertos, uno de captura y dos de contraste. [Resultados](../STATUS.md)
+**Prueba de Carlos en el teléfono.** Elegir la misma empresa en IAERP web y en el iPhone. En Inicio, tocar la fecha y comparar las tres cifras al mismo corte. En Facturas, abrir un mes anterior y cotejar cantidad e importe con la web usando los mismos filtros. Entrar a una factura y volver para comprobar que el mes y la posición se conservan. Repetir con un segundo perfil y comprobar qué puede consultar. Probar con VoiceOver el botón «Nueva factura» y verificar que se distingue la empresa activa. [Resultados de la entrega](../STATUS.md)
 
 ### Entrega 2 · Nueva factura, emisión y envío por correo
 
