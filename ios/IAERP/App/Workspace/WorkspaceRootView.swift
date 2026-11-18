@@ -103,8 +103,7 @@ struct WorkspaceHomeView: View {
                         }
                         .tag(SummaryPage.collections)
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .always))
-                    .indexViewStyle(.page(backgroundDisplayMode: .always))
+                    .tabViewStyle(.page(indexDisplayMode: .never))
                 } else {
                     scrollContent {
                         balances
