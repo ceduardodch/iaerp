@@ -28,7 +28,9 @@ alcance y las decisiones.
   del configurador correctas, UI de edición agotó 120 s y auditoría inicial
   falló por contraste en iOS 27.2. No se da por aprobada. El último candidato
   incorpora reparación de scroll/edición y presupuesto CI de 45 minutos,
-  300/330 s por test; mantiene todas las aserciones. Validación remota pendiente.
+  300/330 s por test; mantiene todas las aserciones. Dos ensayos posteriores
+  de preparación del auditor fallaron y se retiraron; app y test congelados
+  al corte Full4. Validación remota pendiente, no aprobada.
   [Evidencia actual](../ios/validation/2026-11-18-live-connection.md).
 
 - Instalación física: iPhone emparejado por cable, iOS 26.0.1 compatible. El

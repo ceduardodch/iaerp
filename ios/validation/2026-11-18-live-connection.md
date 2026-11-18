@@ -266,3 +266,28 @@ edición siguen intactas.
 - Apple ID activo, sólo Personal Team y cupo agotado. No hay otra cuenta del
   titular. Firma, instalación, login real, Face ID/VoiceOver y borrador real
   siguen pendientes. No se emitió ante SRI ni se inscribió una membresía de pago.
+
+
+### Investigación posterior de CI y cierre de la preparación
+
+QA recuperó sin mutar el bundle parcial tres PNG mediante payloadRef; quedan
+con SHA256 en `/tmp/iaerp-ios-ci-old-qa-images/recovery-provenance.json`.
+La captura de «Seleccionar» muestra el control bajo la barra opaca. No prueba
+un color incorrecto. Se ensayaron dos preparaciones locales del audit:
+`visible-customer-1` reveló Cliente, pero dejó Demo cortado y falló contraste;
+`visible-customer-2` alineó cabecera+control y falló Dynamic Type sin nodo concreto.
+Ambas fallaron y se retiraron. El test publicado conserva todas las auditorías
+stock y la preparación de Full4; no se adoptó una posición por ensayo/error.
+
+El OSLog histórico de la segunda prueba acaba con offset 273 y máximo legal
+1108,17; no hay evidencia para ampliar la reparación de overflow. UI y QA
+revisaron este límite y piden mantener la fuente de app congelada. El último
+corte local aprobado sigue siendo Full4, no esos ensayos. La corrida remota
+intermedia `44329668271` se canceló expresamente antes de gastar otra ejecución
+completa mientras se investigaba. Se deja una corrida final con el presupuesto
+remoto ampliado para obtener resultado y bundle completos. Una CI pendiente o
+fallida no aprueba iOS 27.2 ni habilita la entrega física.
+
+No se instalaron recursos adicionales. Se conservaron el resultado final,
+logs de diagnóstico y capturas sintéticas necesarias. Cambios previos de
+notificaciones y scripts SRI permanecen fuera de los commits de iOS.
