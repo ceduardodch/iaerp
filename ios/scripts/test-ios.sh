@@ -13,6 +13,8 @@ fi
 result_path="${IAERP_RESULT_PATH:-/tmp/iaerp-ios-$(date +%Y%m%d-%H%M%S).xcresult}"
 derived_path="${IAERP_DERIVED_DATA_PATH:-/tmp/iaerp-workspace-derived}"
 layout_log="${IAERP_LAYOUT_LOG_PATH:-${result_path%.xcresult}-layout.log}"
+test_timeout="${IAERP_TEST_TIMEOUT_SECONDS:-120}"
+test_max_timeout="${IAERP_TEST_MAX_TIMEOUT_SECONDS:-150}"
 swift test --package-path ios/IAERP
 xcrun simctl bootstatus "$IAERP_SIMULATOR_ID" -b
 # Xcode 27 reused an older loaded UI test bundle after incremental reinstalls
@@ -23,7 +25,7 @@ if xcrun simctl get_app_container "$IAERP_SIMULATOR_ID" "$runner_id" app >/dev/n
 fi
 # Capture only synthetic, explicitly enabled layout diagnostics. Keep the
 # stream alive across XCTest app relaunches and preserve the test exit code.
-xcrun simctl spawn "$IAERP_SIMULATOR_ID" log stream --style compact --level info --timeout 25m \
+xcrun simctl spawn "$IAERP_SIMULATOR_ID" log stream --style compact --level info --timeout "${IAERP_LAYOUT_LOG_TIMEOUT:-25m}" \
   --predicate 'subsystem == "ec.com.b2b.iaerp.layout" AND category == "InvoiceLayout"' \
   > "$layout_log" 2>&1 &
 layout_stream_pid=$!
@@ -38,5 +40,5 @@ xcodebuild test -project ios/IAERP/IAERP.xcodeproj -scheme IAERP \
   -destination "platform=iOS Simulator,id=$IAERP_SIMULATOR_ID" \
   -derivedDataPath "$derived_path" -resultBundlePath "$result_path" \
   -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
-  -test-timeouts-enabled YES -default-test-execution-time-allowance 120 \
-  -maximum-test-execution-time-allowance 150 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+  -test-timeouts-enabled YES -default-test-execution-time-allowance "$test_timeout" \
+  -maximum-test-execution-time-allowance "$test_max_timeout" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-

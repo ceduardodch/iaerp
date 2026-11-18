@@ -31,7 +31,7 @@ jobs:
   native:
     name: Build and test iOS
     runs-on: xcode-27
-    timeout-minutes: 25
+    timeout-minutes: 45
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
@@ -58,6 +58,11 @@ jobs:
           IAERP_RESULT_PATH: ${{ runner.temp }}/IAERP.xcresult
           IAERP_DERIVED_DATA_PATH: ${{ runner.temp }}/IAERPDerived
           IAERP_LAYOUT_LOG_PATH: ${{ runner.temp }}/invoice-layout.log
+          # Cold hosted builds and UI automation take about 2-3x local time.
+          # Keep every assertion and a finite per-test limit.
+          IAERP_TEST_TIMEOUT_SECONDS: '300'
+          IAERP_TEST_MAX_TIMEOUT_SECONDS: '330'
+          IAERP_LAYOUT_LOG_TIMEOUT: 40m
         run: bash ios/scripts/test-ios.sh
       - name: Keep synthetic test results
         if: always()

@@ -19,12 +19,16 @@ alcance y las decisiones.
   con independencia del reloj local. Contador cero permite primer envío; un
   resultado desconocido exige conciliación y conserva el bloqueo de Nuevo.
   Producto y seguridad revisaron el caso de 26 h reales y reloj local de 2 h.
-  **80 SwiftPM y 42 AppHost correctas**; un test con tres cierres reales del
-  proceso correcto. 0.4.0 full-1: **17/18 UI**, un fallo de auditoría del
-  formulario (IOS-017, sin filtros). Reparación del offset: 2/2 UI dirigidas
-  pasan con auditoría stock y comprobaciones posteriores; 2 avisos de dimensión
-  persisten. full-4 ejecuta ahora las 19 UI. Diagnóstico OSLog sólo Debug/simulador. El primer workflow iOS no inició por
-  contexto runner.temp en job.env; corregido a steps.env, CI iOS remota en curso sobre el candidato anterior, pendiente del resultado.
+  **80 SwiftPM, 42 AppHost y 19 UI correctas**, sin fallos ni omisiones en
+  full-4 (iPhone 14 / iOS 26.5). Incluye tres cierres reales del proceso,
+  auditoría stock con texto máximo y geometría posterior, sin filtros.
+  Persisten tres avisos de dimensión en runtime. Build arm64 iPhoneOS
+  0.4.1 (5) sin firma correcto; no permite instalarlo sin firma válida.
+  CI iOS anterior `44323740080` cancelada al límite de 25 minutos: ocho pruebas
+  del configurador correctas, UI de edición agotó 120 s y auditoría inicial
+  falló por contraste en iOS 27.2. No se da por aprobada. El último candidato
+  incorpora reparación de scroll/edición y presupuesto CI de 45 minutos,
+  300/330 s por test; mantiene todas las aserciones. Validación remota pendiente.
   [Evidencia actual](../ios/validation/2026-11-18-live-connection.md).
 
 - Instalación física: iPhone emparejado por cable, iOS 26.0.1 compatible. El

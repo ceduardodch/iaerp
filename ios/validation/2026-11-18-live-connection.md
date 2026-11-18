@@ -243,3 +243,26 @@ no se declaran logs sin avisos. `full-4` ejecuta la regresión completa sobre es
 fuente. El flujo de teclado se corrigió para buscar hacia contenido anterior
 cuando la celda todavía no está montada; sus comprobaciones de visibilidad y
 edición siguen intactas.
+
+
+## Cierre local full-4 — 2026-11-18
+
+- Fuente de app `e228a58`; 80 SwiftPM, 42 AppHost y 19 UI correctas, sin fallos
+  ni omisiones. Resultado `/tmp/iaerp-ios-live-full-4.xcresult`, resumen JSON y
+  log con el mismo prefijo. Las 19 UI tardaron 466,169 s. Tres avisos de
+  dimensión inválida persisten; no se declara libre de avisos.
+- Auditoría stock del formulario con texto máximo y comprobación posterior
+  correctas (109,018 s); edición con teclado correcta (58,359 s).
+- Build iPhoneOS arm64 sin firma correcto: `/tmp/iaerp-ios-iphone-0.4.1-unsigned.log`.
+  Info.plist confirma versión 0.4.1 (5). No está firmada ni instalada.
+- CI anterior `44323740080` sobre `bcf775a`: configurador 8/8 correcto;
+  job nativo cancelado a 25 min, edición agotó 120 s y auditoría inicial
+  detectó contraste en «Seleccionar» en iPhone 17 / iOS 27.2. Artefacto parcial
+  sin Info.plist no permite leer el xcresult; log completo conservado.
+- QA comparó doce casos: mediana remota 2,07 veces el tiempo local y primer
+  UI tras 13 min de preparación. CI final usa 45 min y 300/330 s por test,
+  sin retirar aserciones ni auditorías. Local conserva 120/150 s.
+  Una corrida posterior debe confirmar la corrección en iOS 27.2.
+- Apple ID activo, sólo Personal Team y cupo agotado. No hay otra cuenta del
+  titular. Firma, instalación, login real, Face ID/VoiceOver y borrador real
+  siguen pendientes. No se emitió ante SRI ni se inscribió una membresía de pago.

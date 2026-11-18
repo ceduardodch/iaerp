@@ -29,15 +29,16 @@ Cerrar el formulario conserva el pendiente.
 [ADR 0024](../docs/adrs/0024-ios-production-connection-policy.md) y
 [ADR 0025](../docs/adrs/0025-ios-durable-draft-recovery.md).
 
-Pruebas: **80 SwiftPM y 42 AppHost correctas** (la 42 nueva cubre reloj local
-retrocedido parcialmente y caducidad del registro del servidor). Una prueba UI completó
-tres terminaciones reales del proceso y recuperó un único borrador sintético.
-La suite completa 0.4.0 pasó 17/18 UI; la auditoría del formulario con texto
-máximo sigue fallando. La regresión 0.4.1 está en curso, sin filtros. [Evidencia del corte](validation/2026-11-18-live-connection.md).
+Pruebas locales: **80 SwiftPM, 42 AppHost y 19 UI correctas**, sin fallos ni
+omisiones. Incluyen tres terminaciones reales del proceso y auditoría stock con
+texto máximo, sin filtros. Persisten tres avisos de dimensión en runtime.
+Build arm64 iPhoneOS 0.4.1 (5) sin firma correcto. La CI iOS anterior se canceló
+por tiempo y mostró dos fallos de UI en iOS 27.2; último candidato remoto pendiente.
+[Evidencia del corte](validation/2026-11-18-live-connection.md).
 
 Teléfono físico emparejado por cable, iOS 26.0.1 compatible con el mínimo 26.
 El titular actualizó la sesión de Apple. La firma ahora falla por límite de
-iPhones registrados del Personal Team; se pidió otro equipo/cuenta. Instalación
+iPhones registrados del Personal Team; Carlos confirma que sólo tiene esa cuenta. Instalación
 y primer login siguen pendientes. Face ID y VoiceOver requieren revisión física.
 
 ## Cuentas guardadas — base 0.3.0 (3)
