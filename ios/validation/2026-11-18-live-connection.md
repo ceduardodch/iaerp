@@ -291,3 +291,20 @@ fallida no aprueba iOS 27.2 ni habilita la entrega física.
 No se instalaron recursos adicionales. Se conservaron el resultado final,
 logs de diagnóstico y capturas sintéticas necesarias. Cambios previos de
 notificaciones y scripts SRI permanecen fuera de los commits de iOS.
+
+
+## Reintento explícito de instalación local de desarrollo
+
+Carlos aclara que quiere instalación directa con cuenta gratuita, sin publicar
+ni contratar una suscripción. `devicectl` confirma conexión wired/paired,
+túnel conectado, DDI disponible y Developer Mode enabled en iOS 26.0.1.
+Se ejecutó build Debug al dispositivo con firma automática de Personal Team y
+permisos de aprovisionamiento/registro. Salida65: Apple sigue rechazando el
+registro por máximo de iPhones; tampoco puede emitir el perfil iOS App Development.
+Log local `/tmp/iaerp-ios-iphone-development-current.log`.
+No se hizo archive, export, upload, TestFlight, inscripción de pago ni instalación.
+
+La CI final `44330846912` ya terminó fallida, con 16/19 UI correctas:
+fallaron snapshot al crear borrador y contraste en formulario/Cuenta de texto
+máximo. Configurador 8/8 correcto. Se conserva Full4 como evidencia local,
+sin confundirlo con aprobación remota. No se cambió código para este reintento.

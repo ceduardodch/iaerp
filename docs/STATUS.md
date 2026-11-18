@@ -33,11 +33,21 @@ alcance y las decisiones.
   al corte Full4. Validación remota pendiente, no aprobada.
   [Evidencia actual](../ios/validation/2026-11-18-live-connection.md).
 
-- Instalación física: iPhone emparejado por cable, iOS 26.0.1 compatible. El
-  titular actualizó Apple ID, pero la firma falla por límite de iPhones de
-  Personal Team y Carlos confirma que no tiene otra cuenta. Apple indica
-  caducidad de registros a siete días; no conocemos su fecha de liberación.
-  No hay app instalada, primer login ni Face ID/VoiceOver físicos comprobados.
+- Reintento pedido por Carlos, 2026-11-18: instalación **local de desarrollo**
+  con cuenta gratuita, sin App Store/TestFlight ni suscripción. El iPhone está
+  conectado por cable, emparejado, con DDI disponible y Developer Mode **enabled**.
+  Build Debug con firma automática del Personal Team vuelve a fallar: Apple
+  responde «Your development team has reached the maximum number of registered
+  iPhone devices». Es un límite de firma local, no de publicación.
+  Log: `/tmp/iaerp-ios-iphone-development-current.log`, salida 65.
+  No hay app instalada. No conocemos la fecha de liberación del cupo.
+  Carlos confirma que sólo dispone de esta cuenta.
+
+- Resultado remoto ya cerrado: CI iOS `44330846912` **fallida**. Configurador
+  8/8 correcto; UI 16/19 correctas y tres fallos: snapshot de crear borrador,
+  contraste inicial del formulario y contraste de Cuenta con texto máximo.
+  La aprobación local Full4 no sustituye este resultado en iOS 27.2.
+  Sigue pendiente login real, Face ID/VoiceOver físicos y guardado real.
 
 Los cortes siguientes son históricos; no sustituyen el estado 0.4.1 anterior.
 
