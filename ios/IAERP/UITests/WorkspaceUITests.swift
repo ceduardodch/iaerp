@@ -173,9 +173,12 @@ final class WorkspaceUITests: XCTestCase {
         quantity.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
-        // The AX frame includes the leading label. Select the value explicitly
-        // so a tap in that label cannot leave the caret before the old digit.
-        quantity.typeKey("a", modifierFlags: .command)
+        let clear = app.buttons["clear-field-Cantidad"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 3))
+        XCTAssertGreaterThanOrEqual(clear.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(clear.frame.height, 44)
+        clear.tap()
+        XCTAssertFalse(clear.isEnabled)
         quantity.typeText("2")
         XCTAssertEqual(quantity.value as? String, "2")
         assertEntireInvoiceControl(quantity, in: app)
@@ -191,10 +194,12 @@ final class WorkspaceUITests: XCTestCase {
         quantity.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
         assertEntireInvoiceControl(quantity, in: app)
-        quantity.typeKey("a", modifierFlags: .command)
+        clear.tap()
+        XCTAssertFalse(clear.isEnabled)
         quantity.typeText("3")
         XCTAssertEqual(quantity.value as? String, "3")
-        quantity.typeKey("a", modifierFlags: .command)
+        clear.tap()
+        XCTAssertFalse(clear.isEnabled)
         quantity.typeText("2")
         XCTAssertEqual(quantity.value as? String, "2")
         done.tap()

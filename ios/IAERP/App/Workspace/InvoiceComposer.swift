@@ -520,9 +520,24 @@ struct ERPDecimalField: View {
     let key: InvoiceInputFocus
     var body: some View {
         LabeledContent {
-            TextField(title, text: $text).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                .focused($focus, equals: key)
-                .accessibilityIdentifier("field-\(title)")
+            HStack(spacing: 4) {
+                TextField(title, text: $text).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                    .focused($focus, equals: key)
+                    .accessibilityIdentifier("field-\(title)")
+                if focus == key {
+                    Button {
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Borrar \(title.lowercased())")
+                    .accessibilityIdentifier("clear-field-\(title)")
+                    .disabled(text.isEmpty)
+                }
+            }
         } label: { Text(title).foregroundStyle(Color.primary) }
         .frame(minHeight: 44)
     }
