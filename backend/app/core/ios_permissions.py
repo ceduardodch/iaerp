@@ -20,6 +20,7 @@ IOS_READ_SCOPES = frozenset(
 )
 # Initial business roles are documented in docs/02-scope-and-restrictions.md.
 # Seed-only labels such as operator/accountant do not imply billing authority.
+IOS_OVERVIEW_ROLES = frozenset({"owner", "admin", "collections", "auditor"})
 IOS_INVOICE_WRITER_ROLES = frozenset({"owner", "admin", "billing"})
 
 
@@ -48,7 +49,10 @@ def validate_ios_client(
 
 def ios_effective_scopes(scopes: Iterable[str], membership_roles: Iterable[str]) -> frozenset[str]:
     allowed = IOS_READ_SCOPES
-    if IOS_INVOICE_WRITER_ROLES.intersection(membership_roles):
+    roles = frozenset(membership_roles)
+    if IOS_OVERVIEW_ROLES.intersection(roles):
+        allowed = allowed | {"receivables:read"}
+    if IOS_INVOICE_WRITER_ROLES.intersection(roles):
         allowed = allowed | {"invoices:write"}
     return frozenset(scopes).intersection(allowed)
 

@@ -242,3 +242,26 @@ class InvoiceEmailRead(APIModel):
     sender_address: EmailStr | None
     sender_name: str | None
     attachment_names: list[str]
+
+
+class InvoiceMonthRead(APIModel):
+    month: str
+    count: int
+    total: Decimal
+    currency: str
+
+
+class InvoiceMonthRowRead(APIModel):
+    id: uuid.UUID
+    number: str
+    customer_name: str
+    issue_date: date
+    status: DocumentStatus
+    collection_status: Literal["OPEN", "PARTIAL", "SETTLED", "VOIDED"] | None
+    total: Decimal
+    currency: str
+
+
+class InvoiceMonthPageRead(APIModel):
+    items: list[InvoiceMonthRowRead]
+    next_cursor: str | None

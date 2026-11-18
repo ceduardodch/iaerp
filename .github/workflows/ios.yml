@@ -1,0 +1,77 @@
+name: iOS
+
+on:
+  pull_request:
+    branches: [develop, release, main]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client-config:
+    name: Validate native client configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+        with:
+          version: '0.11.26'
+      - name: Test activation gates without network or credentials
+        run: uv run --no-project --with httpx==0.28.1 python -B -O -m unittest discover -s ios/scripts/tests -v
+  native:
+    name: Build and test iOS
+    runs-on: xcode-27
+    # The cold run reached 42 minutes with two sales flows stopping early.
+    timeout-minutes: 55
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Check pinned toolchain and select an installed simulator
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcodebuild -version | grep -q 'Xcode 27.2'
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
+          available = devices.get('com.apple.CoreSimulator.SimRuntime.iOS-27-2', [])
+          phone = next((d for d in available if d['isAvailable'] and d['name'] == 'iPhone 17'), None)
+          if phone is None:
+              raise SystemExit('Required installed iPhone 17 / iOS 27.2 unavailable; no runtime will be downloaded.')
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('IAERP_SIMULATOR_ID=' + phone['udid'] + '\n')
+          PY
+      - name: Test Swift packages and native app
+        env:
+          IAERP_RESULT_PATH: ${{ runner.temp }}/IAERP.xcresult
+          IAERP_DERIVED_DATA_PATH: ${{ runner.temp }}/IAERPDerived
+          IAERP_LAYOUT_LOG_PATH: ${{ runner.temp }}/invoice-layout.log
+          # Cold hosted builds and UI automation take about 2-3x local time.
+          # Keep every assertion and a finite per-test limit.
+          IAERP_TEST_TIMEOUT_SECONDS: '360'
+          IAERP_TEST_MAX_TIMEOUT_SECONDS: '390'
+          IAERP_LAYOUT_LOG_TIMEOUT: 50m
+        run: bash ios/scripts/test-ios.sh
+      - name: Keep synthetic test results
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: iaerp-ios-tests
+          path: |
+            ${{ runner.temp }}/IAERP.xcresult
+            ${{ runner.temp }}/invoice-layout.log
+          retention-days: 7
+          if-no-files-found: warn

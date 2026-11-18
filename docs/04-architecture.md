@@ -83,8 +83,19 @@ contexto autenticado y llaman comandos/consultas de aplicacion.
 - Rutas y permisos derivados del tenant activo y claims.
 - Pantallas por modulo, con un selector de tenant fuera del contexto de datos.
 
-La primera experiencia es web responsive. No se planifica aplicacion movil
-nativa en el MVP.
+El MVP original parte de web responsive. Desde el 2026-11-17,
+[ADR 0022 Accepted](adrs/0022-native-ios-client.md) añade un cliente iPhone
+SwiftUI sobre REST, por entregas y sin duplicar reglas de negocio. La primera
+parte es local y sintética; acceso autenticado y distribución tienen sus propias
+puertas. Ver [backlog iOS](backlog/ios-backlog.md).
+El [ADR 0023](adrs/0023-ios-saved-accounts.md) amplía la identidad local a varias
+cuentas Keychain y desbloqueo del dispositivo por selección. Sólo una sesión
+activa; cambia contexto/documentos sin mezclar credenciales o tenants.
+El [ADR 0024](adrs/0024-ios-production-connection-policy.md) añade la política
+de cliente nativo por membresía y limita sus mutaciones a preview/borrador.
+El [ADR 0025](adrs/0025-ios-durable-draft-recovery.md) permite sólo el registro
+mínimo de un guardado incierto en Keychain. No introduce catálogo offline;
+la recuperación consulta el resultado del mismo actor y tenant antes de reenviar.
 
 ## Identidad
 

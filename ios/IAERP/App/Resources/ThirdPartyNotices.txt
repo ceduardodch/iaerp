@@ -1,0 +1,5 @@
+AppAuth iOS 3.0.0
+https://github.com/openid/AppAuth-iOS
+Copyright 2015 Google Inc. All Rights Reserved.
+Licensed under the Apache License, Version 2.0.
+The complete license is bundled as AppAuth-LICENSE.txt.

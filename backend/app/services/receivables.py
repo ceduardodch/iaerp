@@ -38,7 +38,7 @@ from xml.etree.ElementTree import Element
 
 from defusedxml.ElementTree import fromstring as safe_fromstring  # type: ignore[import-untyped]
 from fastapi import HTTPException
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import Select, case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
@@ -69,6 +69,7 @@ from app.schemas.receivables import (
     MonthlyCollectionRead,
     PartyAgingBucketTotalRead,
     PaymentInput,
+    ReceivablesOverviewRead,
     ReminderInput,
     RetentionBatchItemRead,
     RetentionBatchRead,
@@ -1028,6 +1029,81 @@ async def get_receivable(
     if entity is None or entity.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Receivable not found")
     return entity
+
+
+async def compute_overview(session: AsyncSession, context: AuthContext) -> ReceivablesOverviewRead:
+    """Dashboard totals using the web's balance, arrears and collection definitions."""
+    tenant_id = context.tenant_id
+    as_of = today_in_fiscal_timezone()
+    # The web's AccountItemRead and this dashboard both describe amounts in USD.
+    # A legacy import with a different currency needs its own totals.
+    foreign_currency = await session.scalar(
+        select(Receivable.id)
+        .where(Receivable.tenant_id == tenant_id, Receivable.currency != "USD")
+        .limit(1)
+    )
+    if foreign_currency is not None:
+        raise HTTPException(409, "Receivables overview requires USD accounts")
+    applied = (
+        select(Movement.installment_id, func.sum(Movement.amount).label("amount"))
+        .where(
+            Movement.tenant_id == tenant_id,
+            Movement.reversed_movement_id.is_(None),
+            Movement.id.not_in(_reversed_movement_ids(tenant_id)),
+        )
+        .group_by(Movement.installment_id)
+        .subquery()
+    )
+    installment = ReceivableInstallment
+    balance = installment.amount - func.coalesce(applied.c.amount, Decimal("0.00"))
+    balances = (
+        select(
+            installment.receivable_id,
+            func.sum(balance).label("balance"),
+            func.min(case((balance > 0, installment.due_date))).label("earliest_open_due"),
+        )
+        .outerjoin(applied, applied.c.installment_id == installment.id)
+        .where(installment.tenant_id == tenant_id)
+        .group_by(installment.receivable_id)
+        .subquery()
+    )
+    tolerance_ids = set(
+        await session.scalars(
+            select(AuditEvent.entity_id).where(
+                AuditEvent.tenant_id == tenant_id,
+                AuditEvent.action == _RETENTION_TOLERANCE_AUDIT_ACTION,
+                AuditEvent.entity_type == "receivable",
+            )
+        )
+    )
+    # Accounts without installments have a zero balance on the web.
+    accounts = await session.execute(
+        select(
+            Receivable.id,
+            Receivable.status,
+            Receivable.original_amount,
+            balances.c.balance,
+            balances.c.earliest_open_due,
+        )
+        .join(balances, balances.c.receivable_id == Receivable.id)
+        .where(Receivable.tenant_id == tenant_id)
+    )
+    outstanding = overdue = Decimal("0.00")
+    for account_id, persisted_status, original, open_amount, earliest_due in accounts:
+        if -RETENTION_SETTLEMENT_TOLERANCE <= open_amount < 0 and str(account_id) in tolerance_ids:
+            open_amount = Decimal("0.00")
+        outstanding += open_amount
+        # A single late open installment marks the entire open account overdue.
+        account_status = _map_status(persisted_status, open_amount, original)
+        if account_status in {"OPEN", "PARTIAL"} and earliest_due and earliest_due < as_of:
+            overdue += open_amount
+    history = await compute_collections_history(session, context, months=1, as_of=as_of)
+    return ReceivablesOverviewRead(
+        as_of=as_of,
+        outstanding=outstanding,
+        overdue=overdue,
+        collected_this_month=history.months[0].settled_amount,
+    )
 
 
 async def list_receivables(

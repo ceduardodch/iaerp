@@ -32,6 +32,8 @@ from app.schemas.billing import (
     InvoiceEmailPreviewRead,
     InvoiceEmailRead,
     InvoiceInput,
+    InvoiceMonthPageRead,
+    InvoiceMonthRead,
     InvoicePreviewInput,
     InvoicePreviewRead,
     SalesDocumentArchiveInput,
@@ -104,6 +106,7 @@ from app.schemas.receivables import (
     PaymentPreparationRead,
     ReceivableCollectionUpdate,
     ReceivableDueDateUpdate,
+    ReceivablesOverviewRead,
     ReminderInput,
     ReminderRead,
     RetentionBatchRead,
@@ -117,6 +120,7 @@ from app.services import (
     draft_requests,
     fiscal_settings,
     historical_invoice_pdf,
+    invoice_months,
     legal_commercial,
     masters,
     receivables,
@@ -1694,6 +1698,44 @@ async def get_invoices(
     return [await billing.to_sales_document_read(session, context, entity) for entity in entities]
 
 
+@router.get("/invoices/months", response_model=list[InvoiceMonthRead])
+async def get_invoice_months(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    status: str | None = None,
+    party_id: Annotated[uuid.UUID | None, Query(alias="partyId")] = None,
+) -> list[InvoiceMonthRead]:
+    return await invoice_months.list_months(
+        session, context.tenant_id, query=q, status=status, party_id=party_id
+    )
+
+
+@router.get("/invoices/months/{month}", response_model=InvoiceMonthPageRead)
+async def get_monthly_invoices(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+    month: Annotated[str, Path(pattern=r"^[0-9]{4}-(0[1-9]|1[0-2])$")],
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    status: str | None = None,
+    party_id: Annotated[uuid.UUID | None, Query(alias="partyId")] = None,
+    currency: Annotated[str | None, Query(pattern=r"^[A-Z]{3}$")] = None,
+    cursor: Annotated[str | None, Query(max_length=80)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> InvoiceMonthPageRead:
+    return await invoice_months.list_month_page(
+        session,
+        context.tenant_id,
+        month,
+        query=q,
+        status=status,
+        party_id=party_id,
+        currency=currency,
+        cursor=cursor,
+        limit=limit,
+    )
+
+
 @router.get("/invoices/{invoice_id}", response_model=SalesDocumentRead)
 async def get_invoice(
     invoice_id: uuid.UUID,
@@ -2053,6 +2095,14 @@ async def get_receivables(
         session, tenant_id=context.tenant_id, status=status, as_of=as_of, party_id=party_id
     )
     return [_account_item_response(item) for item in items]
+
+
+@router.get("/receivables/overview", response_model=ReceivablesOverviewRead)
+async def get_receivables_overview(
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("receivables:read"))],
+) -> ReceivablesOverviewRead:
+    return await receivables.compute_overview(session, context)
 
 
 @router.get("/receivables/aging", response_model=AgingSummaryRead)

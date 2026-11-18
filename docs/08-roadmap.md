@@ -1,5 +1,15 @@
 # Roadmap
 
+## Ampliación iOS, 2026-11-17
+
+Carlos autoriza iniciar el cliente SwiftUI por partes, según
+[ADR 0022](adrs/0022-native-ios-client.md) y [backlog móvil](backlog/ios-backlog.md).
+Primero app local sintética para iPhone 14; después acceso/clientes y facturas.
+Los sprints históricos de web que siguen no se renumeran.
+El 18 de noviembre Carlos adelanta cuentas guardadas y desbloqueo local
+(IOS-026/IOS-020), según [ADR 0023](adrs/0023-ios-saved-accounts.md). Las puertas
+del piloto real, firma y validación física mantienen su prioridad y alcance.
+
 Sprints de dos semanas, equipo de 2-3 personas. Cada sprint entrega una porcion
 vertical demostrable en `release`.
 

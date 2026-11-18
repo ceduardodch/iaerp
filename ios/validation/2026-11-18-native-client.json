@@ -1,0 +1,33 @@
+{
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "ec.com.b2b.iaerp:/oauth2redirect"
+  },
+  "bearerOnly": false,
+  "clientId": "iaerp-ios",
+  "defaultScopes": [
+    "context:read",
+    "invoices:read",
+    "invoices:write",
+    "memberships:read",
+    "organization:read",
+    "parties:read",
+    "products:read",
+    "profile"
+  ],
+  "directAccessGrantsEnabled": false,
+  "enabled": true,
+  "fullScopeAllowed": false,
+  "implicitFlowEnabled": false,
+  "optionalScopes": [
+    "organization"
+  ],
+  "protocol": "openid-connect",
+  "publicClient": true,
+  "redirectUris": [
+    "ec.com.b2b.iaerp:/oauth2redirect"
+  ],
+  "serviceAccountsEnabled": false,
+  "standardFlowEnabled": true,
+  "webOrigins": []
+}

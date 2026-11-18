@@ -239,9 +239,18 @@ def require_scopes(
     *required: str,
 ) -> Callable[..., Awaitable[AuthContext]]:
     async def dependency(
+        request: Request,
         context: Annotated[AuthContext, Depends(get_auth_context)],
     ) -> AuthContext:
         missing = set(required).difference(context.scopes)
+        # This legacy scope covers individual records and banking-related reads.
+        # The native client receives only the three approved dashboard totals.
+        if (
+            context.client_id == IOS_CLIENT_ID
+            and "receivables:read" in required
+            and request.scope.get("path") != f"{settings.API_PREFIX}/receivables/overview"
+        ):
+            missing.add("receivables:read")
         if missing:
             scope_value = " ".join(sorted(missing))
             raise HTTPException(

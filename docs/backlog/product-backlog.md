@@ -1,5 +1,9 @@
 # Product backlog
 
+Ampliación autorizada: [IAERP para iPhone por partes](ios-backlog.md), con
+[ADR 0022 Accepted](../adrs/0022-native-ios-client.md). Parte 0 en preparación
+local; no modifica el alcance histórico del MVP web ni habilita producción.
+
 Prioridades:
 
 - P0: necesario para una entrega segura y util.

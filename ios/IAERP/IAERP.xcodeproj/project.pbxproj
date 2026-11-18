@@ -1,0 +1,755 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		09A870EB70414798D243308F /* AuthenticationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97EF4F7F805F1C3BF60753B /* AuthenticationController.swift */; };
+		0C1EDF3D25A52379613587FD /* IAERPIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = F065DA62A6B8B2A22D7AFA32 /* IAERPIdentity */; };
+		10EDFEE203496592326412FF /* HomeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31BF382B51328CA896647678 /* HomeUITests.swift */; };
+		12D39A5D66EBB256E92BAC6F /* InvoicePaymentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E33A00880FA15CD1413B28 /* InvoicePaymentTests.swift */; };
+		2D727C3E4F3285B5BC76435C /* IAERPClient in Frameworks */ = {isa = PBXBuildFile; productRef = 96013C487CE9030808EC5431 /* IAERPClient */; };
+		36C3CE8571357578A96A7872 /* IAERPIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = 79033927CA56E0337031201B /* IAERPIdentity */; };
+		399A33F88D3AA2A9FFED4E68 /* WorkspaceRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42C2F2CB65C4F411281EB5FA /* WorkspaceRootView.swift */; };
+		3B51A7E168DF8EBA7A63998C /* SavedAccountsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 257B79B79BBD5A4C021C8F00 /* SavedAccountsUITests.swift */; };
+		3CE44855738397DEFB13A78E /* InvoiceComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4FD14629AD815D46BC362A5 /* InvoiceComposer.swift */; };
+		42B12E7EF703562BBB345C29 /* WorkspaceStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7E9E9B127C42E3C9ED8584 /* WorkspaceStateTests.swift */; };
+		4895284FF80421FE31C38417 /* InvoiceDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6179AB12F75B1F33AC2BD464 /* InvoiceDetail.swift */; };
+		4F5F0AD203513F1921FD8D95 /* InvoiceRecoveryProcessUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9161A866C1B78531BF0C565F /* InvoiceRecoveryProcessUITests.swift */; };
+		5B2B901DCBA94D52748F3FD5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3E5931BFE0278DA3F53537D3 /* Assets.xcassets */; };
+		5E95C94590ABBA63A5DE552B /* WorkspaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA41DAB311450DDB91F74E5 /* WorkspaceUITests.swift */; };
+		60B902DA572341D61202866D /* SavedAccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC7B4D29DA82766499CC936F /* SavedAccountTests.swift */; };
+		6260E7142D482095F9688BC9 /* ThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = EF88DBC0965E7B94D6EB1BBF /* ThirdPartyNotices.txt */; };
+		67034DCBF714B1172FFDE5F2 /* HomePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D405492677F91856B30FAD5 /* HomePresentationTests.swift */; };
+		73F3FA126EE0935B0DA9A04F /* InvoiceRecoveryProcessFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16BADB2271AE15B4499EB72A /* InvoiceRecoveryProcessFixture.swift */; };
+		7521CDC0BC2E831D83070BC1 /* InvoiceRecoveryJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E88E83C9809DF31B0CF78408 /* InvoiceRecoveryJournal.swift */; };
+		799D96BA3CC8D369B6495F44 /* InvoiceRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE0DC32DF1A916FE45A7400 /* InvoiceRecoveryTests.swift */; };
+		7C207158265FB7E69CBDE7B1 /* LaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DF2EA5185EF75FBBC96FBB /* LaunchUITests.swift */; };
+		8AD363D66FF3A9F76F2A11F1 /* IAERPDemo in Frameworks */ = {isa = PBXBuildFile; productRef = 9444FD41C8FDD839F6A0EA41 /* IAERPDemo */; };
+		9526BAD54F4EA47EAC574481 /* AppAuth-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = CC1D19A78921F4EF5DFA755E /* AppAuth-LICENSE.txt */; };
+		A139DDB53C512F01117DECBA /* ERPComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B354A825B72DC36A84B84E /* ERPComponents.swift */; };
+		AF43630A693F88D5F85FECB0 /* WorkspaceSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA813F6541BF6881704BCDF7 /* WorkspaceSupport.swift */; };
+		B22D482C040ABB8FE4DA21BF /* DemoClientsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27072CEE475945FB537D36C8 /* DemoClientsView.swift */; };
+		B77CC53773330D4B1821CB8C /* SavedAccountsFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B479AE21F97F83ECB3571AA /* SavedAccountsFixture.swift */; };
+		BDDFAD67E3C5F441311F9EDF /* WorkspaceLists.swift in Sources */ = {isa = PBXBuildFile; fileRef = F701EDCEF364ABECC346FAA2 /* WorkspaceLists.swift */; };
+		CD2726C56E036DBF62FAE773 /* IAERPConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E761342EF812734B849B91A /* IAERPConnection.swift */; };
+		D5DE7D5BC75A71FA4F8B249C /* IAERPClient in Frameworks */ = {isa = PBXBuildFile; productRef = C247FA3BC587C312E689C3BA /* IAERPClient */; };
+		DAC03BE3E1862B9535088F17 /* WorkspaceConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C56CC20BBF2775D33F6A085D /* WorkspaceConcurrencyTests.swift */; };
+		DDB23D330A58B3C540178CB0 /* DeviceOwnerUnlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 579C47585205A104BDF8B833 /* DeviceOwnerUnlock.swift */; };
+		F89356EFE9458E1516E5A922 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B49BD05192C6926640BD11 /* WorkspaceStore.swift */; };
+		FFE42BFD67158AC4F3A19B73 /* IAERPApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E0E11EE0BF1B185616BC9F1 /* IAERPApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BBEAE962013542354ACDC39B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 883EE81434483D296E840676 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = EF4F612CA537D9A83C88E4FB;
+			remoteInfo = IAERP;
+		};
+		EE1C6C4548D7305DC8C837BD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 883EE81434483D296E840676 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = EF4F612CA537D9A83C88E4FB;
+			remoteInfo = IAERP;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0E0E11EE0BF1B185616BC9F1 /* IAERPApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAERPApp.swift; sourceTree = "<group>"; };
+		16BADB2271AE15B4499EB72A /* InvoiceRecoveryProcessFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceRecoveryProcessFixture.swift; sourceTree = "<group>"; };
+		1E761342EF812734B849B91A /* IAERPConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IAERPConnection.swift; sourceTree = "<group>"; };
+		209336701246C4AEA6935314 /* IAERPAppTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = IAERPAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		257B79B79BBD5A4C021C8F00 /* SavedAccountsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedAccountsUITests.swift; sourceTree = "<group>"; };
+		27072CEE475945FB537D36C8 /* DemoClientsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoClientsView.swift; sourceTree = "<group>"; };
+		2AE0DC32DF1A916FE45A7400 /* InvoiceRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceRecoveryTests.swift; sourceTree = "<group>"; };
+		31BF382B51328CA896647678 /* HomeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeUITests.swift; sourceTree = "<group>"; };
+		3D405492677F91856B30FAD5 /* HomePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePresentationTests.swift; sourceTree = "<group>"; };
+		3E5931BFE0278DA3F53537D3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		42C2F2CB65C4F411281EB5FA /* WorkspaceRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRootView.swift; sourceTree = "<group>"; };
+		48B49BD05192C6926640BD11 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
+		579C47585205A104BDF8B833 /* DeviceOwnerUnlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceOwnerUnlock.swift; sourceTree = "<group>"; };
+		5B11D61246444213EFA7E9EE /* IAERP.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = IAERP.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5B7975685F3D7EE1424D57A6 /* IAERPUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = IAERPUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5CA41DAB311450DDB91F74E5 /* WorkspaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceUITests.swift; sourceTree = "<group>"; };
+		6179AB12F75B1F33AC2BD464 /* InvoiceDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceDetail.swift; sourceTree = "<group>"; };
+		7B479AE21F97F83ECB3571AA /* SavedAccountsFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedAccountsFixture.swift; sourceTree = "<group>"; };
+		9161A866C1B78531BF0C565F /* InvoiceRecoveryProcessUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceRecoveryProcessUITests.swift; sourceTree = "<group>"; };
+		93DF2EA5185EF75FBBC96FBB /* LaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchUITests.swift; sourceTree = "<group>"; };
+		A97EF4F7F805F1C3BF60753B /* AuthenticationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationController.swift; sourceTree = "<group>"; };
+		AA7E9E9B127C42E3C9ED8584 /* WorkspaceStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStateTests.swift; sourceTree = "<group>"; };
+		B7E33A00880FA15CD1413B28 /* InvoicePaymentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoicePaymentTests.swift; sourceTree = "<group>"; };
+		BA813F6541BF6881704BCDF7 /* WorkspaceSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSupport.swift; sourceTree = "<group>"; };
+		BC7B4D29DA82766499CC936F /* SavedAccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedAccountTests.swift; sourceTree = "<group>"; };
+		C56CC20BBF2775D33F6A085D /* WorkspaceConcurrencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceConcurrencyTests.swift; sourceTree = "<group>"; };
+		CC1D19A78921F4EF5DFA755E /* AppAuth-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "AppAuth-LICENSE.txt"; sourceTree = "<group>"; };
+		DFA77ABDFAAF33CAEBA5409E /* IAERP */ = {isa = PBXFileReference; lastKnownFileType = folder; name = IAERP; path = .; sourceTree = SOURCE_ROOT; };
+		E4FD14629AD815D46BC362A5 /* InvoiceComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceComposer.swift; sourceTree = "<group>"; };
+		E88E83C9809DF31B0CF78408 /* InvoiceRecoveryJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceRecoveryJournal.swift; sourceTree = "<group>"; };
+		EF88DBC0965E7B94D6EB1BBF /* ThirdPartyNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = ThirdPartyNotices.txt; sourceTree = "<group>"; };
+		F0B354A825B72DC36A84B84E /* ERPComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ERPComponents.swift; sourceTree = "<group>"; };
+		F701EDCEF364ABECC346FAA2 /* WorkspaceLists.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceLists.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E6ED27B90C18B9BCB7D5F071 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8AD363D66FF3A9F76F2A11F1 /* IAERPDemo in Frameworks */,
+				2D727C3E4F3285B5BC76435C /* IAERPClient in Frameworks */,
+				36C3CE8571357578A96A7872 /* IAERPIdentity in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E922FCACB01A01459A868537 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D5DE7D5BC75A71FA4F8B249C /* IAERPClient in Frameworks */,
+				0C1EDF3D25A52379613587FD /* IAERPIdentity in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2345D0595DA3B30CCDF10366 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				3E5931BFE0278DA3F53537D3 /* Assets.xcassets */,
+				27072CEE475945FB537D36C8 /* DemoClientsView.swift */,
+				F0B354A825B72DC36A84B84E /* ERPComponents.swift */,
+				0E0E11EE0BF1B185616BC9F1 /* IAERPApp.swift */,
+				24ED425786D7E34704C421BC /* Identity */,
+				5C410895D4D9007ED8FE72CD /* Recovery */,
+				79E9F1CA7D7CBDAF9F6DF6FB /* Resources */,
+				92B139C41D937EDF6AAF023C /* Workspace */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		24ED425786D7E34704C421BC /* Identity */ = {
+			isa = PBXGroup;
+			children = (
+				A97EF4F7F805F1C3BF60753B /* AuthenticationController.swift */,
+				579C47585205A104BDF8B833 /* DeviceOwnerUnlock.swift */,
+				1E761342EF812734B849B91A /* IAERPConnection.swift */,
+				7B479AE21F97F83ECB3571AA /* SavedAccountsFixture.swift */,
+			);
+			path = Identity;
+			sourceTree = "<group>";
+		};
+		51DB7A7C872084DD3F10D396 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5B11D61246444213EFA7E9EE /* IAERP.app */,
+				209336701246C4AEA6935314 /* IAERPAppTests.xctest */,
+				5B7975685F3D7EE1424D57A6 /* IAERPUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5C410895D4D9007ED8FE72CD /* Recovery */ = {
+			isa = PBXGroup;
+			children = (
+				E88E83C9809DF31B0CF78408 /* InvoiceRecoveryJournal.swift */,
+				16BADB2271AE15B4499EB72A /* InvoiceRecoveryProcessFixture.swift */,
+			);
+			path = Recovery;
+			sourceTree = "<group>";
+		};
+		79E9F1CA7D7CBDAF9F6DF6FB /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				CC1D19A78921F4EF5DFA755E /* AppAuth-LICENSE.txt */,
+				EF88DBC0965E7B94D6EB1BBF /* ThirdPartyNotices.txt */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		92B139C41D937EDF6AAF023C /* Workspace */ = {
+			isa = PBXGroup;
+			children = (
+				E4FD14629AD815D46BC362A5 /* InvoiceComposer.swift */,
+				6179AB12F75B1F33AC2BD464 /* InvoiceDetail.swift */,
+				F701EDCEF364ABECC346FAA2 /* WorkspaceLists.swift */,
+				42C2F2CB65C4F411281EB5FA /* WorkspaceRootView.swift */,
+				48B49BD05192C6926640BD11 /* WorkspaceStore.swift */,
+				BA813F6541BF6881704BCDF7 /* WorkspaceSupport.swift */,
+			);
+			path = Workspace;
+			sourceTree = "<group>";
+		};
+		BC58F0245EA9B803074661BA /* AppTests */ = {
+			isa = PBXGroup;
+			children = (
+				3D405492677F91856B30FAD5 /* HomePresentationTests.swift */,
+				B7E33A00880FA15CD1413B28 /* InvoicePaymentTests.swift */,
+				2AE0DC32DF1A916FE45A7400 /* InvoiceRecoveryTests.swift */,
+				BC7B4D29DA82766499CC936F /* SavedAccountTests.swift */,
+				C56CC20BBF2775D33F6A085D /* WorkspaceConcurrencyTests.swift */,
+				AA7E9E9B127C42E3C9ED8584 /* WorkspaceStateTests.swift */,
+			);
+			path = AppTests;
+			sourceTree = "<group>";
+		};
+		ED78C917CB2ABEF3D3D2F650 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				DFA77ABDFAAF33CAEBA5409E /* IAERP */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		EDC7F2E2A0391C719552591B = {
+			isa = PBXGroup;
+			children = (
+				2345D0595DA3B30CCDF10366 /* App */,
+				BC58F0245EA9B803074661BA /* AppTests */,
+				ED78C917CB2ABEF3D3D2F650 /* Packages */,
+				EE2576B47090A5836A676ABD /* UITests */,
+				51DB7A7C872084DD3F10D396 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EE2576B47090A5836A676ABD /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				31BF382B51328CA896647678 /* HomeUITests.swift */,
+				9161A866C1B78531BF0C565F /* InvoiceRecoveryProcessUITests.swift */,
+				93DF2EA5185EF75FBBC96FBB /* LaunchUITests.swift */,
+				257B79B79BBD5A4C021C8F00 /* SavedAccountsUITests.swift */,
+				5CA41DAB311450DDB91F74E5 /* WorkspaceUITests.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2D4B59EBD1046EC2E14F1B4E /* IAERPUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7764EAF8B4C8784D29A9A47E /* Build configuration list for PBXNativeTarget "IAERPUITests" */;
+			buildPhases = (
+				8030017CC5DCA17961FA80AD /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1CDC3849E80B6ABE16676F65 /* PBXTargetDependency */,
+			);
+			name = IAERPUITests;
+			packageProductDependencies = (
+			);
+			productName = IAERPUITests;
+			productReference = 5B7975685F3D7EE1424D57A6 /* IAERPUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		BC068F8E011DDA3903EC5500 /* IAERPAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 012FFB8FAD31C978E4415FBD /* Build configuration list for PBXNativeTarget "IAERPAppTests" */;
+			buildPhases = (
+				1D08A891BE9BD43B6ECF2FBA /* Sources */,
+				E922FCACB01A01459A868537 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A6D2F0EFAD768F5007D9A217 /* PBXTargetDependency */,
+			);
+			name = IAERPAppTests;
+			packageProductDependencies = (
+				C247FA3BC587C312E689C3BA /* IAERPClient */,
+				F065DA62A6B8B2A22D7AFA32 /* IAERPIdentity */,
+			);
+			productName = IAERPAppTests;
+			productReference = 209336701246C4AEA6935314 /* IAERPAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		EF4F612CA537D9A83C88E4FB /* IAERP */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7D53B2427CACF58457E93F1D /* Build configuration list for PBXNativeTarget "IAERP" */;
+			buildPhases = (
+				A00CCCF272A1EAA2CAF455E9 /* Sources */,
+				08413D2FB0059E287706F4F7 /* Resources */,
+				E6ED27B90C18B9BCB7D5F071 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = IAERP;
+			packageProductDependencies = (
+				9444FD41C8FDD839F6A0EA41 /* IAERPDemo */,
+				96013C487CE9030808EC5431 /* IAERPClient */,
+				79033927CA56E0337031201B /* IAERPIdentity */,
+			);
+			productName = IAERP;
+			productReference = 5B11D61246444213EFA7E9EE /* IAERP.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		883EE81434483D296E840676 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					2D4B59EBD1046EC2E14F1B4E = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+						TestTargetID = EF4F612CA537D9A83C88E4FB;
+					};
+					BC068F8E011DDA3903EC5500 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					EF4F612CA537D9A83C88E4FB = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = A409E790E9427A1C7BF867B1 /* Build configuration list for PBXProject "IAERP" */;
+			developmentRegion = es;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				es,
+			);
+			mainGroup = EDC7F2E2A0391C719552591B;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				EDC2E6C286DE1B4436FFF06A /* XCLocalSwiftPackageReference "." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 51DB7A7C872084DD3F10D396 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				EF4F612CA537D9A83C88E4FB /* IAERP */,
+				BC068F8E011DDA3903EC5500 /* IAERPAppTests */,
+				2D4B59EBD1046EC2E14F1B4E /* IAERPUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		08413D2FB0059E287706F4F7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9526BAD54F4EA47EAC574481 /* AppAuth-LICENSE.txt in Resources */,
+				5B2B901DCBA94D52748F3FD5 /* Assets.xcassets in Resources */,
+				6260E7142D482095F9688BC9 /* ThirdPartyNotices.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1D08A891BE9BD43B6ECF2FBA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				67034DCBF714B1172FFDE5F2 /* HomePresentationTests.swift in Sources */,
+				12D39A5D66EBB256E92BAC6F /* InvoicePaymentTests.swift in Sources */,
+				799D96BA3CC8D369B6495F44 /* InvoiceRecoveryTests.swift in Sources */,
+				60B902DA572341D61202866D /* SavedAccountTests.swift in Sources */,
+				DAC03BE3E1862B9535088F17 /* WorkspaceConcurrencyTests.swift in Sources */,
+				42B12E7EF703562BBB345C29 /* WorkspaceStateTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8030017CC5DCA17961FA80AD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				10EDFEE203496592326412FF /* HomeUITests.swift in Sources */,
+				4F5F0AD203513F1921FD8D95 /* InvoiceRecoveryProcessUITests.swift in Sources */,
+				7C207158265FB7E69CBDE7B1 /* LaunchUITests.swift in Sources */,
+				3B51A7E168DF8EBA7A63998C /* SavedAccountsUITests.swift in Sources */,
+				5E95C94590ABBA63A5DE552B /* WorkspaceUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00CCCF272A1EAA2CAF455E9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				09A870EB70414798D243308F /* AuthenticationController.swift in Sources */,
+				B22D482C040ABB8FE4DA21BF /* DemoClientsView.swift in Sources */,
+				DDB23D330A58B3C540178CB0 /* DeviceOwnerUnlock.swift in Sources */,
+				A139DDB53C512F01117DECBA /* ERPComponents.swift in Sources */,
+				FFE42BFD67158AC4F3A19B73 /* IAERPApp.swift in Sources */,
+				CD2726C56E036DBF62FAE773 /* IAERPConnection.swift in Sources */,
+				3CE44855738397DEFB13A78E /* InvoiceComposer.swift in Sources */,
+				4895284FF80421FE31C38417 /* InvoiceDetail.swift in Sources */,
+				7521CDC0BC2E831D83070BC1 /* InvoiceRecoveryJournal.swift in Sources */,
+				73F3FA126EE0935B0DA9A04F /* InvoiceRecoveryProcessFixture.swift in Sources */,
+				B77CC53773330D4B1821CB8C /* SavedAccountsFixture.swift in Sources */,
+				BDDFAD67E3C5F441311F9EDF /* WorkspaceLists.swift in Sources */,
+				399A33F88D3AA2A9FFED4E68 /* WorkspaceRootView.swift in Sources */,
+				F89356EFE9458E1516E5A922 /* WorkspaceStore.swift in Sources */,
+				AF43630A693F88D5F85FECB0 /* WorkspaceSupport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1CDC3849E80B6ABE16676F65 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = EF4F612CA537D9A83C88E4FB /* IAERP */;
+			targetProxy = BBEAE962013542354ACDC39B /* PBXContainerItemProxy */;
+		};
+		A6D2F0EFAD768F5007D9A217 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = EF4F612CA537D9A83C88E4FB /* IAERP */;
+			targetProxy = EE1C6C4548D7305DC8C837BD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5B5EE6B11772AAA88C45C89E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ec.com.b2b.iaerp.demo.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = IAERP;
+			};
+			name = Release;
+		};
+		D06E88D1D07B2BFB3194EAF1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 7;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.5.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		D0EE44B8C8349FA1A81E6C78 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ec.com.b2b.iaerp.demo.uitests;
+				SDKROOT = iphoneos;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = IAERP;
+			};
+			name = Debug;
+		};
+		D5E314067CFF0028A31F9087 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ec.com.b2b.iaerp.apptests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IAERP.app/IAERP";
+			};
+			name = Release;
+		};
+		D6EAFE013D82C3CE3CA6C38F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Config/Simulator.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IAERP;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ec.com.b2b.iaerp.demo;
+				PRODUCT_NAME = IAERP;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		E62B88DDB100524BCCCC2884 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 7;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.5.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		F2A7E0D066CC7F141A448DEA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ec.com.b2b.iaerp.apptests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IAERP.app/IAERP";
+			};
+			name = Debug;
+		};
+		FA963EC4601BAB9516BB1204 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = Config/Simulator.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = IAERP;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ec.com.b2b.iaerp.demo;
+				PRODUCT_NAME = IAERP;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		012FFB8FAD31C978E4415FBD /* Build configuration list for PBXNativeTarget "IAERPAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F2A7E0D066CC7F141A448DEA /* Debug */,
+				D5E314067CFF0028A31F9087 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7764EAF8B4C8784D29A9A47E /* Build configuration list for PBXNativeTarget "IAERPUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D0EE44B8C8349FA1A81E6C78 /* Debug */,
+				5B5EE6B11772AAA88C45C89E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7D53B2427CACF58457E93F1D /* Build configuration list for PBXNativeTarget "IAERP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FA963EC4601BAB9516BB1204 /* Debug */,
+				D6EAFE013D82C3CE3CA6C38F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A409E790E9427A1C7BF867B1 /* Build configuration list for PBXProject "IAERP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D06E88D1D07B2BFB3194EAF1 /* Debug */,
+				E62B88DDB100524BCCCC2884 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		EDC2E6C286DE1B4436FFF06A /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		79033927CA56E0337031201B /* IAERPIdentity */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = IAERPIdentity;
+		};
+		9444FD41C8FDD839F6A0EA41 /* IAERPDemo */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = IAERPDemo;
+		};
+		96013C487CE9030808EC5431 /* IAERPClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = IAERPClient;
+		};
+		C247FA3BC587C312E689C3BA /* IAERPClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = IAERPClient;
+		};
+		F065DA62A6B8B2A22D7AFA32 /* IAERPIdentity */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = IAERPIdentity;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 883EE81434483D296E840676 /* Project object */;
+}

@@ -2,6 +2,11 @@
 
 ## Alcance MVP
 
+Ampliación posterior al MVP web: cliente iPhone SwiftUI aprobado en
+[ADR 0022](adrs/0022-native-ios-client.md), con entregas del
+[backlog iOS](backlog/ios-backlog.md). El primer incremento es una demostración
+local con datos sintéticos; no amplía permisos ni habilita operaciones reales.
+
 ### Plataforma
 
 - Un tenant corresponde exactamente a un RUC.

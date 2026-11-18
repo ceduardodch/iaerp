@@ -385,3 +385,11 @@ __all__ = [
     "RetentionXmlPreviewRead",
     "RetentionKind",
 ]
+
+
+class ReceivablesOverviewRead(APIModel):
+    as_of: date
+    outstanding: Decimal
+    overdue: Decimal
+    collected_this_month: Decimal
+    currency: Literal["USD"] = "USD"

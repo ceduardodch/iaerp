@@ -5,6 +5,35 @@ deben enlazarla y no copiar una version parcial.
 
 ## Piramide
 
+Para el cliente iOS de [ADR 0022](adrs/0022-native-ios-client.md), Swift Testing
+cubre lógica pura con datos sintéticos y XCUITest cubre arranque, navegación y
+accesibilidad. Los resultados SwiftPM en macOS no equivalen a una compilación
+iOS, un simulador o una instalación en teléfono. Cada cierre registra esos
+estados por separado; sin Xcode/SDK/dispositivo no se declara terminada IOS-004.
+El paquete cubre contrato REST/OIDC con transportes y proveedores controlados;
+`IAERPAppTests` prueba carreras/privacidad/formulario dentro de iOS y
+`IAERPUITests` prueba recorridos completos y auditoría, sin filtros de hallazgos.
+El workflow [iOS](../.github/workflows/ios.yml) prepara runner Xcode 27.2 y un
+simulador ya instalado. Es independiente de publicación y de Coolify; un
+workflow preparado no cuenta como CI ejecutada.
+Para multicuentas (ADR 0023), probar sujetos distintos con el mismo nombre y
+empresa, dos empresas, rotación aislada y migración interrumpida. El gate local
+usa una abstracción controlada en AppHost para forzar cancelación/no disponible,
+respuesta tardía y background; esa evidencia no sustituye Face ID/código físico.
+Los fixtures UI de cuentas sólo se compilan en Debug del simulador y no eluden
+el desbloqueador real.
+
+Para ADR 0024, probar JWT firmado, roles distintos por tenant, revocación y
+denegación de mutaciones fiscales antes del UOW. La publicación debe comprobar
+la política efectiva antes de habilitar el cliente OAuth; CI verde no acredita
+por sí solo ese despliegue. El configurador tiene pruebas sin red bajo Python
+`-O` para hashes, staging deshabilitado, scopes y habilitación al final.
+Para ADR 0025, probar journal con Keychain real y terminar/reabrir el proceso
+antes del POST, tras commit sin respuesta y tras respuesta antes del GET final.
+Exigir misma clave/payload y un único documento, además de expiración,
+downgrade, identidad ajena y bloqueo de Nuevo. La prueba sintética de proceso
+no sustituye el commit ni la idempotencia del servidor publicado.
+
 - Unitarias: calculos, estados, politicas, secuencias y parsers.
 - Integracion: PostgreSQL, Redis, MinIO, Keycloak y outbox.
 - Contrato: OpenAPI, MCP schemas, SRI, email y WhatsApp.

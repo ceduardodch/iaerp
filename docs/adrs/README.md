@@ -26,3 +26,8 @@ sustituya.
 | [0019](0019-purchase-tax-classification-rules.md) | Reglas fiscales para facturas recibidas | Proposed |
 | [0020](0020-sri-importer-on-b2b.md) | Descarga SRI en b2b con sesiones persistentes | Accepted |
 | [0021](0021-received-purchase-cancellation.md) | Anulación local respaldada de facturas recibidas | Accepted |
+| [0022](0022-native-ios-client.md) | Cliente nativo iOS por entregas | Accepted |
+| [0023](0023-ios-saved-accounts.md) | Cuentas guardadas y desbloqueo local en iPhone | Accepted |
+| [0024](0024-ios-production-connection-policy.md) | Conexión iOS y permisos efectivos del piloto | Accepted |
+| [0025](0025-ios-durable-draft-recovery.md) | Recuperación durable de un borrador desde iPhone | Accepted |
+| [0026](0026-ios-receivables-overview.md) | Resumen móvil de cartera y facturas por mes | Accepted |
