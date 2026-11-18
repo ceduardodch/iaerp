@@ -197,6 +197,7 @@ struct InvoiceComposerView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmDiscard = false
     @State private var pickingCustomer = false
+    @State private var pickingProduct = false
     @State private var didConfigure = false
     @State private var isAtEnd = false
     @State private var measuredAtEnd = false
@@ -291,9 +292,13 @@ struct InvoiceComposerView: View {
                             .disabled(!draft.canEdit)
                         }
                         Section {
-                            NavigationLink {
-                                ProductPicker(store: store, draft: draft)
-                            } label: { Label("Añadir producto", systemImage: "plus") }
+                            Button {
+                                pickingProduct = true
+                            } label: {
+                                Label("Añadir producto", systemImage: "plus")
+                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
                             .accessibilityIdentifier("add-product")
                             .frame(minHeight: 44)
                             .disabled(!draft.canEdit || store.setup == nil)
@@ -413,6 +418,9 @@ struct InvoiceComposerView: View {
             .navigationTitle("Nueva factura")
             .navigationDestination(isPresented: $pickingCustomer) {
                 CustomerPicker(store: store, selection: $draft.customerId)
+            }
+            .sheet(isPresented: $pickingProduct) {
+                NavigationStack { ProductPicker(store: store, draft: draft) }
             }
             .toolbarTitleDisplayMode(.inline)
             .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
@@ -560,27 +568,46 @@ struct ProductPicker: View {
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     var body: some View {
-        List {
-            Section { ERPSearchField(text: $query, prompt: "Buscar productos") }
-            if store.loadingProducts { ProgressView("Buscando productos…") }
-            if let error = store.catalogError {
-                ERPErrorState(message: error) { await store.loadProducts(query: query) }
-            }
-            ForEach(store.products.filter { query.isEmpty || $0.name.localizedStandardContains(query) || ($0.code?.localizedStandardContains(query) == true) }) { product in
-                Button { draft.add(product, setup: store.setup); if draft.error == nil { dismiss() } } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(product.name).font(.headline)
-                        Text(ERPDisplay.money(product.unitPrice)).font(.subheadline)
-                    }
-                    .foregroundStyle(Color.primary)
-                    .frame(minHeight: 44, alignment: .leading)
+        VStack(spacing: 0) {
+            List {
+                Section { ERPSearchField(text: $query, prompt: "Buscar productos") }
+                if store.loadingProducts { ProgressView("Buscando productos…") }
+                if let error = store.catalogError {
+                    ERPErrorState(message: error) { await store.loadProducts(query: query) }
                 }
-                .accessibilityIdentifier("pick-product-\(product.id.uuidString)")
+                ForEach(store.products.filter { query.isEmpty || $0.name.localizedStandardContains(query) || ($0.code?.localizedStandardContains(query) == true) }) { product in
+                    Button { draft.add(product, setup: store.setup); if draft.error == nil { dismiss() } } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(product.name).font(.headline)
+                            Text(ERPDisplay.money(product.unitPrice)).font(.subheadline)
+                        }
+                        .foregroundStyle(Color.primary)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .accessibilityIdentifier("pick-product-\(product.id.uuidString)")
+                }
+                if let error = draft.error { Text(error).foregroundStyle(Color.primary) }
             }
-            if let error = draft.error { Text(error).foregroundStyle(Color.primary) }
-            Text("Hasta 100 productos del catálogo.").foregroundStyle(Color.primary)
+            .scrollEdgeEffectStyle(.hard, for: .all)
+            .clipped()
+            VStack(spacing: 8) {
+                Text("Hasta 100 productos del catálogo.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { dismiss() } label: {
+                    Text("Cancelar")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("cancel-product-picker")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color(uiColor: .systemBackground))
         }
-        .scrollEdgeEffectStyle(.hard, for: .all)
         .navigationTitle("Elegir producto").toolbarTitleDisplayMode(.inline)
         .task(id: query) {
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }

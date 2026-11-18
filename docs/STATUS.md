@@ -19,6 +19,11 @@ alcance y las decisiones.
   espera agotada al cambiar de empresa. La revisión siguiente ajusta el área
   visible de la lista, presenta la empresa a ancho completo y termina de
   cerrar el selector antes de cambiar la empresa de prueba.
+  `32acbc1` pasó las 154 pruebas locales y las seis UI de Inicio en iOS
+  27.2. La [prueba remota](https://github.com/ceduardodch/iaerp/actions/runs/44372847670)
+  devolvió dos hallazgos, contraste en Cuenta y área táctil al elegir un
+  producto. La siguiente revisión conserva los controles de acceso y
+  contrasta los dos arreglos contra las mismas auditorías.
 
 - iOS 0.4.2 (6), 2026-11-18. La solicitud interactiva de 0.4.1 combinaba
   el selector de organización con el permiso explícito `organization:read`.

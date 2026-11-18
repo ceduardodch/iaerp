@@ -138,6 +138,13 @@ final class WorkspaceUITests: XCTestCase {
         app.tabBars.buttons["Facturas"].tap()
         app.buttons["new-invoice"].tap()
         XCTAssertFalse(app.buttons["save-draft"].isEnabled)
+        let add = app.buttons["add-product"]
+        reveal(add, in: app); add.tap()
+        let picker = app.navigationBars["Elegir producto"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        app.buttons["cancel-product-picker"].tap()
+        XCTAssertTrue(picker.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["field-Cantidad"].exists)
         app.buttons["Cancelar"].tap()
         app.buttons["Descartar borrador"].tap()
         XCTAssertTrue(app.navigationBars["Facturas"].waitForExistence(timeout: 3))
@@ -301,8 +308,18 @@ final class WorkspaceUITests: XCTestCase {
         app.buttons["pick-customer-00000000-0000-4000-8000-000000000101"].tap()
         let add = app.buttons["add-product"]
         reveal(add, in: app); add.tap()
+        XCTAssertTrue(app.navigationBars["Elegir producto"].waitForExistence(timeout: 5))
+        let cancelPicker = app.buttons["cancel-product-picker"]
+        XCTAssertTrue(cancelPicker.waitForExistence(timeout: 5))
+        XCTAssertTrue(cancelPicker.isHittable)
+        XCTAssertGreaterThanOrEqual(cancelPicker.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(cancelPicker.frame.height, 44)
+        let product = app.buttons["pick-product-00000000-0000-4000-8000-000000000201"]
+        XCTAssertTrue(product.waitForExistence(timeout: 5))
+        XCTAssertTrue(product.isHittable)
+        XCTAssertGreaterThanOrEqual(product.frame.height, 44)
         try app.performAccessibilityAudit()
-        app.buttons["pick-product-00000000-0000-4000-8000-000000000201"].tap()
+        product.tap()
         let review = app.buttons["review-totals"]
         reveal(review, in: app); review.tap()
         let total = app.descendants(matching: .any)["draft-total"].firstMatch

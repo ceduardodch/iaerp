@@ -558,48 +558,59 @@ struct WorkspaceAccountView: View {
     @State private var profile: CompanyProfileRoute?
     @State private var nextDemoCompany: DemoCompany?
     var body: some View {
-        List {
-            WorkspaceContextSection(store: store)
-            if let profile = store.currentProfile {
+        GeometryReader { viewport in
+            List {
                 Section {
-                    ERPDetailRow(title: "Usuario", value: profile.displayName)
-                    ERPDetailRow(title: "Cuenta", value: profile.accountLabel)
-                }
-            }
-            Section {
-                Button {
-                    if let context = store.context { profile = CompanyProfileRoute(context: context) }
-                } label: {
-                    Label("Mi empresa", systemImage: "building.2")
+                    Text(verbatim: store.displayCompany)
+                        .font(.headline)
                         .foregroundStyle(Color.primary)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("company-profile")
-                Button {
-                    Task { await store.showSavedAccounts() }
-                } label: {
-                    Text("Cambiar cuenta").foregroundStyle(Color.primary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .contentShape(Rectangle())
+                        .accessibilityAddTraits(.isHeader)
+                    if let profile = store.currentProfile {
+                        ERPDetailRow(title: "Usuario", value: profile.displayName)
+                        ERPDetailRow(title: "Cuenta", value: profile.accountLabel)
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("switch-account")
-                Button(role: .destructive) { confirmExit = true } label: {
-                    Text("Cerrar sesión")
-                        .foregroundStyle(colorScheme == .dark ? Color(red: 1, green: 0.62, blue: 0.60) :
-                                            Color(red: 0.65, green: 0.12, blue: 0.13))
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .contentShape(Rectangle())
+                Section {
+                    Button {
+                        if let context = store.context { profile = CompanyProfileRoute(context: context) }
+                    } label: {
+                        Label("Mi empresa", systemImage: "building.2")
+                            .foregroundStyle(Color.primary)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("company-profile")
+                    Button {
+                        Task { await store.showSavedAccounts() }
+                    } label: {
+                        Text("Cambiar cuenta").foregroundStyle(Color.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("switch-account")
+                    Button(role: .destructive) { confirmExit = true } label: {
+                        Text("Cerrar sesión")
+                            .foregroundStyle(colorScheme == .dark ? Color(red: 1, green: 0.62, blue: 0.60) :
+                                                Color(red: 0.65, green: 0.12, blue: 0.13))
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("sign-out")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("sign-out")
             }
+            .listSectionSpacing(.compact)
+            .frame(width: viewport.size.width,
+                   height: max(0, viewport.size.height - viewport.safeAreaInsets.bottom), alignment: .top)
+            .clipped()
+            .padding(.bottom, viewport.safeAreaInsets.bottom)
+            .scrollEdgeEffectStyle(.hard, for: .all)
+            .scrollEdgeEffectHidden(true, for: .all)
         }
-        .scrollEdgeEffectStyle(.hard, for: .all)
-        .scrollEdgeEffectHidden(true, for: .all)
         .navigationTitle("Cuenta")
         .toolbarTitleDisplayMode(.inline)
         .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
