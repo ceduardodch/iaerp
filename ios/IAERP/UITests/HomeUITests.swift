@@ -61,8 +61,12 @@ final class HomeUITests: XCTestCase {
         assertMetric("home-metric-overdue", title: "Vencido", amount: "$100,50", in: app)
         assertMetric("home-metric-collected", title: "Cobrado este mes", amount: "$230,75", in: app)
         let cutoff = element("home-as-of", in: app)
-        reveal(cutoff, in: app)
-        XCTAssertEqual(cutoff.label, "Resumen del 18 de noviembre de 2026")
+        XCTAssertTrue(cutoff.isHittable)
+        XCTAssertEqual(cutoff.label, "18/11/2026")
+        cutoff.tap()
+        XCTAssertTrue(app.staticTexts["Resumen del 18 de noviembre de 2026"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["Cobrado este mes incluye efectivo y retenciones."].waitForExistence(timeout: 4))
+        app.buttons["Cerrar"].tap()
         snapshot("Inicio-resumen", app: app)
     }
 

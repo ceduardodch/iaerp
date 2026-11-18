@@ -75,114 +75,118 @@ struct WorkspaceHomeView: View {
     let store: WorkspaceStore
     @State private var composer: ComposerRoute?
     @State private var savedInvoice: ERPInvoice?
+    @State private var showingCutoff = false
 
     var body: some View {
-        List {
-            Section {
-                if store.canCreate {
-                    newInvoiceButton
-                        .disabled(!store.canStartInvoice)
-                        .accessibilityIdentifier("home-new-invoice")
-                }
-            } header: {
-                Text(store.isDemo ? "Demo · \(store.context?.name ?? "Empresa")" : (store.context?.name ?? "Empresa"))
-                    .font(.headline)
-                    .textCase(nil)
-                    .foregroundStyle(Color.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-            }
-            if let savedInvoice {
-                Section {
-                    Text(savedInvoice.status == "DRAFT" ? "Borrador guardado. No se ha emitido al SRI." : "Guardado confirmado.")
-                        .accessibilityIdentifier("workspace-notice")
-                    NavigationLink {
-                        WorkspaceInvoiceDetail(store: store, invoiceId: savedInvoice.id)
-                    } label: {
-                        Label(savedInvoice.status == "DRAFT" ? "Ver borrador" : "Ver factura", systemImage: "doc.text")
+        GeometryReader { viewport in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let savedInvoice {
+                        Text(savedInvoice.status == "DRAFT" ? "Borrador guardado. No se ha emitido al SRI." : "Guardado confirmado.")
+                            .accessibilityIdentifier("workspace-notice")
+                        NavigationLink {
+                            WorkspaceInvoiceDetail(store: store, invoiceId: savedInvoice.id)
+                        } label: {
+                            Label(savedInvoice.status == "DRAFT" ? "Ver borrador" : "Ver factura", systemImage: "doc.text")
+                        }
+                        .accessibilityIdentifier("home-open-draft")
                     }
-                    .accessibilityIdentifier("home-open-draft")
+                    InvoiceRecoverySection(store: store)
+                    summaryContent
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            InvoiceRecoverySection(store: store)
-            Section {
-                if !store.canReadDashboard {
-                    Text("Tu perfil no tiene permiso para consultar la cartera.")
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("home-dashboard-permission")
-                } else if let error = store.dashboardError {
-                    ERPErrorState(message: error) { await store.loadDashboard() }
-                } else if let summary = store.dashboard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Por cobrar").font(.headline)
-                        let amount = ERPDisplay.money(summary.receivable, currency: summary.currency)
-                        Text(amount)
-                            .font(.largeTitle.bold())
-                            .accessibilityLabel("Por cobrar, \(amount)")
-                            .accessibilityIdentifier("home-metric-receivable")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, 10)
-                    .foregroundStyle(.white)
-                    .listRowBackground(Color.accentColor)
-                    .accessibilityElement(children: .contain)
-                    metric("Vencido", value: summary.overdue, currency: summary.currency, identifier: "home-metric-overdue")
-                    metric("Cobrado este mes", value: summary.collectedThisMonth, currency: summary.currency,
-                           detail: "Incluye efectivo y retenciones.", identifier: "home-metric-collected")
-                    Text("Resumen del \(ERPDisplay.longFiscalDate(summary.asOf))")
-                        .font(.footnote)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("home-as-of")
-                } else {
-                    ProgressView("Consultando cartera…")
-                }
-            }
+            .frame(width: viewport.size.width, height: viewport.size.height, alignment: .top)
+            .clipped()
+            .refreshable { if store.canReadDashboard { await store.loadDashboard() } }
         }
-        .listSectionSpacing(.compact)
-        .clipped()
-        .padding(.bottom, 1)
+        .background(Color(uiColor: .systemGroupedBackground))
         .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .navigationTitle("Inicio")
+        .navigationSubtitle(Text(verbatim: store.displayCompany))
+        .toolbar {
+            if let summary = store.dashboard {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingCutoff = true
+                    } label: {
+                        Label(shortDate(summary.asOf), systemImage: "calendar")
+                            .labelStyle(.titleOnly)
+                    }
+                    .help("Ver fecha y cálculo del resumen")
+                    .accessibilityIdentifier("home-as-of")
+                    .popover(isPresented: $showingCutoff) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Resumen del \(ERPDisplay.longFiscalDate(summary.asOf))").font(.headline)
+                            Text("Cobrado este mes incluye efectivo y retenciones.")
+                            Button("Cerrar") { showingCutoff = false }
+                        }
+                        .padding()
+                        .presentationCompactAdaptation(.popover)
+                    }
+                }
+            }
+            if store.canCreate {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Nueva factura", systemImage: "plus") { composer = ComposerRoute() }
+                        .disabled(!store.canStartInvoice)
+                        .accessibilityIdentifier("home-new-invoice")
+                }
+            }
+        }
         .toolbarTitleDisplayMode(.inline)
         .sheet(item: $composer) { route in
             InvoiceComposerView(store: store, initialCustomerId: route.customerId) { savedInvoice = $0 }
         }
         .task { if store.canReadDashboard { await store.loadDashboard() } }
-        .refreshable { if store.canReadDashboard { await store.loadDashboard() } }
     }
 
-    private var newInvoiceButton: some View {
-        Button { composer = ComposerRoute() } label: {
-            Text("Nueva factura")
-                .font(.body.weight(.semibold))
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .foregroundStyle(store.canStartInvoice ? Color.white : Color.primary)
-                .background(store.canStartInvoice ? Color("AccentColor") : Color(uiColor: .secondarySystemFill),
-                            in: RoundedRectangle(cornerRadius: 10))
+    @ViewBuilder private var summaryContent: some View {
+        if !store.canReadDashboard {
+            Text("Tu perfil no tiene permiso para consultar la cartera.")
+                .accessibilityIdentifier("home-dashboard-permission")
+        } else if let error = store.dashboardError {
+            ERPErrorState(message: error) { await store.loadDashboard() }
+        } else if let summary = store.dashboard {
+            metric("Por cobrar", value: summary.receivable, currency: summary.currency,
+                   featured: true, identifier: "home-metric-receivable")
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(.white)
+                .background(Color("AccentColor"), in: RoundedRectangle(cornerRadius: 16))
+            VStack(alignment: .leading, spacing: 12) {
+                metric("Vencido", value: summary.overdue, currency: summary.currency, identifier: "home-metric-overdue")
+                Divider()
+                metric("Cobrado este mes", value: summary.collectedThisMonth, currency: summary.currency,
+                       identifier: "home-metric-collected")
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        } else {
+            ProgressView("Consultando cartera…")
         }
-        .buttonStyle(.plain)
+    }
+
+    private func shortDate(_ fiscalDate: String) -> String {
+        let parts = fiscalDate.split(separator: "-")
+        guard parts.count == 3 else { return fiscalDate }
+        return parts.reversed().joined(separator: "/")
     }
 
     private func metric(_ title: String, value: Decimal, currency: String,
-                        detail: String? = nil, identifier: String) -> some View {
+                        featured: Bool = false, identifier: String) -> some View {
         let amount = ERPDisplay.money(value, currency: currency)
+        let heading = Text(title).font(featured ? .headline : .subheadline)
+        let figure = Text(amount).font(featured ? .largeTitle.bold() : .title2.weight(.semibold))
         return VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.subheadline)
-            Text(amount)
-                .font(.title2.weight(.semibold))
-                .accessibilityLabel("\(title), \(amount)")
+            Text("\(heading)\(featured ? "\n" : "  ")\(figure)")
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier)
-            if let detail { Text(detail).font(.footnote) }
         }
-        .fixedSize(horizontal: false, vertical: true)
         .padding(.vertical, 4)
-        .accessibilityElement(children: .contain)
     }
 }
 

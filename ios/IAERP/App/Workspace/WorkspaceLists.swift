@@ -3,6 +3,7 @@ import SwiftUI
 
 struct WorkspaceClientsView: View {
     let store: WorkspaceStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var query = ""
     private var visible: [ERPParty] {
         guard !query.isEmpty else { return store.customers }
@@ -12,9 +13,7 @@ struct WorkspaceClientsView: View {
         List {
             Section {
                 ERPSearchField(text: $query, prompt: "Buscar clientes")
-                if store.customerError == nil && !store.loadingCustomers { ERPListSummary(count: visible.count) }
-            } header: {
-                WorkspaceListCompanyHeader(store: store)
+
             }
             Section {
                 if store.loadingCustomers { ProgressView("Buscando clientes…") }
@@ -29,26 +28,44 @@ struct WorkspaceClientsView: View {
                             WorkspaceCustomerDetail(store: store, customer: customer)
                         } label: {
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(customer.name).font(.headline).foregroundStyle(Color.primary)
-                                Text(customer.identificationNumber).font(.subheadline).foregroundStyle(Color.primary)
+                                title(for: customer)
+                                if !dynamicTypeSize.isAccessibilitySize {
+                                    Text(customer.identificationNumber).font(.subheadline)
+                                }
                             }
                             .foregroundStyle(Color.primary)
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(minHeight: 44, alignment: .leading)
                         }
                         .accessibilityIdentifier("workspace-client-\(customer.id.uuidString)")
                     }
                 }
+            } footer: {
+                if store.customerError == nil && !store.loadingCustomers { ERPListSummary(count: visible.count) }
             }
         }
+        .listSectionSpacing(.compact)
+        .clipped()
+        .padding(.bottom, 1)
         .scrollEdgeEffectStyle(.hard, for: .all)
-        .scrollEdgeEffectHidden(true, for: .bottom)
+        .scrollEdgeEffectHidden(true, for: .all)
+        .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .navigationTitle("Clientes")
+        .navigationSubtitle(Text(verbatim: store.displayCompany))
         .toolbarTitleDisplayMode(.inline)
         .task(id: query) {
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             await store.loadCustomers(query: query)
         }
         .refreshable { await store.loadCustomers(query: query) }
+    }
+
+    private func title(for customer: ERPParty) -> Text {
+        let name = Text(verbatim: customer.name).font(.headline)
+        guard dynamicTypeSize.isAccessibilitySize else { return name }
+        let identification = Text(verbatim: customer.identificationNumber).font(.subheadline)
+        return Text("\(name)\n\(identification)")
     }
 }
 
@@ -121,8 +138,6 @@ struct WorkspaceInvoicesView: View {
                     Text("Borradores").tag("DRAFT")
                     Text("Autorizadas").tag("AUTHORIZED")
                 }
-            } header: {
-                WorkspaceListCompanyHeader(store: store)
             }
             InvoiceRecoverySection(store: store)
             if let notice = store.notice {
@@ -148,6 +163,7 @@ struct WorkspaceInvoicesView: View {
         .scrollEdgeEffectStyle(.hard, for: .all)
         .scrollEdgeEffectHidden(true, for: .all)
         .navigationTitle("Facturas")
+        .navigationSubtitle(Text(verbatim: store.displayCompany))
         .toolbarTitleDisplayMode(.inline)
         .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
@@ -233,7 +249,7 @@ struct WorkspaceInvoicesView: View {
                     }
                     .accessibilityLabel([invoice.number, invoice.customerName, amount,
                                          ERPDisplay.longFiscalDate(invoice.issueDate), status, collection]
-                        .compactMap { $0 }.joined(separator: ", "))
+                        .compactMap { $0 }.joined(separator: ", "), isEnabled: dynamicTypeSize.isAccessibilitySize)
                     .accessibilityIdentifier("workspace-invoice-\(invoice.id.uuidString)")
                 }
                 if let error = store.monthErrors[key] {
@@ -257,19 +273,6 @@ struct WorkspaceInvoicesView: View {
                 }
             }
         }
-    }
-}
-
-private struct WorkspaceListCompanyHeader: View {
-    let store: WorkspaceStore
-
-    var body: some View {
-        let company = store.context?.name ?? "Empresa"
-        Text(store.isDemo ? "\(company) · Demo" : company)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.primary)
-            .textCase(nil)
-            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

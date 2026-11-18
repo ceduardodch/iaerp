@@ -26,6 +26,10 @@ final class WorkspaceStore {
     private(set) var loadingDashboard = false
     private(set) var dashboardError: String?
     private var dashboardRequest = UUID()
+    var displayCompany: String {
+        let name = context?.name ?? "Empresa"
+        return isDemo ? "\(name) · Demo" : name
+    }
     var canReadDashboard: Bool { context?.permits("receivables:read") == true }
     private(set) var products: [ERPProduct] = []
     private(set) var setup: ERPInvoiceSetup?

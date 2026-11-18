@@ -29,16 +29,15 @@ struct WorkspaceInvoiceDetail: View {
 
     var body: some View {
         List {
-            WorkspaceContextSection(store: store)
             if loading { ProgressView("Cargando factura…") }
             if let error { Section { ERPErrorState(message: error) { await load() } } }
             if let invoice {
                 Section {
-                    ERPDetailRow(title: "Número", value: listedNumber ?? store.invoiceNumber(invoice))
-                    ERPDetailRow(title: "Cliente", value: listedCustomerName ?? store.customerName(invoice.partyId))
-                    ERPDetailRow(title: "Fecha", value: invoice.issueDate)
-                    ERPDetailRow(title: "Total", value: ERPDisplay.money(invoice.total, currency: invoice.currency))
-                } header: { Text("Factura").foregroundStyle(Color.primary) }
+                    summaryRow("Número", listedNumber ?? store.invoiceNumber(invoice))
+                    summaryRow("Cliente", listedCustomerName ?? store.customerName(invoice.partyId))
+                    summaryRow("Fecha", invoice.issueDate)
+                    summaryRow("Total", ERPDisplay.money(invoice.total, currency: invoice.currency))
+                }
                 Section {
                     ERPDetailRow(title: "Documento", value: ERPDisplay.status(invoice.status))
                     if let transmission = invoice.sriTransmission {
@@ -93,16 +92,30 @@ struct WorkspaceInvoiceDetail: View {
                 } header: { Text("Documentos").foregroundStyle(Color.primary) }
             }
         }
+        .listSectionSpacing(.compact)
+        .clipped()
+        .padding(.bottom, 1)
         .scrollEdgeEffectStyle(.hard, for: .all)
         .scrollEdgeEffectHidden(for: .all)
         .navigationTitle("Factura")
+        .navigationSubtitle(Text(verbatim: store.displayCompany))
         .toolbarTitleDisplayMode(.inline)
         .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
         .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .toolbarVisibility(listedNumber == nil ? .hidden : .visible, for: .tabBar)
+        .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .task { await load() }
         .refreshable { await load() }
         .sheet(item: $presentation) { DocumentViewer(presentation: $0) }
+    }
+
+    private func summaryRow(_ title: String, _ value: String) -> some View {
+        let label = Text(verbatim: title).fontWeight(.semibold)
+        return Text("\(label) · \(value)")
+            .foregroundStyle(Color.primary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }
 
     private func load() async {
