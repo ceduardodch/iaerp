@@ -17,7 +17,7 @@ final class WorkspaceUITests: XCTestCase {
         return app
     }
 
-    @MainActor private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+    @MainActor private func reveal(_ element: XCUIElement, in app: XCUIApplication, searchEarlier: Bool = false) {
         var lastViewport = CGRect.zero
         for _ in 0..<24 {
             let scroll = app.collectionViews.allElementsBoundByIndex.last
@@ -35,7 +35,9 @@ final class WorkspaceUITests: XCTestCase {
                element.frame.minY >= top, element.frame.maxY <= bottom { return }
             let viewportHeight = bottom - top
             lastViewport = CGRect(x: bounds.minX, y: top, width: bounds.width, height: viewportHeight)
-            let above = element.exists && element.frame.minY < top
+            // Lazy cells outside the viewport have no frame. The caller can
+            // identify a known earlier row without changing visibility checks.
+            let above = element.exists ? element.frame.minY < top : searchEarlier
             let overflow = element.exists ? (above ? top - element.frame.minY : element.frame.maxY - bottom) : viewportHeight
             let distance = max(24, min(viewportHeight * 0.35, overflow + 16))
             let start = app.coordinate(withNormalizedOffset: .zero).withOffset(
@@ -141,7 +143,7 @@ final class WorkspaceUITests: XCTestCase {
         // Leave the end of the form to edit an earlier row. Removing the old
         // preview and resizing for the keyboard must not jump back to totals.
         let quantity = app.textFields["field-Cantidad"]
-        reveal(quantity, in: app)
+        reveal(quantity, in: app, searchEarlier: true)
         quantity.doubleTap()
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
@@ -160,9 +162,11 @@ final class WorkspaceUITests: XCTestCase {
         quantity.tap()
         XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
         assertEntireInvoiceControl(quantity, in: app)
-        quantity.typeText("0")
-        XCTAssertNotEqual(quantity.value as? String, "2")
-        quantity.typeText(XCUIKeyboardKey.delete.rawValue)
+        quantity.doubleTap()
+        quantity.typeText("3")
+        XCTAssertEqual(quantity.value as? String, "3")
+        quantity.doubleTap()
+        quantity.typeText("2")
         XCTAssertEqual(quantity.value as? String, "2")
         done.tap()
         XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3))

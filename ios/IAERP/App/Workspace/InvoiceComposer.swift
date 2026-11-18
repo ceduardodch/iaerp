@@ -197,6 +197,8 @@ struct InvoiceComposerView: View {
     @State private var confirmDiscard = false
     @State private var didConfigure = false
     @State private var isAtEnd = false
+    @State private var measuredAtEnd = false
+    @State private var userScrollInFlight = false
     @FocusState private var focusedInput: InvoiceInputFocus?
 
     init(store: WorkspaceStore, initialCustomerId: UUID?) {
@@ -207,136 +209,181 @@ struct InvoiceComposerView: View {
         @Bindable var draft = draft
         NavigationStack {
             VStack(spacing: 0) {
-                Form {
-                    WorkspaceContextSection(store: store)
-                    if let error = store.catalogError {
-                        Section { ERPErrorState(message: error) { await store.loadCatalog() } }
-                    }
-                    Section {
-                        NavigationLink {
-                            CustomerPicker(store: store, selection: $draft.customerId)
-                        } label: {
-                            ERPDetailRow(title: "Cliente", value: draft.customerId.map(store.customerName) ?? "Seleccionar")
+                ScrollViewReader { proxy in
+                    Form {
+                        WorkspaceContextSection(store: store)
+                        if let error = store.catalogError {
+                            Section { ERPErrorState(message: error) { await store.loadCatalog() } }
                         }
-                        .accessibilityIdentifier("draft-customer")
-                    } header: { Text("Cliente").foregroundStyle(Color.primary) }
-                    .disabled(!draft.canEdit)
-                    Section {
-                        LabeledContent("Plazo (días)") {
-                            TextField("Días de plazo", value: $draft.paymentTermsDays, format: .number.grouping(.never))
-                                .focused($focusedInput, equals: .paymentTerms)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .accessibilityIdentifier("payment-terms-days")
-                        }
-                        ERPDetailRow(title: "Vencimiento", value: draft.dueDateString ?? "Revisar plazo")
-                        Text("0 días es al contado. El plazo inicial procede del cliente o de la empresa.")
-                            .font(.footnote).foregroundStyle(Color.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } header: { Text("Pago").foregroundStyle(Color.primary) }
-                    .disabled(!draft.canEdit)
-                    Section {
-                        DatePicker("Fecha", selection: $draft.issueDate, displayedComponents: .date)
-                            .environment(\.timeZone, TimeZone(identifier: "America/Guayaquil")!)
-                        Picker("Establecimiento", selection: $draft.establishmentId) {
-                            Text("Seleccionar").tag(nil as UUID?)
-                            ForEach(store.setup?.establishments ?? []) { item in
-                                Text("\(item.code) · \(item.name)").tag(Optional(item.id))
-                            }
-                        }
-                        Picker("Punto de emisión", selection: $draft.emissionPointId) {
-                            Text("Seleccionar").tag(nil as UUID?)
-                            ForEach((store.setup?.emissionPoints ?? []).filter { $0.establishmentId == draft.establishmentId }) { item in
-                                Text(item.code).tag(Optional(item.id))
-                            }
-                        }
-                    } header: { Text("Emisión").foregroundStyle(Color.primary) }
-                    .disabled(!draft.canEdit)
-                    ForEach($draft.lines) { $line in
                         Section {
-                            TextField("Descripción", text: $line.description)
-                                .focused($focusedInput, equals: .description(line.id))
-                            ERPDecimalField(title: "Cantidad", text: $line.quantity, focus: $focusedInput, key: .quantity(line.id))
-                            ERPDecimalField(title: "Precio unitario", text: $line.unitPrice, focus: $focusedInput, key: .price(line.id))
-                            ERPDecimalField(title: "Descuento", text: $line.discount, focus: $focusedInput, key: .discount(line.id))
-                            Button("Quitar producto", role: .destructive) { draft.lines.removeAll { $0.id == line.id } }
-                                .frame(minHeight: 44)
-                        } header: { Text("Detalle").foregroundStyle(Color.primary) }
+                            NavigationLink {
+                                CustomerPicker(store: store, selection: $draft.customerId)
+                            } label: {
+                                ERPDetailRow(title: "Cliente", value: draft.customerId.map(store.customerName) ?? "Seleccionar")
+                            }
+                            .accessibilityIdentifier("draft-customer")
+                        } header: { Text("Cliente").foregroundStyle(Color.primary) }
                         .disabled(!draft.canEdit)
-                    }
-                    Section {
-                        NavigationLink {
-                            ProductPicker(store: store, draft: draft)
-                        } label: { Label("Añadir producto", systemImage: "plus") }
-                        .accessibilityIdentifier("add-product")
-                        .frame(minHeight: 44)
-                        .disabled(!draft.canEdit || store.setup == nil)
-                        if store.isDemo {
-                            Text("Demo: usa cantidades 1, 2 o 3, precios originales y descuento cero.")
-                                .font(.footnote).fixedSize(horizontal: false, vertical: true)
-                                .foregroundStyle(Color.primary)
+                        Section {
+                            LabeledContent("Plazo (días)") {
+                                TextField("Días de plazo", value: $draft.paymentTermsDays, format: .number.grouping(.never))
+                                    .focused($focusedInput, equals: .paymentTerms)
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .accessibilityIdentifier("payment-terms-days")
+                            }
+                            ERPDetailRow(title: "Vencimiento", value: draft.dueDateString ?? "Revisar plazo")
+                            Text("0 días es al contado. El plazo inicial procede del cliente o de la empresa.")
+                                .font(.footnote).foregroundStyle(Color.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } header: { Text("Pago").foregroundStyle(Color.primary) }
+                        .disabled(!draft.canEdit)
+                        Section {
+                            DatePicker("Fecha", selection: $draft.issueDate, displayedComponents: .date)
+                                .environment(\.timeZone, TimeZone(identifier: "America/Guayaquil")!)
+                            Picker("Establecimiento", selection: $draft.establishmentId) {
+                                Text("Seleccionar").tag(nil as UUID?)
+                                ForEach(store.setup?.establishments ?? []) { item in
+                                    Text("\(item.code) · \(item.name)").tag(Optional(item.id))
+                                }
+                            }
+                            Picker("Punto de emisión", selection: $draft.emissionPointId) {
+                                Text("Seleccionar").tag(nil as UUID?)
+                                ForEach((store.setup?.emissionPoints ?? []).filter { $0.establishmentId == draft.establishmentId }) { item in
+                                    Text(item.code).tag(Optional(item.id))
+                                }
+                            }
+                        } header: { Text("Emisión").foregroundStyle(Color.primary) }
+                        .disabled(!draft.canEdit)
+                        ForEach($draft.lines) { $line in
+                            Section {
+                                TextField("Descripción", text: $line.description)
+                                    .focused($focusedInput, equals: .description(line.id))
+                                ERPDecimalField(title: "Cantidad", text: $line.quantity, focus: $focusedInput, key: .quantity(line.id))
+                                ERPDecimalField(title: "Precio unitario", text: $line.unitPrice, focus: $focusedInput, key: .price(line.id))
+                                ERPDecimalField(title: "Descuento", text: $line.discount, focus: $focusedInput, key: .discount(line.id))
+                                Button("Quitar producto", role: .destructive) { draft.lines.removeAll { $0.id == line.id } }
+                                    .frame(minHeight: 44)
+                            } header: { Text("Detalle").foregroundStyle(Color.primary) }
+                            .disabled(!draft.canEdit)
                         }
-                    }
-                    Section {
-                        if let preview = draft.preview {
-                            ERPDetailRow(title: "Subtotal", value: ERPDisplay.money(preview.subtotal))
-                            ERPDetailRow(title: "IVA", value: ERPDisplay.money(preview.taxTotal))
-                            ERPDetailRow(title: "Total", value: ERPDisplay.money(preview.total))
-                                .fontWeight(.semibold)
-                                .accessibilityIdentifier("draft-total")
-                        }
-                        Button {
-                            guard let service = store.service else { return }
-                            Task { await draft.review(using: service, setup: store.setup) }
-                        } label: {
-                            if draft.working { ProgressView("Revisando…") }
-                            else {
-                                Text("Revisar importes")
-                                    .fixedSize(horizontal: false, vertical: true)
+                        Section {
+                            NavigationLink {
+                                ProductPicker(store: store, draft: draft)
+                            } label: { Label("Añadir producto", systemImage: "plus") }
+                            .accessibilityIdentifier("add-product")
+                            .frame(minHeight: 44)
+                            .disabled(!draft.canEdit || store.setup == nil)
+                            if store.isDemo {
+                                Text("Demo: usa cantidades 1, 2 o 3, precios originales y descuento cero.")
+                                    .font(.footnote).fixedSize(horizontal: false, vertical: true)
+                                    .foregroundStyle(Color.primary)
                             }
                         }
-                        .frame(minHeight: 44)
-                        .disabled(!draft.canEdit || draft.lines.isEmpty)
-                        .accessibilityIdentifier("review-totals")
-                        Text("Borrador, sin envío al SRI.")
-                            .font(.footnote).foregroundStyle(Color.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } header: { Text(store.isDemo ? "Totales de prueba" : "Totales del servidor").foregroundStyle(Color.primary) }
-                    if let error = draft.error {
-                        Section { Text(error).foregroundStyle(Color.primary).accessibilityIdentifier("draft-error") }
+                        Section {
+                            if let preview = draft.preview {
+                                ERPDetailRow(title: "Subtotal", value: ERPDisplay.money(preview.subtotal))
+                                ERPDetailRow(title: "IVA", value: ERPDisplay.money(preview.taxTotal))
+                                ERPDetailRow(title: "Total", value: ERPDisplay.money(preview.total))
+                                    .fontWeight(.semibold)
+                                    .accessibilityIdentifier("draft-total")
+                            }
+                            Button {
+                                guard let service = store.service else { return }
+                                Task { await draft.review(using: service, setup: store.setup) }
+                            } label: {
+                                if draft.working { ProgressView("Revisando…") }
+                                else {
+                                    Text("Revisar importes")
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .frame(minHeight: 44)
+                            .disabled(!draft.canEdit || draft.lines.isEmpty)
+                            .accessibilityIdentifier("review-totals")
+                            Text("Borrador, sin envío al SRI.")
+                                .font(.footnote).foregroundStyle(Color.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .id("invoice-summary-end")
+                        } header: { Text(store.isDemo ? "Totales de prueba" : "Totales del servidor").foregroundStyle(Color.primary) }
+                        if let error = draft.error {
+                            Section { Text(error).foregroundStyle(Color.primary).accessibilityIdentifier("draft-error").id("invoice-error-end") }
+                        }
                     }
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .scrollEdgeEffectStyle(.hard, for: .all)
-                .scrollEdgeEffectHidden(for: .all)
-                .contentMargins(.bottom, 32, for: .scrollContent)
-                .defaultScrollAnchor(isAtEnd && focusedInput == nil ? .bottom : nil, for: .sizeChanges)
-                .onScrollGeometryChange(for: ScrollGeometry.self) { $0 } action: { _, geometry in
-                    let atEnd = geometry.contentSize.height > 0 &&
-                        geometry.visibleRect.maxY >= geometry.contentSize.height + geometry.contentInsets.bottom - 1
-                    if isAtEnd != atEnd { isAtEnd = atEnd }
+                    .scrollDismissesKeyboard(.interactively)
+                    .scrollEdgeEffectStyle(.hard, for: .all)
+                    .scrollEdgeEffectHidden(for: .all)
+                    .contentMargins(.bottom, 32, for: .scrollContent)
+                    .defaultScrollAnchor(isAtEnd && focusedInput == nil ? .bottom : nil, for: .sizeChanges)
+                    .onScrollGeometryChange(for: ScrollGeometry.self) { $0 } action: { _, geometry in
+                        let atEnd = geometry.contentSize.height > 0 &&
+                            geometry.visibleRect.maxY >= geometry.contentSize.height + geometry.contentInsets.bottom - 1
+                        if measuredAtEnd != atEnd { measuredAtEnd = atEnd }
+                        if userScrollInFlight && isAtEnd != atEnd { isAtEnd = atEnd }
+                        let maximumOffset = max(-geometry.contentInsets.top,
+                            geometry.contentSize.height + geometry.contentInsets.bottom - geometry.containerSize.height)
+                        if isAtEnd && focusedInput == nil && !userScrollInFlight &&
+                            geometry.contentSize.height.isFinite && geometry.contentSize.height > 0 &&
+                            geometry.containerSize.height.isFinite && geometry.containerSize.height > 0 &&
+                            geometry.contentInsets.top.isFinite && geometry.contentInsets.bottom.isFinite &&
+                            geometry.contentOffset.y.isFinite && geometry.contentOffset.y > maximumOffset + 1 {
+                            let target = draft.error == nil ? "invoice-summary-end" : "invoice-error-end"
+                            withAnimation(nil) { proxy.scrollTo(target, anchor: .top) }
+                            #if DEBUG && targetEnvironment(simulator)
+                            if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
+                                Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
+                                    .notice("INVOICE_REPAIR \(target, privacy: .public)")
+                            }
+                            #endif
+                        }
+                        #if DEBUG && targetEnvironment(simulator)
+                        if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
+                            let value = "offset=\(geometry.contentOffset) content=\(geometry.contentSize) container=\(geometry.containerSize) insets=\(geometry.contentInsets) visible=\(geometry.visibleRect) measuredAtEnd=\(atEnd) prefersEnd=\(isAtEnd) userScroll=\(userScrollInFlight)"
+                            Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
+                                .notice("INVOICE_LAYOUT \(value, privacy: .public)")
+                        }
+                        #endif
+                    }
+                    .onScrollPhaseChange { oldPhase, newPhase, context in
+                        switch newPhase {
+                        case .tracking, .interacting, .decelerating:
+                            if !userScrollInFlight { userScrollInFlight = true }
+                        case .idle:
+                            if userScrollInFlight {
+                                let geometry = context.geometry
+                                let atEnd = geometry.contentSize.height > 0 &&
+                                    geometry.visibleRect.maxY >= geometry.contentSize.height + geometry.contentInsets.bottom - 1
+                                if measuredAtEnd != atEnd { measuredAtEnd = atEnd }
+                                if isAtEnd != atEnd { isAtEnd = atEnd }
+                                userScrollInFlight = false
+                            }
+                        case .animating:
+                            if userScrollInFlight { userScrollInFlight = false }
+                        @unknown default:
+                            if userScrollInFlight { userScrollInFlight = false }
+                        }
+                        #if DEBUG && targetEnvironment(simulator)
+                        if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
+                            Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
+                                .notice("INVOICE_PHASE \(String(describing: oldPhase), privacy: .public) -> \(String(describing: newPhase), privacy: .public) measuredAtEnd=\(measuredAtEnd) prefersEnd=\(isAtEnd) userScroll=\(userScrollInFlight)")
+                        }
+                        #endif
+                    }
                     #if DEBUG && targetEnvironment(simulator)
-                    if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
-                        let value = "offset=\(geometry.contentOffset) content=\(geometry.contentSize) container=\(geometry.containerSize) insets=\(geometry.contentInsets) visible=\(geometry.visibleRect)"
-                        Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
-                            .notice("INVOICE_LAYOUT \(value, privacy: .public)")
+                    .onAppear {
+                        if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
+                            Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
+                                .notice("TRACE_ENABLED")
+                        }
+                    }
+                    .onChange(of: dynamicTypeSize) { oldValue, newValue in
+                        if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
+                            Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
+                                .notice("INVOICE_TYPE \(String(describing: oldValue), privacy: .public) -> \(String(describing: newValue), privacy: .public)")
+                        }
                     }
                     #endif
                 }
-                #if DEBUG && targetEnvironment(simulator)
-                .onAppear {
-                    if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
-                        Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
-                            .notice("TRACE_ENABLED")
-                    }
-                }
-                .onChange(of: dynamicTypeSize) { oldValue, newValue in
-                    if ProcessInfo.processInfo.arguments.contains("-trace-invoice-layout") {
-                        Logger(subsystem: "ec.com.b2b.iaerp.layout", category: "InvoiceLayout")
-                            .notice("INVOICE_TYPE \(String(describing: oldValue), privacy: .public) -> \(String(describing: newValue), privacy: .public)")
-                    }
-                }
-                #endif
                 formActions
             }
             .navigationTitle("Nueva factura")

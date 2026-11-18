@@ -222,3 +222,24 @@ geometría pública. No limita fuentes ni filtra el auditor. Un test nuevo edita
 cantidad y abre/cierra teclado; la auditoría exige contenido completo también
 al terminar, sin scroll reparador. `full-3` prueba las 19 UI, resultado pendiente.
 La CI corregida de la PR108 aún debe ejecutarse sobre este candidato.
+
+## Reparación verificada del desplazamiento
+
+`Repair-1` pasa **2/2 UI, cero fallos y omisiones**: edición de cantidad/teclado
+60,011 s y formulario con auditoría completa 109,851 s. Mantiene los controles
+completos después del auditor sin un scroll de reparación desde el test.
+
+La vista conserva la preferencia de final sólo desde gestos del usuario y la
+suspende con un campo enfocado. Si queda un offset por encima del máximo válido,
+sin gesto/foco y con métricas finitas, ScrollViewReader lleva la última fila a
+una posición válida sin animación. El máximo incluye insets y admite contenido
+más corto que el viewport. No cambia el modelo, las fuentes ni la accesibilidad.
+
+La traza registra exactamente una reparación: offset3206,33 fuera del contenido
+2047,33 vuelve al máximo1485; el contenido final3076,33 queda con offset2514 y
+viewport562,33. No hubo bucle en esa corrida. QA verificó el xcresult y la fuente
+por separado. Se conservan dos avisos Runtime Warning de dimensión inválida;
+no se declaran logs sin avisos. `full-4` ejecuta la regresión completa sobre esta
+fuente. El flujo de teclado se corrigió para buscar hacia contenido anterior
+cuando la celda todavía no está montada; sus comprobaciones de visibilidad y
+edición siguen intactas.

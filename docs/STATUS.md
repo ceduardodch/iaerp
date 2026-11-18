@@ -21,9 +21,10 @@ alcance y las decisiones.
   Producto y seguridad revisaron el caso de 26 h reales y reloj local de 2 h.
   **80 SwiftPM y 42 AppHost correctas**; un test con tres cierres reales del
   proceso correcto. 0.4.0 full-1: **17/18 UI**, un fallo de auditoría del
-  formulario (IOS-017, sin filtros). 0.4.1 full-2 está en curso con diagnóstico
-  OSLog de geometría sólo Debug/simulador. El primer workflow iOS no inició por
-  contexto runner.temp en job.env; corregido a steps.env, nueva CI pendiente.
+  formulario (IOS-017, sin filtros). Reparación del offset: 2/2 UI dirigidas
+  pasan con auditoría stock y comprobaciones posteriores; 2 avisos de dimensión
+  persisten. full-4 ejecuta ahora las 19 UI. Diagnóstico OSLog sólo Debug/simulador. El primer workflow iOS no inició por
+  contexto runner.temp en job.env; corregido a steps.env, CI iOS remota en curso sobre el candidato anterior, pendiente del resultado.
   [Evidencia actual](../ios/validation/2026-11-18-live-connection.md).
 
 - Instalación física: iPhone emparejado por cable, iOS 26.0.1 compatible. El
