@@ -6,6 +6,77 @@ de introducir variantes locales.
 
 ## Principios
 
+### Cliente nativo iOS
+
+El selector de cuentas (ADR 0023) muestra nombre, usuario y empresa; distingue
+proveedores cuando hay varios. Nunca identifica una cuenta sólo por nombre.
+Elegir cuenta y abrir sus opciones son controles distintos, con objetivos de
+44 pt y etiquetas VoiceOver completas. En tamaños de accesibilidad, la fila
+pasa a vertical y retira iconos decorativos para dar ancho al texto; no reduce
+la fuente. `AnyLayout` conserva identidad y controles al cambiar la disposición.
+La etiqueta nativa del botón reúne los textos visibles de la cuenta; se conserva
+ese anuncio junto con el hint de desbloqueo. Quitar confirma nombre,
+usuario y empresa y ofrece Cancelar; completar el proveedor es un P2 registrado.
+Cambiar cuenta conserva accesos; Cerrar sesión quita sólo el activo. La pantalla
+Cuenta muestra la identidad activa y explica esa diferencia.
+
+Desde [ADR 0022](adrs/0022-native-ios-client.md), las pantallas SwiftUI usan
+equivalentes nativos compartidos en `ios/IAERP/App/ERPComponents.swift`.
+React `Erp*` sigue siendo obligatorio en web; no se copia su DOM en iOS.
+La autorización de inicio cubre estas equivalencias del primer incremento:
+
+| Patrón ERP | SwiftUI |
+| --- | --- |
+| Encabezado y volver | `NavigationStack`, `navigationTitle` y navegación del sistema |
+| Toolbar y búsqueda | `ERPSearchField` compartido bajo el encabezado; `searchable` sólo en la demo de regresión |
+| Panel/listado/ficha | `List`, `Section`, `NavigationLink` y `ERPDetailRow` |
+| Estado visible | `ERPStatusBadge`, texto e icono; nunca sólo color |
+| Vacío | `ContentUnavailableView`, con motivo y filtro visible |
+| Crear/editar | Textos `Nuevo`, `Editar`, `Guardar`, `Cancelar` intactos; fuera de la demo inicial |
+
+No hay cambio de posición de las acciones de formulario en esta parte.
+Usar fuentes semánticas, mínimo táctil 44 pt, colores de sistema, VoiceOver,
+modo oscuro y tamaños de accesibilidad. Datos de demostración claramente
+marcados. No mostrar botones para funciones aún sin conectar.
+
+La demo inicial de regresión mantiene `searchable` bajo el título. En las
+pantallas de trabajo, la auditoría nativa identificó contraste en
+`UISearchBarTextField` y textos junto al material de la barra. Se usa
+`ERPSearchField`: `TextField` SwiftUI con prompt/texto `Color.primary`, icono
+oculto a VoiceOver y limpieza con objetivo de 44 pt, dentro de la primera
+sección de la lista. Evita otra barra, conserva teclado de búsqueda, Dynamic
+Type y los contratos de consulta. Listas/formularios usan borde de scroll
+`.hard` para contenido denso; no se excluyen hallazgos de la auditoría.
+`ERPListSummary` muestra «Resultados: n» y «Hasta 100 por consulta» en textos
+separados con fuente `footnote` y altura intrínseca, junto al buscador.
+Los títulos de trabajo usan tamaño inline para dejar espacio al contenido.
+
+`ERPStatusBadge` usa `HStack` y texto con altura intrínseca, sin limitar Dynamic
+Type; el estado corto `Demo` anuncia «Modo de demostración». Avisos, encabezados
+y ficha usan `Color.primary` explícito. El aviso de datos de prueba ocupa un
+footer corto. La ficha distingue estado del documento/SRI y estado de cobro.
+Nueva factura usa formulario nativo y barra inferior `Cancelar` → `Guardar`,
+vertical con tamaños de accesibilidad. Un preview vencido deshabilita guardar;
+rechazos definitivos permiten corregir, respuesta incierta conserva operación.
+`ERPPrimaryActionStyle` conserva texto legible al deshabilitar Guardar; usa
+colores semánticos de fondo/texto en ambos modos. Los campos de líneas tienen
+foco por UUID y el teclado comparte una acción «Listo». El formulario y su
+barra de acciones son vistas hermanas, sin superponer controles al contenido.
+Formulario y fichas ocultan el efecto de borde y usan fondo opaco en la barra
+de navegación para que el material no desvanezca datos fiscales. Las fichas
+de cliente/factura ocultan las pestañas; Volver recupera la navegación principal.
+
+Cuenta abre los datos de empresa en una hoja propia para evitar que RUC y
+permisos queden bajo la barra de pestañas con texto máximo. Empresa y visor
+comparten `ERPCloseButton`: icono del sistema, objetivo de 44 pt y etiqueta
+VoiceOver «Cerrar».
+
+El escudo de ventana opaco cubre el selector de apps, incluidas hojas y visor,
+al recibir `willResignActive`; se retira al volver a primer plano. No se marca
+el contenedor completo con `privacySensitive`: esa marca redactaba también
+el acceso y otros controles en iOS 26.5. No se muestran datos sintéticos como
+sustituto de una consulta real fallida.
+
 - Consistencia operativa antes que decoracion.
 - Una accion primaria visible por pantalla.
 - El usuario siempre sabe si esta consultando, creando o editando.

@@ -7,6 +7,95 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- iOS 0.4.0 (4), conexión IAERP en validación, 2026-11-18: Carlos autorizó
+  conectar e instalar. API/issuer/documentos vienen preparados en la app.
+  Backend limita el cliente nativo a consultas y borradores según membresía;
+  ADR 0024 y PR #107 integrados en main `2bcd013`: 918 backend correctas,
+  web/OIDC/seguridad/migraciones/contrato verdes. CI/Coolify de main en curso.
+  Keycloak `iaerp-ios` creado
+  **deshabilitado** hasta verificar el despliegue de esa política. No hay login
+  móvil autenticado, guardado real ni emisión SRI comprobados todavía.
+  ADR 0025 acepta el registro mínimo de recuperación en Keychain: conserva
+  clave/payload y concilia tras reiniciar, sin crear otra factura a ciegas.
+  **80 SwiftPM y 41 AppHost correctas**; prueba UI de tres terminaciones reales
+  correcta. Auditoría máxima del formulario y regresión completa en curso.
+  Teléfono físico emparejado por cable, iOS 26.0.1. Apple ID actualizado por el
+  titular tras sesión vencida; la firma ahora falla por límite de iPhones registrados del Personal Team;
+  se pidió otra cuenta/equipo al titular. Instalación y primer acceso pendientes.
+  [Evidencia actual](../ios/validation/2026-11-18-live-connection.md).
+
+Los cortes siguientes son históricos; no sustituyen el estado 0.4.0 anterior.
+
+- iOS 0.3.0 (3), cuentas guardadas solicitadas el 2026-11-18: múltiples usuarios
+  y empresas en Keychain, selector distinguible por usuario, Face ID/código por
+  elección, cambio sin olvidar perfiles, borrado individual y bloqueo en segundo
+  plano. ADR 0023 amplía sólo identidad local. **77 SwiftPM +25 AppHost correctas;
+  Accounts-9: tres UI de cuentas correctas, incluida auditoría máxima sin filtros**.
+  Cuenta/auditoría global de secciones pasó en Accounts-8. Build iPhoneOS arm64
+  0.3.0 (3) sin firma correcto. No es CI remota ni instalación; Face ID/código
+  físico y Keycloak/API real siguen pendientes. La regresión completa Accounts-4
+  tuvo tres fallos: los dos de cuentas se corrigieron y revalidaron después;
+  el del formulario previo sigue abierto en IOS-017.
+  [Evidencia del incremento](../ios/validation/2026-11-18-cuentas.md).
+
+- Recursos del corte iOS del 18 de noviembre: sin instalaciones adicionales;
+  cachés de compilación/SwiftPM 465/194 MiB, evidencia temporal 282 MiB y dos
+  capturas nuevas 368 KiB. Se retiraron bundles/exports intermedios; se conservan
+  Accounts-4/7/9, Tests-39, logs y resúmenes. Simulador propio apagado; no se
+  detectó teléfono físico. Espacio libre observado al cerrar: unos 13 GiB.
+
+- iOS 0.2.0 (2), Partes 1–3 preparadas para revisión local, 2026-11-17:
+  acceso AppAuth/Keychain, REST, clientes, borradores con plazo/cuota, facturas,
+  PDF/XML y Cuenta. Corte final **Tests-39: 58 SwiftPM y 17 AppHost correctas;
+  13 de 14 UI correctas, una auditoría pendiente**, sin omisiones. El caso de
+  formulario con texto máximo sigue fallando por contraste; no se dio por
+  aprobado ni se excluyó del auditor. Tests-28 pasó completo antes de los últimos
+  ajustes, pero no sustituye este resultado final. Build iPhoneOS arm64 sin firma
+  correcto; firma/instalación física pendientes. El control negativo de privacidad
+  falló como se esperaba al quitar el escudo y se restauró la fuente. UI/UX, QA,
+  producto y seguridad revisaron sus áreas. **IOS-017 sigue abierto**.
+  [Evidencia y límites](../ios/validation/2026-11-17-incremento.md).
+
+- **P1 antes del piloto de escritura:** política efectiva por roles de membresía
+  del tenant y recuperación durable de clave/payload tras terminar el proceso.
+  La plantilla Keycloak está `enabled: false`; no se importó ni se habilitó acceso
+  real. El ADR actual excluye persistencia de negocio, por lo que el registro de
+  recuperación requiere una decisión explícita. Sólo se consultó discovery OIDC
+  público; sin login, escritura real, emisión SRI ni cambios de backend/web.
+  [Backlog](backlog/ios-backlog.md) y [puertas del piloto](../ios/configuration/README.md).
+
+- iOS Parte 0 verificada en simulador, 2026-11-17: Xcode **27.2 (27B52)**
+  instalado; licencia aceptada con autorización expresa y componentes iniciales
+  listos tras autenticación del titular. SDK iOS/Simulator 27.2; se reutilizó el
+  runtime iOS 26.5 (23F77) existente con `simctl runtime scan-and-mount`, sin
+  descargar otro. Un solo dispositivo propio: `IAERP iPhone 14`.
+  Build iOS correcto, **cinco unitarias/ocho casos y tres XCUITest correctos,
+  cero fallos/omisiones**. Auditoría de listado/ficha con texto máximo sin
+  exclusiones; búsqueda por ciudad, ficha y vuelta al listado probadas.
+  Inspección visual del listado claro/oscuro y texto máximo sin hallazgos
+  pendientes; QA y UI independientes confirman el alcance de simulador.
+  Correcciones reales: icono propio, aislamiento XCTest Swift 6, contraste
+  semántico, badge con altura intrínseca y buscador bajo el título. Los intentos
+  fallidos/interrumpidos se registran aparte; no se cuentan como aprobados.
+  [Evidencia](../ios/validation/2026-11-17.md), [guía](../ios/README.md) y
+  [backlog actualizado](backlog/ios-backlog.md).
+
+- Estado físico iOS: Carlos respondió **«Lo conectaré después»**. Pendientes
+  versión exacta, cuenta/Team, firma, instalación y VoiceOver manual en teléfono;
+  **IOS-004 parcial**. Partes 1–3 en preparación local por la autorización posterior. ADR 0022 Accepted para dirección
+  y demo local; tres skills instalados con origen/ref/hash en `skills-lock.json`.
+  No hubo conexión productiva, push, PR, merge ni distribución. Cambios previos
+  de avisos y scripts SRI preservados.
+
+- Espacio iOS: limpieza autorizada de cachés y Docker conservó el volumen
+  existente. Carlos aceptó instalar con 34,66 GB libres tras limpiar. Corte final
+  del incremento: **20,1 GiB libres**; caché activa de compilación 452 MiB,
+  SwiftPM 190 MiB y resultados/logs 97 MiB. Se retiraron bundles/exports antiguos,
+  DerivedData en Documentos y un scratch de identidad que ya no se usaban.
+  Cuatro capturas sintéticas útiles ocupan 1,6 MiB. Se reutiliza un runtime y
+  un simulador; sin descargas adicionales ni cambio global de xcode-select.
+  El objetivo inicial de liberar 40 GB no se declara alcanzado.
+
 - Anular directo en la fila de Compras en producción, 2026-11-17:
   PR #105, revisión `e8b4fc0`, [CI/Coolify](https://github.com/ceduardodch/iaerp/actions/runs/44181463258) correctos.
   Botón bajo el número de compra, visible sin entrar en Pagar ni desplazar
@@ -48,6 +137,32 @@ alcance y las decisiones.
   El usuario confirmó que también se canceló la compra; la factura real
   sigue intacta, pendiente de respaldo SRI y registro autorizado.
   [Tareas y pruebas](../openspec/changes/compras-anulaciones-recibidas/tasks.md).
+
+- Conciliación bancaria de abonos, 2026-11-11: PR #96 en producción,
+  revisión `a006e9b`. CI `43107830288` verde en el segundo intento.
+  El mes filtra el extracto y un abono puede cruzar una factura pendiente de
+  meses anteriores si el saldo neto exacto es único. Reutiliza el cruce de
+  retenciones respaldadas. Cartera y Compras muestran referencias sin cruce,
+  ambiguas, registradas y el conteo de abonos de otros meses. Un abono anterior
+  pendiente por el mismo importe impide tomar la factura con el abono
+  posterior. El mes y el TXT quedan fijos mientras corre la revisión o la
+  confirmación. Vista previa sin escrituras. 78 pruebas dirigidas con
+  PostgreSQL, revisión fiscal y QA, y cuatro recorridos de navegador pasan.
+  En el PR pasaron 831 pruebas de servidor y 396 recorridos de navegador.
+  La primera consulta de despliegue devolvió HTTP 502. Se repitió solo el paso
+  de Coolify y confirmó `finished`. Base y Redis sanos, campo de revisión
+  publicado en la API y aviso verificado en el paquete web.
+
+- Logo del emisor en RIDE, 2026-11-11: PR #95 en producción, revisión
+  `f4f34e3`. CI y Coolify `43075404995` verdes. Portal HTTP 200, base
+  y Redis sanos. Los PDF nuevos centran el logo
+  propio y lo muestran hasta 7 × 3 cm. Si falta una imagen válida, el encabezado
+  muestra la razón social del emisor. Se conserva la identificación del
+  proveedor y la descarga de versiones guardadas. Se entregó una copia
+  local con el logo ampliado y se verificó que los datos fiscales coinciden.
+  La auditoría de CI exigió pypdf 6.21.4. Las 29 pruebas locales de RIDE,
+  configuración fiscal, PDF histórico y dossier pasan. En el PR pasaron
+  827 pruebas de backend, con 30 omisiones preexistentes.
 
 - ATS, advertencias de compras, 2026-10-28: EN PRODUCCIÓN por PR #92/#93,
   revisión 076150f. Omite formasDePago en compras con bases+IVA+ICE <=500,
@@ -132,8 +247,15 @@ alcance y las decisiones.
   verificado y Go 1.24.8, sin cambiar almacenamiento productivo. Construcción,
   salud y lectura/escritura sintéticas pasan; cuatro pruebas validan el
   aislamiento y que las rutas CI activen OIDC sin desplegar por sí solas.
-  Dos expertos revisaron el cambio de plataforma. Pendientes CI, Coolify y
-  comportamiento visible.
+  Dos expertos revisaron el cambio de plataforma. PR #84 integrado como
+  `ad042fc`; `main` y `release` iguales. CI PR `38447489918`, main
+  `38448952785` y Coolify verdes. API/web ejecutan esa revisión y salud
+  pública confirma base/Redis sanos. MinIO productivo conserva exactamente
+  la imagen y SHA anteriores. Sesión BTOB: 5 retenciones aplicadas y 6
+  pendientes sin descontar; Cobrar prepara el neto, fecha de Guayaquil y
+  método sin asumir. Se canceló sin registrar efectivo. Evidencia visual
+  local `/tmp/iaerp-cobro-prod-20261013.jpg`. Banco verificado con datos
+  sintéticos, no se cargó un extracto productivo para la prueba.
   El bloqueo ATS por forma de pago faltante sigue separado: no se asignó un
   código ni se alteró el XML autorizado.
 

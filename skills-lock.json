@@ -42,6 +42,33 @@
       "sourceType": "github",
       "skillPath": "skills/ui-ux-designer/SKILL.md",
       "computedHash": "dd094034d6f61ead543f5c15d9168f82c4d23fa6930688cdd120b34f74f988f9"
+    },
+    "swiftui-expert-skill": {
+      "source": "AvdLee/SwiftUI-Agent-Skill",
+      "sourceType": "github",
+      "sourceRef": "62bd760f005093d1e2e4de5db156e456a5f96400",
+      "skillPath": "skills/swiftui-expert-skill/SKILL.md",
+      "computedHash": "6fa1d5188176628a00e7f032298e640f5191185904e305983cc8a2fa6e2c31d5",
+      "hashScope": "SHA-256 of SKILL.md bytes",
+      "installationScope": "Codex user profile"
+    },
+    "swift-concurrency": {
+      "source": "AvdLee/Swift-Concurrency-Agent-Skill",
+      "sourceType": "github",
+      "sourceRef": "3b1580d8398e0b5408b3bf0bada0e941a1cfc642",
+      "skillPath": "skills/swift-concurrency/SKILL.md",
+      "computedHash": "8c667b2ff988251c7c291abe046b77d7b8fcfbe3b5ed36961e25e224b1ead491",
+      "hashScope": "SHA-256 of SKILL.md bytes",
+      "installationScope": "Codex user profile"
+    },
+    "swift-testing-expert": {
+      "source": "AvdLee/Swift-Testing-Agent-Skill",
+      "sourceType": "github",
+      "sourceRef": "798e9b1a2bcac164d4f0c781908199e754f0bab6",
+      "skillPath": "swift-testing-expert/SKILL.md",
+      "computedHash": "d039eb55cfbaa379d308ff42c1e459dea355edb869ec0a4d6f488759d2156aec",
+      "hashScope": "SHA-256 of SKILL.md bytes",
+      "installationScope": "Codex user profile"
     }
   }
 }

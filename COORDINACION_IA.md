@@ -6,7 +6,7 @@
 > "SKIPPED" mientras otra sesión lo completaba, y tests borrados/debilitados
 > para forzar el CI en verde. Este doc evita que se repita.
 
-**Última actualización:** 2026-08-22 (America/Guayaquil)
+**Última actualización:** 2026-11-18 (America/Guayaquil)
 
 > **Estado actual (2026-07-23):** plan UI/UX (Sprints 1-9) **completo**; además
 > cliente **SRI real** (`SoapSRIClient`) e integración **Gmail** listos en código.
@@ -41,8 +41,12 @@
 
 | Sesión / IA | Estado | Área / archivos | Desde |
 | --- | --- | --- | --- |
+| Codex (iOS, conexión IAERP) | 🟢 ACTIVA | Conexión iOS 0.4 autorizada. Backend PR #107/6b1e832: permisos, migraciones, contrato y seguridad pasan; frontend/OIDC en curso. Native client creado disabled hasta despliegue verificado. Recovery durable y revisión producto/seguridad listas (80 SwiftPM, 41 AppHost, UI tres cierres de proceso). Root: única compilación y auditoría del formulario (aún falla), integración/docs. Expertos con fuentes congeladas salvo tareas puntuales coordinadas. Teléfono iOS26.0.1 emparejado; Apple Personal Team bloquea firma por cupo de iPhones, titular no tiene otra cuenta. Sin tocar avisos/scripts SRI; emisión real fuera. | 2026-11-18 |
 | Codex (Compras SRI, reglas y MCP) | ✅ EN PRODUCCIÓN | Anular directo en fila, PR #105 e8b4fc0, CI/Coolify 44181463258 verdes; 416 E2E y revisión frontend/a11y GO. API/MCP/perfiles b2b verificados. Registro real pendiente de respaldo SRI; lote CAPTCHA sigue diferido por el usuario. | 2026-11-17 |
-| Codex (este hilo, Cartera y retenciones) | 🟡 EN VALIDACIÓN FINAL | Cruce automático desde XML tributario, preparación de cobro neto y conciliación de depósitos descontando retenciones; 80 pruebas PostgreSQL y 40 E2E pasan, fiscal GO. Publicación autorizada; notificaciones y scripts SRI pendientes quedan fuera. | 2026-10-13 |
+| Expertos de este hilo (anulaciones, autorizadas) | ✅ REVISADO | Backend/frontend congelados. ERP aprobó sólo operación cancelada; padre verifica y publica el ajuste. | 2026-11-17 |
+| Codex (abonos y retenciones) | ✅ EN PRODUCCIÓN | PR #96, `a006e9b`. Revisión fiscal y QA, CI `43107830288` y Coolify verdes. API y web sirven la revisión de abonos. | 2026-11-11 |
+| Codex (logo RIDE) | ✅ EN PRODUCCIÓN | PR #95, revisión `f4f34e3`, CI y Coolify `43075404995` verdes. Logo propio ampliado y centrado, encabezado sin marca por defecto. Portal y API sanos. | 2026-11-11 |
+| Codex (este hilo, Cartera y retenciones) | ✅ EN PRODUCCIÓN | PR #84, `ad042fc` en main/release; CI/Coolify verdes, API/web sanos. 80 pruebas PostgreSQL, 42 E2E y revisión fiscal/plataforma/QA GO. BTOB aplicó 5 retenciones, 6 pendientes; cobro neto preparado y cancelado sin efectivo. MinIO CI desde fuente oficial; producción sin cambios de almacenamiento. Notificaciones y scripts SRI fuera. | 2026-10-13 |
 | Claude (orquestador) | ⚪ obsoleta (2026-08-29) | Calidad de tests a11y RESTAURADA; Sprint 4 se completó después por Codex. Fila marcada 🟢 durante más de un mes con decenas de sesiones cerradas encima: ya no bloquea a nadie | 2026-07-21 |
 | Codex (GPT-5.6, vía Claude) | ⚪ detenido | Se colgó por `approval_mode="approve"` en modo no interactivo; para usarlo hay que invocarlo con `--full-auto`/`-a never`. Alcanzó a hacer 2 mejoras menores (auth.tsx, ErpModal.tsx) que se conservaron | 2026-07-21 |
 | Codex (este hilo) | ✅ COMPLETA | Conciliación bancaria por período: evidencia subida reemplaza cobro manual sin referencia mediante reverso auditable; julio primero | 2026-08-02 |
@@ -149,6 +153,7 @@ Las dos sesiones mezclaron `main` y `release`:
   antes de leer archivos. Se reconstruye solo en cada commit (git hook).
 - Fuente de verdad operativa: `docs/STATUS.md`. Tareas 1x1: `ISSUE_TRACKING.md`.
   Reglas del repo: `AGENTS.md`.
+
 
 ## Sesión ATS — 2026-10-27
 

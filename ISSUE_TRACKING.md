@@ -1,5 +1,32 @@
 # Issue Tracking - Sesión por Sesión
 
+> 2026-11-18, iOS 0.4.0 en validación: 80 SwiftPM, 41 AppHost y una UI de
+> recuperación con tres terminaciones reales correctas. PR #107 prepara permisos
+> por membresía y consulta del borrador; CI pendiente. Cliente Keycloak creado
+> deshabilitado. Teléfono emparejado iOS 26.0.1; sesión Apple actualizada, pero
+> la firma falla por límite de iPhones registrados del Personal Team. Pendiente
+> alternativa de equipo/cuenta del titular. Formulario: geometría máxima pasa,
+> auditoría de contraste todavía falla; no se excluye. Sin login móvil real,
+> instalación física ni emisión SRI. Ver evidencia 2026-11-18-live-connection.
+
+> 2026-11-18: iOS 0.3.0 (3) con multicuentas preparada localmente. 77 SwiftPM y
+> 25 AppHost correctas; Accounts-9 tres UI correctas, incluida auditoría máxima,
+> sin filtros. Cuenta volvió a pasar auditoría en Accounts-8. Build arm64 iPhoneOS
+> sin firma correcto. QA detectó y se corrigió el cruce logout/background antes
+> de la purga: identidad capturada y eliminada sin suspensión, pruebas con barrera.
+> Sin teléfono físico ni acceso real; P1 del piloto y formulario IOS-017 siguen
+> pendientes. [Evidencia](ios/validation/2026-11-18-cuentas.md).
+
+> 2026-11-17: iOS 0.2.0 preparada para revisión local: acceso, clientes,
+> borradores con plazo/cuota, facturas, PDF/XML y Cuenta. Corte final Tests-39:
+> 58 SwiftPM +17 AppHost correctas; **13/14 UI, una auditoría de texto máximo
+> falla por contraste**, sin omisiones. No se marca IOS-017 terminada.
+> Build iPhoneOS arm64 sin firma correcto; teléfono/Team/firma pendientes.
+> Cliente real deshabilitado: P1 de permisos por tenant y recuperación tras
+> terminación del proceso. [Backlog](docs/backlog/ios-backlog.md) y
+> [evidencia](ios/validation/2026-11-17-incremento.md).
+> Sin producción, commit, push ni distribución; cambios ajenos intactos.
+
 > 2026-11-17: `Anular` directo bajo el número de compra publicado con PR #105,
 > `e8b4fc0`, CI/Coolify `44181463258` correctos. 416 E2E (4 omisiones previas),
 > revisión frontend/a11y GO. API, botón servido, MCP BTOB y perfiles persistentes
@@ -17,15 +44,26 @@
 > contrato, migración, paquete web y MCP autenticado verificados.
 > La compra cancelada está confirmada; el registro real requiere respaldo SRI.
 
+> 2026-11-11: conciliación bancaria cruza saldos netos únicos de facturas
+> previas y explica los abonos sin cruce por referencia. PR #96 con pruebas de
+> retenciones, confirmación, repetición y depósitos iguales de meses distintos.
+> Publicado en `a006e9b`. Coolify, API y web verificados.
+
+> 2026-11-11: logo del emisor centrado y ampliado en RIDE nuevos. Quitado
+> B2B del encabezado por defecto. PR #95 en producción con CI y Coolify
+> verdes en 43075404995.
+
 > Corte 2026-10-13: Cartera cruza retenciones tributarias autorizadas y prepara
 > el cobro neto; banco compara contra ese neto sin guardar en vista previa.
 > 80 pruebas PostgreSQL, 38 repetidas tras locks y 40 E2E verdes; fiscal y QA GO.
-> Commit `2dc2d5a`, PR #84. No publicado: OIDC/stack de CI no puede descargar
+> Commit inicial `2dc2d5a`, PR #84. OIDC/stack de CI no podía descargar
 > la imagen pública MinIO usada por Compose. El usuario autorizó construir
 > solo MinIO de pruebas desde código oficial fijado. Build, salud, lectura/
 > escritura y cuatro pruebas de aislamiento pasan; producción no se cambia.
 > Carrera de lectura/cruce corregida con dos regresiones deterministas.
-> Pendiente validar CI completo y publicar.
+> Publicado `ad042fc`: main/release iguales, CI y Coolify verdes, API/web sanos.
+> Sesión BTOB: 5 retenciones aplicadas, 6 pendientes; Cobrar neto verificado
+> y cancelado sin guardar efectivo. MinIO productivo conserva imagen/SHA.
 
 **Fecha:** 2026-07-20
 **Sprint Activo:** Sprint 3 - Sidebar Colapsible + UX Improvements
@@ -717,6 +755,7 @@ Para retomar rápidamente en cualquier momento:
 **Sprint:** Sprint 1 - CRM Kanban Foundation
 **Próxima tarea:** TASK-1.1 (Instalar dependencias @dnd-kit)
 **Estado:** 🟢 Ready to start Sprint 1
+
 
 ## 2026-10-27 — ATS: forma de pago declarada
 

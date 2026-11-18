@@ -1,0 +1,56 @@
+{
+  "clientId": "iaerp-ios",
+  "name": "IAERP iOS pilot",
+  "description": "Disabled proposal. Enable only after tenant-scoped write permissions pass owner/reader tests across two organizations.",
+  "enabled": false,
+  "protocol": "openid-connect",
+  "publicClient": true,
+  "bearerOnly": false,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "fullScopeAllowed": false,
+  "redirectUris": [
+    "ec.com.b2b.iaerp:/oauth2redirect"
+  ],
+  "webOrigins": [],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "ec.com.b2b.iaerp:/oauth2redirect"
+  },
+  "defaultClientScopes": [
+    "profile",
+    "context:read",
+    "memberships:read",
+    "organization:read",
+    "parties:read",
+    "products:read",
+    "invoices:read",
+    "invoices:write"
+  ],
+  "optionalClientScopes": [
+    "organization"
+  ],
+  "protocolMappers": [
+    {
+      "name": "subject",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-sub-mapper",
+      "config": {
+        "access.token.claim": "true",
+        "introspection.token.claim": "true"
+      }
+    },
+    {
+      "name": "iaerp-api-audience",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-audience-mapper",
+      "config": {
+        "included.custom.audience": "iaerp-api",
+        "access.token.claim": "true",
+        "id.token.claim": "false"
+      }
+    }
+  ]
+}

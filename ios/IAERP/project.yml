@@ -1,0 +1,95 @@
+name: IAERP
+options:
+  minimumXcodeGenVersion: 2.45.0
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: es
+packages:
+  IAERPDemo:
+    path: .
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    MARKETING_VERSION: 0.4.0
+    CURRENT_PROJECT_VERSION: 4
+targets:
+  IAERP:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: IAERPDemo
+      - package: IAERPDemo
+        product: IAERPClient
+      - package: IAERPDemo
+        product: IAERPIdentity
+    info:
+      path: Config/Info.plist
+      properties:
+        CFBundleDisplayName: IAERP
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSFaceIDUsageDescription: Abre tus cuentas guardadas de IAERP con Face ID.
+        CFBundleURLTypes:
+          - CFBundleURLName: ec.com.b2b.iaerp.oidc
+            CFBundleURLSchemes: [ec.com.b2b.iaerp]
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ec.com.b2b.iaerp.demo
+        PRODUCT_NAME: IAERP
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: IAERP
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.business
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        ENABLE_PREVIEWS: YES
+        CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]: Config/Simulator.entitlements
+  IAERPAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [AppTests]
+    dependencies:
+      - target: IAERP
+      - package: IAERPDemo
+        product: IAERPClient
+      - package: IAERPDemo
+        product: IAERPIdentity
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ec.com.b2b.iaerp.apptests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        TARGETED_DEVICE_FAMILY: "1"
+  IAERPUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: IAERP
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ec.com.b2b.iaerp.demo.uitests
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        TARGETED_DEVICE_FAMILY: "1"
+schemes:
+  IAERP:
+    build:
+      targets:
+        IAERP: all
+        IAERPAppTests: [test]
+        IAERPUITests: [test]
+    test:
+      targets: [IAERPAppTests, IAERPUITests]
+      gatherCoverageData: true

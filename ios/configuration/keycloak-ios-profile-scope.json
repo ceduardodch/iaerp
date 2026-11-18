@@ -1,0 +1,36 @@
+{
+  "name": "profile",
+  "description": "OIDC profile claims for the native IAERP client; attach only to iaerp-ios.",
+  "protocol": "openid-connect",
+  "attributes": {
+    "include.in.token.scope": "true",
+    "display.on.consent.screen": "true"
+  },
+  "protocolMappers": [
+    {
+      "name": "preferred username",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "user.attribute": "username",
+        "claim.name": "preferred_username",
+        "jsonType.label": "String",
+        "id.token.claim": "true",
+        "access.token.claim": "false",
+        "userinfo.token.claim": "true"
+      }
+    },
+    {
+      "name": "full name",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-full-name-mapper",
+      "consentRequired": false,
+      "config": {
+        "id.token.claim": "true",
+        "access.token.claim": "false",
+        "userinfo.token.claim": "true"
+      }
+    }
+  ]
+}
