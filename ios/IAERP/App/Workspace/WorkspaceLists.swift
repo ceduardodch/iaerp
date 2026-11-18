@@ -130,11 +130,13 @@ struct ComposerRoute: Identifiable {
 struct WorkspaceInvoicesView: View {
     let store: WorkspaceStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @FocusState private var searchIsFocused: Bool
     @State private var query = ""
     @State private var status = ""
     @State private var composer: ComposerRoute?
     @State private var expandedMonths: [String: Bool] = [:]
     @State private var appliedRequest: InvoiceListRequest?
+    @State private var unfocusedBottomInset: CGFloat?
 
     private struct InvoiceListRequest: Equatable {
         let query: String
@@ -149,9 +151,15 @@ struct WorkspaceInvoicesView: View {
 
     var body: some View {
         GeometryReader { viewport in
+            let bottomInset = viewport.safeAreaInsets.bottom
+            let chromeInset = unfocusedBottomInset ?? bottomInset
+            // With the software keyboard, SwiftUI already shortens the proposed height.
+            let keyboardAvoidance = searchIsFocused && bottomInset > chromeInset + 1
+            let reservedBottomInset = keyboardAvoidance ? 0 : bottomInset
             List {
                 Section {
                     ERPSearchField(text: $query, prompt: "Número o clave de acceso")
+                        .focused($searchIsFocused)
                     Picker("Estado", selection: $status) {
                         Text("Todos").tag("")
                         Text("Borradores").tag("DRAFT")
@@ -181,11 +189,14 @@ struct WorkspaceInvoicesView: View {
             }
             .accessibilityIdentifier("invoice-list")
             .frame(width: viewport.size.width,
-                   height: max(0, viewport.size.height - viewport.safeAreaInsets.bottom), alignment: .top)
+                   height: max(0, viewport.size.height - reservedBottomInset), alignment: .top)
             .clipped()
-            .padding(.bottom, viewport.safeAreaInsets.bottom)
+            .padding(.bottom, reservedBottomInset)
             .scrollEdgeEffectStyle(.hard, for: .all)
             .scrollEdgeEffectHidden(true, for: .all)
+            .onChange(of: bottomInset, initial: true) { _, inset in
+                if !searchIsFocused { unfocusedBottomInset = inset }
+            }
         }
         .navigationTitle("Facturas")
         .navigationSubtitle(Text(verbatim: store.displayCompany))
