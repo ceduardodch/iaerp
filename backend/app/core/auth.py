@@ -14,6 +14,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.ios_permissions import (
+    IOS_CLIENT_ID,
+    ios_effective_scopes,
+    ios_request_permitted,
+    is_ios_client,
+    validate_ios_client,
+)
 from app.db.session import get_session
 from app.models.platform import Membership, ServiceAccount, Tenant, User
 
@@ -29,6 +36,7 @@ class AuthContext:
     roles: frozenset[str]
     scopes: frozenset[str]
     token_id: str
+    client_id: str | None = None
 
 
 def create_dev_token(
@@ -113,8 +121,18 @@ async def resolve_auth_context(
     scopes = frozenset(str(payload.get("scope") or "").split())
     subject = payload.get("sub")
     client_id = payload.get("client_id") or payload.get("azp")
+    native_ios = is_ios_client(payload)
+    if native_ios:
+        try:
+            validate_ios_client(
+                payload,
+                api_audience=settings.OIDC_API_AUDIENCE,
+                mcp_audience=settings.OIDC_MCP_AUDIENCE,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    if isinstance(client_id, str):
+    if isinstance(client_id, str) and not native_ios:
         # client_id es unico globalmente (unique=True en service_accounts), por
         # lo que basta para ligar el token a su tenant sin filtro adicional.
         service_account = await session.scalar(
@@ -134,6 +152,7 @@ async def resolve_auth_context(
                 roles=frozenset({"agent"}),
                 scopes=frozenset(scopes.intersection(service_account.scopes)),
                 token_id=token_id,
+                client_id=client_id,
             )
 
     if settings.AUTH_MODE == "dev":
@@ -168,13 +187,17 @@ async def resolve_auth_context(
         if user_membership is None:
             raise HTTPException(status_code=404, detail="Membership not found")
         user, membership = user_membership
+        effective_scopes = ios_effective_scopes(scopes, membership.roles) if native_ios else scopes
         return AuthContext(
             actor_id=str(user.id),
             actor_type="USER",
             tenant_id=tenant_id,
             roles=frozenset(membership.roles),
-            scopes=scopes,
+            scopes=effective_scopes,
             token_id=token_id,
+            client_id=IOS_CLIENT_ID
+            if native_ios
+            else (client_id if isinstance(client_id, str) else None),
         )
 
     raise HTTPException(status_code=404, detail="Service account or user not found")
@@ -199,6 +222,16 @@ async def get_auth_context(
     # los exception handlers de FastAPI solo reciben (request, exc).
     request.state.tenant_id = context.tenant_id
     request.state.actor_id = context.actor_id
+    # ASGI's decoded dispatch path retains the API prefix with both eager and
+    # lazy FastAPI routers. Child APIRoute.path may omit that prefix.
+    route_path = request.scope.get("path", "")
+    if context.client_id == IOS_CLIENT_ID and not ios_request_permitted(
+        request.method, route_path, api_prefix=settings.API_PREFIX
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Native iOS access permits invoice drafts and preview only",
+        )
     return context
 
 

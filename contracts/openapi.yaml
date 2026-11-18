@@ -736,6 +736,43 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /invoices/draft-requests/{idempotency_key}:
+    get:
+      operationId: getCompletedInvoiceDraftRequest
+      summary: Conciliar una solicitud propia de borrador ya guardada
+      description: >-
+        Busca evidencia COMPLETED por tenant activo, actor autenticado,
+        operacion invoices.create_draft y clave exacta. No reenvia una escritura.
+        Una evidencia completada y retenida sigue siendo consultable tras su TTL.
+        Devuelve 404 indistinto si falta, esta pendiente, pertenece a otro actor
+        o tenant, o no resuelve a una factura de ese tenant.
+      security:
+        - oauth2: ["invoices:read"]
+      parameters:
+        - name: idempotency_key
+          in: path
+          required: true
+          description: Clave original con forma UUID; conservar mayusculas y minusculas exactas.
+          schema:
+            type: string
+            minLength: 36
+            maxLength: 36
+            pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      responses:
+        "200":
+          description: Identificador de la factura guardada, sin payload de la solicitud.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceDraftRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
   /invoices/{invoiceId}:
     get:
       operationId: getInvoice
@@ -2319,6 +2356,14 @@ components:
           minItems: 1
           items:
             $ref: "#/components/schemas/InvoiceLineInput"
+    InvoiceDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [invoiceId]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
     SalesDocument:
       type: object
       additionalProperties: false
