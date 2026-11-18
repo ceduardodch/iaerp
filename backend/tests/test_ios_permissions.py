@@ -7,6 +7,7 @@ public key; PyJWT still verifies RS256, issuer, audience and expiration.
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from types import SimpleNamespace
 
 import jwt
@@ -170,7 +171,7 @@ async def test_ios_human_cannot_be_reclassified_as_a_service_account(monkeypatch
                 tenant_id=TENANT_B,
                 client_id="iaerp-ios",
                 name="Synthetic collision",
-                secret_hash="synthetic-unused",
+                secret_hash=sha256(b"non-secret native client collision fixture").hexdigest(),
                 scopes=["invoices:write"],
                 expires_at=datetime.now(UTC) + timedelta(hours=1),
             )
