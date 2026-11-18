@@ -13,8 +13,9 @@ struct WorkspaceClientsView: View {
             Section {
                 ERPSearchField(text: $query, prompt: "Buscar clientes")
                 if store.customerError == nil && !store.loadingCustomers { ERPListSummary(count: visible.count) }
+            } header: {
+                WorkspaceListCompanyHeader(store: store)
             }
-            WorkspaceContextSection(store: store)
             Section {
                 if store.loadingCustomers { ProgressView("Buscando clientes…") }
                 if let error = store.customerError {
@@ -93,6 +94,7 @@ struct ComposerRoute: Identifiable {
 
 struct WorkspaceInvoicesView: View {
     let store: WorkspaceStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var query = ""
     @State private var status = ""
     @State private var composer: ComposerRoute?
@@ -119,8 +121,9 @@ struct WorkspaceInvoicesView: View {
                     Text("Borradores").tag("DRAFT")
                     Text("Autorizadas").tag("AUTHORIZED")
                 }
+            } header: {
+                WorkspaceListCompanyHeader(store: store)
             }
-            WorkspaceContextSection(store: store)
             InvoiceRecoverySection(store: store)
             if let notice = store.notice {
                 Text(notice).accessibilityIdentifier("workspace-notice")
@@ -143,9 +146,11 @@ struct WorkspaceInvoicesView: View {
             }
         }
         .scrollEdgeEffectStyle(.hard, for: .all)
-        .scrollEdgeEffectHidden(true, for: .bottom)
+        .scrollEdgeEffectHidden(true, for: .all)
         .navigationTitle("Facturas")
         .toolbarTitleDisplayMode(.inline)
+        .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .toolbar {
             if store.canCreate {
                 ToolbarItem(placement: .primaryAction) {
@@ -192,7 +197,8 @@ struct WorkspaceInvoicesView: View {
                         Text("\(count) · \(groupTotal)")
                             .font(.subheadline)
                     }
-                    Spacer()
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: expanded ? "chevron.up" : "chevron.down").accessibilityHidden(true)
                 }
                 .foregroundStyle(Color.primary)
@@ -205,6 +211,9 @@ struct WorkspaceInvoicesView: View {
             .accessibilityIdentifier("invoice-month-\(accessibilityKey)")
             if expanded {
                 ForEach(store.monthRows[key] ?? [], id: \.id) { invoice in
+                    let amount = ERPDisplay.money(invoice.total, currency: invoice.currency)
+                    let status = ERPDisplay.status(invoice.status)
+                    let collection = invoice.collectionStatus.map { "Cobro: \(ERPDisplay.status($0))" }
                     NavigationLink {
                         WorkspaceInvoiceDetail(store: store, invoiceId: invoice.id, listedNumber: invoice.number,
                                                listedCustomerName: invoice.customerName)
@@ -212,15 +221,19 @@ struct WorkspaceInvoicesView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(invoice.number).font(.headline)
                             Text(invoice.customerName)
-                            Text("\(invoice.issueDate) · \(ERPDisplay.money(invoice.total, currency: invoice.currency))")
-                            Text(ERPDisplay.status(invoice.status)).font(.subheadline.weight(.medium))
-                            if let collection = invoice.collectionStatus {
-                                Text("Cobro: \(ERPDisplay.status(collection))").font(.subheadline)
+                            Text(dynamicTypeSize.isAccessibilitySize ? amount : "\(invoice.issueDate) · \(amount)")
+                            if !dynamicTypeSize.isAccessibilitySize {
+                                Text(status).font(.subheadline.weight(.medium))
+                                if let collection { Text(collection).font(.subheadline) }
                             }
                         }
+                        .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(Color.primary)
                         .padding(.vertical, 4)
                     }
+                    .accessibilityLabel([invoice.number, invoice.customerName, amount,
+                                         ERPDisplay.longFiscalDate(invoice.issueDate), status, collection]
+                        .compactMap { $0 }.joined(separator: ", "))
                     .accessibilityIdentifier("workspace-invoice-\(invoice.id.uuidString)")
                 }
                 if let error = store.monthErrors[key] {
@@ -244,6 +257,19 @@ struct WorkspaceInvoicesView: View {
                 }
             }
         }
+    }
+}
+
+private struct WorkspaceListCompanyHeader: View {
+    let store: WorkspaceStore
+
+    var body: some View {
+        let company = store.context?.name ?? "Empresa"
+        Text(store.isDemo ? "\(company) · Demo" : company)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.primary)
+            .textCase(nil)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

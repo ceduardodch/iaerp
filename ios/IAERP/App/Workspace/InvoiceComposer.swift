@@ -221,11 +221,12 @@ struct InvoiceComposerView: View {
                             Button { pickingCustomer = true } label: {
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text("Cliente").font(.subheadline)
-                                        Text(draft.customerId.map(store.customerName) ?? "Seleccionar")
+                                        if draft.customerId != nil { Text("Cliente").font(.subheadline) }
+                                        Text(draft.customerId.map(store.customerName) ?? "Elegir cliente")
                                             .font(.headline)
                                     }
-                                    Spacer()
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                     Image(systemName: "chevron.right").accessibilityHidden(true)
                                 }
                                 .foregroundStyle(Color.primary)
@@ -244,7 +245,7 @@ struct InvoiceComposerView: View {
                             .foregroundStyle(Color.primary)
                         }
                         Section {
-                            LabeledContent("Plazo (días)") {
+                            LabeledContent("Plazo de pago (días)") {
                                 TextField("Días de plazo", value: $draft.paymentTermsDays, format: .number.grouping(.never))
                                     .focused($focusedInput, equals: .paymentTerms)
                                     .keyboardType(.numberPad)
@@ -255,7 +256,7 @@ struct InvoiceComposerView: View {
                             Text("0 días es al contado. El plazo inicial procede del cliente o de la empresa.")
                                 .font(.footnote).foregroundStyle(Color.primary)
                                 .fixedSize(horizontal: false, vertical: true)
-                        } header: { Text("Pago").foregroundStyle(Color.primary) }
+                        }
                         .disabled(!draft.canEdit)
                         Section {
                             DatePicker("Fecha", selection: $draft.issueDate, displayedComponents: .date)

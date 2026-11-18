@@ -99,7 +99,7 @@ struct WorkspaceInvoiceDetail: View {
         .toolbarTitleDisplayMode(.inline)
         .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
         .toolbarBackgroundVisibility(.visible, for: .navigationBar)
-        .toolbarVisibility(.hidden, for: .tabBar)
+        .toolbarVisibility(listedNumber == nil ? .hidden : .visible, for: .tabBar)
         .task { await load() }
         .refreshable { await load() }
         .sheet(item: $presentation) { DocumentViewer(presentation: $0) }

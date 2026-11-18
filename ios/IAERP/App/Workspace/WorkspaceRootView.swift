@@ -73,29 +73,24 @@ struct WorkspaceRootView: View {
 
 struct WorkspaceHomeView: View {
     let store: WorkspaceStore
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var composer: ComposerRoute?
     @State private var savedInvoice: ERPInvoice?
 
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    if store.isDemo {
-                        ERPStatusBadge(text: "Demo", systemImage: "testtube.2")
-                            .accessibilityLabel("Modo de demostración")
-                    }
-                    Text(store.context?.name ?? "Empresa")
-                        .font(.title.bold())
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityAddTraits(.isHeader)
-                }
-                .padding(.vertical, 4)
                 if store.canCreate {
                     newInvoiceButton
                         .disabled(!store.canStartInvoice)
                         .accessibilityIdentifier("home-new-invoice")
                 }
+            } header: {
+                Text(store.isDemo ? "Demo · \(store.context?.name ?? "Empresa")" : (store.context?.name ?? "Empresa"))
+                    .font(.headline)
+                    .textCase(nil)
+                    .foregroundStyle(Color.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
             }
             if let savedInvoice {
                 Section {
@@ -120,16 +115,18 @@ struct WorkspaceHomeView: View {
                 } else if let summary = store.dashboard {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Por cobrar").font(.headline)
-                        Text(ERPDisplay.money(summary.receivable, currency: summary.currency))
+                        let amount = ERPDisplay.money(summary.receivable, currency: summary.currency)
+                        Text(amount)
                             .font(.largeTitle.bold())
+                            .accessibilityLabel("Por cobrar, \(amount)")
+                            .accessibilityIdentifier("home-metric-receivable")
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, 10)
                     .foregroundStyle(.white)
                     .listRowBackground(Color.accentColor)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("home-metric-receivable")
+                    .accessibilityElement(children: .contain)
                     metric("Vencido", value: summary.overdue, currency: summary.currency, identifier: "home-metric-overdue")
                     metric("Cobrado este mes", value: summary.collectedThisMonth, currency: summary.currency,
                            detail: "Incluye efectivo y retenciones.", identifier: "home-metric-collected")
@@ -140,10 +137,13 @@ struct WorkspaceHomeView: View {
                 } else {
                     ProgressView("Consultando cartera…")
                 }
-            } header: {
-                Text("Caja y cobranza").foregroundStyle(Color.primary)
             }
         }
+        .listSectionSpacing(.compact)
+        .clipped()
+        .padding(.bottom, 1)
+        .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .navigationTitle("Inicio")
         .toolbarTitleDisplayMode(.inline)
         .sheet(item: $composer) { route in
@@ -153,39 +153,36 @@ struct WorkspaceHomeView: View {
         .refreshable { if store.canReadDashboard { await store.loadDashboard() } }
     }
 
-    @ViewBuilder private var newInvoiceButton: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            Button { composer = ComposerRoute() } label: {
-                Text("Nueva factura")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(store.canStartInvoice ? Color.primary : Color.secondary)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        } else {
-            Button { composer = ComposerRoute() } label: {
-                Label("Nueva factura", systemImage: "plus")
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(ERPPrimaryActionStyle())
+    private var newInvoiceButton: some View {
+        Button { composer = ComposerRoute() } label: {
+            Text("Nueva factura")
+                .font(.body.weight(.semibold))
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .foregroundStyle(store.canStartInvoice ? Color.white : Color.primary)
+                .background(store.canStartInvoice ? Color("AccentColor") : Color(uiColor: .secondarySystemFill),
+                            in: RoundedRectangle(cornerRadius: 10))
         }
+        .buttonStyle(.plain)
     }
 
     private func metric(_ title: String, value: Decimal, currency: String,
                         detail: String? = nil, identifier: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let amount = ERPDisplay.money(value, currency: currency)
+        return VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.subheadline)
-            Text(ERPDisplay.money(value, currency: currency)).font(.title2.weight(.semibold))
+            Text(amount)
+                .font(.title2.weight(.semibold))
+                .accessibilityLabel("\(title), \(amount)")
+                .accessibilityIdentifier(identifier)
             if let detail { Text(detail).font(.footnote) }
         }
         .fixedSize(horizontal: false, vertical: true)
         .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(identifier)
+        .accessibilityElement(children: .contain)
     }
 }
 
