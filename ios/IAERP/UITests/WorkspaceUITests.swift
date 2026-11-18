@@ -33,7 +33,7 @@ final class WorkspaceUITests: XCTestCase {
             if app.tabBars.firstMatch.exists && app.tabBars.firstMatch.isHittable {
                 bottom = min(bottom, app.tabBars.firstMatch.frame.minY - 8)
             }
-            if app.buttons["save-draft"].exists && app.buttons["Cancelar"].isHittable {
+            if form.exists && app.buttons["Cancelar"].isHittable {
                 bottom = min(bottom, app.buttons["Cancelar"].frame.minY - 12)
             }
             if element.exists && element.isHittable,
@@ -46,12 +46,24 @@ final class WorkspaceUITests: XCTestCase {
             let overflow = element.exists ? (above ? top - element.frame.minY : element.frame.maxY - bottom) : viewportHeight
             let distance = max(24, min(viewportHeight * 0.35, overflow + 16))
             let start = app.coordinate(withNormalizedOffset: .zero).withOffset(
-                CGVector(dx: bounds.minX + 8 - app.frame.minX, dy: (top + bottom) / 2 - app.frame.minY))
+                CGVector(dx: bounds.minX + (form.exists ? bounds.width * 0.28 : 8) - app.frame.minX, dy: (top + bottom) / 2 - app.frame.minY))
             let end = start.withOffset(CGVector(dx: 0, dy: above ? distance : -distance))
             start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
         }
         let targetFrame = element.exists ? element.frame : .null
+        snapshot("Control-fuera-de-vista", app: app)
         XCTFail("El control debe estar completo y operable. Target: \(targetFrame), viewport: \(lastViewport)")
+    }
+
+    @MainActor private func assertFooterButton(_ button: XCUIElement, in app: XCUIApplication,
+                                               file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(button.waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertTrue(button.isHittable, file: file, line: line)
+        XCTAssertTrue(button.isEnabled, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(button.frame.width, 44, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(button.frame.height, 44, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(button.frame.minY, app.collectionViews["invoice-form"].frame.maxY, file: file, line: line)
+        XCTAssertTrue(app.frame.contains(button.frame), file: file, line: line)
     }
 
     @MainActor private func currentNavigationBar(in app: XCUIApplication) -> XCUIElement {
@@ -117,7 +129,7 @@ final class WorkspaceUITests: XCTestCase {
         app.buttons["pick-product-00000000-0000-4000-8000-000000000201"].tap()
         XCTAssertEqual(app.textFields["payment-terms-days"].value as? String, "30")
         let review = app.buttons["review-totals"]
-        reveal(review, in: app); review.tap()
+        assertFooterButton(review, in: app); review.tap()
         let total = app.descendants(matching: .any)["draft-total"].firstMatch
         reveal(total, in: app)
         XCTAssertTrue(total.exists)
@@ -137,7 +149,8 @@ final class WorkspaceUITests: XCTestCase {
         let app = app()
         app.tabBars.buttons["Facturas"].tap()
         app.buttons["new-invoice"].tap()
-        XCTAssertFalse(app.buttons["save-draft"].isEnabled)
+        XCTAssertFalse(app.buttons["review-totals"].isEnabled)
+        XCTAssertFalse(app.buttons["save-draft"].exists)
         let add = app.buttons["add-product"]
         reveal(add, in: app); add.tap()
         let picker = app.navigationBars["Elegir producto"]
@@ -161,7 +174,7 @@ final class WorkspaceUITests: XCTestCase {
         reveal(add, in: app); add.tap()
         app.buttons["pick-product-00000000-0000-4000-8000-000000000201"].tap()
         let review = app.buttons["review-totals"]
-        reveal(review, in: app); review.tap()
+        assertFooterButton(review, in: app); review.tap()
         let total = app.descendants(matching: .any)["draft-total"].firstMatch
         reveal(total, in: app)
         XCTAssertTrue(total.exists)
@@ -206,8 +219,9 @@ final class WorkspaceUITests: XCTestCase {
         XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3))
         assertEntireInvoiceControl(quantity, in: app)
         snapshot("Cantidad-editada-sin-salto", app: app)
+        XCTAssertFalse(app.buttons["save-draft"].exists)
 
-        reveal(review, in: app); review.tap()
+        assertFooterButton(review, in: app); review.tap()
         reveal(total, in: app)
         XCTAssertEqual(total.label, "$230,00")
     }
@@ -328,14 +342,15 @@ final class WorkspaceUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(product.frame.height, 44)
         try app.performAccessibilityAudit()
         product.tap()
+        XCTAssertTrue(app.navigationBars["Elegir producto"].waitForNonExistence(timeout: 5))
         let review = app.buttons["review-totals"]
-        reveal(review, in: app); review.tap()
+        assertFooterButton(review, in: app); review.tap()
         let total = app.descendants(matching: .any)["draft-total"].firstMatch
         let totalCell = app.cells.containing(.any, identifier: "draft-total").firstMatch
         reveal(totalCell, in: app)
         XCTAssertTrue(totalCell.exists)
         XCTAssertTrue(total.exists)
-        XCTAssertTrue(app.buttons["save-draft"].isHittable)
+        assertFooterButton(app.buttons["save-draft"], in: app)
         // Include the final note: a button can have a few hittable pixels
         // above the fixed actions while all of its text is still covered.
         let note = app.staticTexts["Borrador, sin envío al SRI."]
@@ -346,14 +361,15 @@ final class WorkspaceUITests: XCTestCase {
         let form = app.collectionViews["invoice-form"]
         XCTAssertTrue(form.exists)
         let endStart = app.coordinate(withNormalizedOffset: .zero).withOffset(
-            CGVector(dx: form.frame.minX + 8, dy: form.frame.midY))
+            CGVector(dx: form.frame.minX + form.frame.width * 0.28, dy: form.frame.midY))
         endStart.press(forDuration: 0.05,
             thenDragTo: endStart.withOffset(CGVector(dx: 0, dy: -120)),
             withVelocity: .slow, thenHoldForDuration: 0.3)
-        XCTAssertTrue(app.buttons["review-totals"].isHittable)
+        XCTAssertFalse(review.exists)
+        assertFooterButton(app.buttons["save-draft"], in: app)
         let top = app.navigationBars["Nueva factura"].frame.maxY
         let bottom = form.frame.maxY
-        for element in [totalCell, app.buttons["review-totals"], note] {
+        for element in [totalCell, note] {
             XCTAssertGreaterThanOrEqual(element.frame.minY, top)
             XCTAssertLessThanOrEqual(element.frame.maxY, bottom)
         }
@@ -366,13 +382,15 @@ final class WorkspaceUITests: XCTestCase {
         try app.performAccessibilityAudit()
         // The audit changes Dynamic Type. Its return must leave the complete
         // totals viewport usable, without a reveal that could hide a bad offset.
-        for element in [totalCell, review, note] {
+        for element in [totalCell, note] {
             assertEntireInvoiceControl(element, in: app)
         }
-        XCTAssertTrue(app.buttons["save-draft"].isHittable)
+        assertFooterButton(app.buttons["save-draft"], in: app)
         snapshot("Importes-despues-auditoria", app: app)
         app.buttons["Cancelar"].tap()
         app.buttons["Descartar borrador"].tap()
+        XCTAssertTrue(app.navigationBars["Nueva factura"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Facturas"].waitForExistence(timeout: 5))
         let invoice = app.descendants(matching: .any)["workspace-invoice-00000000-0000-4000-8000-000000000601"].firstMatch
         reveal(invoice, in: app); invoice.tap()
         snapshot("Factura-texto-maximo", app: app)

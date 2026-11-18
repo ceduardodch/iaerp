@@ -24,6 +24,10 @@ alcance y las decisiones.
   devolvió dos hallazgos, contraste en Cuenta y área táctil al elegir un
   producto. La siguiente revisión conserva los controles de acceso y
   contrasta los dos arreglos contra las mismas auditorías.
+  En `e4e1f93`, iOS 27.2 pasó las seis pruebas de Inicio y 24 de las 25 de
+  interfaz. En la restante, el formulario con letra máxima dejó de avanzar
+  antes de llegar a «Revisar importes». La corrección mantiene la acción en el
+  pie y exige otro toque para guardar tras ver el total. [Ejecución](https://github.com/ceduardodch/iaerp/actions/runs/44390354547).
 
 - iOS 0.4.2 (6), 2026-11-18. La solicitud interactiva de 0.4.1 combinaba
   el selector de organización con el permiso explícito `organization:read`.

@@ -1,6 +1,6 @@
 # Issue Tracking - Sesión por Sesión
 
-> 2026-11-18 · iOS 0.4.2 (6) instalada. Carlos confirma el ingreso. Siguen abiertos el guardado físico de prueba y los tres fallos de CI iOS. Las mejoras IOS-027 a IOS-035 quedan propuestas en el [backlog móvil](docs/backlog/ios-evaluacion-2026-11-18.md).
+> 2026-11-18 · iOS 0.4.2 (6) instalada. Carlos confirma el ingreso. Siguen abiertos el guardado físico de prueba y la validación de «Revisar importes» con letra máxima en iOS 27.2. Las mejoras IOS-027 a IOS-035 quedan propuestas en el [backlog móvil](docs/backlog/ios-evaluacion-2026-11-18.md).
 
 > 2026-11-18, corte 0.4.1 (5): PR #107 publicada como 2bcd013, CI/Coolify y
 > política efectiva verificados; cliente iOS habilitado con PKCE. PR #108 draft:

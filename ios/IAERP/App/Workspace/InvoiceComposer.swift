@@ -198,6 +198,7 @@ struct InvoiceComposerView: View {
     @State private var confirmDiscard = false
     @State private var pickingCustomer = false
     @State private var pickingProduct = false
+    @AccessibilityFocusState private var summaryFocused: Bool
     @State private var didConfigure = false
     @State private var isAtEnd = false
     @State private var measuredAtEnd = false
@@ -212,8 +213,8 @@ struct InvoiceComposerView: View {
     var body: some View {
         @Bindable var draft = draft
         NavigationStack {
-            VStack(spacing: 0) {
-                ScrollViewReader { proxy in
+            ScrollViewReader { proxy in
+                VStack(spacing: 0) {
                     Form {
                         if let error = store.catalogError {
                             Section { ERPErrorState(message: error) { await store.loadCatalog() } }
@@ -315,20 +316,8 @@ struct InvoiceComposerView: View {
                                 ERPDetailRow(title: "Total", value: ERPDisplay.money(preview.total))
                                     .fontWeight(.semibold)
                                     .accessibilityIdentifier("draft-total")
+                                    .accessibilityFocused($summaryFocused)
                             }
-                            Button {
-                                guard let service = store.service else { return }
-                                Task { await draft.review(using: service, setup: store.setup) }
-                            } label: {
-                                if draft.working { ProgressView("Revisando…") }
-                                else {
-                                    Text("Revisar importes")
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                            .frame(minHeight: 44)
-                            .disabled(!draft.canEdit || draft.lines.isEmpty)
-                            .accessibilityIdentifier("review-totals")
                             Text("Borrador, sin envío al SRI.")
                                 .font(.footnote).foregroundStyle(Color.primary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -412,8 +401,19 @@ struct InvoiceComposerView: View {
                         }
                     }
                     #endif
+                    .onChange(of: draft.preview != nil) { _, hasPreview in
+                        if hasPreview {
+                            proxy.scrollTo("invoice-summary-end", anchor: .bottom)
+                            summaryFocused = true
+                        }
+                    }
+                    .onChange(of: draft.error) { _, error in
+                        if error != nil {
+                            proxy.scrollTo("invoice-error-end", anchor: .bottom)
+                        }
+                    }
+                    formActions
                 }
-                formActions
             }
             .navigationTitle("Nueva factura")
             .navigationDestination(isPresented: $pickingCustomer) {
@@ -466,11 +466,29 @@ struct InvoiceComposerView: View {
                 .tint(Color.primary)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .disabled(draft.working)
-            Button(saveActionTitle) { Task { await save() } }
+            if draft.preview == nil && draft.pendingInput == nil {
+                Button {
+                    guard let service = store.service else { return }
+                    focusedInput = nil
+                    Task { await draft.review(using: service, setup: store.setup) }
+                } label: {
+                    ViewThatFits(in: .horizontal) {
+                        Text(draft.working ? "Revisando…" : "Revisar importes").fixedSize()
+                        Text(draft.working ? "Revisando…" : "Revisar")
+                    }
+                }
+                .accessibilityLabel(draft.working ? "Revisando importes" : "Revisar importes")
                 .buttonStyle(ERPPrimaryActionStyle())
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .disabled(draft.working || draft.preview == nil)
-                .accessibilityIdentifier("save-draft")
+                .disabled(!draft.canEdit || draft.lines.isEmpty)
+                .accessibilityIdentifier("review-totals")
+            } else {
+                Button(saveActionTitle) { Task { await save() } }
+                    .buttonStyle(ERPPrimaryActionStyle())
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .disabled(draft.working)
+                    .accessibilityIdentifier("save-draft")
+            }
         }
         .padding().background(Color(uiColor: .systemBackground))
     }

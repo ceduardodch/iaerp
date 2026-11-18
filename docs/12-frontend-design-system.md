@@ -10,7 +10,7 @@ En la recuperación iOS (ADR 0025), «Continuar guardado» identifica un primer
 envío aún no intentado y lo explica antes de la acción. «Consultar guardado»
 queda reservado a lectura tras un intento; un resultado desconocido conserva
 el pendiente. Cerrar ese formulario no se describe como borrar la operación.
-Los estados iniciales mantienen Guardar y Cancelar.
+El formulario conserva Cancelar durante la revisión y el guardado.
 
 ### Cliente nativo iOS
 
@@ -61,9 +61,11 @@ Los títulos de trabajo usan tamaño inline para dejar espacio al contenido.
 Type; el estado corto `Demo` anuncia «Modo de demostración». Avisos, encabezados
 y ficha usan `Color.primary` explícito. El aviso de datos de prueba ocupa un
 footer corto. La ficha distingue estado del documento/SRI y estado de cobro.
-Nueva factura usa formulario nativo y barra inferior `Cancelar` → `Guardar`,
-vertical con tamaños de accesibilidad. Un preview vencido deshabilita guardar;
-rechazos definitivos permiten corregir, respuesta incierta conserva operación.
+En Nueva factura, la barra inferior mantiene «Cancelar» y una acción principal.
+«Revisar importes» consulta los totales y los muestra. Después, un segundo toque
+en «Guardar» crea el borrador. Si se edita una línea, la acción vuelve a «Revisar
+importes». En tamaños de accesibilidad las dos acciones se apilan. Un rechazo
+permite corregir el borrador. Una respuesta incierta conserva la operación.
 `ERPPrimaryActionStyle` conserva texto legible al deshabilitar Guardar; usa
 colores semánticos de fondo/texto en ambos modos. Los campos de líneas tienen
 foco por UUID y el teclado comparte una acción «Listo». El formulario y su

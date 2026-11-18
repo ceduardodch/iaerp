@@ -38,6 +38,8 @@ Carlos aprobó IOS-034, IOS-035 y la búsqueda de IOS-028. La versión 0.5.0 mue
 
 **Revisión por entrega.** Negocio contrasta saldos, reglas fiscales, roles y límites de empresa. UI/UX comprueba navegación, legibilidad y texto máximo. QA comprueba contratos, errores, regresiones y flujo completo con datos sintéticos. Cada hallazgo que incumpla un criterio vuelve a desarrollo y al revisor correspondiente. Tras las tres revisiones favorables y CI verde se publica por el flujo de IAERP y se instala por cable. Carlos autorizó las consultas de lectura y el permiso de resumen para perfiles autorizados.
 
+**Ajuste de facturación de esta entrega.** Una vez añadido el producto, la acción de pie «Revisar importes» permite ver el cálculo de IAERP. El usuario puede editar la cantidad antes de revisar. «Guardar» aparece con el cálculo vigente y requiere un toque aparte. Al cambiar la cantidad, el precio o el descuento, se debe volver a revisar.
+
 | Orden | Historia | Criterio para aceptarla |
 | --- | --- | --- |
 | 1 | **IOS-034 · M · Inicio con resumen de la empresa.** Nueva pantalla inicial. | Mostrar empresa activa, «Por cobrar» y «Vencido» al corte, «Cobrado este mes» y acción «Nueva factura». Reusar definiciones y fuentes de la web. Las cifras sólo se muestran con permiso y datos completos. Un error de carga tiene su propio estado. Cambiar de perfil descarta el resumen anterior. Comparar los tres valores contra la web para la misma empresa y fecha fiscal. |

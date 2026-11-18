@@ -132,7 +132,9 @@ final class HomeUITests: XCTestCase {
         reveal(add, in: app); add.tap()
         app.buttons["pick-product-00000000-0000-4000-8000-000000000201"].tap()
         let review = app.buttons["review-totals"]
-        reveal(review, in: app); review.tap()
+        XCTAssertTrue(review.waitForExistence(timeout: 5))
+        XCTAssertTrue(review.isHittable)
+        review.tap()
         let total = element("draft-total", in: app)
         reveal(total, in: app)
         XCTAssertEqual(total.label, "$115,00")
