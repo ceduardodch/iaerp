@@ -230,7 +230,7 @@ async def get_auth_context(
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Native iOS access permits invoice drafts and preview only",
+            detail="Operation is not enabled for the native iOS client",
         )
     return context
 

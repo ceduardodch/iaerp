@@ -31,3 +31,5 @@ sustituya.
 | [0024](0024-ios-production-connection-policy.md) | Conexión iOS y permisos efectivos del piloto | Accepted |
 | [0025](0025-ios-durable-draft-recovery.md) | Recuperación durable de un borrador desde iPhone | Accepted |
 | [0026](0026-ios-receivables-overview.md) | Resumen móvil de cartera y facturas por mes | Accepted |
+| [0027](0027-ios-test-invoice-delivery.md) | Emisión y envío al buzón de pruebas desde iPhone | Pruebas autorizadas |
+| [0028](0028-ios-alta-catalogos.md) | Alta de clientes y productos desde el iPhone | Publicación sujeta a revisión y CI |

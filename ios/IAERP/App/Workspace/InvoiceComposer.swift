@@ -562,6 +562,8 @@ struct ERPDecimalField: View {
 }
 
 struct CustomerPicker: View {
+    @State private var registering = false
+    @State private var registered: ERPParty?
     let store: WorkspaceStore
     @Binding var selection: UUID?
     @Environment(\.dismiss) private var dismiss
@@ -588,6 +590,22 @@ struct CustomerPicker: View {
         }
         .scrollEdgeEffectStyle(.hard, for: .all)
         .navigationTitle("Elegir cliente").toolbarTitleDisplayMode(.inline)
+        .toolbar {
+            if store.canRegisterCustomer {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Nuevo cliente", systemImage: "plus") { registered = nil; registering = true }
+                        .accessibilityIdentifier("picker-new-customer")
+                }
+            }
+        }
+        .sheet(isPresented: $registering, onDismiss: {
+            if let registered {
+                selection = registered.id
+                dismiss()
+            }
+        }) {
+            CustomerRegistrationView(store: store) { registered = $0 }
+        }
         .task(id: query) {
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             await store.loadCustomers(query: query)
@@ -600,6 +618,8 @@ struct ProductPicker: View {
     let draft: InvoiceComposer
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
+    @State private var addingProduct = false
+    @State private var registered: ERPProduct?
     var body: some View {
         VStack(spacing: 0) {
             List {
@@ -642,6 +662,27 @@ struct ProductPicker: View {
             .background(Color(uiColor: .systemBackground))
         }
         .navigationTitle("Elegir producto").toolbarTitleDisplayMode(.inline)
+        .toolbar {
+            if store.context?.permits("products:create") == true {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Nuevo producto", systemImage: "plus") { addingProduct = true }
+                        .accessibilityIdentifier("new-catalog-product")
+                }
+            }
+        }
+        .sheet(isPresented: $addingProduct, onDismiss: {
+            guard let product = registered else { return }
+            registered = nil
+            draft.add(product, setup: store.setup)
+            if draft.error == nil { dismiss() }
+        }) {
+            NavigationStack {
+                ProductRegistrationView(store: store) { product in
+                    registered = product
+                    addingProduct = false
+                }
+            }
+        }
         .task(id: query) {
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             await store.loadProducts(query: query)

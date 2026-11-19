@@ -450,6 +450,18 @@ final class WorkspaceUITests: XCTestCase {
         XCTAssertTrue(springboard.otherElements["AppSwitcherContentView"].waitForExistence(timeout: 4))
         let card = springboard.otherElements.matching(NSPredicate(format: "identifier BEGINSWITH %@", "card:ec.com.b2b.iaerp.demo:")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 4))
+        // SpringBoard can initially center the previous app. A screenshot of
+        // a partly off-screen card is padded with black by XCTest.
+        let switcher = springboard.otherElements["AppSwitcherContentView"]
+        let screen = springboard.frame.insetBy(dx: -1, dy: -1)
+        for _ in 0..<4 {
+            let frame = card.frame
+            if screen.contains(frame) { break }
+            if frame.maxX > screen.maxX { switcher.swipeLeft() }
+            else if frame.minX < screen.minX { switcher.swipeRight() }
+            else { break }
+        }
+        XCTAssertTrue(screen.contains(card.frame), "La tarjeta IAERP completa debe estar visible antes de comprobar su privacidad")
         let hierarchy = XCTAttachment(string: springboard.debugDescription)
         hierarchy.name = "Selector-apps-hierarchy"
         hierarchy.lifetime = .keepAlways

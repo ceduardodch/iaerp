@@ -41,7 +41,8 @@
 
 | Sesión / IA | Estado | Área / archivos | Desde |
 | --- | --- | --- | --- |
-| Codex (iOS, conexión IAERP) | En desarrollo: Inicio y facturas por mes. Revisiones de negocio, UI/UX y QA | 0.4.2 (6) instalada. Carlos confirma el ingreso en su iPhone. Pendientes guardado físico en pruebas, VoiceOver y CI iOS 27.2 (24/25 UI sobre e4e1f93, corrección de revisión de importes en curso). [Evaluación, referencias y entregas propuestas](docs/backlog/ios-evaluacion-2026-11-18.md). | 2026-11-18 |
+| Codex (iOS, emisión y correo de pruebas) | En curso, 19 de noviembre | Backend y pruebas del servidor: dominio. IAERPClient y pruebas de paquete: cliente. Vistas y control de acciones: SwiftUI. Integración, UITests y validación independiente: coordinación. | 2026-11-19 |
+| Codex (iOS, conexión IAERP) | Inicio y facturas por mes revisados e integrados en main · PR #108 | 0.5.0 (7), 154 pruebas locales y 154 en CI. Coolify publicó el servidor y se verificó el permiso iOS. El 19 de noviembre se confirmó la instalación y apertura en el iPhone 14 Pro. Pendiente prueba funcional de Carlos. [Backlog y prueba física](docs/backlog/ios-evaluacion-2026-11-18.md). | 2026-11-18 |
 | Codex (Compras SRI, reglas y MCP) | ✅ EN PRODUCCIÓN | Anular directo en fila, PR #105 e8b4fc0, CI/Coolify 44181463258 verdes; 416 E2E y revisión frontend/a11y GO. API/MCP/perfiles b2b verificados. Registro real pendiente de respaldo SRI; lote CAPTCHA sigue diferido por el usuario. | 2026-11-17 |
 | Expertos de este hilo (anulaciones, autorizadas) | ✅ REVISADO | Backend/frontend congelados. ERP aprobó sólo operación cancelada; padre verifica y publica el ajuste. | 2026-11-17 |
 | Codex (abonos y retenciones) | ✅ EN PRODUCCIÓN | PR #96, `a006e9b`. Revisión fiscal y QA, CI `43107830288` y Coolify verdes. API y web sirven la revisión de abonos. | 2026-11-11 |

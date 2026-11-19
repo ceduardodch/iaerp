@@ -223,3 +223,7 @@ Una pantalla no cumple Definition of Done si:
 - no contempla estados vacio/error/permisos;
 - solo funciona con mouse o en desktop;
 - introduce una sexta plantilla sin actualizar este documento.
+
+### Catálogos dentro de la factura móvil
+
+En los selectores de cliente y producto, el botón **Nuevo** abre un formulario con la empresa visible. Primero se consulta la identificación o el código exacto. Cuando hay coincidencia, **Usar este cliente** o **Usar este producto** vuelve a la factura. **Guardar** requiere confirmación del servidor antes de añadir el registro al borrador. **Cancelar** conserva las líneas existentes. El alta de productos muestra el precio unitario sin IVA y exige elegir una tarifa vigente. La ficha de la factura distingue **Emitir en pruebas**, **Revisar correo** y **Correo capturado**. La confirmación muestra la empresa, el total y el destino.

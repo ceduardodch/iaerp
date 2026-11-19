@@ -22,6 +22,9 @@ enum SessionUnlockError: Error, LocalizedError {
 @MainActor
 final class DeviceOwnerUnlock: SessionUnlocking {
     private var context: LAContext?
+    private let reason: String
+
+    init(reason: String = "Abre tu cuenta guardada de IAERP.") { self.reason = reason }
 
     func unlock() async throws {
         cancel()
@@ -37,7 +40,7 @@ final class DeviceOwnerUnlock: SessionUnlocking {
         do {
             let allowed = try await attempt.evaluatePolicy(
                 .deviceOwnerAuthentication,
-                localizedReason: "Abre tu cuenta guardada de IAERP."
+                localizedReason: reason
             )
             try Task.checkCancellation()
             guard allowed, context === attempt else { throw SessionUnlockError.cancelled }

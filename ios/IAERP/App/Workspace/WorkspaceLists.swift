@@ -6,6 +6,9 @@ struct WorkspaceClientsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var query = ""
     @State private var showingSearchSummary = false
+    @State private var registering = false
+    @State private var selectedCustomer: ERPParty?
+    @State private var showingRegisteredCustomer = false
     private var visible: [ERPParty] {
         guard !query.isEmpty else { return store.customers }
         return store.customers.filter { [$0.name, $0.identificationNumber].contains { $0.localizedStandardContains(query) } }
@@ -52,12 +55,32 @@ struct WorkspaceClientsView: View {
         .navigationTitle("Clientes")
         .navigationSubtitle(Text(verbatim: store.displayCompany))
         .toolbarTitleDisplayMode(.inline)
+        .sheet(isPresented: $registering, onDismiss: {
+            if selectedCustomer != nil { showingRegisteredCustomer = true }
+        }) {
+            CustomerRegistrationView(store: store) { party in
+                query = party.identificationNumber
+                selectedCustomer = party
+            }
+        }
+        .navigationDestination(isPresented: $showingRegisteredCustomer) {
+            if let selectedCustomer { WorkspaceCustomerDetail(store: store, customer: selectedCustomer) }
+        }
         .toolbar {
+            if store.canRegisterCustomer {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Nuevo cliente", systemImage: "plus") {
+                        selectedCustomer = nil
+                        registering = true
+                    }
+                    .accessibilityIdentifier("clients-new-customer")
+                }
+            }
             if store.customerError == nil && !store.loadingCustomers {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showingSearchSummary = true } label: {
                         Label("Resultados: \(visible.count)", systemImage: "info.circle")
-                            .labelStyle(.titleOnly)
+                            .labelStyle(.iconOnly)
                     }
                     .help("Ver resultados y límite de búsqueda")
                     .accessibilityIdentifier("client-search-summary")
@@ -87,13 +110,42 @@ struct WorkspaceClientsView: View {
     }
 }
 
+struct SavedInvoiceLink: View {
+    let store: WorkspaceStore
+    let saved: ERPInvoice
+    let linkIdentifier: String
+
+    var body: some View {
+        let invoice = store.invoices.first { $0.id == saved.id } ?? saved
+        let isDraft = invoice.status == "DRAFT"
+        Text(isDraft ? "Borrador guardado. No se ha emitido al SRI." : "Factura guardada.")
+            .accessibilityIdentifier("workspace-notice")
+        NavigationLink {
+            WorkspaceInvoiceDetail(store: store, invoiceId: invoice.id)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Label(isDraft ? "Ver borrador" : "Ver factura", systemImage: "doc.text")
+                Text(verbatim: store.customerName(invoice.partyId))
+                Text(verbatim: ERPDisplay.money(invoice.total, currency: invoice.currency))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(minHeight: 44, alignment: .leading)
+        }
+        .accessibilityIdentifier(linkIdentifier)
+    }
+}
+
 struct WorkspaceCustomerDetail: View {
     let store: WorkspaceStore
     let customer: ERPParty
     @State private var composer: ComposerRoute?
+    @State private var savedInvoice: ERPInvoice?
     var body: some View {
         List {
             WorkspaceContextSection(store: store)
+            if let savedInvoice {
+                Section { SavedInvoiceLink(store: store, saved: savedInvoice, linkIdentifier: "customer-open-draft") }
+            }
             Section {
                 ERPDetailRow(title: "Nombre", value: customer.name)
                 ERPDetailRow(title: "Identificación", value: customer.identificationNumber)
@@ -108,6 +160,13 @@ struct WorkspaceCustomerDetail: View {
                         .frame(minHeight: 44)
                         .disabled(!store.canStartInvoice)
                         .accessibilityIdentifier("new-customer-invoice")
+                    if store.canPrepareBTOBTestInvoice {
+                        NavigationLink("Preparar factura de prueba") {
+                            CustomerTestProductPicker(store: store, customer: customer)
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("customer-prepare-test-invoice")
+                    }
                 }
             }
         }
@@ -118,7 +177,9 @@ struct WorkspaceCustomerDetail: View {
         .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
         .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .toolbarVisibility(.hidden, for: .tabBar)
-        .sheet(item: $composer) { InvoiceComposerView(store: store, initialCustomerId: $0.customerId) }
+        .sheet(item: $composer) { route in
+            InvoiceComposerView(store: store, initialCustomerId: route.customerId) { savedInvoice = $0 }
+        }
     }
 }
 
@@ -134,6 +195,7 @@ struct WorkspaceInvoicesView: View {
     @State private var query = ""
     @State private var status = ""
     @State private var composer: ComposerRoute?
+    @State private var savedInvoice: ERPInvoice?
     @State private var expandedMonths: [String: Bool] = [:]
     @State private var appliedRequest: InvoiceListRequest?
     @State private var unfocusedBottomInset: CGFloat?
@@ -167,7 +229,9 @@ struct WorkspaceInvoicesView: View {
                     }
                 }
                 InvoiceRecoverySection(store: store)
-                if let notice = store.notice {
+                if let savedInvoice {
+                    Section { SavedInvoiceLink(store: store, saved: savedInvoice, linkIdentifier: "invoices-open-draft") }
+                } else if let notice = store.notice {
                     Text(notice).accessibilityIdentifier("workspace-notice")
                 }
                 if request.query.count == 1 {
@@ -212,7 +276,9 @@ struct WorkspaceInvoicesView: View {
                 }
             }
         }
-        .sheet(item: $composer) { InvoiceComposerView(store: store, initialCustomerId: $0.customerId) }
+        .sheet(item: $composer) { route in
+            InvoiceComposerView(store: store, initialCustomerId: route.customerId) { savedInvoice = $0 }
+        }
         .task(id: request) {
             let next = request
             guard next != appliedRequest, next.query.count != 1 else { return }

@@ -24,7 +24,7 @@ roles. No se cambian scopes por defecto del realm ni los demás clientes.
 con sus credenciales de administración; nunca las imprime ni las copia al Mac.
 La preparación deja el cliente deshabilitado. Antes de `--enable` hay que pasar
 CI, publicar por main/CI/Coolify y comprobar la política servida. El script exige
-los SHA256 esperados de las cuatro fuentes del backend y los compara en `/app`;
+los SHA256 esperados de las fuentes de control de acceso del backend y los compara en `/app`;
 no basta una comprobación de salud o una ruta pública. Concilia sólo asociaciones
 del cliente iOS y lo habilita al final, tras comprobar su configuración.
 
@@ -58,3 +58,5 @@ No existe acción de emisión fiscal en esta versión.
 [Evidencia actual](../validation/2026-11-18-live-connection.md).
 
 La versión 0.5.0 añade `receivables:read` al cliente nativo para el resumen de Inicio. El backend comprueba rol, empresa y ruta en cada petición. Una sesión que aún tenga el token anterior puede requerir renovarlo o volver a entrar para obtener el permiso. [ADR 0026](../../docs/adrs/0026-ios-receivables-overview.md).
+
+La versión 0.6.0 añade `customers:create` y `products:create` al cliente iOS. La API fija el rol CUSTOMER en el alta de clientes, exige una categoría fiscal vigente en el alta de productos y verifica la membresía para ambas operaciones. El simulador y su buzón requieren permisos independientes que este cliente de producción no solicita.

@@ -1,6 +1,6 @@
 # Qué le falta a IAERP en el iPhone
 
-**Propuesta para revisión de Carlos · 18 de noviembre de 2026 · versión instalada 0.4.2 (6)**
+**Propuesta para revisión de Carlos · 18 de noviembre de 2026 · versión inicial 0.4.2 (6)**
 
 Carlos quiere reconocer en el iPhone su forma de trabajar en IAERP. Al entrar verá un resumen de la empresa, podrá abrir las facturas por mes y tendrá «Nueva factura» a mano. El recorrido termina cuando el SRI autoriza el comprobante y el usuario puede enviar el RIDE y el XML por correo desde esa misma ficha.
 
@@ -37,6 +37,10 @@ Orden propuesto dentro de cada entrega. S, M y L indican esfuerzo relativo. Las 
 Carlos aprobó IOS-034, IOS-035 y la búsqueda de IOS-028. La versión 0.5.0 muestra los tres saldos de cartera de la web. El servidor calcula los totales de cada mes y moneda antes de paginar las filas. Desde Inicio se puede abrir el formulario de factura y volver a consultar el borrador guardado.
 
 **Revisión por entrega.** Negocio contrasta saldos, reglas fiscales, roles y límites de empresa. UI/UX comprueba navegación, legibilidad y texto máximo. QA comprueba contratos, errores, regresiones y flujo completo con datos sintéticos. Cada hallazgo que incumpla un criterio vuelve a desarrollo y al revisor correspondiente. Tras las tres revisiones favorables y CI verde se publica por el flujo de IAERP y se instala por cable. Carlos autorizó las consultas de lectura y el permiso de resumen para perfiles autorizados.
+
+**Cierre de la revisión.** Negocio, UI/UX y QA aprobaron la 0.5.0 (7) tras corregir el cambio de empresa, la posición de la lista y los controles del formulario con texto máximo. Pasaron las mismas 154 pruebas en el Mac y en CI. El PR se integró en `main` (`c244d8d`). [PR #108](https://github.com/ceduardodch/iaerp/pull/108) · [CI iOS](https://github.com/ceduardodch/iaerp/actions/runs/44399488616).
+
+**Producción.** Coolify publicó las tres consultas de lectura y se habilitó el permiso del cliente móvil. Se comprobó el estado del servidor, el esquema público y el rechazo de los accesos anónimos. El 19 de noviembre se instaló y abrió la 0.5.0 (7) en el iPhone 14 Pro. Falta comparar los importes con la web desde la cuenta de Carlos. [Estado y evidencia](../STATUS.md).
 
 **Ajuste de facturación de esta entrega.** Una vez añadido el producto, la acción de pie «Revisar importes» permite ver el cálculo de IAERP. El usuario puede editar la cantidad antes de revisar. «Guardar» aparece con el cálculo vigente y requiere un toque aparte. Al cambiar la cantidad, el precio o el descuento, se debe volver a revisar.
 

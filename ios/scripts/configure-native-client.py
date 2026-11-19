@@ -4,7 +4,7 @@ Run inside the existing IAERP API environment with a JSON envelope on stdin:
 {"client": <reviewed template>, "profileScope": <reviewed profile scope>,
  "expectedBackendHashes": {"app/core/auth.py": "<sha256>", ...}}.
 Default preparation leaves the client disabled. --enable requires exact SHA256
-hashes of all four security files in /app, checked before contacting OAuth.
+hashes of the reviewed security files in /app, checked before contacting OAuth.
 No token, secret, user record, or existing client's representation is printed.
 """
 
@@ -20,11 +20,12 @@ import httpx
 
 BACKEND_FILES = frozenset({
     "app/core/auth.py", "app/core/ios_permissions.py",
-    "app/services/draft_requests.py", "app/api/router.py",
+    "app/services/draft_requests.py", "app/api/router.py", "app/api/ios_customers.py",
+    "app/api/ios_products.py", "app/core/ios_catalog_access.py",
 })
 DEFAULT_SCOPES = frozenset({
     "profile", "context:read", "memberships:read", "organization:read",
-    "parties:read", "products:read", "invoices:read", "invoices:write", "receivables:read",
+    "parties:read", "customers:create", "products:read", "products:create", "invoices:read", "invoices:write", "receivables:read",
 })
 
 
@@ -35,7 +36,7 @@ def require(condition: bool, message: str) -> None:
 
 def verify_backend_hashes(expected: object, root: Path = Path("/app")) -> None:
     require(isinstance(expected, dict) and set(expected) == BACKEND_FILES,
-            "Enabling requires the exact four expectedBackendHashes entries")
+            "Enabling requires the complete set of expectedBackendHashes entries")
     for relative in sorted(BACKEND_FILES):
         digest = expected[relative]
         require(isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) is not None,
@@ -117,6 +118,18 @@ def main() -> None:
         if "profile" not in by_name:
             request("POST", "/client-scopes", json=profile)
             by_name = {item["name"]: item for item in request("GET", "/client-scopes").json()}
+        for scope_name in ("customers:create", "products:create"):
+            if scope_name not in by_name:
+                request("POST", "/client-scopes", json={
+                    "name": scope_name, "protocol": "openid-connect",
+                    "attributes": {"include.in.token.scope": "true"},
+                })
+                by_name = {item["name"]: item for item in request("GET", "/client-scopes").json()}
+            entry = by_name.get(scope_name, {})
+            require(entry.get("protocol") == "openid-connect"
+                    and entry.get("attributes", {}).get("include.in.token.scope") == "true"
+                    and not entry.get("protocolMappers"),
+                    "Unexpected native scope configuration: " + scope_name)
         names = set(desired["defaultClientScopes"] + desired["optionalClientScopes"])
         if not names.issubset(by_name):
             raise RuntimeError("A required native client scope is unavailable")

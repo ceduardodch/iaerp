@@ -25,7 +25,9 @@
     "memberships:read",
     "organization:read",
     "parties:read",
+    "customers:create",
     "products:read",
+    "products:create",
     "invoices:read",
     "invoices:write",
     "receivables:read"
