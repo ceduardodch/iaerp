@@ -329,6 +329,13 @@ export type FiscalSettings = {
   sriPortalCredentialsUpdatedAt?: string | null
 }
 
+export type ReceivablesOverview = {
+  outstanding: string
+  overdue: string
+  openAccountCount: number
+  overdueAccountCount: number
+}
+
 export type AccountItemStatus = 'OPEN' | 'PARTIAL' | 'OVERDUE' | 'SETTLED' | 'VOIDED'
 
 export type AccountItem = {

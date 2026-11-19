@@ -763,6 +763,20 @@ async def installment_agings_for_receivable(
     return agings
 
 
+def _collectible_accounts(tenant_id: uuid.UUID) -> Select[tuple[uuid.UUID, uuid.UUID, str]]:
+    """Las facturas ya anuladas pueden conservar cartera abierta anterior a su conciliación."""
+    return (
+        select(Receivable.id, Receivable.party_id, Receivable.currency)
+        .join(SalesDocument, SalesDocument.id == Receivable.sales_document_id)
+        .where(
+            Receivable.tenant_id == tenant_id,
+            SalesDocument.tenant_id == tenant_id,
+            Receivable.status.in_(("OPEN", "PARTIALLY_PAID")),
+            SalesDocument.status != "VOIDED",
+        )
+    )
+
+
 async def compute_aging_summary(
     session: AsyncSession, context: AuthContext, *, as_of: date | None = None
 ) -> AgingSummaryRead:
@@ -777,14 +791,11 @@ async def compute_aging_summary(
 
     tenant_id = context.tenant_id
 
-    # Obtener todas las cuotas abiertas del tenant
+    accounts = _collectible_accounts(tenant_id).subquery()
     stmt_installments = (
-        select(ReceivableInstallment, Receivable.party_id)
-        .join(Receivable, Receivable.id == ReceivableInstallment.receivable_id)
-        .where(
-            Receivable.tenant_id == tenant_id,
-            Receivable.status.in_(["OPEN", "PARTIALLY_PAID"]),
-        )
+        select(ReceivableInstallment, accounts.c.party_id)
+        .join(accounts, accounts.c.id == ReceivableInstallment.receivable_id)
+        .where(ReceivableInstallment.tenant_id == tenant_id)
     )
     result = await session.execute(stmt_installments)
 
@@ -940,6 +951,7 @@ async def compute_collections_history(
     *,
     months: int = 12,
     as_of: date | None = None,
+    expected_currency: str | None = None,
 ) -> CollectionsHistoryRead:
     """Serie mensual de cobro (``GET /receivables/collections/monthly``).
 
@@ -972,9 +984,12 @@ async def compute_collections_history(
         select(
             Movement.effective_date,
             Movement.movement_type,
+            Receivable.currency,
             func.coalesce(func.sum(Movement.amount), Decimal("0.00")),
         )
+        .join(Receivable, Receivable.id == Movement.receivable_id)
         .where(
+            Receivable.tenant_id == context.tenant_id,
             Movement.tenant_id == context.tenant_id,
             Movement.reversed_movement_id.is_(None),
             Movement.id.not_in(_reversed_movement_ids(context.tenant_id)),
@@ -982,12 +997,14 @@ async def compute_collections_history(
             Movement.effective_date <= window_end,
             Movement.movement_type.in_(_CASH_MOVEMENTS + _RETENTION_MOVEMENTS),
         )
-        .group_by(Movement.effective_date, Movement.movement_type)
+        .group_by(Movement.effective_date, Movement.movement_type, Receivable.currency)
     )
 
     cash: dict[tuple[int, int], Decimal] = {key: Decimal("0.00") for key in keys}
     retention: dict[tuple[int, int], Decimal] = {key: Decimal("0.00") for key in keys}
-    for effective_date, movement_type, amount in rows:
+    for effective_date, movement_type, currency, amount in rows:
+        if expected_currency and currency != expected_currency and amount:
+            raise HTTPException(409, "Collections include a different currency")
         if effective_date is None:
             continue
         key = (effective_date.year, effective_date.month)
@@ -1035,15 +1052,6 @@ async def compute_overview(session: AsyncSession, context: AuthContext) -> Recei
     """Dashboard totals using the web's balance, arrears and collection definitions."""
     tenant_id = context.tenant_id
     as_of = today_in_fiscal_timezone()
-    # The web's AccountItemRead and this dashboard both describe amounts in USD.
-    # A legacy import with a different currency needs its own totals.
-    foreign_currency = await session.scalar(
-        select(Receivable.id)
-        .where(Receivable.tenant_id == tenant_id, Receivable.currency != "USD")
-        .limit(1)
-    )
-    if foreign_currency is not None:
-        raise HTTPException(409, "Receivables overview requires USD accounts")
     applied = (
         select(Movement.installment_id, func.sum(Movement.amount).label("amount"))
         .where(
@@ -1067,41 +1075,32 @@ async def compute_overview(session: AsyncSession, context: AuthContext) -> Recei
         .group_by(installment.receivable_id)
         .subquery()
     )
-    tolerance_ids = set(
-        await session.scalars(
-            select(AuditEvent.entity_id).where(
-                AuditEvent.tenant_id == tenant_id,
-                AuditEvent.action == _RETENTION_TOLERANCE_AUDIT_ACTION,
-                AuditEvent.entity_type == "receivable",
-            )
-        )
-    )
-    # Accounts without installments have a zero balance on the web.
+    collectible = _collectible_accounts(tenant_id).subquery()
     accounts = await session.execute(
-        select(
-            Receivable.id,
-            Receivable.status,
-            Receivable.original_amount,
-            balances.c.balance,
-            balances.c.earliest_open_due,
-        )
-        .join(balances, balances.c.receivable_id == Receivable.id)
-        .where(Receivable.tenant_id == tenant_id)
+        select(balances.c.balance, balances.c.earliest_open_due, collectible.c.currency)
+        .join(collectible, collectible.c.id == balances.c.receivable_id)
+        .where(balances.c.balance > 0)
     )
     outstanding = overdue = Decimal("0.00")
-    for account_id, persisted_status, original, open_amount, earliest_due in accounts:
-        if -RETENTION_SETTLEMENT_TOLERANCE <= open_amount < 0 and str(account_id) in tolerance_ids:
-            open_amount = Decimal("0.00")
+    open_count = overdue_count = 0
+    for open_amount, earliest_due, currency in accounts:
+        if currency != "USD":
+            raise HTTPException(409, "Receivables overview requires USD accounts")
         outstanding += open_amount
+        open_count += 1
         # A single late open installment marks the entire open account overdue.
-        account_status = _map_status(persisted_status, open_amount, original)
-        if account_status in {"OPEN", "PARTIAL"} and earliest_due and earliest_due < as_of:
+        if earliest_due and earliest_due < as_of:
             overdue += open_amount
-    history = await compute_collections_history(session, context, months=1, as_of=as_of)
+            overdue_count += 1
+    history = await compute_collections_history(
+        session, context, months=1, as_of=as_of, expected_currency="USD"
+    )
     return ReceivablesOverviewRead(
         as_of=as_of,
         outstanding=outstanding,
         overdue=overdue,
+        open_account_count=open_count,
+        overdue_account_count=overdue_count,
         collected_this_month=history.months[0].settled_amount,
     )
 

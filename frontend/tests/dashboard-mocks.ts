@@ -8,11 +8,14 @@ import type { Page } from '@playwright/test'
  * la API real con el token falso, devuelven 401 y ensucian la consola — lo que
  * rompe el spec que exige cero errores de consola al cargar el kanban.
  *
- * Los mocks por ruta exacta (`**\/api/v1/receivables`) NO cubren estas dos, que
+ * Los mocks por ruta exacta (`**\/api/v1/receivables`) NO cubren las consultas que
  * cuelgan de subrutas. Por eso viven en un helper compartido: la próxima
  * consulta que agregue el tablero se añade aquí una vez y no en nueve specs.
  */
 export async function mockDashboardEndpoints(page: Page): Promise<void> {
+  await page.route('**/api/v1/receivables/overview', (route) => route.fulfill({
+    json: { outstanding: '0.00', overdue: '0.00', openAccountCount: 0, overdueAccountCount: 0 },
+  }))
   await page.route('**/api/v1/receivables/reconcile-retentions', (route) =>
     route.fulfill({ json: { appliedRetentions: 0, pendingRetentions: 0, notes: [] } }),
   )
