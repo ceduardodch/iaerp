@@ -790,3 +790,193 @@ extension ERPClientTests {
         }
     }
 }
+
+@Suite("Emisión y correo de producción")
+struct ProductionInvoiceDeliveryTests {
+    private let invoiceID = UUID()
+    private let key = UUID().uuidString
+    private let recipient = "ventas@example.invalid"
+    private let digest = String(repeating: "a", count: 64)
+    private let attachments = ["FACTURA-001.xml", "FACTURA-001.pdf"]
+
+    private func preview(_ names: [String], recipient: String?, digest: String? = nil) throws -> ERPHTTPResponse {
+        var data: [String: Any] = [
+            "subject": "Factura 001", "message": "Adjuntamos los documentos.",
+            "attachmentNames": names, "previewDigest": digest ?? self.digest,
+            "dueDate": "2026-11-19", "paymentTermsDays": 0
+        ]
+        if let recipient { data["recipient"] = recipient }
+        return ok(try JSONSerialization.data(withJSONObject: data))
+    }
+
+    private func receipt(_ names: [String], recipient: String, messageId: String = "synthetic-id") -> ERPInvoiceEmailReceipt {
+        ERPInvoiceEmailReceipt(messageId: messageId, recipient: recipient, attachmentNames: names)
+    }
+
+    private func deliveryStatus(_ status: String, environment: String = "PRODUCTION",
+                                receipt: ERPInvoiceEmailReceipt? = nil) throws -> ERPHTTPResponse {
+        var data: [String: Any] = ["emailStatus": status, "fiscalEnvironment": environment]
+        if let receipt { data["receipt"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(receipt)) }
+        return ok(try JSONSerialization.data(withJSONObject: data))
+    }
+
+    @Test(arguments: [false, true]) func confirmsExactlyTheCatalogRecipientAndDisclosedDocuments(report: Bool) async throws {
+        let names = attachments + (report ? ["INFORME-MENSUAL.pdf"] : [])
+        let sent = receipt(names, recipient: recipient)
+        let operationID = UUID()
+        let http = try MockHTTP([
+            deliveryStatus("NOT_SENT"),
+            ERPHTTPResponse(statusCode: 202, data: JSONSerialization.data(withJSONObject: [
+                "status": "PROCESSING", "operationId": operationID.uuidString,
+                "result": ["sales_document_id": invoiceID.uuidString]
+            ])),
+            preview(names, recipient: recipient),
+            ok(JSONEncoder().encode(sent)),
+            deliveryStatus("SENT", receipt: sent)
+        ])
+        let api = try service(http)
+        #expect(try await api.deliveryStatus(invoiceID: invoiceID).emailStatus == "NOT_SENT")
+        let issue = try await api.issueInvoice(invoiceID: invoiceID, idempotencyKey: key)
+        #expect(issue == ERPInvoiceIssueResult(operationId: operationID, status: "PROCESSING"))
+        let reviewed = try await api.invoiceEmailPreview(invoiceID: invoiceID)
+        #expect(reviewed.invoiceID == invoiceID)
+        #expect(reviewed.attachmentNames == names)
+        #expect(try await api.sendInvoiceEmail(invoiceID: invoiceID, recipient: recipient, preview: reviewed,
+                                               idempotencyKey: key) == sent)
+        #expect(try await api.deliveryStatus(invoiceID: invoiceID).receipt == sent)
+        let calls = await http.captured()
+        let route = "/api/v1/invoices/\(invoiceID.uuidString)"
+        #expect(calls.compactMap { $0.url?.path } == ["delivery-status", "issue", "email-preview", "email", "delivery-status"].map { route + "/" + $0 })
+        #expect(calls.map(\.httpMethod) == ["GET", "POST", "GET", "POST", "GET"])
+        #expect(calls.map { $0.value(forHTTPHeaderField: "Idempotency-Key") } == [nil, key, nil, key, nil])
+        #expect(calls.allSatisfy { $0.url?.query == nil })
+        #expect(calls[1].httpBody == nil)
+        let body = try #require(calls[3].httpBody)
+        #expect(try JSONDecoder().decode([String: String].self, from: body) == ["recipient": recipient, "previewDigest": digest])
+    }
+
+    @Test func preventsUnreviewedRecipientInvalidKeyAndCrossInvoiceBeforeSending() async throws {
+        let http = try MockHTTP([preview(attachments, recipient: recipient), preview(attachments, recipient: nil)])
+        let api = try service(http)
+        let reviewed = try await api.invoiceEmailPreview(invoiceID: invoiceID)
+        let missing = try await api.invoiceEmailPreview(invoiceID: invoiceID)
+        #expect(missing.recipient == nil)
+        await #expect(throws: ERPClientError.invoiceEmailPreviewChanged) {
+            try await api.sendInvoiceEmail(invoiceID: UUID(), recipient: recipient, preview: reviewed, idempotencyKey: key)
+        }
+        await #expect(throws: ERPClientError.invoiceEmailPreviewChanged) {
+            try await api.sendInvoiceEmail(invoiceID: invoiceID, recipient: "otro@example.invalid", preview: reviewed, idempotencyKey: key)
+        }
+        await #expect(throws: ERPClientError.invoiceEmailPreviewChanged) {
+            try await api.sendInvoiceEmail(invoiceID: invoiceID, recipient: recipient, preview: missing, idempotencyKey: key)
+        }
+        await #expect(throws: ERPClientError.self) {
+            try await api.sendInvoiceEmail(invoiceID: invoiceID, recipient: recipient, preview: reviewed, idempotencyKey: "invalid")
+        }
+        await #expect(throws: ERPClientError.self) { try await api.issueInvoice(invoiceID: invoiceID, idempotencyKey: "invalid") }
+        #expect(await http.captured().map(\.httpMethod) == ["GET", "GET"])
+    }
+
+    @Test func rejectsIncompleteOrChangedServerEvidence() async throws {
+        let names = attachments + ["INFORME.pdf"]
+        let invalidPreviews = try [
+            preview(attachments, recipient: recipient, digest: "a"),
+            preview(["RIDE.pdf"], recipient: recipient),
+            preview(attachments + ["../private.pdf"], recipient: recipient),
+            preview(attachments + ["other.html"], recipient: recipient),
+            preview(attachments, recipient: "a@example.invalid, b@example.invalid")
+        ]
+        let mismatches = [
+            receipt(attachments, recipient: recipient), receipt(names, recipient: "otro@example.invalid"),
+            receipt(names, recipient: recipient, messageId: "")
+        ]
+        let http = try MockHTTP(invalidPreviews + [preview(names, recipient: recipient)] +
+            mismatches.map { ok(try JSONEncoder().encode($0)) })
+        let api = try service(http)
+        for _ in invalidPreviews {
+            await #expect(throws: ERPClientError.invalidResponse) { try await api.invoiceEmailPreview(invoiceID: invoiceID) }
+        }
+        let reviewed = try await api.invoiceEmailPreview(invoiceID: invoiceID)
+        for _ in mismatches {
+            await #expect(throws: ERPClientError.invalidResponse) {
+                try await api.sendInvoiceEmail(invoiceID: invoiceID, recipient: recipient, preview: reviewed, idempotencyKey: key)
+            }
+        }
+    }
+
+    @Test func statusRequiresKnownEnvironmentAndConsistentReceipt() async throws {
+        let sent = receipt(attachments, recipient: recipient)
+        let invalidStatuses = try [
+            deliveryStatus("SENT"), deliveryStatus("PENDING", receipt: sent), deliveryStatus("NOT_SENT", receipt: sent),
+            deliveryStatus("UNKNOWN"), deliveryStatus("PENDING", environment: "UNKNOWN")
+        ]
+        let http = try MockHTTP(invalidStatuses + [
+            deliveryStatus("PENDING"), deliveryStatus("NOT_SENT", environment: "TEST"),
+            deliveryStatus("NOT_SENT", environment: "UNCONFIGURED")
+        ])
+        let api = try service(http)
+        for _ in invalidStatuses {
+            await #expect(throws: ERPClientError.invalidResponse) { try await api.deliveryStatus(invoiceID: invoiceID) }
+        }
+        for environment in ["PRODUCTION", "TEST", "UNCONFIGURED"] {
+            #expect(try await api.deliveryStatus(invoiceID: invoiceID).fiscalEnvironment == environment)
+        }
+    }
+
+    @Test func neverReplaysWritesAfterSessionExpiryTimeoutOrConflict() async throws {
+        let conflicts: [(String, ERPClientError)] = [
+            ("invoice_email_preview_changed", .invoiceEmailPreviewChanged),
+            ("invoice_email_pending", .invoiceEmailDeliveryPending),
+            ("invoice_email_key_conflict", .invoiceDeliveryConflict),
+            ("private server detail", .invoiceDeliveryConflict)
+        ]
+        let expired = ERPHTTPResponse(statusCode: 401, data: Data())
+        let events: [MockHTTP.Event] = try conflicts.map { detail, _ in
+            .response(ERPHTTPResponse(statusCode: 409, data: try JSONEncoder().encode(["detail": detail])))
+        }
+        let http = try MockHTTP(events: [
+            .response(expired), .response(preview(attachments, recipient: recipient)),
+            .response(expired), .lostConnection, .response(expired), .lostConnection
+        ] + events)
+        let tokens = TokenCalls()
+        let api = try LiveERPService(baseURL: baseURL, tokenProvider: { await tokens.token($0) }, transport: http)
+        let reviewed = try await api.invoiceEmailPreview(invoiceID: invoiceID)
+        await #expect(throws: ERPClientError.authenticationRequired) {
+            try await api.issueInvoice(invoiceID: invoiceID, idempotencyKey: key)
+        }
+        await #expect(throws: URLError.self) { try await api.issueInvoice(invoiceID: invoiceID, idempotencyKey: key) }
+        await #expect(throws: ERPClientError.authenticationRequired) {
+            try await api.sendInvoiceEmail(invoiceID: invoiceID, recipient: recipient, preview: reviewed, idempotencyKey: key)
+        }
+        await #expect(throws: URLError.self) {
+            try await api.sendInvoiceEmail(invoiceID: invoiceID, recipient: recipient, preview: reviewed, idempotencyKey: key)
+        }
+        for (_, error) in conflicts {
+            await #expect(throws: error) {
+                try await api.sendInvoiceEmail(invoiceID: invoiceID, recipient: recipient, preview: reviewed, idempotencyKey: key)
+            }
+        }
+        #expect(await http.captured().count == 6 + conflicts.count)
+        #expect(await tokens.captured().filter { $0 }.count == 1)
+    }
+}
+
+extension ProductionInvoiceDeliveryTests {
+    @Test func fiscalPreconditionsIdentifyTheFieldOrMissingDocument() async throws {
+        let reasons: [(Int, String, String)] = [
+            (409, "Signing certificate is not configured", "certificado"),
+            (422, "Approve the required monthly report before emailing the invoice", "informe mensual"),
+            (422, "Authorized invoice requires both signed XML and RIDE before email", "XML firmado o el RIDE"),
+            (422, "Google Workspace must be reconnected", "Google Workspace")
+        ]
+        for (status, reason, expected) in reasons {
+            let body = try JSONEncoder().encode(["detail": reason])
+            let response = ERPHTTPResponse(statusCode: status, data: body)
+            let error = try #require(ERPClientError.fiscalDeliveryError(response))
+            #expect(error.localizedDescription.contains(expected))
+        }
+        let body = try JSONEncoder().encode(["detail": "invoice_email_rejected"])
+        #expect(ERPClientError.fiscalDeliveryError(.init(statusCode: 422, data: body)) == .invoiceEmailRejected)
+        #expect(ERPClientError.fiscalDeliveryError(.init(statusCode: 500, data: body)) == nil)
+    }
+}

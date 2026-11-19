@@ -29,6 +29,8 @@ public enum ERPClientError: Error, Equatable, Sendable, LocalizedError {
     case customerIdentificationUnavailable, customerRegistrationConflict
     case productCodeUnavailable, productRegistrationConflict
     case fixtureUnsupported
+    case invoiceEmailPreparationFailed(String)
+    case invoiceEmailPreviewChanged, invoiceEmailDeliveryPending, invoiceEmailRejected, invoiceDeliveryConflict
     case idempotencyConflict
     case unsupportedOverviewCurrency
     case documentTooLarge
@@ -41,13 +43,17 @@ public enum ERPClientError: Error, Equatable, Sendable, LocalizedError {
         case .invalidResponse: "El servidor devolvió una respuesta no válida."
         case .rateLimited(let seconds): seconds.map { "Espera \($0) segundos antes de reintentar." } ?? "Espera antes de reintentar."
         case .server: "El servicio no está disponible. Inténtalo más tarde."
-        case .invalidInput(let message): message
+        case .invalidInput(let message), .invoiceEmailPreparationFailed(let message): message
         case .productCodeUnavailable: "El código corresponde a un producto inactivo."
         case .productRegistrationConflict: "El producto ya existe o cambió la solicitud. Consulta el código para continuar."
         case .customerIdentificationUnavailable: "Esta identificación ya existe y no está disponible como cliente."
         case .customerRegistrationConflict: "El registro ya existe o cambió la solicitud. Consulta la identificación antes de continuar."
         case .fixtureUnsupported: "La demo admite los productos de ejemplo, cantidades 1, 2 o 3, sus precios originales y descuento cero."
         case .unsupportedOverviewCurrency: "La cartera incluye cuentas en otra moneda. El resumen está disponible para cartera en dólares."
+        case .invoiceEmailPreviewChanged: "El correo o sus adjuntos cambiaron. Revisa la vista previa actualizada antes de confirmar el envío."
+        case .invoiceEmailDeliveryPending: "IAERP está comprobando el envío. Consulta el estado antes de volver a enviar."
+        case .invoiceEmailRejected: "El proveedor de correo rechazó el envío. Revisa la dirección del cliente y la cuenta de correo de la empresa."
+        case .invoiceDeliveryConflict: "La factura o la solicitud cambió. Consulta su estado antes de continuar."
         case .idempotencyConflict: "La operación cambió. Revisa el borrador antes de guardarlo otra vez."
         case .documentTooLarge: "El documento supera el tamaño permitido."
         }

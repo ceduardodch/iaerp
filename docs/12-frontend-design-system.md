@@ -229,3 +229,5 @@ Una pantalla no cumple Definition of Done si:
 ### Catálogos dentro de la factura móvil
 
 En los selectores de cliente y producto, el botón **Nuevo** abre un formulario con la empresa visible. Primero se consulta la identificación o el código exacto. Cuando hay coincidencia, **Usar este cliente** o **Usar este producto** vuelve a la factura. **Guardar** requiere confirmación del servidor antes de añadir el registro al borrador. **Cancelar** conserva las líneas existentes. El alta de productos muestra el precio unitario sin IVA y exige elegir una tarifa vigente. La ficha de la factura distingue **Emitir en pruebas**, **Revisar correo** y **Correo capturado**. La confirmación muestra la empresa, el total y el destino.
+
+En la ficha móvil de producción, **Revisar emisión** muestra empresa, cliente, número y total. **Emitir factura al SRI** confirma la transmisión. Una vez autorizada, **Preparar correo** muestra el destinatario y cada archivo por nombre. **Enviar correo al cliente** confirma ese envío. Un resultado incierto ofrece **Consultar estado**. La aceptación del correo por el proveedor conserva su referencia.

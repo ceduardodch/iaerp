@@ -31,6 +31,11 @@ struct WorkspaceInvoiceDetail: View {
         store.context?.permits("invoices:test-issue") == true || store.context?.permits("invoices:test-email") == true
     }
 
+    private var showsProductionActions: Bool {
+        !store.isDemo && !showsTestActions && store.service is any ERPProductionInvoiceService &&
+        (store.context?.permits("invoices:issue") == true || store.context?.permits("invoices:email") == true)
+    }
+
     var body: some View {
         List {
             if loading { ProgressView("Cargando factura…") }
@@ -64,6 +69,12 @@ struct WorkspaceInvoiceDetail: View {
                     InvoiceTestDeliverySection(store: store, invoice: invoice,
                                                number: listedNumber ?? store.invoiceNumber(invoice),
                                                artifacts: artifacts, reloadDocument: { await load(showProgress: false) })
+                        .id(invoice.id)
+                } else if showsProductionActions, invoice.type == "INVOICE" {
+                    InvoiceProductionDeliverySection(store: store, invoice: invoice,
+                        number: listedNumber ?? store.invoiceNumber(invoice),
+                        customer: listedCustomerName ?? store.customer(invoice.partyId)?.name,
+                        reloadDocument: { await load(showProgress: false) })
                         .id(invoice.id)
                 }
                 ForEach(invoice.lines) { line in
@@ -127,25 +138,19 @@ struct WorkspaceInvoiceDetail: View {
     }
 
     func statusGuidance(for status: String) -> String? {
-        guard !showsTestActions else { return nil }
+        guard !showsTestActions, !showsProductionActions else { return nil }
         if store.isDemo {
             return ["DRAFT", "AUTHORIZED"].contains(status) ? "Esta cuenta de prueba sólo permite consultar la factura." : nil
         }
         switch status {
         case "DRAFT":
-            let web = "Para emitir este borrador, abre Facturas en IAERP web, elige esta factura y pulsa Emitir con una cuenta autorizada."
-            if store.canPrepareBTOBTestInvoice {
-                return web + "\n\nPara el ensayo de USD 0,05, abre la ficha del cliente del ensayo en Clientes y elige Preparar factura de prueba. Se crea otro comprobante en el simulador."
-            }
-            return web
-        case "READY":
-            return "La factura está lista para emitir. Actualiza el estado en IAERP web antes de continuar."
-        case "SIGNED", "RECEIVED", "PENDING_AUTHORIZATION":
+            return "Para emitir este borrador, pide permiso de emisión a quien administra tu empresa y vuelve a iniciar sesión."
+        case "READY", "SIGNED", "RECEIVED", "PENDING_AUTHORIZATION":
             return "Desliza hacia abajo para consultar el estado de esta emisión y comprobar si el SRI ya respondió."
         case "AUTHORIZED":
-            return "Para enviar el RIDE y el XML al cliente, abre esta factura en IAERP web y elige Preparar correo."
+            return "Para enviar el RIDE y el XML, pide permiso de envío de facturas a quien administra tu empresa y vuelve a iniciar sesión."
         case "REJECTED", "NOT_AUTHORIZED", "FAILED":
-            return "Revisa el mensaje de transmisión. Encontrarás el detalle de esta factura en IAERP web."
+            return "Revisa el mensaje de transmisión para corregir el problema antes de emitir."
         default:
             return nil
         }

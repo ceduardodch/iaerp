@@ -60,6 +60,11 @@ final class WorkspaceStore {
     let authentication: AuthenticationController
     let documents: TemporaryDocuments
     let testDeliveryJournal = InvoiceTestAttemptJournal()
+    let productionDeliveryJournal = InvoiceTestAttemptJournal(
+        vault: KeychainInvoiceRecoveryVault(service: "ec.com.b2b.iaerp.production-delivery"))
+    #if DEBUG && targetEnvironment(simulator)
+    private var fixtureDeliveryScope: InvoiceRecoveryScope?
+    #endif
     let customerRegistrationJournal = CustomerRegistrationJournal()
     let invoiceRecoveryJournal: InvoiceRecoveryJournal
     @ObservationIgnored private let resetDocuments: @Sendable (UUID) async throws -> Void
@@ -82,6 +87,34 @@ final class WorkspaceStore {
     }
     var currentProfile: SavedIdentityProfile? { savedProfiles.first { $0.id == authentication.activeProfileID } }
     var connectionConfigurationForRetry: IdentityConfiguration? { configuration }
+
+    func currentProductionDeliveryScope() throws -> InvoiceRecoveryScope {
+        #if DEBUG && targetEnvironment(simulator)
+        if let fixtureDeliveryScope, phase == .ready, context?.tenantId == fixtureDeliveryScope.tenantID {
+            return fixtureDeliveryScope
+        }
+        #endif
+        return try currentInvoiceRecoveryScope()
+    }
+
+    #if DEBUG && targetEnvironment(simulator)
+    static func productionDeliveryFixture() throws -> WorkspaceStore {
+        let base = URL(string: "https://invoice.example.invalid/api/v1")!
+        let config = try IdentityConfiguration(apiBaseURL: base, issuerURL: URL(string: "https://id.example.invalid")!,
+            clientID: "fixture", organizationAlias: "empresa-demo")
+        let tenant = UUID()
+        let service = try LiveERPService(baseURL: base, tokenProvider: { _ in "fixture" },
+            transport: ProductionDeliveryFixtureTransport())
+        let store = WorkspaceStore(service: service)
+        store.configuration = config
+        store.context = ERPContext(tenantId: tenant, ruc: "", name: "Empresa de control", roles: ["billing"],
+                                   scopes: ["invoices:read", "invoices:issue", "invoices:email"])
+        store.fixtureDeliveryScope = InvoiceRecoveryScope(profileID: UUID(), configuration: config, subject: "fixture",
+                                                          organizationID: "empresa-demo", tenantID: tenant)
+        store.phase = .ready
+        return store
+    }
+    #endif
 
     func currentInvoiceRecoveryScope() throws -> InvoiceRecoveryScope {
         guard !isDemo, phase == .ready, let context, let configuration,

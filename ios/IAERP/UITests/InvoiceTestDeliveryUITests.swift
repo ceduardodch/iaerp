@@ -29,6 +29,63 @@ final class InvoiceTestDeliveryUITests: XCTestCase {
         return [element.label, element.value as? String ?? ""].joined(separator: " ")
     }
 
+    func testRealDeliveryRequiresTwoReviewsAndDisplaysServerReceipt() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-production-delivery-fixture"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Factura"].waitForExistence(timeout: 8))
+        tap("real-review-issue", in: app)
+        XCTAssertTrue(text("real-delivery-customer", in: app).contains("Cliente de control"))
+        XCTAssertTrue(text("real-delivery-number", in: app).contains("001-001-000000042"))
+        XCTAssertFalse(text("real-delivery-company", in: app).isEmpty)
+        tap("real-cancel-review", in: app)
+        XCTAssertTrue(app.navigationBars["Revisar emisión"].waitForNonExistence(timeout: 5))
+        tap("real-review-issue", in: app)
+        tap("real-confirm-issue", in: app)
+        XCTAssertTrue(app.buttons["real-review-email"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["real-review-issue"].exists)
+        tap("real-review-email", in: app)
+        XCTAssertTrue(text("real-delivery-recipient", in: app).contains("cliente@example.invalid"))
+        XCTAssertTrue(text("real-attachment-factura-42.pdf", in: app).contains("factura-42.pdf"))
+        XCTAssertTrue(text("real-attachment-factura-42.xml", in: app).contains("factura-42.xml"))
+        tap("real-cancel-review", in: app)
+        XCTAssertTrue(app.navigationBars["Revisar correo"].waitForNonExistence(timeout: 5))
+        tap("real-review-email", in: app)
+        tap("real-confirm-email", in: app)
+        let receipt = app.descendants(matching: .any)["real-email-receipt"].firstMatch
+        XCTAssertTrue(receipt.waitForExistence(timeout: 10))
+        XCTAssertTrue(receipt.label.contains("cliente@example.invalid"))
+        XCTAssertTrue(receipt.label.contains("factura-42.xml"))
+        XCTAssertTrue(receipt.label.contains("factura-42.pdf"))
+        XCTAssertFalse(app.buttons["real-review-email"].exists)
+    }
+
+    func testRejectedPreparationAllowsReviewingTheNewReportBeforeSending() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-production-delivery-fixture", "-production-report-changed", "-production-invoice-authorized"]
+        app.launch()
+        tap("real-review-email", in: app)
+        tap("real-confirm-email", in: app)
+        XCTAssertTrue(text("real-delivery-feedback", in: app).contains("informe mensual"))
+        tap("real-review-email", in: app)
+        XCTAssertTrue(text("real-attachment-informe-aprobado.pdf", in: app).contains("informe-aprobado.pdf"))
+        tap("real-confirm-email", in: app)
+        XCTAssertTrue(text("real-email-receipt", in: app).contains("informe-aprobado.pdf"))
+    }
+
+    func testLostEmailResponseRecoversServerReceiptWithoutSendingAgain() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-production-delivery-fixture", "-production-email-response-lost", "-production-invoice-authorized"]
+        app.launch()
+        XCTAssertTrue(app.buttons["real-review-email"].waitForExistence(timeout: 8))
+        tap("real-review-email", in: app)
+        tap("real-confirm-email", in: app)
+        let receipt = app.descendants(matching: .any)["real-email-receipt"].firstMatch
+        XCTAssertTrue(receipt.waitForExistence(timeout: 15))
+        XCTAssertTrue(receipt.label.contains("cliente@example.invalid"))
+        XCTAssertFalse(app.buttons["real-review-email"].exists)
+    }
+
     func testCustomerDraftCanBeIssuedAndBothDocumentsSentToTestInbox() {
         let app = XCUIApplication()
         app.launchArguments = ["-workspace-demo"]

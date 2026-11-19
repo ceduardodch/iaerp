@@ -12,6 +12,7 @@ private struct InvoiceTestAttempt: Codable {
     let action: InvoiceTestAction
     let key: String
     let recipient: String?
+    var needsReconciliation: Bool? = nil
 }
 
 /// Persist only unresolved action identifiers. A lost response or a relaunch
@@ -44,10 +45,23 @@ private struct InvoiceTestAttempt: Codable {
         return key
     }
 
+    func needsReconciliation(invoiceID: UUID, scope: InvoiceRecoveryScope) throws -> Bool {
+        try entries().contains { $0.invoiceID == invoiceID && $0.scope.representsSameFinancialIdentity(as: scope) && $0.needsReconciliation == true }
+    }
+
+    func markForReconciliation(_ action: InvoiceTestAction, invoiceID: UUID, scope: InvoiceRecoveryScope) throws {
+        var records = try entries()
+        guard let index = records.firstIndex(where: {
+            $0.invoiceID == invoiceID && $0.action == action && $0.scope.representsSameFinancialIdentity(as: scope)
+        }) else { throw InvoiceRecoveryError.missingOperation }
+        records[index].needsReconciliation = true
+        try vault.write(JSONEncoder().encode(records))
+    }
+
     func retryKey(_ action: InvoiceTestAction, invoiceID: UUID, scope: InvoiceRecoveryScope?, recipient: String?) throws -> String {
         if let scope {
             guard let record = try entries().first(where: { $0.invoiceID == invoiceID && $0.scope.representsSameIdentity(as: scope) }),
-                  record.action == action, record.recipient == recipient else { throw InvoiceRecoveryError.reconciliationRequired }
+                  record.action == action, record.recipient == recipient, record.needsReconciliation != true else { throw InvoiceRecoveryError.reconciliationRequired }
             return record.key
         }
         guard let record = demoAttempts[invoiceID], record.action == action, record.recipient == recipient else {

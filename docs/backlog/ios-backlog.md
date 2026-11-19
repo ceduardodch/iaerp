@@ -360,3 +360,12 @@ build. Los skills ayudan a escribir y revisar código; no sustituyen estas fuent
 4. Pulsar **Enviar por correo**, revisar los dos adjuntos y elegir **Enviar al buzón de pruebas**. El criterio de aceptación es un único mensaje capturado con los dos archivos.
 
 Para crear un artículo mientras se prepara otra factura, abrir el selector de productos y pulsar **+**. Al guardar, el producto debe quedar seleccionado en el mismo borrador.
+
+### Emisión oficial y correo desde la ficha de factura
+
+| Historia | Criterio de aceptación |
+| --- | --- |
+| Emitir un borrador | El usuario autorizado comprueba empresa, número, cliente y total. Cancelar conserva el borrador. Confirmar muestra el estado del SRI. |
+| Enviar los documentos | Con la factura autorizada, el usuario revisa destinatario, texto, RIDE y XML. Si el contrato exige informe, ve también su PDF aprobado. Confirmar muestra una referencia del proveedor. |
+| Recuperar una respuesta perdida | Consultar el estado conserva la factura y recupera el resultado de envío. Una operación pendiente se identifica antes de ofrecer una nueva acción. |
+| Probar en el iPhone | El titular elige la factura real, confirma primero la emisión y después el correo. Comprueba que llegaron los adjuntos al destino acordado. |

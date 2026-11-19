@@ -41,6 +41,7 @@
 
 | Sesión / IA | Estado | Área / archivos | Desde |
 | --- | --- | --- | --- |
+| Codex (iOS, emisión real y correo) | En desarrollo | Servidor y permisos en copia limpia, cliente Swift, ficha y revisión posterior por negocio, UI/UX y QA. La primera emisión real corresponde al usuario. | 2026-11-19 |
 | Codex (iOS, emisión y correo de pruebas) | Catálogos integrados en main, PR #109 | Negocio, UI/UX y QA aprobaron. Pasaron 186 pruebas iOS en el Mac y en GitHub. El ensayo por cable con datos sintéticos capturó un RIDE y un XML. Producción tiene los dos permisos de catálogo. 0.6.1 (9) instalada en el iPhone 14 Pro, con la bienvenida de producción y las ayudas de facturación revisadas. Carlos probará el recorrido en BTOB-SAS. [Estado](docs/STATUS.md). | 2026-11-19 |
 | Codex (iOS, conexión IAERP) | Inicio y facturas por mes revisados e integrados en main · PR #108 | 0.5.0 (7), 154 pruebas locales y 154 en CI. Coolify publicó el servidor y se verificó el permiso iOS. El 19 de noviembre se confirmó la instalación y apertura en el iPhone 14 Pro. Pendiente prueba funcional de Carlos. [Backlog y prueba física](docs/backlog/ios-evaluacion-2026-11-18.md). | 2026-11-18 |
 | Codex (Compras SRI, reglas y MCP) | ✅ EN PRODUCCIÓN | Anular directo en fila, PR #105 e8b4fc0, CI/Coolify 44181463258 verdes; 416 E2E y revisión frontend/a11y GO. API/MCP/perfiles b2b verificados. Registro real pendiente de respaldo SRI; lote CAPTCHA sigue diferido por el usuario. | 2026-11-17 |

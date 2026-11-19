@@ -118,13 +118,16 @@ struct SavedInvoiceLink: View {
     var body: some View {
         let invoice = store.invoices.first { $0.id == saved.id } ?? saved
         let isDraft = invoice.status == "DRAFT"
+        let linkTitle: LocalizedStringKey = if !isDraft { "Ver factura" }
+            else if !store.isDemo && store.context?.permits("invoices:issue") == true { "Revisar borrador para emitir" }
+            else { "Ver borrador" }
         Text(isDraft ? "Borrador guardado. No se ha emitido al SRI." : "Factura guardada.")
             .accessibilityIdentifier("workspace-notice")
         NavigationLink {
             WorkspaceInvoiceDetail(store: store, invoiceId: invoice.id)
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Label(isDraft ? "Ver borrador" : "Ver factura", systemImage: "doc.text")
+                Label(linkTitle, systemImage: "doc.text")
                 Text(verbatim: store.customerName(invoice.partyId))
                 Text(verbatim: ERPDisplay.money(invoice.total, currency: invoice.currency))
             }

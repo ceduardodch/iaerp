@@ -171,7 +171,7 @@ public struct LiveERPService: ERPService, ERPInvoiceDraftLookup, ERPSalesOvervie
     private func get<T: Decodable & Sendable>(_ route: String, query: [URLQueryItem] = []) async throws -> T {
         try await request(route, method: "GET", query: query, mayRefresh: true)
     }
-    private func request<T: Decodable & Sendable>(_ route: String, method: String, query: [URLQueryItem] = [], body: Data? = nil, idempotencyKey: String? = nil, mayRefresh: Bool) async throws -> T {
+    private func request<T: Decodable & Sendable>(_ route: String, method: String, query: [URLQueryItem] = [], body: Data? = nil, idempotencyKey: String? = nil, mayRefresh: Bool, fiscalDelivery: Bool = false) async throws -> T {
         var components = URLComponents(url: baseURL.appendingPathComponent(route), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
         guard let url = components.url else { throw ERPClientError.invalidConfiguration }
@@ -191,6 +191,7 @@ public struct LiveERPService: ERPService, ERPInvoiceDraftLookup, ERPSalesOvervie
             response = try await transport.send(request, maximumBytes: 8 * 1_024 * 1_024)
         }
         try Task.checkCancellation()
+        if fiscalDelivery, let error = ERPClientError.fiscalDeliveryError(response) { throw error }
         try Self.requireSuccess(response)
         do { return try JSONDecoder().decode(T.self, from: response.data) }
         catch { throw ERPClientError.invalidResponse }
@@ -314,6 +315,52 @@ extension LiveERPService: ERPCustomerRegistrationService {
         } catch ERPClientError.idempotencyConflict {
             throw ERPClientError.customerRegistrationConflict
         }
+    }
+}
+
+extension LiveERPService: ERPProductionInvoiceService {
+    public func deliveryStatus(invoiceID: UUID) async throws -> ERPInvoiceDeliveryStatus {
+        let status: ERPInvoiceDeliveryStatus = try await request("invoices/\(invoiceID.uuidString)/delivery-status",
+            method: "GET", mayRefresh: true, fiscalDelivery: true)
+        guard ["PRODUCTION", "TEST", "UNCONFIGURED"].contains(status.fiscalEnvironment),
+              ["NOT_SENT", "PENDING", "SENT"].contains(status.emailStatus),
+              (status.emailStatus == "SENT") == (status.receipt != nil) else { throw ERPClientError.invalidResponse }
+        try status.receipt?.validate()
+        return status
+    }
+
+    public func issueInvoice(invoiceID: UUID, idempotencyKey: String) async throws -> ERPInvoiceIssueResult {
+        try ERPInputValidation.validateUUIDKey(idempotencyKey)
+        let result: ERPInvoiceIssueResult = try await request("invoices/\(invoiceID.uuidString)/issue", method: "POST",
+            idempotencyKey: idempotencyKey, mayRefresh: false, fiscalDelivery: true)
+        guard result.status == "PROCESSING" else { throw ERPClientError.invalidResponse }
+        return result
+    }
+
+    public func invoiceEmailPreview(invoiceID: UUID) async throws -> ERPInvoiceEmailPreview {
+        var preview: ERPInvoiceEmailPreview = try await request("invoices/\(invoiceID.uuidString)/email-preview",
+            method: "GET", mayRefresh: true, fiscalDelivery: true)
+        try preview.validate()
+        preview.invoiceID = invoiceID
+        return preview
+    }
+
+    public func sendInvoiceEmail(invoiceID: UUID, recipient: String, preview: ERPInvoiceEmailPreview,
+                                 idempotencyKey: String) async throws -> ERPInvoiceEmailReceipt {
+        struct Confirmation: Encodable { let recipient: String; let previewDigest: String }
+        try ERPInputValidation.validateUUIDKey(idempotencyKey)
+        try preview.validate()
+        guard preview.invoiceID == invoiceID, preview.recipient == recipient else {
+            throw ERPClientError.invoiceEmailPreviewChanged
+        }
+        let confirmation = Confirmation(recipient: recipient, previewDigest: preview.previewDigest)
+        let receipt: ERPInvoiceEmailReceipt = try await request("invoices/\(invoiceID.uuidString)/email", method: "POST",
+            body: Self.encode(confirmation), idempotencyKey: idempotencyKey, mayRefresh: false, fiscalDelivery: true)
+        try receipt.validate()
+        guard receipt.recipient == recipient, Set(receipt.attachmentNames) == Set(preview.attachmentNames) else {
+            throw ERPClientError.invalidResponse
+        }
+        return receipt
     }
 }
 
