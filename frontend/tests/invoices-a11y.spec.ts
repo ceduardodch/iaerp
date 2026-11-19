@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
@@ -235,6 +236,9 @@ async function mockApi(page: Page) {
   await page.route(`**/api/v1/invoices/${historicalInvoice.id}`, (route) =>
     route.fulfill({ json: historicalInvoice }),
   )
+  await page.route(`**/api/v1/invoices/${authorizedInvoice.id}/delivery-status**`, (route) =>
+    route.fulfill({ json: { fiscalEnvironment: 'PRODUCTION', emailStatus: 'NOT_SENT' } }),
+  )
   await page.route(`**/api/v1/invoices/${authorizedInvoice.id}/email-preview`, (route) =>
     route.fulfill({
       json: {
@@ -447,6 +451,59 @@ test('authorized invoice detail shows SRI transmission, artifacts and credit not
   await page.keyboard.press('Enter')
   await expect(page.getByRole('heading', { name: 'Nueva nota de crédito', level: 1 })).toBeVisible()
   await expectNoA11yViolations(page)
+})
+
+test('email receipt requires an explicit resend to the reviewed address and keeps other recipients editable', async ({ page }) => {
+  const receipt = {
+    recipient: 'compras@example.invalid', messageId: 'recibo-42',
+    attachmentNames: ['factura.pdf', 'factura.xml'],
+  }
+  const other = 'finanzas@example.invalid'
+  const otherHash = createHash('sha256').update(other).digest('hex')
+  const posts: { recipient: string; resend?: boolean }[] = []
+  const hashedLookups: string[] = []
+  await page.route(`**/api/v1/invoices/${authorizedInvoice.id}/delivery-status**`, (route) => {
+    const url = new URL(route.request().url())
+    const hash = url.searchParams.get('recipientHash')
+    if (hash) hashedLookups.push(hash)
+    return route.fulfill({ json: hash === otherHash ? { emailStatus: 'NOT_SENT' } : { emailStatus: 'SENT', receipt } })
+  })
+  await page.route(`**/api/v1/invoices/${authorizedInvoice.id}/email`, (route) => {
+    const body = route.request().postDataJSON()
+    posts.push(body)
+    return route.fulfill({ json: { ...receipt, recipient: body.recipient, messageId: `recibo-${42 + posts.length}` } })
+  })
+  await loginAndOpenInvoices(page)
+  await page.getByRole('row', { name: new RegExp(authorizedInvoice.sequential) }).getByRole('button', { name: 'Ver' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'recibo-42' })).toContainText(receipt.recipient)
+  await page.getByRole('button', { name: 'Reenviar correo' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toHaveAccessibleName('Reenviar factura por correo')
+  await expect(dialog).toContainText('recibo-42')
+  await expect(dialog.getByRole('textbox')).toHaveValue(receipt.recipient)
+  await dialog.getByRole('button', { name: 'Cancelar' }).click()
+  expect(posts).toEqual([])
+  await page.getByRole('button', { name: 'Reenviar correo' }).click()
+  await dialog.getByRole('button', { name: 'Confirmar reenvío' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'recibo-43' })).toBeVisible()
+  expect(posts).toEqual([{ recipient: receipt.recipient, resend: true }])
+  await page.getByRole('button', { name: 'Reenviar correo' }).click()
+  await dialog.getByRole('textbox').fill(other)
+  await expect(dialog).toHaveAccessibleName('Enviar factura por correo')
+  await dialog.getByRole('button', { name: 'Confirmar envío' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'recibo-44' })).toContainText(other)
+  expect(posts).toEqual([{ recipient: receipt.recipient, resend: true }, { recipient: other }])
+  expect(hashedLookups).toContain(otherHash)
+})
+
+test('a pending invoice delivery blocks another web send', async ({ page }) => {
+  await page.route(`**/api/v1/invoices/${authorizedInvoice.id}/delivery-status**`, (route) =>
+    route.fulfill({ json: { emailStatus: 'PENDING', receipt: null } }))
+  await loginAndOpenInvoices(page)
+  await page.getByRole('row', { name: new RegExp(authorizedInvoice.sequential) }).getByRole('button', { name: 'Ver' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'envío pendiente' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Preparar correo' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Reenviar correo' })).toHaveCount(0)
 })
 
 test('RIDE opens in the in-app PDF viewer and returns focus when it closes', async ({ page }) => {

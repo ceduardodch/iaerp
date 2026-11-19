@@ -12,6 +12,7 @@ private struct InvoiceTestAttempt: Codable {
     let action: InvoiceTestAction
     let key: String
     let recipient: String?
+    var needsReconciliation: Bool? = nil
 }
 
 /// Persist only unresolved action identifiers. A lost response or a relaunch
@@ -44,10 +45,23 @@ private struct InvoiceTestAttempt: Codable {
         return key
     }
 
+    func needsReconciliation(invoiceID: UUID, scope: InvoiceRecoveryScope) throws -> Bool {
+        try entries().contains { $0.invoiceID == invoiceID && $0.scope.representsSameFinancialIdentity(as: scope) && $0.needsReconciliation == true }
+    }
+
+    func markForReconciliation(_ action: InvoiceTestAction, invoiceID: UUID, scope: InvoiceRecoveryScope) throws {
+        var records = try entries()
+        guard let index = records.firstIndex(where: {
+            $0.invoiceID == invoiceID && $0.action == action && $0.scope.representsSameFinancialIdentity(as: scope)
+        }) else { throw InvoiceRecoveryError.missingOperation }
+        records[index].needsReconciliation = true
+        try vault.write(JSONEncoder().encode(records))
+    }
+
     func retryKey(_ action: InvoiceTestAction, invoiceID: UUID, scope: InvoiceRecoveryScope?, recipient: String?) throws -> String {
         if let scope {
             guard let record = try entries().first(where: { $0.invoiceID == invoiceID && $0.scope.representsSameIdentity(as: scope) }),
-                  record.action == action, record.recipient == recipient else { throw InvoiceRecoveryError.reconciliationRequired }
+                  record.action == action, record.recipient == recipient, record.needsReconciliation != true else { throw InvoiceRecoveryError.reconciliationRequired }
             return record.key
         }
         guard let record = demoAttempts[invoiceID], record.action == action, record.recipient == recipient else {
@@ -127,7 +141,7 @@ struct InvoiceTestDeliverySection: View {
         Set(artifacts.map(\.artifactType)).isSuperset(of: ["ride-pdf", "xml-signed"])
     }
     private var followsIssue: Bool {
-        pending == .issue || ["SIGNED", "RECEIVED", "PENDING_AUTHORIZATION"].contains(invoice.status)
+        pending == .issue || ["READY", "SIGNED", "RECEIVED", "PENDING_AUTHORIZATION"].contains(invoice.status)
     }
 
     var body: some View {
@@ -149,8 +163,10 @@ struct InvoiceTestDeliverySection: View {
                     } else if pending == .email {
                         Text(canRetry ? "El buzón aún no registra este correo." : "Comprobando si el buzón de pruebas recibió el correo.")
                     } else if followsIssue {
-                        Text(canRetry ? "El simulador aún muestra el borrador sin emitir." : "Esperando el resultado del simulador.")
+                        Text(canRetry ? "El simulador aún muestra el borrador. Revisa la emisión pendiente antes de reintentar." : "Esperando la autorización del simulador. Puedes consultar el estado de esta misma factura.")
                     } else if actions.canIssue && invoice.status == "DRAFT" {
+                        Text("Para autorizar este borrador en el simulador, revisa y confirma la emisión.")
+                            .accessibilityIdentifier("test-issue-guidance")
                         Button("Emitir en pruebas", systemImage: "doc.badge.arrow.up") { review = .issue(retrying: false) }
                             .frame(minHeight: 44)
                             .accessibilityIdentifier("test-issue-invoice")
@@ -159,7 +175,19 @@ struct InvoiceTestDeliverySection: View {
                             .frame(minHeight: 44)
                             .accessibilityIdentifier("test-email-invoice")
                     } else if invoice.status == "AUTHORIZED" && !hasAttachments {
-                        Text("Los archivos RIDE y XML aún no están listos.")
+                        Text("Para enviar el correo hacen falta el RIDE y el XML. Toca Consultar estado para comprobar si ya están listos.")
+                    } else if invoice.status == "AUTHORIZED" {
+                        Text(store.context?.permits("invoices:test-email") == true
+                             ? "El simulador todavía no habilita el envío de esta factura. Toca Consultar estado para actualizarla."
+                             : "Tu cuenta necesita permiso de envío al buzón de pruebas. Pídelo a quien administra tu empresa.")
+                    } else if invoice.status == "DRAFT" {
+                        Text(store.context?.permits("invoices:test-issue") == true
+                             ? "El simulador no habilita la emisión de este borrador. Toca Consultar estado antes de volver a intentarlo."
+                             : "Tu cuenta necesita permiso de emisión en pruebas. Pídelo a quien administra tu empresa.")
+                    } else if ["REJECTED", "NOT_AUTHORIZED", "FAILED"].contains(invoice.status) {
+                        Text("Revisa el motivo en Estado antes de preparar otro ensayo. El correo requiere una factura autorizada.")
+                    } else {
+                        Text("Para enviar el correo de prueba, la factura debe estar autorizada y tener el RIDE y el XML.")
                     }
                     if let pending, canRetry {
                         Button(pending == .issue ? "Revisar emisión pendiente" : "Revisar envío pendiente") {
@@ -173,9 +201,7 @@ struct InvoiceTestDeliverySection: View {
                     }
                     if let message { Text(verbatim: message).accessibilityIdentifier("test-delivery-message") }
                     if busy { ProgressView("Consultando…") }
-                    if followsIssue || pending == .email || message != nil || (invoice.status == "AUTHORIZED" && !hasAttachments) {
-                        refreshButton
-                    }
+                    if shouldOfferRefresh(actions) { refreshButton }
                 } else if let message {
                     Text(verbatim: message)
                     refreshButton
@@ -214,6 +240,18 @@ struct InvoiceTestDeliverySection: View {
         let invoiceID: UUID
         let pending: Bool
         let version: Int
+    }
+
+    private func shouldOfferRefresh(_ actions: ERPTestInvoiceActions) -> Bool {
+        if followsIssue || pending == .email || message != nil { return true }
+        switch invoice.status {
+        case "DRAFT":
+            return !actions.canIssue && store.context?.permits("invoices:test-issue") == true
+        case "AUTHORIZED":
+            return receipt == nil && (!hasAttachments || (!actions.canEmail && store.context?.permits("invoices:test-email") == true))
+        default:
+            return false
+        }
     }
 
     private var refreshButton: some View {

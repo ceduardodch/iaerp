@@ -18,6 +18,9 @@ final class SavedAccountsUITests: XCTestCase {
     @MainActor func testProfilesAreDistinctAndRemovingOneKeepsOthers() {
         let app = launch()
         let first = app.buttons["saved-account-00000000-0000-4000-8000-000000000001"]
+        XCTAssertEqual(app.buttons["connect-company"].label, "Añadir cuenta")
+        XCTAssertFalse(app.buttons["start-demo"].exists)
+        XCTAssertFalse(app.buttons["start-btob-test"].exists)
         let second = app.buttons["saved-account-00000000-0000-4000-8000-000000000002"]
         XCTAssertTrue(first.label.contains("alex.ventas"))
         XCTAssertTrue(second.label.contains("alex.consulta"))

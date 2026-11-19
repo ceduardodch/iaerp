@@ -2180,6 +2180,22 @@ function CreditNoteForm({
   )
 }
 
+const invoiceEmailErrors: Record<string, string> = {
+  invoice_email_pending: 'Hay una entrega pendiente. Consulta su estado antes de preparar otro correo.',
+  invoice_email_rejected: 'El proveedor rechazó el correo. Revisa el destinatario y la cuenta de envío.',
+  invoice_email_key_conflict: 'La solicitud cambió. Consulta el recibo y vuelve a revisar el correo.',
+}
+
+type InvoiceDeliveryStatus = {
+  emailStatus: 'NOT_SENT' | 'PENDING' | 'SENT'
+  receipt?: InvoiceEmailResult | null
+}
+
+async function recipientHash(address: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(address))
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 function InvoiceDetail({
   token,
   invoiceId,
@@ -2202,8 +2218,9 @@ function InvoiceDetail({
   const queryClient = useQueryClient()
   const [ridePreview, setRidePreview] = useState<ArtifactDownload | null>(null)
   const [emailing, setEmailing] = useState(false)
-  const [emailRecipient, setEmailRecipient] = useState('')
-  const [sentEmail, setSentEmail] = useState<InvoiceEmailResult | null>(null)
+  const [emailRecipient, setEmailRecipient] = useState<string | null>(null)
+  const [settledRecipient, setSettledRecipient] = useState('')
+  const attempt = useRef<{ recipient: string; priorMessageId?: string; key: string } | null>(null)
   const [archiving, setArchiving] = useState(false)
   const [archiveReason, setArchiveReason] = useState('Prueba de emisión SRI; comprobante no autorizado.')
   const [voiding, setVoiding] = useState(false)
@@ -2228,6 +2245,40 @@ function InvoiceDetail({
     queryFn: () => apiRequest<InvoiceEmailPreview>(token, `/invoices/${invoiceId}/email-preview`),
     enabled: emailing && invoiceQuery.data?.status === 'AUTHORIZED',
   })
+
+  const deliveryKey = ['invoices', invoiceId, 'delivery-status']
+  const latestDelivery = useQuery({
+    queryKey: deliveryKey,
+    queryFn: () => apiRequest<InvoiceDeliveryStatus>(token, `/invoices/${invoiceId}/delivery-status`),
+    enabled: invoiceQuery.data?.type === 'INVOICE' && invoiceQuery.data.status === 'AUTHORIZED',
+    refetchInterval: (query) => query.state.data?.emailStatus === 'PENDING' ? 5000 : false,
+  })
+  const recipientInput = emailRecipient ?? emailPreviewQuery.data?.recipient ?? ''
+  const recipient = recipientInput.trim()
+  const validRecipient = /^[^\s@]+@[^\s@]+$/.test(recipient)
+  const latestReceipt = latestDelivery.data?.receipt
+  const checkAddress = emailing && latestDelivery.data?.emailStatus === 'SENT' &&
+    recipient !== latestReceipt?.recipient && validRecipient
+  useEffect(() => {
+    if (!checkAddress) return
+    const timer = window.setTimeout(() => setSettledRecipient(recipient), 300)
+    return () => window.clearTimeout(timer)
+  }, [checkAddress, recipient])
+  const recipientDelivery = useQuery({
+    queryKey: [...deliveryKey, settledRecipient],
+    queryFn: async () => apiRequest<InvoiceDeliveryStatus>(token,
+      `/invoices/${invoiceId}/delivery-status?recipientHash=${await recipientHash(settledRecipient)}`),
+    enabled: checkAddress && recipient === settledRecipient,
+    refetchInterval: (query) => query.state.data?.emailStatus === 'PENDING' ? 5000 : false,
+  })
+  const reviewedDelivery = checkAddress
+    ? (recipient === settledRecipient ? recipientDelivery.data : undefined)
+    : latestDelivery.data
+  const previousReceipt = reviewedDelivery?.receipt?.recipient === recipient ? reviewedDelivery.receipt : null
+  const deliveryPending = latestDelivery.data?.emailStatus === 'PENDING' || reviewedDelivery?.emailStatus === 'PENDING'
+  const readyToSend = !deliveryPending && !latestDelivery.isError && !latestDelivery.isFetching &&
+    (!checkAddress || !recipientDelivery.isError && !recipientDelivery.isFetching) &&
+    (reviewedDelivery?.emailStatus === 'NOT_SENT' || Boolean(previousReceipt))
 
   const issueInvoice = useMutation({
     mutationFn: () =>
@@ -2294,14 +2345,27 @@ function InvoiceDetail({
   })
 
   const emailInvoice = useMutation({
-    mutationFn: () => apiRequest<InvoiceEmailResult>(token, `/invoices/${invoiceId}/email`, {
-      method: 'POST',
-      headers: { 'Idempotency-Key': idempotencyKey('web-email-invoice') },
-      body: JSON.stringify({ recipient: emailRecipient.trim() }),
-    }),
+    mutationFn: ({ address, prior }: { address: string; prior: InvoiceEmailResult | null }) => {
+      const resend = prior !== null && prior.recipient === address
+      if (attempt.current?.recipient !== address || attempt.current.priorMessageId !== prior?.messageId) {
+        attempt.current = { recipient: address, priorMessageId: prior?.messageId, key: idempotencyKey('web-email-invoice') }
+      }
+      return apiRequest<InvoiceEmailResult>(token, `/invoices/${invoiceId}/email`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': attempt.current.key },
+        body: JSON.stringify({ recipient: address, ...(resend ? { resend: true } : {}) }),
+      })
+    },
     onSuccess: (result) => {
-      setSentEmail(result)
+      const status: InvoiceDeliveryStatus = { emailStatus: 'SENT', receipt: result }
+      queryClient.setQueryData(deliveryKey, status)
+      queryClient.setQueryData([...deliveryKey, result.recipient], status)
+      attempt.current = null
       setEmailing(false)
+    },
+    onError: async () => {
+      setEmailing(false)
+      await queryClient.invalidateQueries({ queryKey: deliveryKey })
     },
   })
 
@@ -2479,14 +2543,14 @@ function InvoiceDetail({
         <p className="form-error" role="alert">{archiveInvoice.error.message}</p>
       ) : null}
       {emailInvoice.error ? (
-        <p className="form-error" role="alert">{emailInvoice.error.message}</p>
+        <p className="form-error" role="alert">{invoiceEmailErrors[emailInvoice.error.message] ?? emailInvoice.error.message}</p>
       ) : null}
       {updateCollection.error ? (
         <p className="form-error" role="alert">{updateCollection.error.message}</p>
       ) : null}
-      {sentEmail ? (
+      {latestReceipt && !deliveryPending ? (
         <p className="form-success" role="status">
-          Factura enviada a {sentEmail.recipient} con RIDE y XML.
+          Correo registrado para {latestReceipt.recipient}. Referencia: {latestReceipt.messageId}.
         </p>
       ) : null}
       {previewRide.error ? (
@@ -2597,20 +2661,28 @@ function InvoiceDetail({
       ) : null}
 
       {emailing ? (
-        <ErpModal title="Enviar factura por correo" size="sm" onClose={() => setEmailing(false)}>
+        <ErpModal title={previousReceipt ? "Reenviar factura por correo" : "Enviar factura por correo"} size="sm" onClose={() => { if (!emailInvoice.isPending) setEmailing(false) }}>
           <p className="fine-print">
-            Se enviarán el RIDE PDF y el XML firmado vigentes. Nada saldrá hasta que confirmes aquí.
+            {previousReceipt
+              ? `Ya hay un correo registrado para ${previousReceipt.recipient}. Referencia: ${previousReceipt.messageId}. Al confirmar se enviará otro correo con los adjuntos.`
+              : 'Revisa el destinatario y los archivos antes de confirmar el envío.'}
           </p>
           <label>
             Correo del destinatario
             <input
               type="email"
-              value={emailRecipient}
+              disabled={emailInvoice.isPending}
+              value={recipientInput}
               onChange={(event) => setEmailRecipient(event.target.value)}
               required
               autoFocus
             />
           </label>
+          {deliveryPending ? <p role="status">Hay un envío pendiente para esta factura. Espera su confirmación.</p> : null}
+          {checkAddress && (settledRecipient !== recipient || recipientDelivery.isFetching)
+            ? <p role="status">Consultando envíos para este destinatario…</p> : null}
+          {checkAddress && recipientDelivery.isError
+            ? <p className="form-error" role="alert">No se pudo comprobar el destinatario. <ErpButton variant="ghost" onClick={() => void recipientDelivery.refetch()}>Volver a consultar</ErpButton></p> : null}
           {emailPreviewQuery.isPending ? <p className="fine-print">Preparando vista previa…</p> : null}
           {emailPreviewQuery.error ? (
             <p className="form-error" role="alert">{emailPreviewQuery.error.message}</p>
@@ -2633,20 +2705,22 @@ function InvoiceDetail({
             <ErpButton variant="secondary" onClick={() => setEmailing(false)} disabled={emailInvoice.isPending}>Cancelar</ErpButton>
             <ErpButton
               variant="primary"
-              disabled={emailInvoice.isPending || emailPreviewQuery.isPending || !emailRecipient.trim()}
-              onClick={() => emailInvoice.mutate()}
+              disabled={emailInvoice.isPending || !emailPreviewQuery.data || emailPreviewQuery.isError || !readyToSend || !validRecipient}
+              onClick={() => emailInvoice.mutate({ address: recipient, prior: previousReceipt })}
             >
-              {emailInvoice.isPending ? 'Enviando…' : 'Confirmar envío'}
+              {emailInvoice.isPending ? 'Enviando…' : previousReceipt ? 'Confirmar reenvío' : 'Confirmar envío'}
             </ErpButton>
           </div>
         </ErpModal>
       ) : null}
 
-      {invoice.status === 'AUTHORIZED' ? (
+      {invoice.type === 'INVOICE' && invoice.status === 'AUTHORIZED' ? (
         <section className="invoice-delivery-panel" aria-labelledby="invoice-delivery-title">
           <div>
             <p className="section-number" id="invoice-delivery-title">Entrega al cliente</p>
-            <h3>Enviar factura autorizada</h3>
+            <h3>{latestReceipt ? 'Reenviar factura autorizada' : 'Enviar factura autorizada'}</h3>
+            {deliveryPending ? <p role="status">Hay un envío pendiente para esta factura. El estado se actualizará al confirmarlo.</p> : null}
+            {latestDelivery.isError ? <p className="form-error" role="alert">No se pudo comprobar el envío. <ErpButton variant="ghost" onClick={() => void latestDelivery.refetch()}>Volver a consultar</ErpButton></p> : null}
             <p>
               El correo incluye el plazo y la fecha límite de pago. Se adjuntan el RIDE PDF y el XML firmado.
             </p>
@@ -2654,12 +2728,13 @@ function InvoiceDetail({
           <ErpButton
             variant="primary"
             onClick={() => {
-              setEmailRecipient(emailPreviewQuery.data?.recipient ?? customer?.email ?? '')
-              setSentEmail(null)
+              emailInvoice.reset()
+              setEmailRecipient(latestReceipt?.recipient ?? emailPreviewQuery.data?.recipient ?? customer?.email ?? null)
               setEmailing(true)
             }}
+            disabled={latestDelivery.isPending || latestDelivery.isError || deliveryPending || emailInvoice.isPending || latestDelivery.isFetching}
           >
-            <Mail size={18} aria-hidden="true" /> Preparar correo
+            <Mail size={18} aria-hidden="true" /> {latestReceipt ? 'Reenviar correo' : 'Preparar correo'}
           </ErpButton>
         </section>
       ) : null}

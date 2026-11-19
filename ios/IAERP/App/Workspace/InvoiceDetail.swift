@@ -27,6 +27,15 @@ struct WorkspaceInvoiceDetail: View {
     @State private var paymentSchedule: [InvoicePaymentRow] = []
     @State private var presentation: DocumentPresentation?
 
+    private var showsTestActions: Bool {
+        store.context?.permits("invoices:test-issue") == true || store.context?.permits("invoices:test-email") == true
+    }
+
+    private var showsProductionActions: Bool {
+        !store.isDemo && !showsTestActions && store.service is any ERPProductionInvoiceService &&
+        (store.context?.permits("invoices:issue") == true || store.context?.permits("invoices:email") == true)
+    }
+
     var body: some View {
         List {
             if loading { ProgressView("Cargando factura…") }
@@ -49,12 +58,23 @@ struct WorkspaceInvoiceDetail: View {
                     }
                     if let status = invoice.collectionStatus { ERPDetailRow(title: "Cobro", value: ERPDisplay.status(status)) }
                     if invoice.status == "DRAFT" { Text("Borrador guardado. No se ha emitido al SRI.").foregroundStyle(Color.primary) }
+                    if let guidance = statusGuidance(for: invoice.status) {
+                        Text(guidance)
+                            .foregroundStyle(Color.primary)
+                            .accessibilityIdentifier("invoice-status-guidance")
+                    }
                     if invoice.status == "HISTORICAL_ISSUED" { Text("Documento histórico. No equivale a una autorización SRI verificada por esta app.").foregroundStyle(Color.primary) }
                 } header: { Text("Estado").foregroundStyle(Color.primary) }
-                if store.context?.permits("invoices:test-issue") == true || store.context?.permits("invoices:test-email") == true {
+                if showsTestActions {
                     InvoiceTestDeliverySection(store: store, invoice: invoice,
                                                number: listedNumber ?? store.invoiceNumber(invoice),
                                                artifacts: artifacts, reloadDocument: { await load(showProgress: false) })
+                        .id(invoice.id)
+                } else if showsProductionActions, invoice.type == "INVOICE" {
+                    InvoiceProductionDeliverySection(store: store, invoice: invoice,
+                        number: listedNumber ?? store.invoiceNumber(invoice),
+                        customer: listedCustomerName ?? store.customer(invoice.partyId)?.name,
+                        reloadDocument: { await load(showProgress: false) })
                         .id(invoice.id)
                 }
                 ForEach(invoice.lines) { line in
@@ -82,7 +102,8 @@ struct WorkspaceInvoiceDetail: View {
                     if let documentError {
                         ERPErrorState(message: documentError) { await loadArtifacts() }
                     } else if artifacts.isEmpty {
-                        Text("RIDE/XML aún no disponibles.").foregroundStyle(Color.primary)
+                        Text(invoice.status == "DRAFT" ? "Los archivos estarán disponibles aquí cuando se generen durante la emisión." : "Todavía no hay archivos disponibles. Desliza hacia abajo para actualizar la ficha.")
+                            .foregroundStyle(Color.primary)
                     }
                     ForEach(artifacts) { artifact in
                         Button {
@@ -114,6 +135,25 @@ struct WorkspaceInvoiceDetail: View {
         .task { _ = await load() }
         .refreshable { _ = await load() }
         .sheet(item: $presentation) { DocumentViewer(presentation: $0) }
+    }
+
+    func statusGuidance(for status: String) -> String? {
+        guard !showsTestActions, !showsProductionActions else { return nil }
+        if store.isDemo {
+            return ["DRAFT", "AUTHORIZED"].contains(status) ? "Esta cuenta de prueba sólo permite consultar la factura." : nil
+        }
+        switch status {
+        case "DRAFT":
+            return "Para emitir este borrador, pide permiso de emisión a quien administra tu empresa y vuelve a iniciar sesión."
+        case "READY", "SIGNED", "RECEIVED", "PENDING_AUTHORIZATION":
+            return "Desliza hacia abajo para consultar el estado de esta emisión y comprobar si el SRI ya respondió."
+        case "AUTHORIZED":
+            return "Para enviar el RIDE y el XML, pide permiso de envío de facturas a quien administra tu empresa y vuelve a iniciar sesión."
+        case "REJECTED", "NOT_AUTHORIZED", "FAILED":
+            return "Revisa el mensaje de transmisión para corregir el problema antes de emitir."
+        default:
+            return nil
+        }
     }
 
     private func summaryRow(_ title: String, _ value: String) -> some View {

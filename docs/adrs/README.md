@@ -33,3 +33,4 @@ sustituya.
 | [0026](0026-ios-receivables-overview.md) | Resumen móvil de cartera y facturas por mes | Accepted |
 | [0027](0027-ios-test-invoice-delivery.md) | Emisión y envío al buzón de pruebas desde iPhone | Pruebas autorizadas |
 | [0028](0028-ios-alta-catalogos.md) | Alta de clientes y productos desde el iPhone | Publicación sujeta a revisión y CI |
+| [0029](0029-ios-emision-correo.md) | Emisión y correo reales desde el iPhone | Publicación sujeta a revisión y CI |

@@ -77,9 +77,7 @@ El plazo inicial toma cliente, empresa o contado; permite ajustarlo y guarda
 la cuota con el total exacto del preview y fecha de Guayaquil. Los campos
 numéricos tienen «Listo» para cerrar el teclado.
 
-La app abre en una bienvenida: **Probar demo** usa sólo fixtures y memoria;
-**Entrar a mi empresa** solicita configuración pública y abre el navegador de
-acceso. Las direcciones públicas de IAERP vienen preparadas; no hay campos para pegar tokens.
+La bienvenida muestra **Entrar a mi empresa** o las cuentas guardadas y **Añadir cuenta**. Al conectar una empresa, la app abre el navegador de acceso. Las direcciones públicas de IAERP vienen preparadas; no hay campos para pegar tokens.
 El selector de **Cuentas guardadas** recupera el perfil elegido de Keychain,
 tras comprobar al usuario del dispositivo, y vuelve a validar `/context`.
 La contraseña se escribe sólo en la página del proveedor de acceso.
@@ -154,9 +152,9 @@ mediante configuración local; no se versionan credenciales ni perfiles.
 Bundle ID: `ec.com.b2b.iaerp.demo`. IOS-004 sigue parcial hasta abrir la app
 firmada en el teléfono. TestFlight requiere una entrega y autorización aparte.
 
-## Revisar la demo en el teléfono
+## Revisar la demo en el simulador
 
-1. Probar demo → buscar Costa o Álamo → abrir la ficha del cliente.
+1. Iniciar el simulador en Debug con el argumento `-workspace-demo`, buscar Costa o Álamo y abrir la ficha del cliente.
 2. Crear un borrador con Servicio de ejemplo, cantidad 1 y plazo 30 días.
    Revisar el total ficticio USD 115, guardar y reabrir su plan de pago.
 3. Abrir una factura autorizada de ejemplo y ver RIDE/XML; el contenido avisa

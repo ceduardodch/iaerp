@@ -10,7 +10,7 @@ La API expone estas acciones de prueba sólo en un entorno habilitado para el si
 
 Con la factura autorizada y sus dos archivos listos, el usuario revisa el destinatario y los nombres del RIDE y del XML. Un segundo acto explícito confirma el correo al buzón de captura. El recibo identifica el mensaje y sus adjuntos. Al volver a abrir la ficha, la app consulta el estado de esa factura antes de ofrecer otra acción.
 
-«Probar demo» permite recorrer el proceso con datos ficticios en el iPhone. El cliente conectado usa la capacidad anunciada por el servidor. La demo local, las pruebas de integración del backend y la recepción en el SRI representan comprobaciones distintas.
+El simulador de iOS en Debug permite recorrer el proceso con datos ficticios. En el iPhone, la bienvenida ofrece acceso a la empresa y a las cuentas guardadas. El ensayo de BTOB-SAS se inicia desde la ficha del cliente tras entrar a la empresa. El cliente conectado usa la capacidad anunciada por el servidor. La demo local, las pruebas de integración del backend y la recepción en el SRI representan comprobaciones distintas.
 
 ## Criterios de cierre
 

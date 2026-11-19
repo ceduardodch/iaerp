@@ -118,13 +118,16 @@ struct SavedInvoiceLink: View {
     var body: some View {
         let invoice = store.invoices.first { $0.id == saved.id } ?? saved
         let isDraft = invoice.status == "DRAFT"
+        let linkTitle: LocalizedStringKey = if !isDraft { "Ver factura" }
+            else if !store.isDemo && store.context?.permits("invoices:issue") == true { "Revisar borrador para emitir" }
+            else { "Ver borrador" }
         Text(isDraft ? "Borrador guardado. No se ha emitido al SRI." : "Factura guardada.")
             .accessibilityIdentifier("workspace-notice")
         NavigationLink {
             WorkspaceInvoiceDetail(store: store, invoiceId: invoice.id)
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Label(isDraft ? "Ver borrador" : "Ver factura", systemImage: "doc.text")
+                Label(linkTitle, systemImage: "doc.text")
                 Text(verbatim: store.customerName(invoice.partyId))
                 Text(verbatim: ERPDisplay.money(invoice.total, currency: invoice.currency))
             }
@@ -168,6 +171,7 @@ struct WorkspaceCustomerDetail: View {
                         .accessibilityIdentifier("customer-prepare-test-invoice")
                     }
                 }
+                if !store.canStartInvoice { InvoiceRecoverySection(store: store) }
             }
         }
         .scrollEdgeEffectStyle(.hard, for: .all)
@@ -384,7 +388,7 @@ struct InvoiceRecoverySection: View {
     var body: some View {
         if let pending = store.pendingInvoiceRecovery {
             Section {
-                Text("Hay un guardado pendiente de confirmar en esta cuenta.")
+                Text("Confirma el guardado pendiente antes de crear otra factura.")
                     .fixedSize(horizontal: false, vertical: true)
                 Text(pending.attemptCount == 0 && pending.confirmedInvoiceID == nil
                      ? "Continuar intentará enviar este borrador a IAERP por primera vez."

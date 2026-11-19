@@ -454,6 +454,10 @@ async def _google_access_token(
     return entity, token
 
 
+class GoogleSendRejected(HTTPException):
+    """Provider explicitly declined this send before accepting the message."""
+
+
 async def send_google_email(
     session: AsyncSession,
     context: AuthContext,
@@ -466,6 +470,7 @@ async def send_google_email(
     sender_address: str | None = None,
     sender_name: str | None = None,
     reply_to: str | None = None,
+    provider_reference: str | None = None,
 ) -> str:
     sent = await send_google_email_with_thread(
         session,
@@ -478,6 +483,7 @@ async def send_google_email(
         sender_address=sender_address,
         sender_name=sender_name,
         reply_to=reply_to,
+        provider_reference=provider_reference,
     )
     return sent.message_id
 
@@ -494,28 +500,42 @@ async def send_google_email_with_thread(
     sender_address: str | None = None,
     sender_name: str | None = None,
     reply_to: str | None = None,
+    provider_reference: str | None = None,
 ) -> GoogleSentMessage:
-    entity, token = await _google_access_token(session, context)
-    email = EmailMessage()
-    email["To"] = recipient
-    from_address = sender_address or entity.email or "me"
-    email["From"] = formataddr((sender_name or "", from_address))
-    if reply_to:
-        email["Reply-To"] = reply_to
-    email["Subject"] = subject
-    email.set_content(message)
-    if html_message:
-        email.add_alternative(html_message, subtype="html")
-    for file_name, content_type, data in attachments or []:
-        maintype, subtype = content_type.split("/", 1)
-        email.add_attachment(data, maintype=maintype, subtype=subtype, filename=file_name)
-    raw = base64.urlsafe_b64encode(email.as_bytes()).decode().rstrip("=")
+    try:
+        entity, token = await _google_access_token(session, context)
+        email = EmailMessage()
+        if provider_reference:
+            email["Message-ID"] = f"<{provider_reference}>"
+        email["To"] = recipient
+        from_address = sender_address or entity.email or "me"
+        email["From"] = formataddr((sender_name or "", from_address))
+        if reply_to:
+            email["Reply-To"] = reply_to
+        email["Subject"] = subject
+        email.set_content(message)
+        if html_message:
+            email.add_alternative(html_message, subtype="html")
+        for file_name, content_type, data in attachments or []:
+            maintype, subtype = content_type.split("/", 1)
+            email.add_attachment(data, maintype=maintype, subtype=subtype, filename=file_name)
+        raw = base64.urlsafe_b64encode(email.as_bytes()).decode().rstrip("=")
+    except HTTPException as exc:
+        if provider_reference:
+            raise GoogleSendRejected(exc.status_code, exc.detail) from exc
+        raise
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
+        if provider_reference:
+            raise GoogleSendRejected(503, "Google Workspace could not prepare the email") from exc
+        raise
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
             "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
             headers={"Authorization": f"Bearer {token}"},
             json={"raw": raw},
         )
+    if provider_reference and response.status_code in {400, 401, 403, 404, 413, 429}:
+        raise GoogleSendRejected(502, "Google rejected the invoice email")
     if response.is_error:
         if sender_address:
             raise HTTPException(
@@ -531,6 +551,32 @@ async def send_google_email_with_thread(
         message_id=str(payload["id"]),
         thread_id=str(payload["threadId"]),
     )
+
+
+async def prepare_google_sender(session: AsyncSession, context: AuthContext) -> str | None:
+    try:
+        integration, _ = await _google_access_token(session, context)
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
+        raise HTTPException(503, "Google Workspace could not prepare the email") from exc
+    return integration.email
+
+
+async def find_sent_reference(
+    session: AsyncSession, context: AuthContext, reference: str
+) -> str | None:
+    """Only search the original sender's Sent folder for the reserved Message-ID."""
+    _, token = await _google_access_token(session, context)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"labelIds": "SENT", "q": "rfc822msgid:" + reference, "maxResults": 2},
+        )
+        response.raise_for_status()
+    matches = response.json().get("messages", [])
+    if len(matches) == 1 and isinstance(matches[0].get("id"), str):
+        return str(matches[0]["id"])
+    return None
 
 
 def _gmail_pdf_parts(payload: dict[str, object]) -> list[dict[str, object]]:

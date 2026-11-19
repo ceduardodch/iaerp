@@ -1,11 +1,77 @@
+import CryptoKit
 import Foundation
 import IAERPClient
+import IAERPIdentity
 import Testing
 import UIKit
 @testable import IAERP
 
 @Suite("Formulario y privacidad") @MainActor
 struct WorkspaceStateTests {
+    @Test func invoiceDetailGivesNextStepsForRealAndSimulatedStates() async {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceStore(documents: TemporaryDocuments(root: root))
+        let detail = WorkspaceInvoiceDetail(store: store, invoiceId: UUID())
+        #expect(detail.statusGuidance(for: "DRAFT")?.contains("permiso de emisión") == true)
+        #expect(detail.statusGuidance(for: "AUTHORIZED")?.contains("permiso de envío") == true)
+        #expect(detail.statusGuidance(for: "PENDING_AUTHORIZATION")?.contains("consultar el estado") == true)
+        #expect(detail.statusGuidance(for: "REJECTED")?.contains("mensaje de transmisión") == true)
+        #expect(detail.statusGuidance(for: "VOIDED") == nil)
+        await store.startDemo()
+        #expect(detail.statusGuidance(for: "DRAFT") == nil)
+        await store.startDemo(readOnly: true)
+        #expect(detail.statusGuidance(for: "DRAFT")?.contains("sólo permite consultar") == true)
+    }
+
+    @Test func productionInvoiceActionsFollowFiscalAndEmailState() {
+        func step(_ status: String, environment: String = "PRODUCTION", email: String = "NOT_SENT",
+                  receipt: Bool = false, pending: InvoiceTestAction? = nil,
+                  canIssue: Bool = true, canEmail: Bool = true) -> ProductionDeliveryStep {
+            .resolve(environment: environment, document: status, email: email, hasReceipt: receipt,
+                     pending: pending, canIssue: canIssue, canEmail: canEmail)
+        }
+        #expect(step("DRAFT") == .issue)
+        #expect(step("DRAFT", environment: "TEST") != .issue)
+        #expect(step("DRAFT", environment: "UNCONFIGURED") != .issue)
+        #expect(step("DRAFT", canIssue: false) != .issue)
+        #expect(step("PENDING_AUTHORIZATION") == .waitingForSRI)
+        #expect(step("READY") == .waitingForSRI)
+        #expect(step("REJECTED") != .email)
+        #expect(step("HISTORICAL_ISSUED") != .email)
+        #expect(step("AUTHORIZED") == .email)
+        #expect(step("AUTHORIZED", canEmail: false) != .email)
+        #expect(step("AUTHORIZED", email: "PENDING") == .waitingForEmail)
+        #expect(step("AUTHORIZED", email: "SENT") == .waitingForEmail)
+        #expect(step("AUTHORIZED", email: "SENT", receipt: true) == .receipt)
+        #expect(step("AUTHORIZED", email: "UNKNOWN") != .email)
+    }
+
+    @Test func conflictingProductionEmailStaysReadOnlyAfterReopening() throws {
+        final class Vault: InvoiceRecoveryVault {
+            var data: Data?
+            func read() throws -> Data? { data }
+            func write(_ data: Data) throws { self.data = data }
+        }
+        let vault = Vault()
+        let journal = InvoiceTestAttemptJournal(vault: vault)
+        let invoice = UUID()
+        let config = try IdentityConfiguration(apiBaseURL: #require(URL(string: "https://api.example.invalid/api/v1")),
+            issuerURL: #require(URL(string: "https://auth.example.invalid/realms/test")),
+            clientID: "iaerp-ios", organizationAlias: "prueba")
+        let scope = InvoiceRecoveryScope(profileID: UUID(), configuration: config, subject: "demo",
+                                         organizationID: "prueba", tenantID: UUID())
+        _ = try journal.begin(.email, invoiceID: invoice, scope: scope, recipient: "digest-original")
+        try journal.markForReconciliation(.email, invoiceID: invoice, scope: scope)
+        let reopened = InvoiceTestAttemptJournal(vault: vault)
+        #expect(try reopened.needsReconciliation(invoiceID: invoice, scope: scope))
+        #expect(throws: InvoiceRecoveryError.reconciliationRequired) {
+            try reopened.retryKey(.email, invoiceID: invoice, scope: scope, recipient: "digest-original")
+        }
+        try reopened.finish(.email, invoiceID: invoice, scope: scope)
+        #expect(try !reopened.needsReconciliation(invoiceID: invoice, scope: scope))
+    }
+
     @Test(arguments: ["1,25", "1.25", "0", "999999.123456"])
     func decimalEntryIsExact(_ text: String) {
         #expect(DecimalEntry.parse(text) == Decimal(string: text.replacingOccurrences(of: ",", with: ".")))
@@ -119,5 +185,43 @@ struct WorkspaceStateTests {
         }
         PrivacyShield.update(visible: false)
         #expect(windows.allSatisfy { $0.viewWithTag(PrivacyShield.tag) == nil })
+    }
+}
+
+extension WorkspaceStateTests {
+    @Test func onlyThisTrialsRejectionIsDisplayed() throws {
+        let selectionFile = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: selectionFile) }
+        let selection = Data("synthetic selection".utf8)
+        let digest = SHA256.hash(data: selection).map { String(format: "%02x", $0) }.joined()
+        let data = try JSONEncoder().encode(["selectionSHA256": digest, "reason": "customerOutsideTrial"])
+        try selection.write(to: selectionFile)
+        #expect(try PreparedBTOBTrial.read(data, matching: "other", selectionFile: selectionFile) == nil)
+        #expect(try Data(contentsOf: selectionFile) == selection)
+        for newerSelection in [true, false] {
+            try (newerSelection ? Data("another selection".utf8) : selection).write(to: selectionFile)
+            do {
+                _ = try PreparedBTOBTrial.read(data, matching: digest, selectionFile: selectionFile)
+                Issue.record("El cliente fuera del ensayo requiere un mensaje")
+            } catch let error as ERPClientError {
+                #expect(error.localizedDescription.contains("cliente"))
+                #expect(FileManager.default.fileExists(atPath: selectionFile.path) == newerSelection)
+            }
+        }
+    }
+
+    @Test func connectionFieldsIdentifyTheCorrection() throws {
+        func config(_ alias: String, _ host: String) throws {
+            _ = try IAERPConnection.formConfiguration(api: "https://api.example.org", issuer: "https://login.example.org", client: "iaerp-ios", alias: alias, documentHost: host)
+        }
+        for (alias, host, field) in [("", "", "alias"), ("@", "", "Alias"), ("valid", "https://example.org", "Servidor de documentos")] {
+            do {
+                try config(alias, host)
+                Issue.record("Debía señalar el campo")
+            } catch {
+                #expect(error.localizedDescription.contains(field))
+            }
+        }
+        try config("valid", "")
     }
 }

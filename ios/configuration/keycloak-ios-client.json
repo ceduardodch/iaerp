@@ -1,7 +1,7 @@
 {
   "clientId": "iaerp-ios",
-  "name": "IAERP iOS pilot",
-  "description": "Disabled proposal. Enable only after tenant-scoped write permissions pass owner/reader tests across two organizations.",
+  "name": "IAERP iOS",
+  "description": "Cliente nativo. Habilitar después de verificar la API y el worker con los permisos aprobados.",
   "enabled": false,
   "protocol": "openid-connect",
   "publicClient": true,
@@ -30,6 +30,8 @@
     "products:create",
     "invoices:read",
     "invoices:write",
+    "invoices:issue",
+    "invoices:email",
     "receivables:read"
   ],
   "optionalClientScopes": [

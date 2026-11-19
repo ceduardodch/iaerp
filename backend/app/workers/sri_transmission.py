@@ -49,17 +49,18 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.db.session import SessionFactory
 from app.integrations.sri.protocol import (
     AuthorizationResult,
     ReceptionResult,
     SRIClient,
 )
 from app.integrations.sri.simulator import SimulatorSRIClient
-from app.integrations.sri.soap import SoapSRIClient
+from app.integrations.sri.soap import SoapSRIClient, production_endpoints
 from app.models.billing import DocumentArtifact, SalesDocument, SalesDocumentLine, SRITransmission
 from app.models.masters import EmissionPoint, Establishment, Party
 from app.models.platform import DeadLetter, OutboxEvent, Tenant
@@ -195,12 +196,8 @@ async def _create_authorized_ride_version(
         emission_point=emission_point,
         tenant_ruc=tenant.ruc,
         tenant_legal_name=tenant.name,
-        electronic_invoicing_provider_name=(
-            runtime_settings.ELECTRONIC_INVOICING_PROVIDER_NAME
-        ),
-        electronic_invoicing_provider_ruc=(
-            runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
-        ),
+        electronic_invoicing_provider_name=(runtime_settings.ELECTRONIC_INVOICING_PROVIDER_NAME),
+        electronic_invoicing_provider_ruc=(runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC),
         buyer=buyer,
         environment_code=document.access_key[23],
         logo_bytes=await fiscal_settings.load_ride_logo(session, tenant_id),
@@ -349,6 +346,21 @@ async def _followup_or_dead_letter(
         session, tenant_id=message.tenant_id, document_id=document.id
     )
     if attempts >= settings.OUTBOX_MAX_ATTEMPTS:
+        if message.payload.get("native_confirmed") and document.access_key:
+            transmission = await _latest_transmission_for_access_key(
+                session, tenant_id=message.tenant_id, access_key=document.access_key
+            )
+            if transmission is not None:
+                transmission.messages = [
+                    *transmission.messages,
+                    {
+                        "code": "MANUAL_RECONCILIATION",
+                        "message": (
+                            "Solicita a soporte que consulte la autorización por la "
+                            "clave de acceso de esta factura."
+                        ),
+                    },
+                ]
         await _dead_letter(
             session,
             message=message,
@@ -547,6 +559,24 @@ async def _apply_authorization_result(
     await session.flush()
 
 
+async def _claim_native_reception(row: SRITransmission) -> bool:
+    # Commit independently of the worker inbox. A lost SOAP response or worker crash
+    # leaves only authorization lookups eligible for this key.
+    async with SessionFactory() as claim, claim.begin():
+        identifier = await claim.scalar(
+            update(SRITransmission)
+            .where(
+                SRITransmission.id == row.id,
+                SRITransmission.tenant_id == row.tenant_id,
+                SRITransmission.access_key == row.access_key,
+                SRITransmission.status == "PENDING",
+            )
+            .values(status="PENDING_AUTHORIZATION")
+            .returning(SRITransmission.id)
+        )
+        return identifier is not None
+
+
 async def handle_invoice_signed(
     session: AsyncSession,
     message: OutboxMessage,
@@ -564,7 +594,9 @@ async def handle_invoice_signed(
     tenant_id = message.tenant_id
     document_id = uuid.UUID(message.aggregate_id)
 
-    document = await session.get(SalesDocument, document_id)
+    native = message.payload.get("native_confirmed") is True
+    # Concurrent redeliveries must not apply stale authorization or publish it twice.
+    document = await session.get(SalesDocument, document_id, with_for_update=native)
     if document is None or document.tenant_id != tenant_id:
         # El documento no existe o no pertenece a este tenant: nada que
         # transmitir. No es un fallo tecnico, no se reintenta.
@@ -579,35 +611,51 @@ async def handle_invoice_signed(
         existing = await _latest_transmission_for_access_key(
             session, tenant_id=tenant_id, access_key=document.access_key
         )
-        if existing is not None and existing.status in _ALREADY_TRANSMITTED_STATUSES:
-            # Regla E4-05: reconciliar, nunca retransmitir una clave ya
-            # aceptada por el SRI/simulador.
-            authorization = await client.check_authorization(document.access_key)
-            await _apply_authorization_result(
-                session,
-                tenant_id=tenant_id,
-                document=document,
-                result=authorization,
-            )
-        else:
-            signed_xml = await _load_signed_xml(
-                session, tenant_id=tenant_id, document_id=document.id
-            )
+        signed_xml: bytes | None = None
+        reconcile = existing is not None and existing.status in _ALREADY_TRANSMITTED_STATUSES
+        if native:
+            if (
+                settings.SRI_TRANSMISSION_MODE != "soap"
+                or not production_endpoints(
+                    settings.SRI_RECEPTION_URL, settings.SRI_AUTHORIZATION_URL
+                )
+                or settings.SRI_ENVIRONMENT != "2"
+                or settings.APP_ENV not in {"release", "production"}
+                or document.access_key[23:24] != "2"
+            ):
+                raise ValueError("Native production transmission environment mismatch")
+            if existing is None:
+                raise ValueError("Missing native transmission reservation")
+            if document.status in {"AUTHORIZED", "NOT_AUTHORIZED", "REJECTED", "VOIDED"}:
+                return
+            if existing.status == "PENDING":
+                signed_xml = await _load_signed_xml(
+                    session, tenant_id=tenant_id, document_id=document.id
+                )
+                reconcile = not await _claim_native_reception(existing)
+            else:
+                reconcile = True
+        if not reconcile:
+            if signed_xml is None:
+                signed_xml = await _load_signed_xml(
+                    session, tenant_id=tenant_id, document_id=document.id
+                )
             reception = await client.send_reception(signed_xml, document.access_key)
             await _apply_reception_result(
-                session,
-                tenant_id=tenant_id,
-                document=document,
-                result=reception,
+                session, tenant_id=tenant_id, document=document, result=reception
             )
-            if reception.status == "RECEIVED":
-                authorization = await client.check_authorization(document.access_key)
-                await _apply_authorization_result(
-                    session,
-                    tenant_id=tenant_id,
-                    document=document,
-                    result=authorization,
-                )
+            if reception.status != "RECEIVED":
+                return
+        authorization = await client.check_authorization(document.access_key)
+        if (
+            native
+            and authorization.status == "AUTHORIZED"
+            and authorization.authorization_number != document.access_key
+        ):
+            raise ValueError("SRI authorization does not match the confirmed invoice")
+        await _apply_authorization_result(
+            session, tenant_id=tenant_id, document=document, result=authorization
+        )
     except Exception as exc:  # noqa: BLE001 - fallo tecnico, se reprograma explicitamente
         await _followup_or_dead_letter(
             session,

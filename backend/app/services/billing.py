@@ -10,6 +10,7 @@ dispara la transmision SRI (``workers/sri_transmission.py``).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -118,7 +119,7 @@ INVOICE_SIGNED_EVENT = "invoice.signed"
 
 
 @dataclass(frozen=True)
-class _InvoiceEmailDelivery:
+class InvoiceEmailDelivery:
     recipient: str | None
     sender_address: str | None
     sender_name: str | None
@@ -127,6 +128,7 @@ class _InvoiceEmailDelivery:
     attachment_names: list[str]
     artifacts: dict[str, DocumentArtifact]
     report_object_key: str | None
+    report_sha256: str | None
     due_date: date
     payment_terms_days: int
 
@@ -1488,12 +1490,8 @@ async def issue_document(
         emission_point=emission_point,
         tenant_ruc=tenant.ruc,
         tenant_legal_name=tenant.name,
-        electronic_invoicing_provider_name=(
-            runtime_settings.ELECTRONIC_INVOICING_PROVIDER_NAME
-        ),
-        electronic_invoicing_provider_ruc=(
-            runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC
-        ),
+        electronic_invoicing_provider_name=(runtime_settings.ELECTRONIC_INVOICING_PROVIDER_NAME),
+        electronic_invoicing_provider_ruc=(runtime_settings.ELECTRONIC_INVOICING_PROVIDER_RUC),
         buyer=party,
         environment_code=fiscal.sri_environment,
         logo_bytes=await fiscal_settings.load_ride_logo(session, context.tenant_id),
@@ -1627,15 +1625,9 @@ async def create_artifact_download(
     )
 
 
-async def send_invoice_email(
-    session: AsyncSession,
-    context: AuthContext,
-    document_id: uuid.UUID,
-    *,
-    recipient: str,
-) -> InvoiceEmailRead:
-    """Envía una factura autorizada con su XML y RIDE por acción humana."""
-    delivery = await _prepare_invoice_email(session, context, document_id)
+async def load_invoice_attachments(
+    delivery: InvoiceEmailDelivery, *, verify: bool = False
+) -> list[tuple[str, str, bytes]]:
     xml_data, ride_data = await asyncio.gather(
         storage.download_artifact(object_key=delivery.artifacts["xml-signed"].object_key),
         storage.download_artifact(object_key=delivery.artifacts["ride-pdf"].object_key),
@@ -1647,6 +1639,27 @@ async def send_invoice_email(
     if delivery.report_object_key is not None:
         report_data = await storage.download_artifact(object_key=delivery.report_object_key)
         attachments.append((delivery.attachment_names[2], "application/pdf", report_data))
+    if verify:
+        hashes = [delivery.artifacts[k].sha256 for k in ("xml-signed", "ride-pdf")]
+        if delivery.report_object_key:
+            hashes.append(delivery.report_sha256 or "")
+        if any(
+            hashlib.sha256(data).hexdigest() != digest
+            for (_, _, data), digest in zip(attachments, hashes, strict=True)
+        ):
+            raise HTTPException(409, "invoice_email_attachment_changed")
+    return attachments
+
+
+async def send_prepared_invoice(
+    session: AsyncSession,
+    context: AuthContext,
+    delivery: InvoiceEmailDelivery,
+    recipient: str,
+    attachments: list[tuple[str, str, bytes]],
+    *,
+    provider_reference: str | None = None,
+) -> InvoiceEmailRead:
     message_id = await crm_integrations.send_google_email(
         session,
         context,
@@ -1657,6 +1670,7 @@ async def send_invoice_email(
         sender_address=delivery.sender_address,
         sender_name=delivery.sender_name,
         reply_to=delivery.sender_address,
+        **({"provider_reference": provider_reference} if provider_reference else {}),
     )
     return InvoiceEmailRead(
         message_id=message_id,
@@ -1673,7 +1687,11 @@ async def preview_invoice_email(
     document_id: uuid.UUID,
 ) -> InvoiceEmailPreviewRead:
     """Muestra exactamente el correo fiscal antes de la confirmación humana."""
-    delivery = await _prepare_invoice_email(session, context, document_id)
+    delivery = await prepare_invoice_email(session, context, document_id)
+    return email_preview(delivery)
+
+
+def email_preview(delivery: InvoiceEmailDelivery) -> InvoiceEmailPreviewRead:
     return InvoiceEmailPreviewRead(
         recipient=delivery.recipient,
         sender_address=delivery.sender_address,
@@ -1686,11 +1704,11 @@ async def preview_invoice_email(
     )
 
 
-async def _prepare_invoice_email(
+async def prepare_invoice_email(
     session: AsyncSession,
     context: AuthContext,
     document_id: uuid.UUID,
-) -> _InvoiceEmailDelivery:
+) -> InvoiceEmailDelivery:
     document = await get_sales_document(session, context, document_id)
     if document.document_type != "INVOICE" or document.status != "AUTHORIZED":
         raise HTTPException(status_code=422, detail="Only authorized invoices can be emailed")
@@ -1767,7 +1785,7 @@ async def _prepare_invoice_email(
             value = value.replace(variable, replacement)
         return value
 
-    return _InvoiceEmailDelivery(
+    return InvoiceEmailDelivery(
         recipient=party.email,
         sender_address=template.invoice_email_from_address,
         sender_name=template.invoice_email_from_name,
@@ -1776,6 +1794,7 @@ async def _prepare_invoice_email(
         attachment_names=attachment_names,
         artifacts=latest,
         report_object_key=report_object_key,
+        report_sha256=proposal.report_sha256 if proposal else None,
         due_date=due_date,
         payment_terms_days=payment_terms_days,
     )

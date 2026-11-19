@@ -77,9 +77,9 @@ class ConfigureNativeClientTests(unittest.TestCase):
         scopes = [{"id": name, "name": name} for name in sorted(names)]
 
         if mode == "customer-scope-absent":
-            scopes[:] = [scope for scope in scopes if scope["name"] not in {"customers:create", "products:create"}]
+            scopes[:] = [scope for scope in scopes if scope["name"] not in {"customers:create", "products:create", "invoices:issue", "invoices:email"}]
         for scope in scopes:
-            if scope["name"] in {"customers:create", "products:create"}:
+            if scope["name"] in {"customers:create", "products:create", "invoices:issue", "invoices:email"}:
                 scope.update(protocol="openid-connect", attributes={"include.in.token.scope": "true"})
                 if mode == "invalid-customer-scope":
                     scope["protocolMappers"] = [{"name": "unexpected"}]
@@ -97,7 +97,7 @@ class ConfigureNativeClientTests(unittest.TestCase):
             if path == "/client-scopes":
                 if verb == "POST":
                     data = json.loads(request.content)
-                    self.assertIn(data["name"], {"customers:create", "products:create"})
+                    self.assertIn(data["name"], {"customers:create", "products:create", "invoices:issue", "invoices:email"})
                     self.assertEqual(data, {"name": data["name"], "protocol": "openid-connect",
                                             "attributes": {"include.in.token.scope": "true"}})
                     scopes.append({**data, "id": data["name"]})

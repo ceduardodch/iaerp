@@ -56,8 +56,7 @@ public struct IdentityConfiguration: Codable, Equatable, Sendable {
             throw IdentityError.invalidOrganization
         }
         guard Self.isHTTPSResource(apiBaseURL), Self.isHTTPSResource(issuerURL),
-              !clientID.isEmpty, clientID.count <= 200,
-              clientID.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
+              Self.isValidClientID(clientID),
               !apiAudience.isEmpty, apiAudience.count <= 200,
               redirectURL.absoluteString == "ec.com.b2b.iaerp:/oauth2redirect"
         else { throw IdentityError.invalidConfiguration }
@@ -98,7 +97,11 @@ public struct IdentityConfiguration: Codable, Equatable, Sendable {
             && url.user == nil && url.password == nil && url.query == nil && url.fragment == nil
     }
 
-    private static func isDocumentHost(_ host: String) -> Bool {
+    public static func isValidClientID(_ value: String) -> Bool {
+        !value.isEmpty && value.count <= 200 && value.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
+    }
+
+    public static func isDocumentHost(_ host: String) -> Bool {
         guard !host.isEmpty, host.utf8.count <= 253 else { return false }
         return host.split(separator: ".", omittingEmptySubsequences: false).allSatisfy { label in
             !label.isEmpty && label.utf8.count <= 63

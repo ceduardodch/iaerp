@@ -35,7 +35,18 @@ def require_catalog_creator(
 
 
 async def check_catalog_membership(session: AsyncSession, context: AuthContext) -> None:
-    # The UoW can wait on another tenant writer. Recheck before inserting into the catalog.
+    await check_billing_membership(
+        session, context, denied="Catalog creation permission is no longer active"
+    )
+
+
+async def check_billing_membership(
+    session: AsyncSession,
+    context: AuthContext,
+    *,
+    denied: str = "Invoice permission is no longer active",
+) -> None:
+    # Membership can change while waiting for another tenant writer.
     roles = await session.scalar(
         select(Membership.roles)
         .join(User, User.id == Membership.user_id)
@@ -50,4 +61,4 @@ async def check_catalog_membership(session: AsyncSession, context: AuthContext) 
         .with_for_update()
     )
     if not roles or IOS_INVOICE_WRITER_ROLES.isdisjoint(roles):
-        raise HTTPException(403, "Catalog creation permission is no longer active")
+        raise HTTPException(403, denied)
