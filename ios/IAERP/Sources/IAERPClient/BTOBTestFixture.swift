@@ -133,6 +133,9 @@ struct BTOBTestFixture {
         } else {
             customer = ERPParty(id: DemoCompany.uuid(2_101), name: buyer, identificationType: "RUC",
                                 identificationNumber: identification, email: "cliente@example.invalid")
+            // The synthetic catalog label identifies the service family. The invoice
+            // retains its issued line description and the original web documents.
+            catalogName = "AWS · " + line.description
             productID = DemoCompany.uuid(2_201)
         }
         ledgerIdentifier = (isPrivate ? "import-" : "bundle-") + fingerprint.finalize().map { String(format: "%02x", $0) }.joined()

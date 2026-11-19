@@ -348,4 +348,15 @@ build. Los skills ayudan a escribir y revisar código; no sustituyen estas fuent
 | IOS-032 · Alta de cliente | Buscar RUC o cédula en la empresa, recuperar coincidencias y volver con el cliente seleccionado y las líneas intactas. |
 | IOS-033 · Alta de producto | Guardar código, nombre, precio sin IVA y categoría vigente. Usarlo en la misma factura. Un segundo intento con el mismo código recupera el registro. |
 | IOS-034 · Emisión y entrega de prueba | Revisar y confirmar USD 0,05 con el IVA de un servicio AWS del catálogo seleccionado en el iPhone. Abrir el RIDE y el XML de la web y verificar un solo correo en el buzón de captura. |
+| Mensajes de validación | Mostrar el campo que falta, cómo completarlo y cuándo se habilita la acción. Comprobar cliente, producto, tarifa, líneas, acceso y confirmación de guardado. |
+| Estado tras guardar | Identificar el borrador, explicar dónde se emite en producción y distinguir el ensayo de USD 0,05 de la factura real. |
 | Aceptación física | Verificar en el iPhone el catálogo real de BTOB-SAS, la autorización simulada y los dos adjuntos. Registrar sólo resultados y datos sintéticos en el repositorio. |
+
+### Prueba en el iPhone de BTOB-SAS
+
+1. Con el iPhone conectado al Mac, entrar a BTOB-SAS. En **Clientes → +**, buscar el RUC. Si aparece una coincidencia, pulsar **Usar este cliente**. Si es nuevo, completar los datos y pulsar **Guardar**. Este paso usa el catálogo real.
+2. En la ficha del cliente, pulsar **Preparar factura de prueba**, buscar **AWS**, elegir un servicio del catálogo y pulsar **Continuar en pruebas**. Comprobar que el total con IVA es **USD 0,05**.
+3. Pulsar **Emitir en pruebas** y confirmar. Cuando el simulador autorice el comprobante, abrir el RIDE y el XML y cotejar el total.
+4. Pulsar **Enviar por correo**, revisar los dos adjuntos y elegir **Enviar al buzón de pruebas**. El criterio de aceptación es un único mensaje capturado con los dos archivos.
+
+Para crear un artículo mientras se prepara otra factura, abrir el selector de productos y pulsar **+**. Al guardar, el producto debe quedar seleccionado en el mismo borrador.

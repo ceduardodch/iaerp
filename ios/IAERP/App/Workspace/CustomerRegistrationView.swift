@@ -21,8 +21,23 @@ struct CustomerRegistrationView: View {
 
     private enum Field { case number, name, address, email }
     private var api: (any ERPCustomerRegistrationService)? { store.service as? any ERPCustomerRegistrationService }
-    private var validNumber: Bool {
-        number.utf8.count == (type == "RUC" ? 13 : 10) && number.utf8.allSatisfy { (48...57).contains($0) }
+    private var lookupGuidance: String? {
+        let digits = type == "RUC" ? 13 : 10
+        guard number.utf8.count == digits, number.utf8.allSatisfy({ (48...57).contains($0) }) else {
+            return type == "RUC" ? "Escribe los 13 dígitos del RUC para buscar." : "Escribe los 10 dígitos de la cédula para buscar."
+        }
+        return nil
+    }
+    private var input: ERPCustomerRegistrationInput {
+        ERPCustomerRegistrationInput(identificationType: type, identificationNumber: number,
+                                     name: name, address: address, email: email)
+    }
+    private var saveGuidance: String? {
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Escribe el nombre o la razón social para guardar el cliente."
+        }
+        do { _ = try input.validated(); return nil }
+        catch { return friendlyError(error) }
     }
 
     var body: some View {
@@ -57,9 +72,13 @@ struct CustomerRegistrationView: View {
                             .keyboardType(.numberPad).focused($focus, equals: .number)
                             .accessibilityIdentifier("customer-id-number")
                         Button("Buscar identificación") { Task { await lookup() } }
-                            .disabled(!validNumber)
+                            .disabled(lookupGuidance != nil)
                             .accessibilityIdentifier("customer-lookup")
-                    } header: { Text("Identificación") }
+                    } header: { Text("Identificación") } footer: {
+                        if let lookupGuidance {
+                            Text(verbatim: lookupGuidance).accessibilityIdentifier("customer-lookup-guidance")
+                        }
+                    }
                 }
                 if let existing {
                     Section {
@@ -77,9 +96,13 @@ struct CustomerRegistrationView: View {
                             .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
                             .focused($focus, equals: .email)
                         Button("Guardar cliente") { Task { await save(retrying: false) } }
-                            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .disabled(saveGuidance != nil)
                             .accessibilityIdentifier("customer-save")
-                    } header: { Text("Datos del nuevo cliente") }
+                    } header: { Text("Datos del nuevo cliente") } footer: {
+                        if let saveGuidance {
+                            Text(verbatim: saveGuidance).accessibilityIdentifier("customer-save-guidance")
+                        }
+                    }
                 }
                 if loading { ProgressView("Consultando IAERP…") }
                 if let message {
@@ -197,9 +220,7 @@ struct CustomerRegistrationView: View {
                 guard epoch == store.generation, !Task.isCancelled else { return }
                 attempt = original
             } else {
-                let input = try ERPCustomerRegistrationInput(identificationType: type, identificationNumber: number,
-                                                            name: name, address: address, email: email).validated()
-                attempt = try journal.begin(input, scope: scope, persist: persist)
+                attempt = try journal.begin(input.validated(), scope: scope, persist: persist)
             }
             attempted = attempt
             pending = attempt
@@ -238,7 +259,7 @@ struct CustomerTestProductPicker: View {
     let store: WorkspaceStore
     let customer: ERPParty
     @State private var query = ""
-    @State private var selected: ERPProduct?
+    @State private var selectedID: UUID?
     @State private var prepareTask: Task<Void, Never>?
     @State private var prepareGeneration: UUID?
     @State private var preparing = false
@@ -251,7 +272,20 @@ struct CustomerTestProductPicker: View {
     }
 
     var body: some View {
-        List {
+        ScrollViewReader { proxy in
+            productList.onChange(of: selectedID) { _, id in
+                if id != nil {
+                    proxy.scrollTo("trial-continue", anchor: .bottom)
+                }
+            }
+        }
+    }
+
+    private var productList: some View {
+        let selected = store.products.first { $0.id == selectedID }
+        let selectedTax = selected.flatMap { tax(for: $0) }
+        let productIssue = selected.flatMap { BTOBTrialSelection.productGuidance(for: $0) }
+        return List {
             Section {
                 Text(verbatim: customer.name).font(.headline)
                 Text(verbatim: customer.identificationNumber)
@@ -267,14 +301,17 @@ struct CustomerTestProductPicker: View {
                     Text("Sin productos para esta búsqueda.")
                 }
                 ForEach(store.products) { product in
+                    let productGuidance = BTOBTrialSelection.productGuidance(for: product)
                     Button {
-                        selected = product
+                        selectedID = product.id
                         error = nil
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(verbatim: product.name).font(.headline)
                             Text(verbatim: product.code ?? "")
-                            if let rate = tax(for: product)?.rate {
+                            if let productGuidance {
+                                Text(verbatim: productGuidance)
+                            } else if let rate = tax(for: product)?.rate {
                                 Text("\(ERPDisplay.money(product.unitPrice)) · IVA \(ERPDisplay.decimal(rate)) %")
                             } else {
                                 Text(store.setup == nil ? "Tarifa pendiente de cargar" : "IVA sin vigencia para hoy")
@@ -283,33 +320,42 @@ struct CustomerTestProductPicker: View {
                         .foregroundStyle(.primary)
                         .frame(minHeight: 44, alignment: .leading)
                     }
-                    .disabled(tax(for: product) == nil)
-                    .accessibilityAddTraits(selected?.id == product.id ? .isSelected : [])
+                    .disabled(productGuidance != nil || tax(for: product) == nil)
+                    .accessibilityAddTraits(selectedID == product.id ? .isSelected : [])
                     .accessibilityIdentifier("test-product-\(product.id.uuidString)")
                 }
             } header: { Text("Productos") }
-            if let selected, let tax = tax(for: selected) {
-                Section {
+            Section {
+                if let selected, let tax = selectedTax {
                     ERPDetailRow(title: "Producto", value: selected.name)
                     ERPDetailRow(title: "Precio de catálogo", value: ERPDisplay.money(selected.unitPrice))
                     ERPDetailRow(title: "Total de prueba con IVA", value: ERPDisplay.money(Decimal(string: "0.05")!))
                     ERPDetailRow(title: "IVA", value: "\(ERPDisplay.decimal(tax.rate)) %")
-                    Button("Continuar en pruebas") {
-                        guard !preparing else { return }
-                        preparing = true
-                        let epoch = store.generation
-                        prepareGeneration = epoch
-                        prepareTask = Task {
-                            defer { if epoch == store.generation { preparing = false } }
-                            do {
-                                try await store.prepareBTOBTestInvoice(customer: customer, product: selected, tax: tax)
-                            } catch {
-                                if epoch == store.generation { self.error = friendlyError(error) }
-                            }
+                }
+                Button("Continuar en pruebas") {
+                    guard !preparing, productIssue == nil, let selected, let tax = selectedTax else { return }
+                    preparing = true
+                    let epoch = store.generation
+                    prepareGeneration = epoch
+                    prepareTask = Task {
+                        defer { if epoch == store.generation { preparing = false } }
+                        do {
+                            try await store.prepareBTOBTestInvoice(customer: customer, product: selected, tax: tax)
+                        } catch {
+                            if epoch == store.generation { self.error = friendlyError(error) }
                         }
                     }
-                    .accessibilityIdentifier("confirm-test-product")
-                } header: { Text("Producto elegido") }
+                }
+                .disabled(productIssue != nil || selectedTax == nil)
+                .accessibilityIdentifier("confirm-test-product")
+                .id("trial-continue")
+            } header: { Text("Producto elegido") } footer: {
+                if let productIssue {
+                    Text(verbatim: productIssue).accessibilityIdentifier("test-product-selection-guidance")
+                } else if selectedTax == nil {
+                    Text("Busca un servicio AWS y toca un producto con IVA vigente para continuar.")
+                        .accessibilityIdentifier("test-product-selection-guidance")
+                }
             }
             if preparing { ProgressView("Preparando el comprobante en el simulador…") }
             if let error { Text(verbatim: error) }
@@ -330,7 +376,7 @@ struct CustomerTestProductPicker: View {
             NavigationStack {
                 ProductRegistrationView(store: store) { product in
                     store.rememberProduct(product)
-                    selected = product
+                    selectedID = product.id
                     error = nil
                     addingProduct = false
                 }

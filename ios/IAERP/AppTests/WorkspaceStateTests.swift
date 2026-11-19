@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import IAERPClient
 import Testing
@@ -6,6 +7,22 @@ import UIKit
 
 @Suite("Formulario y privacidad") @MainActor
 struct WorkspaceStateTests {
+    @Test func invoiceDetailGivesNextStepsForRealAndSimulatedStates() async {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceStore(documents: TemporaryDocuments(root: root))
+        let detail = WorkspaceInvoiceDetail(store: store, invoiceId: UUID())
+        #expect(detail.statusGuidance(for: "DRAFT")?.contains("IAERP web") == true)
+        #expect(detail.statusGuidance(for: "AUTHORIZED")?.contains("Preparar correo") == true)
+        #expect(detail.statusGuidance(for: "PENDING_AUTHORIZATION")?.contains("consultar el estado") == true)
+        #expect(detail.statusGuidance(for: "REJECTED")?.contains("mensaje de transmisión") == true)
+        #expect(detail.statusGuidance(for: "VOIDED") == nil)
+        await store.startDemo()
+        #expect(detail.statusGuidance(for: "DRAFT") == nil)
+        await store.startDemo(readOnly: true)
+        #expect(detail.statusGuidance(for: "DRAFT")?.contains("sólo permite consultar") == true)
+    }
+
     @Test(arguments: ["1,25", "1.25", "0", "999999.123456"])
     func decimalEntryIsExact(_ text: String) {
         #expect(DecimalEntry.parse(text) == Decimal(string: text.replacingOccurrences(of: ",", with: ".")))
@@ -119,5 +136,43 @@ struct WorkspaceStateTests {
         }
         PrivacyShield.update(visible: false)
         #expect(windows.allSatisfy { $0.viewWithTag(PrivacyShield.tag) == nil })
+    }
+}
+
+extension WorkspaceStateTests {
+    @Test func onlyThisTrialsRejectionIsDisplayed() throws {
+        let selectionFile = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: selectionFile) }
+        let selection = Data("synthetic selection".utf8)
+        let digest = SHA256.hash(data: selection).map { String(format: "%02x", $0) }.joined()
+        let data = try JSONEncoder().encode(["selectionSHA256": digest, "reason": "customerOutsideTrial"])
+        try selection.write(to: selectionFile)
+        #expect(try PreparedBTOBTrial.read(data, matching: "other", selectionFile: selectionFile) == nil)
+        #expect(try Data(contentsOf: selectionFile) == selection)
+        for newerSelection in [true, false] {
+            try (newerSelection ? Data("another selection".utf8) : selection).write(to: selectionFile)
+            do {
+                _ = try PreparedBTOBTrial.read(data, matching: digest, selectionFile: selectionFile)
+                Issue.record("El cliente fuera del ensayo requiere un mensaje")
+            } catch let error as ERPClientError {
+                #expect(error.localizedDescription.contains("cliente"))
+                #expect(FileManager.default.fileExists(atPath: selectionFile.path) == newerSelection)
+            }
+        }
+    }
+
+    @Test func connectionFieldsIdentifyTheCorrection() throws {
+        func config(_ alias: String, _ host: String) throws {
+            _ = try IAERPConnection.formConfiguration(api: "https://api.example.org", issuer: "https://login.example.org", client: "iaerp-ios", alias: alias, documentHost: host)
+        }
+        for (alias, host, field) in [("", "", "alias"), ("@", "", "Alias"), ("valid", "https://example.org", "Servidor de documentos")] {
+            do {
+                try config(alias, host)
+                Issue.record("Debía señalar el campo")
+            } catch {
+                #expect(error.localizedDescription.contains(field))
+            }
+        }
+        try config("valid", "")
     }
 }

@@ -6,6 +6,19 @@ final class LaunchUITests: XCTestCase {
     }
 
     @MainActor
+    func testProductionWelcomeOpensCompanySignIn() {
+        let app = XCUIApplication()
+        app.launch()
+        let connect = app.buttons["connect-company"]
+        XCTAssertTrue(connect.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["start-demo"].exists)
+        XCTAssertFalse(app.buttons["start-btob-test"].exists)
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[cd] %@ OR label CONTAINS[cd] %@", "demo", "prueba")).firstMatch.exists)
+        connect.tap()
+        XCTAssertTrue(app.textFields["connection-alias"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testLaunchNavigateAndReturn() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-legacy-demo"]

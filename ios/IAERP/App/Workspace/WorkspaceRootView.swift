@@ -76,9 +76,13 @@ struct WorkspaceRootView: View {
             store.findSavedSession()
             do { try await store.documents.reset(generation: store.generation) }
             catch { store.connectionError = "No se pudieron borrar los documentos temporales. Intenta de nuevo." }
-            if ProcessInfo.processInfo.arguments.contains("-workspace-demo") {
-                await store.startDemo(readOnly: ProcessInfo.processInfo.arguments.contains("-read-only"))
+            #if DEBUG && targetEnvironment(simulator)
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("-workspace-demo") {
+                await store.startDemo(readOnly: arguments.contains("-read-only"),
+                                      company: arguments.contains("-btob-sandbox") ? .btobSandbox : nil)
             }
+            #endif
         }
     }
 }
@@ -297,7 +301,6 @@ struct WelcomeView: View {
                             .font(.largeTitle).foregroundStyle(.tint)
                             .accessibilityHidden(true)
                         Text("Clientes y facturas, desde tu iPhone.").font(.title2.weight(.semibold))
-                        Text("Entra a tu empresa o recorre la app con datos de prueba.")
                     }
                     .padding(.vertical, 12)
                 } }
@@ -314,23 +317,6 @@ struct WelcomeView: View {
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("connect-company")
                         .disabled(store.connecting)
-                    Button("Probar demo", systemImage: "testtube.2") {
-                        Task { await store.startDemo(persistDelivery: !ProcessInfo.processInfo.arguments.contains("-ephemeral-demo")) }
-                    }
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("start-demo")
-                        .disabled(store.connecting)
-                    Button("BTOB-SAS · Factura de prueba de USD 0,05", systemImage: "doc.text") {
-                        Task {
-                            await store.startDemo(persistDelivery: !ProcessInfo.processInfo.arguments.contains("-ephemeral-demo"), company: .btobSandbox)
-                        }
-                    }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("start-btob-test")
-                    .disabled(store.connecting)
-                } footer: {
-                    Text("La demo usa datos ficticios. Las emisiones de prueba y los correos capturados se guardan en este iPhone.")
-                        .foregroundStyle(Color.primary)
                 }
                 if let message = store.connectionError {
                     Section {
@@ -474,7 +460,6 @@ struct ConnectionView: View {
     @State private var clientID = ""
     @State private var alias = ""
     @State private var documentHosts = ""
-    @State private var errorMessage: String?
 
     init(store: WorkspaceStore, configuration: IdentityConfiguration? = nil) {
         self.store = store
@@ -487,6 +472,10 @@ struct ConnectionView: View {
     }
 
     var body: some View {
+        let configuration = Result {
+            try IAERPConnection.formConfiguration(api: apiURL, issuer: issuerURL, client: clientID,
+                alias: alias, documentHost: documentHosts)
+        }
         NavigationStack {
             Form {
                 Section {
@@ -509,18 +498,27 @@ struct ConnectionView: View {
                     Text("Sólo el nombre HTTPS del servidor de archivos aprobado por tu empresa.")
                         .foregroundStyle(Color.primary)
                 }
-                if let message = errorMessage ?? store.connectionError {
-                    Section { Text(message).foregroundStyle(Color.primary).accessibilityIdentifier("connection-error") }
-                }
                 Section {
+                    if case .failure(let error) = configuration {
+                        Text(verbatim: friendlyError(error))
+                            .foregroundStyle(Color.primary)
+                            .accessibilityIdentifier("connection-error")
+                    } else if let message = store.connectionError {
+                        Text(message).foregroundStyle(Color.primary).accessibilityIdentifier("connection-error")
+                    }
                     Button {
-                        Task { await connect() }
+                        if case .success(let config) = configuration {
+                            Task {
+                                await store.connect(config)
+                                if store.phase == .ready { dismiss() }
+                            }
+                        }
                     } label: {
                         if store.connecting { ProgressView("Abriendo acceso seguro…") }
                         else { Label("Iniciar sesión", systemImage: "lock.open") }
                     }
                     .frame(minHeight: 44)
-                    .disabled(store.connecting)
+                    .disabled(store.connecting || (try? configuration.get()) == nil)
                     .accessibilityIdentifier("sign-in")
                 }
             }
@@ -541,24 +539,7 @@ struct ConnectionView: View {
         }
     }
 
-    private func connect() async {
-        errorMessage = nil
-        do {
-            guard let api = URL(string: apiURL.trimmingCharacters(in: .whitespacesAndNewlines)),
-                  let issuer = URL(string: issuerURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-                throw IdentityError.invalidConfiguration
-            }
-            let host = documentHosts.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard host.isEmpty || host.range(of: #"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$"#, options: .regularExpression) != nil else {
-                throw IdentityError.invalidConfiguration
-            }
-            let config = try IdentityConfiguration(apiBaseURL: api, issuerURL: issuer,
-                                                   clientID: clientID.trimmingCharacters(in: .whitespacesAndNewlines),
-                                                   organizationAlias: alias, allowedDocumentHosts: host.isEmpty ? [] : [host])
-            await store.connect(config)
-            if store.phase == .ready { dismiss() }
-        } catch { errorMessage = friendlyError(error) }
-    }
+
 }
 
 struct CompanyProfileRoute: Identifiable {

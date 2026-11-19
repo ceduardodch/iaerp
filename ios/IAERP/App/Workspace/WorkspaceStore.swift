@@ -562,6 +562,13 @@ final class WorkspaceStore {
 
 func friendlyError(_ error: any Error) -> String {
     if error is CancellationError { return "Se canceló la consulta." }
+    if let network = error as? URLError {
+        switch network.code {
+        case .notConnectedToInternet: return "El iPhone está sin conexión. Conéctalo a internet y vuelve a consultar."
+        case .timedOut, .networkConnectionLost: return "Se interrumpió la conexión. Consulta el estado antes de repetir la operación."
+        default: break
+        }
+    }
     if let known = error as? ERPClientError { return known.localizedDescription }
     if let known = error as? IdentityError { return known.localizedDescription }
     if let known = error as? SessionUnlockError { return known.localizedDescription }

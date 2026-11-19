@@ -21,6 +21,35 @@ struct ProductRegistrationView: View {
     private var taxes: [ERPTaxCategory] {
         store.setup?.taxCategories.filter { $0.isValid(on: ERPDisplay.fiscalDate(Date())) } ?? []
     }
+    private var lookupGuidance: String? {
+        if normalizedCode.isEmpty { return "Escribe el código del producto para buscar." }
+        if normalizedCode.count > 80 { return "Acorta el código a 80 caracteres como máximo." }
+        return nil
+    }
+    private func registrationInput() throws -> ERPProductRegistrationInput {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ERPClientError.invalidInput("Escribe el nombre del producto para guardarlo.")
+        }
+        guard let amount = DecimalEntry.parse(price) else {
+            throw ERPClientError.invalidInput(price.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Escribe el precio unitario sin IVA. Puedes ingresar cero."
+                : "Escribe un precio sin signo ni separador de miles, con hasta 12 enteros y 6 decimales.")
+        }
+        guard store.setup != nil else {
+            throw ERPClientError.invalidInput("Pulsa Reintentar para cargar las tarifas de IVA.")
+        }
+        guard !taxes.isEmpty else {
+            throw ERPClientError.invalidInput("Pide a un administrador que habilite una tarifa de IVA vigente para hoy.")
+        }
+        guard let taxID, taxes.contains(where: { $0.id == taxID }) else {
+            throw ERPClientError.invalidInput("Elige una tarifa de IVA vigente para guardar el producto.")
+        }
+        return try ERPProductRegistrationInput(code: normalizedCode, name: name, unitPrice: amount, taxCategoryId: taxID).validated()
+    }
+    private var saveGuidance: String? {
+        do { _ = try registrationInput(); return nil }
+        catch { return friendlyError(error) }
+    }
 
     var body: some View {
         Form {
@@ -28,15 +57,19 @@ struct ProductRegistrationView: View {
                 Text(verbatim: store.displayCompany).font(.headline)
                 Text(store.isDemo ? "El producto se guardará en el catálogo de pruebas." : "El producto se guardará en el catálogo de esta empresa.")
             }
-            Section("Código del producto") {
+            Section {
                 TextField("Código", text: $code)
                     .focused($focused, equals: .code)
                     .autocorrectionDisabled().textInputAutocapitalization(.never)
                     .accessibilityIdentifier("catalog-product-code")
                     .onChange(of: code) { checkedCode = nil; existing = nil; message = nil }
                 Button("Buscar código") { Task { await lookup() } }
-                    .disabled(normalizedCode.isEmpty || normalizedCode.count > 80)
+                    .disabled(lookupGuidance != nil)
                     .accessibilityIdentifier("catalog-product-lookup")
+            } header: { Text("Código del producto") } footer: {
+                if let lookupGuidance {
+                    Text(verbatim: lookupGuidance).accessibilityIdentifier("catalog-product-lookup-guidance")
+                }
             }
             if let existing {
                 Section("Este código ya existe") {
@@ -59,9 +92,15 @@ struct ProductRegistrationView: View {
                     if store.setup == nil { CatalogSetupRecovery(store: store) }
                     else if taxes.isEmpty { Text("No hay tarifas de IVA vigentes para hoy.") }
                 }
-                Button("Guardar") { Task { await save() } }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || DecimalEntry.parse(price) == nil || taxID == nil)
-                    .accessibilityIdentifier("catalog-product-save")
+                Section {
+                    Button("Guardar") { Task { await save() } }
+                        .disabled(saveGuidance != nil)
+                        .accessibilityIdentifier("catalog-product-save")
+                } footer: {
+                    if let saveGuidance {
+                        Text(verbatim: saveGuidance).accessibilityIdentifier("catalog-product-save-guidance")
+                    }
+                }
             }
             if busy { ProgressView("Consultando catálogo…") }
             if let message { Text(verbatim: message).accessibilityIdentifier("catalog-product-feedback") }
@@ -96,11 +135,9 @@ struct ProductRegistrationView: View {
     }
 
     private func save() async {
-        guard !busy, checkedCode == normalizedCode, let amount = DecimalEntry.parse(price),
-              let taxID, taxes.contains(where: { $0.id == taxID }),
+        guard !busy, checkedCode == normalizedCode, let input = try? registrationInput(),
               let api = store.service as? any ERPCatalogProductRegistrationService else { return }
         let epoch = store.generation
-        let input = ERPProductRegistrationInput(code: normalizedCode, name: name, unitPrice: amount, taxCategoryId: taxID)
         if lastInput != input { key = UUID().uuidString; lastInput = input }
         busy = true
         defer { busy = false }

@@ -168,6 +168,7 @@ struct WorkspaceCustomerDetail: View {
                         .accessibilityIdentifier("customer-prepare-test-invoice")
                     }
                 }
+                if !store.canStartInvoice { InvoiceRecoverySection(store: store) }
             }
         }
         .scrollEdgeEffectStyle(.hard, for: .all)
@@ -384,7 +385,7 @@ struct InvoiceRecoverySection: View {
     var body: some View {
         if let pending = store.pendingInvoiceRecovery {
             Section {
-                Text("Hay un guardado pendiente de confirmar en esta cuenta.")
+                Text("Confirma el guardado pendiente antes de crear otra factura.")
                     .fixedSize(horizontal: false, vertical: true)
                 Text(pending.attemptCount == 0 && pending.confirmedInvoiceID == nil
                      ? "Continuar intentará enviar este borrador a IAERP por primera vez."

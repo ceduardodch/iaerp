@@ -31,9 +31,8 @@ final class InvoiceTestDeliveryUITests: XCTestCase {
 
     func testCustomerDraftCanBeIssuedAndBothDocumentsSentToTestInbox() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ephemeral-demo"]
+        app.launchArguments = ["-workspace-demo"]
         app.launch()
-        tap("start-demo", in: app)
         XCTAssertTrue(app.navigationBars["Inicio"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Clientes"].tap()
         tap("workspace-client-00000000-0000-4000-8000-000000000101", in: app)
@@ -76,9 +75,9 @@ final class InvoiceTestDeliveryUITests: XCTestCase {
 
     func testPrepareFiveCentInvoiceFromSelectedCatalogCustomerAndProduct() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ephemeral-demo"]
+        app.launchArguments = ["-workspace-demo", "-btob-sandbox"]
         app.launch()
-        tap("start-btob-test", in: app)
+        XCTAssertTrue(app.navigationBars["Inicio"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Clientes"].tap()
         tap("workspace-client-00000000-0000-4000-8000-000000002101", in: app)
         tap("customer-prepare-test-invoice", in: app)
@@ -86,6 +85,9 @@ final class InvoiceTestDeliveryUITests: XCTestCase {
         tap("test-product-00000000-0000-4000-8000-000000002201", in: app)
         tap("confirm-test-product", in: app)
         XCTAssertTrue(app.navigationBars["Factura"].waitForExistence(timeout: 8))
+        let guidance = app.staticTexts["test-issue-guidance"]
+        reveal(guidance, in: app)
+        XCTAssertTrue(guidance.label.contains("simulador"))
         tap("test-issue-invoice", in: app)
         let amount = text("test-delivery-total", in: app)
         XCTAssertTrue(amount.contains("0,05") || amount.contains("0.05"))

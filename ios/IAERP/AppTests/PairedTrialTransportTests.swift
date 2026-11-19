@@ -5,6 +5,29 @@ import Testing
 
 @Suite("Transporte del simulador por cable")
 struct PairedTrialTransportTests {
+    @Test @MainActor func onlyEligibleCatalogServicesCanPrepareTheFiveCentTrial() async throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceStore(documents: TemporaryDocuments(root: root))
+        await store.startDemo(company: .btobSandbox)
+        let customer = try #require(store.customers.first)
+        let item = try #require(store.products.first)
+        let tax = try #require(store.setup?.taxCategories.first { $0.id == item.taxCategoryId })
+        func product(_ name: String, _ code: String?) -> ERPProduct {
+            ERPProduct(id: UUID(), name: name, code: code, unitPrice: 1, taxCategoryId: tax.id)
+        }
+        #expect(BTOBTrialSelection.productGuidance(for: product("Servicio sintético", "it-aWs-42")) == nil)
+        #expect(BTOBTrialSelection.productGuidance(for: product("AMAZON WEB SERVICES", "TEST")) == nil)
+        #expect(BTOBTrialSelection.productGuidance(for: product("AWS", nil)) != nil)
+        let other = product("Suscripción de ejemplo", "TEST-PAWS")
+        store.rememberProduct(other)
+        let guidance = try #require(BTOBTrialSelection.productGuidance(for: other))
+        await #expect(throws: ERPClientError.invalidInput(guidance)) {
+            try await store.prepareBTOBTestInvoice(customer: customer, product: other, tax: tax)
+        }
+        #expect(store.preparedTrialInvoiceID == nil)
+    }
+
     @Test func transportRestrictsWritesToSelectedInvoiceAndTestActions() {
         let target = UUID()
         let transport = PairedTrialTransport(directory: URL.temporaryDirectory, selectionSHA256: "test", invoiceID: target)

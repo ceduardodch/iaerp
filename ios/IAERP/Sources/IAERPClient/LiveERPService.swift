@@ -205,6 +205,41 @@ public struct LiveERPService: ERPService, ERPInvoiceDraftLookup, ERPSalesOvervie
     private static func isSecureURL(_ url: URL) -> Bool {
         url.scheme?.lowercased() == "https" && url.host != nil && url.user == nil && url.password == nil && (url.port == nil || url.port == 443)
     }
+    // Use known field locations only. Error bodies can contain submitted values.
+    private static func validationMessage(in data: Data) -> String {
+        let fallback = "IAERP rechazó los datos. Revisa los campos del formulario antes de volver a enviarlo."
+        guard data.count <= 65_536,
+              let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let details = body["detail"] as? [[String: Any]] else { return fallback }
+        for detail in details {
+            guard let path = detail["loc"] as? [Any], path.first as? String == "body",
+                  let key = path.last as? String else { continue }
+            let action: String
+            switch key {
+            case "customerId", "customer_id": action = "Vuelve a elegir un cliente de esta empresa."
+            case "establishmentId", "establishment_id": action = "Elige un establecimiento activo."
+            case "emissionPointId", "emission_point_id": action = "Elige un punto de emisión del establecimiento."
+            case "issueDate", "issue_date": action = "Revisa la fecha de emisión."
+            case "lines": action = "Añade al menos un producto o servicio."
+            case "quantity": action = "Escribe una cantidad mayor que cero."
+            case "unitPrice", "unit_price": action = "Revisa el precio sin IVA y sus decimales."
+            case "discount": action = "Revisa el importe del descuento."
+            case "description": action = "Revisa la descripción del producto o servicio."
+            case "taxCode", "tax_code", "taxCategoryId", "tax_category_id": action = "Elige una tarifa de IVA vigente."
+            case "identificationNumber", "identification_number": action = "Revisa el número de identificación del cliente."
+            case "name": action = "Revisa el nombre antes de guardar."
+            case "email": action = "Revisa la dirección de correo."
+            case "code": action = "Revisa el código del producto."
+            default: continue
+            }
+            if path.count == 4, path[1] as? String == "lines", let index = path[2] as? Int, (0..<100).contains(index) {
+                return "Línea \(index + 1). " + action
+            }
+            return action
+        }
+        return fallback
+    }
+
     private static func requireSuccess(_ response: ERPHTTPResponse) throws {
         switch response.statusCode {
         case 200..<300: return
@@ -213,7 +248,7 @@ public struct LiveERPService: ERPService, ERPInvoiceDraftLookup, ERPSalesOvervie
         case 404: throw ERPClientError.notFound
         case 409: throw ERPClientError.idempotencyConflict
         case 429: throw ERPClientError.rateLimited(retryAfter: response.headers["retry-after"].flatMap(Int.init))
-        case 400, 422: throw ERPClientError.invalidInput("Revisa los datos del formulario.")
+        case 400, 422: throw ERPClientError.invalidInput(validationMessage(in: response.data))
         default: throw ERPClientError.server(response.statusCode)
         }
     }
@@ -337,13 +372,25 @@ public enum ERPInputValidation {
         return formatter.string(from: date) == text
     }
     public static func validate(_ input: ERPPreviewInput) throws {
-        guard isFiscalDate(input.issueDate), !input.lines.isEmpty, input.lines.count <= 100 else { throw ERPClientError.invalidInput("Elige una fecha válida y al menos una línea.") }
-        for line in input.lines {
+        guard isFiscalDate(input.issueDate) else { throw ERPClientError.invalidInput("Elige una fecha de emisión válida.") }
+        guard !input.lines.isEmpty else { throw ERPClientError.invalidInput("Añade al menos un producto o servicio.") }
+        guard input.lines.count <= 100 else { throw ERPClientError.invalidInput("La factura admite hasta 100 líneas. Reduce la cantidad de líneas.") }
+        for (index, line) in input.lines.enumerated() {
+            let row = "Línea \(index + 1). "
             guard !line.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  line.description.count <= 300, !line.taxCode.isEmpty,
-                  validDecimal(line.quantity, positive: true, integerDigits: 6, fractionDigits: 6),
-                  validDecimal(line.unitPrice, positive: false, integerDigits: 6, fractionDigits: 6),
-                  validDecimal(line.discount, positive: false, integerDigits: 14, fractionDigits: 2) else { throw ERPClientError.invalidInput("Revisa descripción, cantidad, precio, descuento e impuesto de cada línea.") }
+                  line.description.count <= 300 else {
+                throw ERPClientError.invalidInput(row + "Escribe una descripción de 1 a 300 caracteres.")
+            }
+            guard !line.taxCode.isEmpty else { throw ERPClientError.invalidInput(row + "Elige una tarifa de IVA vigente.") }
+            guard validDecimal(line.quantity, positive: true, integerDigits: 6, fractionDigits: 6) else {
+                throw ERPClientError.invalidInput(row + "La cantidad debe ser mayor que cero, con hasta 6 enteros y 6 decimales.")
+            }
+            guard validDecimal(line.unitPrice, positive: false, integerDigits: 6, fractionDigits: 6) else {
+                throw ERPClientError.invalidInput(row + "El precio debe ser cero o mayor, con hasta 6 enteros y 6 decimales.")
+            }
+            guard validDecimal(line.discount, positive: false, integerDigits: 14, fractionDigits: 2) else {
+                throw ERPClientError.invalidInput(row + "El descuento debe ser cero o mayor, con hasta 14 enteros y 2 decimales.")
+            }
         }
     }
     static func validDecimal(_ value: Decimal, positive: Bool, integerDigits: Int, fractionDigits: Int) -> Bool {

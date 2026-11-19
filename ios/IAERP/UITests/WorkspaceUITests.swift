@@ -145,6 +145,38 @@ final class WorkspaceUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Borrador guardado. No se ha emitido al SRI."].exists)
     }
 
+    @MainActor func testIncompleteInvoiceExplainsMissingCustomerBeforeOfferingSaveDraft() {
+        let app = app()
+        app.tabBars.buttons["Facturas"].tap()
+        app.buttons["new-invoice"].tap()
+        let hint = app.staticTexts["draft-next-step"]
+        XCTAssertTrue(hint.waitForExistence(timeout: 5))
+        XCTAssertTrue(hint.label.contains("Elegir cliente"))
+
+        let add = app.buttons["add-product"]
+        reveal(add, in: app)
+        add.tap()
+        app.buttons["pick-product-00000000-0000-4000-8000-000000000201"].tap()
+        let review = app.buttons["review-totals"]
+        XCTAssertTrue(review.waitForExistence(timeout: 5))
+        review.tap()
+        let error = app.staticTexts["draft-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        XCTAssertTrue(error.label.contains("Elegir cliente"))
+        XCTAssertFalse(app.buttons["save-draft"].exists)
+
+        let customer = app.buttons["draft-customer"]
+        reveal(customer, in: app, searchEarlier: true)
+        customer.tap()
+        app.buttons["pick-customer-00000000-0000-4000-8000-000000000101"].tap()
+        XCTAssertTrue(review.waitForExistence(timeout: 5))
+        review.tap()
+        let save = app.buttons["save-draft"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertEqual(save.label, "Guardar borrador")
+        XCTAssertTrue(app.staticTexts["Borrador, sin envío al SRI."].exists)
+    }
+
     @MainActor func testCancelDoesNotSaveDraft() throws {
         let app = app()
         app.tabBars.buttons["Facturas"].tap()
@@ -250,7 +282,9 @@ final class WorkspaceUITests: XCTestCase {
         let signOut = app.buttons["sign-out"]
         reveal(signOut, in: app); signOut.tap()
         app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Cerrar sesión", "sign-out")).firstMatch.tap()
-        XCTAssertTrue(app.buttons["start-demo"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["connect-company"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["start-demo"].exists)
+        XCTAssertFalse(app.buttons["start-btob-test"].exists)
         XCTAssertFalse(app.tabBars.buttons["Clientes"].exists)
         XCTAssertFalse(app.staticTexts["Cliente de ejemplo Río"].exists)
     }
@@ -261,8 +295,11 @@ final class WorkspaceUITests: XCTestCase {
         app.launch()
         app.buttons["connect-company"].tap()
         let signIn = app.buttons["sign-in"]
-        reveal(signIn, in: app); signIn.tap()
-        XCTAssertTrue(app.staticTexts["connection-error"].waitForExistence(timeout: 3))
+        reveal(signIn, in: app)
+        XCTAssertFalse(signIn.isEnabled)
+        let error = app.staticTexts["connection-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 3))
+        XCTAssertTrue(error.label.contains("alias"))
         XCTAssertFalse(app.tabBars.buttons["Clientes"].exists)
     }
 

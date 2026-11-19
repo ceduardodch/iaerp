@@ -6,6 +6,8 @@ de introducir variantes locales.
 
 ## Principios
 
+En iPhone, si falta un campo obligatorio, el formulario indica su nombre y qué hacer. La ayuda se muestra junto al campo o a la acción que depende de él y se actualiza al corregirlo. Al revisar una factura, un error identifica la línea cuando corresponde y recibe el foco de VoiceOver. El botón final se llama **Guardar borrador**. La ficha del comprobante indica el siguiente paso según su estado y el entorno de emisión. La bienvenida de producción ofrece acceso a la empresa y a las cuentas guardadas. [Guía del W3C para identificar errores y explicar cómo corregirlos](https://www.w3.org/WAI/tutorials/forms/notifications/).
+
 En la recuperación iOS (ADR 0025), «Continuar guardado» identifica un primer
 envío aún no intentado y lo explica antes de la acción. «Consultar guardado»
 queda reservado a lectura tras un intento; un resultado desconocido conserva

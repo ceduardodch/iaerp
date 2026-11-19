@@ -725,6 +725,7 @@ struct CatalogProductRegistrationTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let first = DemoERPService(company: .btobSandbox, testDeliveryDirectory: directory)
         let tax = try #require(try await first.invoiceSetup().taxCategories.first)
+        let originalProductIDs = try await first.products(query: "AWS").map(\.id)
         let input = ERPProductRegistrationInput(code: "AWS-FICTICIO", name: "Servicio AWS de ejemplo",
                                                 unitPrice: Decimal(string: "0.05")!, taxCategoryId: tax.id)
         let second = DemoERPService(company: .btobSandbox, testDeliveryDirectory: directory)
@@ -736,7 +737,9 @@ struct CatalogProductRegistrationTests {
         let reopened = DemoERPService(company: .btobSandbox, testDeliveryDirectory: directory)
         #expect(try await reopened.findProduct(code: input.code) == created)
         #expect(try await reopened.findProduct(code: input.code.lowercased()) == nil)
-        #expect(try await reopened.products(query: "AWS").map(\.id) == [created.id])
+        let matchingIDs = try await reopened.products(query: "AWS").map(\.id)
+        #expect(matchingIDs.count == originalProductIDs.count + 1)
+        #expect(Set(matchingIDs) == Set(originalProductIDs + [created.id]))
         var changed = input
         changed.unitPrice = 3
         await #expect(throws: ERPClientError.productRegistrationConflict) { try await reopened.createProduct(changed, idempotencyKey: key) }
@@ -767,5 +770,23 @@ struct CatalogProductRegistrationTests {
         await #expect(throws: URLError.self) { try await api.createProduct(input, idempotencyKey: UUID().uuidString) }
         await #expect(throws: ERPClientError.authenticationRequired) { try await api.createProduct(input, idempotencyKey: UUID().uuidString) }
         #expect(await http.captured().count == 2)
+    }
+}
+
+extension ERPClientTests {
+    @Test func validationResponseNamesTheLineWithoutEchoingSubmittedValues() async throws {
+        let body = Data(#"{"detail":[{"loc":["body","lines",1,"quantity"],"input":"private value","msg":"internal reason"}]}"#.utf8)
+        let api = try service(MockHTTP([ERPHTTPResponse(statusCode: 422, data: body)]))
+        await #expect(throws: ERPClientError.invalidInput("Línea 2. Escribe una cantidad mayor que cero.")) {
+            try await api.context()
+        }
+    }
+
+    @Test func unknownValidationFieldsShowSafeGuidance() async throws {
+        let body = Data(#"{"detail":[{"loc":["body","unknown"],"msg":"private detail"}]}"#.utf8)
+        let api = try service(MockHTTP([ERPHTTPResponse(statusCode: 400, data: body)]))
+        await #expect(throws: ERPClientError.invalidInput("IAERP rechazó los datos. Revisa los campos del formulario antes de volver a enviarlo.")) {
+            try await api.context()
+        }
     }
 }

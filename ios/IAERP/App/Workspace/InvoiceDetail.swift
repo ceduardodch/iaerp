@@ -27,6 +27,10 @@ struct WorkspaceInvoiceDetail: View {
     @State private var paymentSchedule: [InvoicePaymentRow] = []
     @State private var presentation: DocumentPresentation?
 
+    private var showsTestActions: Bool {
+        store.context?.permits("invoices:test-issue") == true || store.context?.permits("invoices:test-email") == true
+    }
+
     var body: some View {
         List {
             if loading { ProgressView("Cargando factura…") }
@@ -49,9 +53,14 @@ struct WorkspaceInvoiceDetail: View {
                     }
                     if let status = invoice.collectionStatus { ERPDetailRow(title: "Cobro", value: ERPDisplay.status(status)) }
                     if invoice.status == "DRAFT" { Text("Borrador guardado. No se ha emitido al SRI.").foregroundStyle(Color.primary) }
+                    if let guidance = statusGuidance(for: invoice.status) {
+                        Text(guidance)
+                            .foregroundStyle(Color.primary)
+                            .accessibilityIdentifier("invoice-status-guidance")
+                    }
                     if invoice.status == "HISTORICAL_ISSUED" { Text("Documento histórico. No equivale a una autorización SRI verificada por esta app.").foregroundStyle(Color.primary) }
                 } header: { Text("Estado").foregroundStyle(Color.primary) }
-                if store.context?.permits("invoices:test-issue") == true || store.context?.permits("invoices:test-email") == true {
+                if showsTestActions {
                     InvoiceTestDeliverySection(store: store, invoice: invoice,
                                                number: listedNumber ?? store.invoiceNumber(invoice),
                                                artifacts: artifacts, reloadDocument: { await load(showProgress: false) })
@@ -82,7 +91,8 @@ struct WorkspaceInvoiceDetail: View {
                     if let documentError {
                         ERPErrorState(message: documentError) { await loadArtifacts() }
                     } else if artifacts.isEmpty {
-                        Text("RIDE/XML aún no disponibles.").foregroundStyle(Color.primary)
+                        Text(invoice.status == "DRAFT" ? "Los archivos estarán disponibles aquí cuando se generen durante la emisión." : "Todavía no hay archivos disponibles. Desliza hacia abajo para actualizar la ficha.")
+                            .foregroundStyle(Color.primary)
                     }
                     ForEach(artifacts) { artifact in
                         Button {
@@ -114,6 +124,31 @@ struct WorkspaceInvoiceDetail: View {
         .task { _ = await load() }
         .refreshable { _ = await load() }
         .sheet(item: $presentation) { DocumentViewer(presentation: $0) }
+    }
+
+    func statusGuidance(for status: String) -> String? {
+        guard !showsTestActions else { return nil }
+        if store.isDemo {
+            return ["DRAFT", "AUTHORIZED"].contains(status) ? "Esta cuenta de prueba sólo permite consultar la factura." : nil
+        }
+        switch status {
+        case "DRAFT":
+            let web = "Para emitir este borrador, abre Facturas en IAERP web, elige esta factura y pulsa Emitir con una cuenta autorizada."
+            if store.canPrepareBTOBTestInvoice {
+                return web + "\n\nPara el ensayo de USD 0,05, abre la ficha del cliente del ensayo en Clientes y elige Preparar factura de prueba. Se crea otro comprobante en el simulador."
+            }
+            return web
+        case "READY":
+            return "La factura está lista para emitir. Actualiza el estado en IAERP web antes de continuar."
+        case "SIGNED", "RECEIVED", "PENDING_AUTHORIZATION":
+            return "Desliza hacia abajo para consultar el estado de esta emisión y comprobar si el SRI ya respondió."
+        case "AUTHORIZED":
+            return "Para enviar el RIDE y el XML al cliente, abre esta factura en IAERP web y elige Preparar correo."
+        case "REJECTED", "NOT_AUTHORIZED", "FAILED":
+            return "Revisa el mensaje de transmisión. Encontrarás el detalle de esta factura en IAERP web."
+        default:
+            return nil
+        }
     }
 
     private func summaryRow(_ title: String, _ value: String) -> some View {

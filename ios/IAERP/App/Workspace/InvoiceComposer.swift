@@ -14,11 +14,17 @@ struct DraftLine: Identifiable, Equatable {
     var taxCode: String
 
     func input() throws -> ERPInvoiceLineInput {
-        guard let quantity = DecimalEntry.parse(quantity, positive: true),
-              let price = DecimalEntry.parse(unitPrice),
-              let discount = DecimalEntry.parse(discount, scale: 2),
-              !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw ERPClientError.invalidInput("Revisa descripción, cantidad, precio y descuento. Usa hasta 6 decimales en cantidad y precio, y 2 en descuento.")
+        guard !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ERPClientError.invalidInput("Escribe la descripción del producto.")
+        }
+        guard let quantity = DecimalEntry.parse(quantity, positive: true) else {
+            throw ERPClientError.invalidInput("Ingresa una cantidad mayor que cero con hasta 6 decimales.")
+        }
+        guard let price = DecimalEntry.parse(unitPrice) else {
+            throw ERPClientError.invalidInput("Ingresa un precio unitario de cero o más con hasta 6 decimales.")
+        }
+        guard let discount = DecimalEntry.parse(discount, scale: 2) else {
+            throw ERPClientError.invalidInput("Ingresa un descuento con hasta 2 decimales. Si no hay descuento, escribe 0.")
         }
         return ERPInvoiceLineInput(productId: productId, description: description,
                                    quantity: quantity, unitPrice: price, discount: discount, taxCode: taxCode)
@@ -34,7 +40,12 @@ final class InvoiceComposer {
     var paymentTermsDays = 0
     var lines: [DraftLine] = []
     var preview: ERPInvoicePreview?
-    var error: String?
+    var error: String? {
+        didSet {
+            if error != nil { errorPresentationID = UUID() }
+        }
+    }
+    private(set) var errorPresentationID = UUID()
     var working = false
     private(set) var pendingInput: ERPInvoiceInput?
     private(set) var pendingKey: String?
@@ -63,7 +74,7 @@ final class InvoiceComposer {
         guard canEdit else { return }
         let date = ERPDisplay.fiscalDate(issueDate)
         guard let tax = setup?.taxCategories.first(where: { $0.id == product.taxCategoryId && $0.isValid(on: date) }) else {
-            error = "Este producto no tiene una tarifa vigente para la fecha elegida."
+            error = "Este producto no tiene una tarifa vigente para esa fecha. Elige otro producto o cambia la fecha de la factura."
             return
         }
         lines.append(DraftLine(productId: product.id, description: product.name,
@@ -71,24 +82,41 @@ final class InvoiceComposer {
         invalidatePreview()
     }
     func buildInput(setup: ERPInvoiceSetup?, total: Decimal? = nil) throws -> ERPInvoiceInput {
-        guard let customerId, let establishmentId, let emissionPointId, let setup,
-              setup.establishments.contains(where: { $0.id == establishmentId && $0.active }),
-              setup.emissionPoints.contains(where: { $0.id == emissionPointId && $0.establishmentId == establishmentId && $0.active }),
-              !lines.isEmpty else {
-            throw ERPClientError.invalidInput("Elige cliente, establecimiento, punto de emisión y al menos un producto.")
+        guard let customerId else {
+            throw ERPClientError.invalidInput("Toca Elegir cliente para indicar a quién facturas.")
+        }
+        guard let setup else {
+            throw ERPClientError.invalidInput("Falta cargar el catálogo de la empresa. Vuelve a intentarlo desde el formulario.")
+        }
+        guard let establishmentId,
+              setup.establishments.contains(where: { $0.id == establishmentId && $0.active }) else {
+            throw ERPClientError.invalidInput("Selecciona un establecimiento activo en Emisión. Si no aparece ninguno, pide que lo configuren en IAERP.")
+        }
+        guard let emissionPointId,
+              setup.emissionPoints.contains(where: { $0.id == emissionPointId && $0.establishmentId == establishmentId && $0.active }) else {
+            throw ERPClientError.invalidInput("Selecciona un punto de emisión del establecimiento. Si no aparece ninguno, pide que lo configuren en IAERP.")
+        }
+        guard !lines.isEmpty else {
+            throw ERPClientError.invalidInput("Toca Añadir producto para incluir al menos un producto o servicio.")
         }
         let date = ERPDisplay.fiscalDate(issueDate)
         guard (0...365).contains(paymentTermsDays), let dueDateString else {
             throw ERPClientError.invalidInput("Revisa el plazo de pago: debe estar entre 0 y 365 días.")
         }
-        for line in lines {
-            guard setup.taxCategories.contains(where: { $0.sriCode == line.taxCode && $0.isValid(on: date) }) else {
-                throw ERPClientError.invalidInput("Hay una tarifa sin vigencia para la fecha elegida.")
+        let items = try lines.enumerated().map { index, line in
+            do {
+                guard setup.taxCategories.contains(where: { $0.sriCode == line.taxCode && $0.isValid(on: date) }) else {
+                    throw ERPClientError.invalidInput("La tarifa de IVA venció o aún no rige. Cambia el producto o la fecha.")
+                }
+                return try line.input()
+            } catch ERPClientError.invalidInput(let message) {
+                throw ERPClientError.invalidInput("Línea \(index + 1). \(message)")
             }
         }
+        try ERPInputValidation.validate(ERPPreviewInput(issueDate: date, lines: items))
         let installments = total.map { $0 > 0 ? [ERPInstallment(dueDate: dueDateString, amount: $0)] : [] } ?? []
-        return try ERPInvoiceInput(customerId: customerId, establishmentId: establishmentId, emissionPointId: emissionPointId,
-                                   issueDate: date, lines: lines.map { try $0.input() }, installments: installments)
+        return ERPInvoiceInput(customerId: customerId, establishmentId: establishmentId, emissionPointId: emissionPointId,
+                                   issueDate: date, lines: items, installments: installments)
     }
     func review(using service: any ERPService, setup: ERPInvoiceSetup?) async {
         guard canEdit else { return }
@@ -172,9 +200,9 @@ final class InvoiceComposer {
             let message = (error as? InvoiceRecoveryError)?.localizedDescription ?? friendlyError(error)
             if pendingInput == nil { self.error = message }
             else if recoveryJournal != nil {
-                self.error = "No se confirmó el guardado. \(message) Se conserva la referencia pendiente."
+                self.error = "Guardado pendiente de confirmar. \(message) Puedes consultar esta operación desde Facturas con la misma cuenta."
             } else {
-                self.error = "No se confirmó el guardado. \(message) Reintentar conserva la misma operación."
+                self.error = "Guardado pendiente de confirmar. \(message) Toca Reintentar guardado para usar la misma operación."
             }
             return nil
         }
@@ -198,7 +226,8 @@ struct InvoiceComposerView: View {
     @State private var confirmDiscard = false
     @State private var pickingCustomer = false
     @State private var pickingProduct = false
-    @AccessibilityFocusState private var summaryFocused: Bool
+    private enum FeedbackFocus: Hashable { case summary, error }
+    @AccessibilityFocusState private var feedbackFocus: FeedbackFocus?
     @State private var didConfigure = false
     @State private var isAtEnd = false
     @State private var measuredAtEnd = false
@@ -238,6 +267,12 @@ struct InvoiceComposerView: View {
                             .buttonStyle(.plain)
                             .disabled(!draft.canEdit)
                             .accessibilityIdentifier("draft-customer")
+                            if draft.customerId == nil || draft.lines.isEmpty {
+                                Text(draft.customerId == nil ? "Para empezar, toca Elegir cliente." : "Sigue con Añadir producto.")
+                                    .font(.subheadline).foregroundStyle(Color.primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("draft-next-step")
+                            }
                         } header: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(store.context?.name ?? "Empresa").font(.headline)
@@ -245,6 +280,7 @@ struct InvoiceComposerView: View {
                             }
                             .textCase(nil)
                             .foregroundStyle(Color.primary)
+
                         }
                         Section {
                             LabeledContent("Plazo de pago (días)") {
@@ -268,13 +304,13 @@ struct InvoiceComposerView: View {
                                 .environment(\.timeZone, TimeZone(identifier: "America/Guayaquil")!)
                             Picker("Establecimiento", selection: $draft.establishmentId) {
                                 Text("Seleccionar").tag(nil as UUID?)
-                                ForEach(store.setup?.establishments ?? []) { item in
+                                ForEach(store.setup?.establishments.filter(\.active) ?? []) { item in
                                     Text("\(item.code) · \(item.name)").tag(Optional(item.id))
                                 }
                             }
                             Picker("Punto de emisión", selection: $draft.emissionPointId) {
                                 Text("Seleccionar").tag(nil as UUID?)
-                                ForEach((store.setup?.emissionPoints ?? []).filter { $0.establishmentId == draft.establishmentId }) { item in
+                                ForEach((store.setup?.emissionPoints ?? []).filter { $0.active && $0.establishmentId == draft.establishmentId }) { item in
                                     Text(item.code).tag(Optional(item.id))
                                 }
                             }
@@ -316,7 +352,12 @@ struct InvoiceComposerView: View {
                                 ERPDetailRow(title: "Total", value: ERPDisplay.money(preview.total))
                                     .fontWeight(.semibold)
                                     .accessibilityIdentifier("draft-total")
-                                    .accessibilityFocused($summaryFocused)
+                                    .accessibilityFocused($feedbackFocus, equals: .summary)
+                            }
+                            if draft.preview == nil && draft.pendingInput == nil && !draft.lines.isEmpty && draft.customerId != nil {
+                                Text("Toca Revisar importes para ver el total con IVA antes de guardar.")
+                                    .font(.footnote).foregroundStyle(Color.primary)
+                                    .accessibilityIdentifier("draft-review-guidance")
                             }
                             Text("Borrador, sin envío al SRI.")
                                 .font(.footnote).foregroundStyle(Color.primary)
@@ -324,7 +365,13 @@ struct InvoiceComposerView: View {
                                 .id("invoice-summary-end")
                         } header: { Text(store.isDemo ? "Totales de prueba" : "Totales del servidor").foregroundStyle(Color.primary) }
                         if let error = draft.error {
-                            Section { Text(error).foregroundStyle(Color.primary).accessibilityIdentifier("draft-error").id("invoice-error-end") }
+                            Section {
+                                Text(error)
+                                    .foregroundStyle(Color.primary)
+                                    .accessibilityIdentifier("draft-error")
+                                    .accessibilityFocused($feedbackFocus, equals: .error)
+                                    .id("invoice-error-end")
+                            }
                         }
                     }
                     .accessibilityIdentifier("invoice-form")
@@ -404,12 +451,18 @@ struct InvoiceComposerView: View {
                     .onChange(of: draft.preview != nil) { _, hasPreview in
                         if hasPreview {
                             proxy.scrollTo("invoice-summary-end", anchor: .bottom)
-                            summaryFocused = true
+                            feedbackFocus = .summary
                         }
                     }
-                    .onChange(of: draft.error) { _, error in
-                        if error != nil {
-                            proxy.scrollTo("invoice-error-end", anchor: .bottom)
+                    .onChange(of: draft.errorPresentationID) { _, presentation in
+                        guard draft.error != nil, !pickingCustomer, !pickingProduct else { return }
+                        feedbackFocus = nil
+                        proxy.scrollTo("invoice-error-end", anchor: .bottom)
+                        Task { @MainActor in
+                            await Task.yield()
+                            guard draft.errorPresentationID == presentation, draft.error != nil,
+                                  !pickingCustomer, !pickingProduct else { return }
+                            feedbackFocus = .error
                         }
                     }
                     formActions
@@ -442,7 +495,7 @@ struct InvoiceComposerView: View {
             }
             .onChange(of: draft.fingerprint) { _, _ in draft.invalidatePreview() }
             .onChange(of: draft.establishmentId) { _, id in
-                draft.emissionPointId = store.setup?.emissionPoints.first { $0.establishmentId == id }?.id
+                draft.emissionPointId = store.setup?.emissionPoints.first { $0.active && $0.establishmentId == id }?.id
             }
             .onChange(of: draft.customerId) { _, id in
                 draft.configurePaymentTerms(customer: id.flatMap(store.customer), context: store.context)
@@ -451,8 +504,8 @@ struct InvoiceComposerView: View {
                 guard !didConfigure else { return }
                 didConfigure = true
                 if store.setup == nil { await store.loadCatalog() }
-                draft.establishmentId = store.setup?.establishments.first?.id
-                draft.emissionPointId = store.setup?.emissionPoints.first { $0.establishmentId == draft.establishmentId }?.id
+                draft.establishmentId = store.setup?.establishments.first(where: \.active)?.id
+                draft.emissionPointId = store.setup?.emissionPoints.first { $0.active && $0.establishmentId == draft.establishmentId }?.id
                 draft.configurePaymentTerms(customer: draft.customerId.flatMap(store.customer), context: store.context)
             }
         }
@@ -495,9 +548,9 @@ struct InvoiceComposerView: View {
 
     private var saveActionTitle: String {
         if draft.working && draft.pendingInput != nil { return "Guardando…" }
-        guard draft.pendingInput != nil else { return "Guardar" }
+        guard draft.pendingInput != nil else { return "Guardar borrador" }
         if store.isDemo { return "Reintentar guardado" }
-        guard let pending = store.pendingInvoiceRecovery else { return "Guardar" }
+        guard let pending = store.pendingInvoiceRecovery else { return "Consultar guardado" }
         return pending.attemptCount == 0 && pending.confirmedInvoiceID == nil
             ? "Continuar guardado" : "Consultar guardado"
     }
@@ -568,14 +621,16 @@ struct CustomerPicker: View {
     @Binding var selection: UUID?
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
+    @State private var completedQuery: String?
     var body: some View {
+        let matches = store.customers.filter { query.isEmpty || $0.name.localizedStandardContains(query) || $0.identificationNumber.localizedStandardContains(query) }
         List {
             Section { ERPSearchField(text: $query, prompt: "Buscar clientes") }
             if store.loadingCustomers { ProgressView("Buscando clientes…") }
             if let error = store.customerError {
                 ERPErrorState(message: error) { await store.loadCustomers(query: query) }
             }
-            ForEach(store.customers.filter { query.isEmpty || $0.name.localizedStandardContains(query) || $0.identificationNumber.localizedStandardContains(query) }) { customer in
+            ForEach(matches) { customer in
                 Button { selection = customer.id; dismiss() } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(customer.name).font(.headline)
@@ -586,7 +641,15 @@ struct CustomerPicker: View {
                 }
                 .accessibilityIdentifier("pick-customer-\(customer.id.uuidString)")
             }
-            Text("Hasta 100 registros. Busca con al menos dos caracteres.").foregroundStyle(Color.primary)
+            if matches.isEmpty, completedQuery == query, !store.loadingCustomers, store.customerError == nil {
+                if query.isEmpty {
+                    Text(store.canRegisterCustomer ? "No hay clientes disponibles. Toca + para crear uno." : "No hay clientes disponibles. Pide a tu empresa que registre el cliente.")
+                } else {
+                    Text("Sin coincidencias. Busca con al menos dos caracteres del nombre o de la identificación.")
+                }
+            } else {
+                Text("Hasta 100 registros. Busca con al menos dos caracteres.").foregroundStyle(Color.primary)
+            }
         }
         .scrollEdgeEffectStyle(.hard, for: .all)
         .navigationTitle("Elegir cliente").toolbarTitleDisplayMode(.inline)
@@ -609,6 +672,7 @@ struct CustomerPicker: View {
         .task(id: query) {
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             await store.loadCustomers(query: query)
+            if !Task.isCancelled { completedQuery = query }
         }
     }
 }
@@ -620,7 +684,9 @@ struct ProductPicker: View {
     @State private var query = ""
     @State private var addingProduct = false
     @State private var registered: ERPProduct?
+    @State private var completedQuery: String?
     var body: some View {
+        let matches = store.products.filter { query.isEmpty || $0.name.localizedStandardContains(query) || ($0.code?.localizedStandardContains(query) == true) }
         VStack(spacing: 0) {
             List {
                 Section { ERPSearchField(text: $query, prompt: "Buscar productos") }
@@ -628,7 +694,14 @@ struct ProductPicker: View {
                 if let error = store.catalogError {
                     ERPErrorState(message: error) { await store.loadProducts(query: query) }
                 }
-                ForEach(store.products.filter { query.isEmpty || $0.name.localizedStandardContains(query) || ($0.code?.localizedStandardContains(query) == true) }) { product in
+                if matches.isEmpty, completedQuery == query, !store.loadingProducts, store.catalogError == nil {
+                    if query.isEmpty {
+                        Text(store.context?.permits("products:create") == true ? "No hay productos disponibles. Toca + para crear uno." : "No hay productos disponibles. Pide a tu empresa que registre el producto.")
+                    } else {
+                        Text("Sin coincidencias. Busca con al menos dos caracteres del nombre o del código.")
+                    }
+                }
+                ForEach(matches) { product in
                     Button { draft.add(product, setup: store.setup); if draft.error == nil { dismiss() } } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(product.name).font(.headline)
@@ -686,6 +759,7 @@ struct ProductPicker: View {
         .task(id: query) {
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             await store.loadProducts(query: query)
+            if !Task.isCancelled { completedQuery = query }
         }
     }
 }

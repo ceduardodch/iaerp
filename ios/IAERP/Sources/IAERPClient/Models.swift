@@ -36,8 +36,8 @@ public enum ERPClientError: Error, Equatable, Sendable, LocalizedError {
         switch self {
         case .invalidConfiguration: "Revisa la configuración de conexión."
         case .authenticationRequired: "Tu sesión terminó. Vuelve a entrar."
-        case .forbidden: "No tienes permiso para esta acción."
-        case .notFound: "El registro ya no está disponible."
+        case .forbidden: "Tu cuenta no tiene permiso para esta acción. Consulta al administrador de tu empresa."
+        case .notFound: "El registro ya no está disponible. Actualiza la lista y vuelve a seleccionarlo."
         case .invalidResponse: "El servidor devolvió una respuesta no válida."
         case .rateLimited(let seconds): seconds.map { "Espera \($0) segundos antes de reintentar." } ?? "Espera antes de reintentar."
         case .server: "El servicio no está disponible. Inténtalo más tarde."
