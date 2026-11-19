@@ -171,7 +171,7 @@ public struct LiveERPService: ERPService, ERPInvoiceDraftLookup, ERPSalesOvervie
     private func get<T: Decodable & Sendable>(_ route: String, query: [URLQueryItem] = []) async throws -> T {
         try await request(route, method: "GET", query: query, mayRefresh: true)
     }
-    private func request<T: Decodable & Sendable>(_ route: String, method: String, query: [URLQueryItem] = [], body: Data? = nil, idempotencyKey: String? = nil, mayRefresh: Bool, fiscalDelivery: Bool = false) async throws -> T {
+    private func request<T: Decodable & Sendable>(_ route: String, method: String, query: [URLQueryItem] = [], body: Data? = nil, idempotencyKey: String? = nil, mayRefresh: Bool, fiscalDelivery: Bool = false, collectionAction: Bool = false) async throws -> T {
         var components = URLComponents(url: baseURL.appendingPathComponent(route), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
         guard let url = components.url else { throw ERPClientError.invalidConfiguration }
@@ -192,6 +192,16 @@ public struct LiveERPService: ERPService, ERPInvoiceDraftLookup, ERPSalesOvervie
         }
         try Task.checkCancellation()
         if fiscalDelivery, let error = ERPClientError.fiscalDeliveryError(response) { throw error }
+        if collectionAction, [400, 409, 422].contains(response.statusCode) {
+            if response.data.count <= 4_096,
+               let detail = try? JSONDecoder().decode(CollectionFailure.self, from: response.data).detail,
+               !detail.isEmpty, detail.count <= 300 {
+                throw ERPClientError.invalidInput(detail)
+            }
+            if response.statusCode == 409 {
+                throw ERPClientError.invalidInput("La cuenta cambió. Actualiza la ficha antes de continuar.")
+            }
+        }
         try Self.requireSuccess(response)
         do { return try JSONDecoder().decode(T.self, from: response.data) }
         catch { throw ERPClientError.invalidResponse }
@@ -445,5 +455,27 @@ public enum ERPInputValidation {
         let text = NSDecimalNumber(decimal: value).stringValue
         let parts = text.split(separator: ".", omittingEmptySubsequences: false)
         return !text.contains("E") && !text.contains("e") && parts[0].count <= integerDigits && (parts.count == 1 || parts[1].count <= fractionDigits)
+    }
+}
+
+private struct CollectionFailure: Decodable { let detail: String }
+
+extension LiveERPService: ERPCollectionsService {
+    public func collectionAccounts() async throws -> [CollectionAccount] {
+        try await get("collections/accounts")
+    }
+    public func collectionAccount(_ id: UUID) async throws -> CollectionAccount {
+        let result: CollectionAccount = try await get("collections/accounts/\(id.uuidString)")
+        guard result.id == id else { throw ERPClientError.invalidResponse }
+        return result
+    }
+    public func changeCollectionAccount(
+        _ id: UUID, action: CollectionAction, key: UUID
+    ) async throws -> CollectionAccount {
+        let result: CollectionAccount = try await request("collections/accounts/\(id.uuidString)/\(action.path)",
+            method: action.method, body: Self.encode(action), idempotencyKey: key.uuidString,
+            mayRefresh: false, collectionAction: true)
+        guard result.id == id else { throw ERPClientError.invalidResponse }
+        return result
     }
 }

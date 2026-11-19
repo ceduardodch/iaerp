@@ -77,9 +77,9 @@ class ConfigureNativeClientTests(unittest.TestCase):
         scopes = [{"id": name, "name": name} for name in sorted(names)]
 
         if mode == "customer-scope-absent":
-            scopes[:] = [scope for scope in scopes if scope["name"] not in {"customers:create", "products:create", "invoices:issue", "invoices:email"}]
+            scopes[:] = [scope for scope in scopes if scope["name"] not in {"customers:create", "products:create", "invoices:issue", "invoices:email", "collections:notify", "collections:terms"}]
         for scope in scopes:
-            if scope["name"] in {"customers:create", "products:create", "invoices:issue", "invoices:email"}:
+            if scope["name"] in {"customers:create", "products:create", "invoices:issue", "invoices:email", "collections:notify", "collections:terms"}:
                 scope.update(protocol="openid-connect", attributes={"include.in.token.scope": "true"})
                 if mode == "invalid-customer-scope":
                     scope["protocolMappers"] = [{"name": "unexpected"}]
@@ -97,7 +97,7 @@ class ConfigureNativeClientTests(unittest.TestCase):
             if path == "/client-scopes":
                 if verb == "POST":
                     data = json.loads(request.content)
-                    self.assertIn(data["name"], {"customers:create", "products:create", "invoices:issue", "invoices:email"})
+                    self.assertIn(data["name"], {"customers:create", "products:create", "invoices:issue", "invoices:email", "collections:notify", "collections:terms"})
                     self.assertEqual(data, {"name": data["name"], "protocol": "openid-connect",
                                             "attributes": {"include.in.token.scope": "true"}})
                     scopes.append({**data, "id": data["name"]})
@@ -172,11 +172,14 @@ class ConfigureNativeClientTests(unittest.TestCase):
         self.assertIs(state["registered"]["enabled"], False)
         self.assertNotIn("synthetic-never-printed", output)
 
-    def test_customer_scope_created_and_assigned_only_to_native_client(self):
+    def test_individual_action_scopes_created_and_assigned_only_to_native_client(self):
         state, error, _ = self.run_script(enable=True, mode="customer-scope-absent")
         self.assertIsNone(error)
         self.assertEqual(state["default"], NATIVE.DEFAULT_SCOPES)
         self.assertNotIn("parties:write", state["default"])
+        self.assertNotIn("receivables:write", state["default"])
+        self.assertNotIn("receivables:notify", state["default"])
+        self.assertLessEqual({"collections:notify", "collections:terms"}, state["default"])
 
     def test_unexpected_scope_mapper_blocks_activation(self):
         state, error, _ = self.run_script(enable=True, mode="invalid-customer-scope")

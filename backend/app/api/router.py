@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Path,
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.ios_collections import router as ios_collection_router
 from app.api.ios_customers import router as ios_customer_router
 from app.api.ios_products import router as ios_product_router
 from app.core.auth import AuthContext, create_dev_token, require_scopes
@@ -134,6 +135,7 @@ from app.services import (
 from app.services.unit_of_work import append_audit, execute_idempotent
 
 router = APIRouter()
+router.include_router(ios_collection_router)
 router.include_router(ios_customer_router)
 router.include_router(ios_product_router)
 settings = get_settings()

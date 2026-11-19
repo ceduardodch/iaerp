@@ -19,6 +19,10 @@ import sys
 import httpx
 
 BACKEND_FILES = frozenset({
+    "app/core/ios_collection_access.py", "app/api/ios_collections.py",
+    "app/services/mobile_collections.py", "app/services/receivables.py",
+    "app/workers/collections.py", "app/workers/mobile_collections.py", "app/workers/tasks.py",
+    "app/models/receivables.py", "app/schemas/ios_collections.py", "app/services/collection_email.py",
     "app/core/auth.py", "app/core/ios_permissions.py",
     "app/services/draft_requests.py", "app/api/router.py", "app/api/ios_customers.py",
     "app/api/ios_products.py", "app/core/ios_catalog_access.py",
@@ -27,6 +31,7 @@ BACKEND_FILES = frozenset({
 DEFAULT_SCOPES = frozenset({
     "profile", "context:read", "memberships:read", "organization:read",
     "parties:read", "customers:create", "products:read", "products:create", "invoices:read", "invoices:write", "invoices:issue", "invoices:email", "receivables:read",
+    "collections:notify", "collections:terms",
 })
 
 
@@ -119,7 +124,8 @@ def main() -> None:
         if "profile" not in by_name:
             request("POST", "/client-scopes", json=profile)
             by_name = {item["name"]: item for item in request("GET", "/client-scopes").json()}
-        for scope_name in ("customers:create", "products:create", "invoices:issue", "invoices:email"):
+        for scope_name in ("customers:create", "products:create", "invoices:issue", "invoices:email",
+                           "collections:notify", "collections:terms"):
             if scope_name not in by_name:
                 request("POST", "/client-scopes", json={
                     "name": scope_name, "protocol": "openid-connect",

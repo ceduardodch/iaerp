@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.core.ios_permissions import (
     IOS_CLIENT_ID,
     ios_effective_scopes,
+    ios_receivable_read_permitted,
     ios_request_permitted,
     is_ios_client,
     validate_ios_client,
@@ -244,11 +245,13 @@ def require_scopes(
     ) -> AuthContext:
         missing = set(required).difference(context.scopes)
         # This legacy scope covers individual records and banking-related reads.
-        # The native client receives only the three approved dashboard totals.
+        # Native access is limited to the dashboard and the collections inbox.
         if (
             context.client_id == IOS_CLIENT_ID
             and "receivables:read" in required
-            and request.scope.get("path") != f"{settings.API_PREFIX}/receivables/overview"
+            and not ios_receivable_read_permitted(
+                request.scope.get("path", ""), settings.API_PREFIX, request.method
+            )
         ):
             missing.add("receivables:read")
         if missing:

@@ -46,6 +46,14 @@ async def check_billing_membership(
     *,
     denied: str = "Invoice permission is no longer active",
 ) -> None:
+    await check_native_membership(session, context, allowed=IOS_INVOICE_WRITER_ROLES, denied=denied)
+
+
+async def check_native_membership(
+    session: AsyncSession, context: AuthContext, *, allowed: frozenset[str], denied: str
+) -> None:
+    if context.actor_type != "USER":
+        raise HTTPException(403, denied)
     # Membership can change while waiting for another tenant writer.
     roles = await session.scalar(
         select(Membership.roles)
@@ -60,5 +68,5 @@ async def check_billing_membership(
         )
         .with_for_update()
     )
-    if not roles or IOS_INVOICE_WRITER_ROLES.isdisjoint(roles):
+    if not roles or allowed.isdisjoint(roles):
         raise HTTPException(403, denied)

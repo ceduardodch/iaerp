@@ -319,3 +319,101 @@ async def test_existing_web_scope_policy_is_unchanged(monkeypatch):
     async with SessionFactory() as session:
         context = await authentication.resolve_auth_context(claims(azp="iaerp-web"), session)
     assert context.scopes == frozenset(OVERBROAD_SCOPES.split())
+
+
+@pytest.mark.parametrize(
+    "roles, expected",
+    [
+        (["owner"], {"receivables:read", "collections:terms", "collections:notify"}),
+        (["admin"], {"receivables:read", "collections:terms", "collections:notify"}),
+        (["collections"], {"receivables:read", "collections:terms", "collections:notify"}),
+        (["auditor"], {"receivables:read"}),
+        (["billing"], set()),
+        (["viewer"], set()),
+    ],
+)
+async def test_individual_collection_permissions_come_from_membership(monkeypatch, roles, expected):
+    monkeypatch.setattr(authentication.settings, "AUTH_MODE", "oidc")
+    await membership(TENANT_A, roles)
+    async with SessionFactory() as session:
+        context = await authentication.resolve_auth_context(
+            claims(scope=("receivables:read receivables:write receivables:notify "
+                          "collections:terms collections:notify")),
+            session,
+        )
+    assert context.scopes == expected
+
+
+@pytest.mark.parametrize(
+    "method, path, scope, allowed",
+    [
+        ("PUT", "promise", "collections:terms", True),
+        ("PUT", "due-date", "collections:terms", True),
+        ("POST", "reminder", "collections:notify", True),
+        ("PUT", "enable-reminders", "collections:notify", True),
+        ("PUT", "due-date", "collections:notify", False),
+        ("POST", "reminder", "collections:terms", False),
+        ("POST", "promise", "collections:terms", False),
+        ("POST", "reminders", "collections:notify", False),
+        ("POST", "reminder/batch", "collections:notify", False),
+        ("PUT", "collection-policy", "collections:notify", False),
+    ],
+)
+def test_native_collection_actions_have_exact_routes_and_scopes(method, path, scope, allowed):
+    from app.core.ios_permissions import ios_request_permitted
+
+    route = f"/api/v1/collections/accounts/{uuid.uuid4()}/{path}"
+    assert ios_request_permitted(method, route, api_prefix="/api/v1", scopes={scope}) == allowed
+
+
+def test_native_portfolio_read_does_not_include_banking_or_reminder_history():
+    from app.core.ios_permissions import ios_receivable_read_permitted
+
+    prefix = "/api/v1"
+    account = str(uuid.uuid4())
+    base_path = "/collections/accounts"
+    for path in ("/receivables/overview", base_path, f"{base_path}/{account}"):
+        assert ios_receivable_read_permitted(prefix + path, prefix)
+    for path in ("/receivables", "/receivables/aging", "/collections/accounts/export",
+                 f"/collections/accounts/{account}/history", "/receivables/collections/monthly"):
+        assert not ios_receivable_read_permitted(prefix + path, prefix)
+
+
+async def test_native_collection_write_rechecks_revoked_membership(monkeypatch):
+    from app.core.ios_collection_access import check_collection_membership
+
+    monkeypatch.setattr(authentication.settings, "AUTH_MODE", "oidc")
+    await membership(TENANT_A, ["collections"])
+    async with SessionFactory() as session:
+        context = await authentication.resolve_auth_context(
+            claims(scope="collections:terms"), session
+        )
+    await membership(TENANT_A, ["auditor"])
+    async with SessionFactory() as session, session.begin():
+        with pytest.raises(HTTPException, match="403"):
+            await check_collection_membership(session, context)
+
+@pytest.mark.parametrize("endpoint, method, payload, required", [
+    ("enable-reminders", "PUT", {}, "collections:notify"),
+    ("promise", "PUT", {"promisedDate": None, "previousPromisedDate": None}, "collections:terms"),
+    ("due-date", "PUT", {"dueDate": "2030-05-06", "previousDueDate": "2030-05-05",
+                         "reason": "Acuerdo sintético"}, "collections:terms"),
+    ("reminder", "POST", {"expectedRecipient": "example@example.invalid",
+                          "expectedOpenAmount": "55.00", "expectedDueDate": "2030-05-05"},
+     "collections:notify"),
+])
+async def test_native_collection_route_requires_both_grants(
+    client, monkeypatch, endpoint, method, payload, required
+):
+    signer = oidc_signer(monkeypatch)
+    await membership(TENANT_A, ["collections"])
+    path = f"/api/v1/collections/accounts/{uuid.uuid4()}/{endpoint}"
+    for scopes, code in [
+        ("receivables:read", 403), (required, 403), (f"receivables:read {required}", 404)
+    ]:
+        token = signer(claims(scope=scopes))
+        response = await client.request(
+            method, path, json=payload,
+            headers={"Authorization": f"Bearer {token}", "Idempotency-Key": str(uuid.uuid4())},
+        )
+        assert response.status_code == code, response.text

@@ -32,7 +32,9 @@
     "invoices:write",
     "invoices:issue",
     "invoices:email",
-    "receivables:read"
+    "receivables:read",
+    "collections:terms",
+    "collections:notify"
   ],
   "optionalClientScopes": [
     "organization"
