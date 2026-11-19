@@ -80,7 +80,7 @@ struct WorkspaceClientsView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showingSearchSummary = true } label: {
                         Label("Resultados: \(visible.count)", systemImage: "info.circle")
-                            .labelStyle(.titleOnly)
+                            .labelStyle(.iconOnly)
                     }
                     .help("Ver resultados y límite de búsqueda")
                     .accessibilityIdentifier("client-search-summary")
