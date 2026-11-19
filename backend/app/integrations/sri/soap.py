@@ -52,6 +52,14 @@ _ENDPOINTS: dict[str, dict[str, str]] = {
     },
 }
 
+
+def production_endpoints(reception_url: str | None, authorization_url: str | None) -> bool:
+    official = _ENDPOINTS["2"]
+    return (reception_url is None or reception_url == official["reception"]) and (
+        authorization_url is None or authorization_url == official["authorization"]
+    )
+
+
 _RECEPTION_ENVELOPE = (
     '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"'
     ' xmlns:ec="http://ec.gob.sri.ws.recepcion">'

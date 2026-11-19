@@ -101,7 +101,9 @@ async def test_ios_scopes_are_limited_by_current_membership(monkeypatch, roles, 
     async with SessionFactory() as session:
         context = await authentication.resolve_auth_context(claims(), session)
     assert context.roles == frozenset(roles)
-    assert context.scopes == IOS_READ_SCOPES | ({"invoices:write"} if can_write else set())
+    assert context.scopes == IOS_READ_SCOPES | (
+        {"invoices:write", "invoices:issue"} if can_write else set()
+    )
     assert context.client_id == "iaerp-ios"
 
 
@@ -264,7 +266,7 @@ async def test_ios_draft_writer_can_create_one_audited_draft_but_reader_post_is_
         ("PUT", "analytic-assignments", {"analyticValueIds": []}),
     ],
 )
-async def test_ios_direct_mutations_other_than_draft_never_enter_a_unit_of_work(
+async def test_ios_draft_only_token_cannot_enter_other_mutations(
     client, monkeypatch, method, path, body
 ):
     import app.api.router as api
@@ -273,7 +275,7 @@ async def test_ios_direct_mutations_other_than_draft_never_enter_a_unit_of_work(
         pytest.fail("Native policy must reject before any business mutation/callback")
 
     monkeypatch.setattr(api, "execute_idempotent", forbidden_unit_of_work)
-    token = oidc_signer(monkeypatch)(claims())
+    token = oidc_signer(monkeypatch)(claims(scope="invoices:write invoices:read"))
     response = await client.request(
         method,
         f"/api/v1/invoices/cccccccc-cccc-4ccc-8ccc-cccccccccccc/{path}",

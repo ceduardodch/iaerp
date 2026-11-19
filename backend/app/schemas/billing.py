@@ -218,7 +218,9 @@ class ArtifactDownloadRead(APIModel):
 
 
 class InvoiceEmailInput(APIModel):
+    resend: bool = False
     recipient: EmailStr
+    preview_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 class InvoiceCollectionUpdate(APIModel):
@@ -226,6 +228,7 @@ class InvoiceCollectionUpdate(APIModel):
 
 
 class InvoiceEmailPreviewRead(APIModel):
+    preview_digest: str | None = None
     recipient: EmailStr | None
     sender_address: EmailStr | None
     sender_name: str | None
@@ -242,6 +245,12 @@ class InvoiceEmailRead(APIModel):
     sender_address: EmailStr | None
     sender_name: str | None
     attachment_names: list[str]
+
+
+class InvoiceDeliveryStatus(APIModel):
+    fiscal_environment: Literal["PRODUCTION", "TEST", "UNCONFIGURED"]
+    email_status: Literal["NOT_SENT", "PENDING", "SENT"]
+    receipt: InvoiceEmailRead | None
 
 
 class InvoiceMonthRead(APIModel):

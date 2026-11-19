@@ -22,10 +22,11 @@ BACKEND_FILES = frozenset({
     "app/core/auth.py", "app/core/ios_permissions.py",
     "app/services/draft_requests.py", "app/api/router.py", "app/api/ios_customers.py",
     "app/api/ios_products.py", "app/core/ios_catalog_access.py",
+    "app/integrations/sri/soap.py", "app/workers/sri_transmission.py", "app/services/invoice_delivery.py", "app/services/billing.py", "app/services/crm_integrations.py",
 })
 DEFAULT_SCOPES = frozenset({
     "profile", "context:read", "memberships:read", "organization:read",
-    "parties:read", "customers:create", "products:read", "products:create", "invoices:read", "invoices:write", "receivables:read",
+    "parties:read", "customers:create", "products:read", "products:create", "invoices:read", "invoices:write", "invoices:issue", "invoices:email", "receivables:read",
 })
 
 
@@ -118,7 +119,7 @@ def main() -> None:
         if "profile" not in by_name:
             request("POST", "/client-scopes", json=profile)
             by_name = {item["name"]: item for item in request("GET", "/client-scopes").json()}
-        for scope_name in ("customers:create", "products:create"):
+        for scope_name in ("customers:create", "products:create", "invoices:issue", "invoices:email"):
             if scope_name not in by_name:
                 request("POST", "/client-scopes", json={
                     "name": scope_name, "protocol": "openid-connect",

@@ -924,6 +924,94 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /invoices/{invoiceId}/delivery-status:
+    get:
+      operationId: getInvoiceDeliveryStatus
+      summary: Consultar el ambiente fiscal y el último envío confirmado
+      security:
+        - oauth2: ["invoices:read"]
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+        - in: query
+          name: recipientHash
+          description: En web, SHA-256 hexadecimal del destinatario para consultar su entrega.
+          schema: {type: string, pattern: '^[0-9a-f]{64}$'}
+      responses:
+        "200":
+          description: PENDING se concilia con Enviados de Gmail sin repetir el envío.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fiscalEnvironment, emailStatus, receipt]
+                properties:
+                  fiscalEnvironment: {type: string, enum: [TEST, PRODUCTION, UNCONFIGURED]}
+                  emailStatus: {type: string, enum: [NOT_SENT, PENDING, SENT]}
+                  receipt:
+                    oneOf:
+                      - $ref: "#/components/schemas/InvoiceEmailReceipt"
+                      - type: "null"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /invoices/{invoiceId}/email-preview:
+    get:
+      operationId: previewInvoiceEmail
+      summary: Revisar destinatario, texto y adjuntos de una factura autorizada
+      security:
+        - oauth2: ["invoices:read"]
+      description: El cliente iOS requiere además invoices:email y recibe una huella de lo revisado.
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+      responses:
+        "200":
+          description: RIDE y XML, con el informe de la propuesta si está aprobado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recipient, senderAddress, senderName, subject, message, attachmentNames, dueDate, paymentTermsDays]
+                properties:
+                  recipient: {type: [string, "null"], format: email}
+                  senderAddress: {type: [string, "null"], format: email}
+                  senderName: {type: [string, "null"]}
+                  subject: {type: string}
+                  message: {type: string}
+                  attachmentNames: {type: array, items: {type: string}, minItems: 2, maxItems: 3}
+                  dueDate: {type: string, format: date}
+                  paymentTermsDays: {type: integer}
+                  previewDigest: {type: [string, "null"], pattern: '^[0-9a-f]{64}$'}
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /invoices/{invoiceId}/email:
+    post:
+      operationId: sendInvoiceEmail
+      summary: Confirmar el envío a Gmail de una factura autorizada
+      security:
+        - oauth2: ["invoices:write"]
+      description: iOS requiere además invoices:email, destinatario del cliente y huella vigente. En web, resend permite repetir intencionalmente un envío ya confirmado con una nueva clave.
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipient]
+              properties:
+                recipient: {type: string, format: email}
+                previewDigest: {type: string, pattern: '^[0-9a-f]{64}$'}
+                resend: {type: boolean, default: false}
+      responses:
+        "200":
+          description: Gmail aceptó el mensaje o ya existe un recibo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceEmailReceipt"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /invoices/{invoiceId}/artifacts:
     get:
       operationId: listInvoiceArtifacts
@@ -1820,6 +1908,7 @@ components:
             invoices:read: Leer facturas
             invoices:write: Crear y emitir documentos
             invoices:issue: Emitir facturas
+            invoices:email: Confirmar envío de factura desde iOS
             credit-notes:issue: Emitir notas de credito
             receivables:read: Leer cartera
             receivables:write: Registrar cobros y recordatorios
@@ -1850,6 +1939,7 @@ components:
             invoices:read: Leer facturas
             invoices:write: Crear documentos
             invoices:issue: Emitir facturas
+            invoices:email: Confirmar envío de factura desde iOS
             credit-notes:issue: Emitir notas de credito
             receivables:read: Leer cartera
             receivables:write: Registrar cobros
@@ -2507,6 +2597,15 @@ components:
           $ref: "#/components/schemas/UnitPriceDecimal"
         taxCode:
           type: string
+    InvoiceEmailReceipt:
+      type: object
+      required: [messageId, recipient, senderAddress, senderName, attachmentNames]
+      properties:
+        messageId: {type: string}
+        recipient: {type: string, format: email}
+        senderAddress: {type: [string, "null"], format: email}
+        senderName: {type: [string, "null"]}
+        attachmentNames: {type: array, items: {type: string}, minItems: 2, maxItems: 3}
     InvoiceLineInput:
       type: object
       additionalProperties: false

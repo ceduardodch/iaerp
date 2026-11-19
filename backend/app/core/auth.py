@@ -226,7 +226,7 @@ async def get_auth_context(
     # lazy FastAPI routers. Child APIRoute.path may omit that prefix.
     route_path = request.scope.get("path", "")
     if context.client_id == IOS_CLIENT_ID and not ios_request_permitted(
-        request.method, route_path, api_prefix=settings.API_PREFIX
+        request.method, route_path, api_prefix=settings.API_PREFIX, scopes=context.scopes
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

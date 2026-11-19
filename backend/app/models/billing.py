@@ -282,6 +282,31 @@ class SRITransmission(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Ba
     authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class InvoiceEmailDispatch(TimestampMixin, Base):
+    """Durable claim before contacting the provider, one provider call per confirmed attempt."""
+
+    __tablename__ = "invoice_email_dispatches"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "document_id"], ["sales_documents.tenant_id", "sales_documents.id"]
+        ),
+        UniqueConstraint("tenant_id", "actor_id", "idempotency_key"),
+        Index("ix_invoice_email_dispatches_invoice", "tenant_id", "document_id"),
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    document_id: Mapped[uuid.UUID]
+    recipient_hash: Mapped[str] = mapped_column(String(64))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    actor_id: Mapped[str] = mapped_column(String(200))
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    preview_digest: Mapped[str] = mapped_column(String(64))
+    # A private, random RFC 5322 Message-ID for read-only Gmail reconciliation.
+    provider_reference: Mapped[str] = mapped_column(String(100), primary_key=True)
+    # Address and filenames at confirmation time. Provider messageId is set only on acceptance.
+    envelope: Mapped[dict[str, Any]] = mapped_column(JSON)
+    provider_message_id: Mapped[str | None] = mapped_column(String(200))
+
+
 class DocumentArtifact(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     """XML firmado o RIDE PDF de un ``SalesDocument``, con checksum y version.
 

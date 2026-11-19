@@ -5,6 +5,7 @@ still resolved from IAERP on every request. Unknown or unrelated roles never
 gain invoice writes. Existing web and service-account policies stay unchanged.
 """
 
+import re
 from collections.abc import Iterable
 
 IOS_PRODUCT_CREATE = "products:create"
@@ -55,13 +56,28 @@ def ios_effective_scopes(scopes: Iterable[str], membership_roles: Iterable[str])
     if IOS_OVERVIEW_ROLES.intersection(roles):
         allowed = allowed | {"receivables:read"}
     if IOS_INVOICE_WRITER_ROLES.intersection(roles):
-        allowed = allowed | {"invoices:write", IOS_CUSTOMER_CREATE, IOS_PRODUCT_CREATE}
+        allowed = allowed | {
+            "invoices:issue",
+            "invoices:email",
+            "invoices:write",
+            IOS_CUSTOMER_CREATE,
+            IOS_PRODUCT_CREATE,
+        }
     return frozenset(scopes).intersection(allowed)
 
 
-def ios_request_permitted(method: str, route_path: str, *, api_prefix: str) -> bool:
+def ios_request_permitted(
+    method: str, route_path: str, *, api_prefix: str, scopes: Iterable[str] = ()
+) -> bool:
     if method in {"GET", "HEAD", "OPTIONS"}:
         return True
+    native_action = re.fullmatch(
+        re.escape(api_prefix)
+        + r"/invoices/[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}/(issue|email)",
+        route_path,
+    )
+    if method == "POST" and native_action:
+        return "invoices:" + native_action[1] in scopes
     # invoices:write is shared by issue/email/void and draft in the legacy API.
     # Native writes use the dedicated quick-entry routes below.
     return method == "POST" and route_path in {

@@ -12,8 +12,10 @@ from app.api.ios_customers import router as ios_customer_router
 from app.api.ios_products import router as ios_product_router
 from app.core.auth import AuthContext, create_dev_token, require_scopes
 from app.core.config import get_settings
+from app.core.ios_catalog_access import check_billing_membership
+from app.core.ios_permissions import IOS_CLIENT_ID
 from app.db.session import get_session
-from app.models.billing import SalesDocument
+from app.models.billing import SalesDocument, SRITransmission
 from app.models.legal_commercial import ContractVersion
 from app.models.platform import (
     AutomationSettings,
@@ -29,6 +31,7 @@ from app.schemas.billing import (
     CreditNoteInput,
     DocumentArtifactRead,
     InvoiceCollectionUpdate,
+    InvoiceDeliveryStatus,
     InvoiceDraftRequestRead,
     InvoiceEmailInput,
     InvoiceEmailPreviewRead,
@@ -122,6 +125,7 @@ from app.services import (
     draft_requests,
     fiscal_settings,
     historical_invoice_pdf,
+    invoice_delivery,
     invoice_months,
     legal_commercial,
     masters,
@@ -1871,6 +1875,18 @@ async def get_invoice_artifact_download(
     )
 
 
+@router.get("/invoices/{invoice_id}/delivery-status", response_model=InvoiceDeliveryStatus)
+async def get_invoice_delivery_status(
+    invoice_id: uuid.UUID,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
+    recipient_hash: str | None = Query(None, alias="recipientHash", pattern=r"^[0-9a-f]{64}$"),
+) -> InvoiceDeliveryStatus:
+    return await invoice_delivery.delivery_status(
+        session, context, invoice_id, recipient_hash=recipient_hash
+    )
+
+
 @router.post("/invoices/{invoice_id}/email", response_model=InvoiceEmailRead)
 async def post_invoice_email(
     invoice_id: uuid.UUID,
@@ -1881,33 +1897,30 @@ async def post_invoice_email(
 ) -> dict[str, object]:
     """Envía, tras confirmación humana, el RIDE y XML de una factura autorizada."""
 
-    async def send() -> tuple[str, dict[str, object]]:
-        result = await billing.send_invoice_email(
-            session, context, invoice_id, recipient=str(data.recipient)
-        )
-        return result.message_id, result.model_dump(mode="json", by_alias=True)
-
-    return await execute_idempotent(
+    result = await invoice_delivery.send_email(
         session,
-        context=context,
-        operation="invoices.email",
-        idempotency_key=idempotency_key,
-        request_payload={"invoice_id": str(invoice_id), "recipient": str(data.recipient)},
-        action="invoice.emailed",
-        entity_type="sales_document",
-        callback=send,
+        context,
+        invoice_id,
+        recipient=str(data.recipient),
+        digest=data.preview_digest,
+        key=idempotency_key,
+        resend=data.resend,
     )
+    return result.model_dump(mode="json", by_alias=True)
 
 
 @router.get(
     "/invoices/{invoice_id}/email-preview",
     response_model=InvoiceEmailPreviewRead,
+    response_model_exclude_unset=True,
 )
 async def get_invoice_email_preview(
     invoice_id: uuid.UUID,
     session: Session,
     context: Annotated[AuthContext, Depends(require_scopes("invoices:read"))],
 ) -> InvoiceEmailPreviewRead:
+    if context.client_id == IOS_CLIENT_ID:
+        return await invoice_delivery.preview_email(session, context, invoice_id)
     return await billing.preview_invoice_email(session, context, invoice_id)
 
 
@@ -1931,6 +1944,11 @@ async def post_invoice_issue(
     """
 
     async def issue() -> tuple[str, dict[str, object]]:
+        if context.client_id == IOS_CLIENT_ID:
+            invoice_delivery.require_scope(context, "invoices:issue")
+            invoice_delivery.require_request_key(idempotency_key)
+            await check_billing_membership(session, context)
+            await invoice_delivery.require_production(session, context, invoice_id, issue=True)
         correlation_id = str(uuid.uuid4())
         document = await billing.issue_document(
             session,
@@ -1939,6 +1957,17 @@ async def post_invoice_issue(
             idempotency_key=idempotency_key,
             correlation_id=correlation_id,
         )
+        if context.client_id == IOS_CLIENT_ID:
+            session.add(
+                SRITransmission(
+                    tenant_id=context.tenant_id,
+                    sales_document_id=document.id,
+                    access_key=document.access_key,
+                    status="PENDING",
+                    attempts=0,
+                    messages=[],
+                )
+            )
         operation = OperationRecord(
             tenant_id=context.tenant_id,
             actor_id=context.actor_id,
@@ -1971,6 +2000,7 @@ async def post_invoice_issue(
         entity_type="sales_document",
         callback=issue,
         event_type="invoice.signed",
+        event_payload={"native_confirmed": True} if context.client_id == IOS_CLIENT_ID else None,
     )
 
 
