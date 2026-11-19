@@ -75,62 +75,66 @@ struct InvoiceProductionDeliverySection: View {
 
     var body: some View {
         Section {
-            if let state {
-                switch step(state, invoice) {
-                case .issue, .email:
-                    if let customer, !customer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        if pending != nil {
-                            Text("Hay una solicitud sin confirmar. Al continuar se comprobará su estado y se usará la misma solicitud.")
+            VStack(alignment: .leading, spacing: 10) {
+                if let state {
+                    switch step(state, invoice) {
+                    case .issue, .email:
+                        if let customer, !customer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            if pending != nil {
+                                Text("Hay una solicitud sin confirmar. Al continuar se comprobará su estado y se usará la misma solicitud.")
+                            }
+                            let isIssue = step(state, invoice) == .issue
+                            Button(isIssue ? "Revisar emisión" : "Preparar correo", systemImage: isIssue ? "doc.badge.arrow.up" : "envelope") {
+                                Task { await prepare() }
+                            }
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier(isIssue ? "real-review-issue" : "real-review-email")
+                        } else {
+                            Text("Falta el nombre del cliente. Abre la factura desde Clientes para comprobar a quién corresponde.")
                         }
-                        let isIssue = step(state, invoice) == .issue
-                        Button(isIssue ? "Revisar emisión" : "Preparar correo", systemImage: isIssue ? "doc.badge.arrow.up" : "envelope") {
-                            Task { await prepare() }
+                    case .receipt:
+                        if let receipt = state.receipt {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label("Correo aceptado para envío", systemImage: "checkmark.circle").font(.headline)
+                                Text(verbatim: receipt.recipient)
+                                ForEach(receipt.attachmentNames, id: \.self) { Text(verbatim: $0) }
+                                Text("Referencia: \(receipt.messageId)").font(.footnote).textSelection(.enabled)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("real-email-receipt")
                         }
+                    case .needsReconciliation:
+                        Text("IAERP necesita comprobar la solicitud anterior. Consulta el estado. Si sigue pendiente, pide a quien administra tu empresa que revise esta factura.")
+                    case .waitingForSRI:
+                        Text("Emisión en curso. El correo estará disponible cuando el SRI autorice la factura.")
+                    case .waitingForEmail:
+                        Text("Hay un envío en curso. Consulta el estado para ver el comprobante del correo.")
+                    case .unavailable(let reason):
+                        Text(verbatim: reason)
+                    }
+                }
+                if let message {
+                    Text(verbatim: message)
+                        .accessibilityIdentifier("real-delivery-feedback")
+                        .accessibilityFocused($feedbackFocused)
+                        .task(id: message) { feedbackFocused = true }
+                }
+                if busy || state == nil && message == nil { ProgressView("Consultando…") }
+                if !busy, message != nil || shouldPoll || state == nil {
+                    Button("Consultar estado", systemImage: "arrow.clockwise") { Task { await refresh() } }
                         .frame(minHeight: 44)
-                        .accessibilityIdentifier(isIssue ? "real-review-issue" : "real-review-email")
-                    } else {
-                        Text("Falta el nombre del cliente. Abre la factura desde Clientes para comprobar a quién corresponde.")
-                    }
-                case .receipt:
-                    if let receipt = state.receipt {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label("Correo aceptado para envío", systemImage: "checkmark.circle").font(.headline)
-                            Text(verbatim: receipt.recipient)
-                            ForEach(receipt.attachmentNames, id: \.self) { Text(verbatim: $0) }
-                            Text("Referencia: \(receipt.messageId)").font(.footnote).textSelection(.enabled)
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier("real-email-receipt")
-                    }
-                case .needsReconciliation:
-                    Text("IAERP necesita comprobar la solicitud anterior. Consulta el estado. Si sigue pendiente, pide a quien administra tu empresa que revise esta factura.")
-                case .waitingForSRI:
-                    Text("Emisión en curso. El correo estará disponible cuando el SRI autorice la factura.")
-                case .waitingForEmail:
-                    Text("Hay un envío en curso. Consulta el estado para ver el comprobante del correo.")
-                case .unavailable(let reason):
-                    Text(verbatim: reason)
+                        .accessibilityIdentifier("real-delivery-refresh")
                 }
             }
-            if let message {
-                Text(verbatim: message)
-                    .accessibilityIdentifier("real-delivery-feedback")
-                    .accessibilityFocused($feedbackFocused)
-                    .task(id: message) { feedbackFocused = true }
-            }
-            if busy || state == nil && message == nil { ProgressView("Consultando…") }
-            if !busy, message != nil || shouldPoll || state == nil {
-                Button("Consultar estado", systemImage: "arrow.clockwise") { Task { await refresh() } }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("real-delivery-refresh")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.borderless)
+            .sheet(item: $review) { step in
+                ProductionInvoiceReviewSheet(review: step) { await submit(step) }
             }
         } header: {
             Text("Emisión y correo")
         }
         .disabled(busy)
-        .sheet(item: $review) { step in
-            ProductionInvoiceReviewSheet(review: step) { await submit(step) }
-        }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             await refresh(reload: false)

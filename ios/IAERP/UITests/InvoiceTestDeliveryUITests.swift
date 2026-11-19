@@ -25,7 +25,10 @@ final class InvoiceTestDeliveryUITests: XCTestCase {
 
     private func text(_ id: String, in app: XCUIApplication) -> String {
         let element = app.descendants(matching: .any)[id].firstMatch
-        XCTAssertTrue(element.waitForExistence(timeout: 4))
+        if !element.waitForExistence(timeout: 2) {
+            reveal(element, in: app)
+        }
+        XCTAssertTrue(element.exists)
         return [element.label, element.value as? String ?? ""].joined(separator: " ")
     }
 

@@ -7,7 +7,7 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- **iOS 0.7.0 (10), en preparación.** Emisión oficial y correo desde la ficha de factura. El usuario autorizó la publicación tras revisión y hará la primera prueba real. [Decisión y criterios](adrs/0029-ios-emision-correo.md).
+- **iOS 0.7.0 (10), en validación para publicación.** Negocio, UI/UX y QA revisaron emisión oficial y correo desde la ficha. PostgreSQL cubrió la recepción incierta, la clave de autorización y los envíos concurrentes. En el simulador pasaron los recorridos de confirmación y cancelación, recuperación del recibo y revisión de un informe mensual cambiado. El usuario hará la primera prueba real. [PR 110](https://github.com/ceduardodch/iaerp/pull/110). [Decisión y criterios](adrs/0029-ios-emision-correo.md).
 
 - **iOS 0.6.1 (9) · Bienvenida y validación en el iPhone, 19 de noviembre.** La bienvenida da acceso a las cuentas reales. Las altas de clientes y productos y el formulario de factura indican qué falta. La revisión de importes identifica la línea con error y entrega el foco a VoiceOver. La ficha del borrador explica la emisión oficial desde Facturas en la web y el ensayo móvil desde la ficha del cliente. La revisión local cubrió 100 pruebas de paquetes, 60 de app, los 35 recorridos de interfaz y cuatro comprobaciones del enlace con el simulador. Se corrigieron y repitieron los recorridos del servicio AWS, del botón Continuar y del contraste con letra máxima. Negocio, UI/UX y QA revisaron los cambios. El iPhone 14 Pro confirmó la instalación de 0.6.1 (9). Carlos hará la prueba con su cuenta.
 
