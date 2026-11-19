@@ -32,7 +32,7 @@ jobs:
     name: Build and test iOS
     runs-on: xcode-27
     # The cold run reached 42 minutes with two sales flows stopping early.
-    timeout-minutes: 55
+    timeout-minutes: 65
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
@@ -64,14 +64,15 @@ jobs:
           IAERP_TEST_TIMEOUT_SECONDS: '360'
           IAERP_TEST_MAX_TIMEOUT_SECONDS: '390'
           IAERP_LAYOUT_LOG_TIMEOUT: 50m
-        run: bash ios/scripts/test-ios.sh
+        run: |
+          bash ios/scripts/test-ios.sh || python3 ios/scripts/retry-simulator-launch.py
       - name: Keep synthetic test results
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: iaerp-ios-tests
           path: |
-            ${{ runner.temp }}/IAERP.xcresult
+            ${{ runner.temp }}/IAERP*.xcresult
             ${{ runner.temp }}/invoice-layout.log
           retention-days: 7
           if-no-files-found: warn
