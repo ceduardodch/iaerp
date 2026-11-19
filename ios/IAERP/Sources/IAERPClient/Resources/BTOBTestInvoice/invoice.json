@@ -1,0 +1,53 @@
+{
+  "id": "2a03fd57-ce9a-4825-b1fd-3ebba1bf283d",
+  "type": "INVOICE",
+  "status": "AUTHORIZED",
+  "sequential": "000000001",
+  "issueDate": "2026-11-19",
+  "accessKey": "1911202601179999999900110010010000000015108772412",
+  "subtotal": "0.05",
+  "tax": "0.00",
+  "total": "0.05",
+  "currency": "USD",
+  "partyId": "27222b95-a964-4ca5-914d-ac7f3f13c916",
+  "establishmentId": "46b12d09-0e0c-485d-88ca-1cae430b04b0",
+  "emissionPointId": "4cf08925-72bb-4166-a3dc-e496e7c94987",
+  "fiscalPolicyVersion": "ec-iva-v1",
+  "reason": null,
+  "authorizationNumber": "1911202601179999999900110010010000000015108772412",
+  "authorizedAt": "2026-11-19T11:10:52.225175Z",
+  "voidedAt": null,
+  "voidedReason": null,
+  "sriTransmission": {
+    "status": "AUTHORIZED",
+    "message": null,
+    "lastAttemptAt": "2026-11-19T11:10:52.224430Z",
+    "authorizationNumber": "1911202601179999999900110010010000000015108772412"
+  },
+  "collectionStatus": null,
+  "retentionTotal": "0.00",
+  "collectionEnabled": true,
+  "commercialSnapshot": null,
+  "lines": [
+    {
+      "id": "e3659f43-0161-44a3-913e-fb80cad4dc96",
+      "lineNumber": 1,
+      "productId": "41db39fd-d0b2-40b2-8414-c2ad2ee02a63",
+      "description": "Servicio de prueba",
+      "quantity": "1.000000",
+      "unitPrice": "0.050000",
+      "discount": "0.00",
+      "baseAmount": "0.05",
+      "taxCode": "0",
+      "taxRate": "0.000000",
+      "taxAmount": "0.00"
+    }
+  ],
+  "installments": [
+    {
+      "dueDate": "2026-12-19",
+      "amount": "0.05"
+    }
+  ],
+  "analyticAssignments": []
+}

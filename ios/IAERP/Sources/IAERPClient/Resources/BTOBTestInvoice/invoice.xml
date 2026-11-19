@@ -1,0 +1,50 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<factura id="comprobante" version="1.1.0"><infoTributaria><ambiente>1</ambiente><tipoEmision>1</tipoEmision><razonSocial>BTOB SAS Pruebas</razonSocial><ruc>1799999999001</ruc><claveAcceso>1911202601179999999900110010010000000015108772412</claveAcceso><codDoc>01</codDoc><estab>001</estab><ptoEmi>001</ptoEmi><secuencial>000000001</secuencial><dirMatriz>Av. Siempre Viva 123</dirMatriz></infoTributaria><infoFactura><fechaEmision>19/11/2026</fechaEmision><dirEstablecimiento>Av. Siempre Viva 123</dirEstablecimiento><obligadoContabilidad>SI</obligadoContabilidad><tipoIdentificacionComprador>05</tipoIdentificacionComprador><razonSocialComprador>Cliente Facturable</razonSocialComprador><identificacionComprador>1790000001</identificacionComprador><totalSinImpuestos>0.05</totalSinImpuestos><totalDescuento>0.00</totalDescuento><totalConImpuestos><totalImpuesto><codigo>2</codigo><codigoPorcentaje>0</codigoPorcentaje><baseImponible>0.05</baseImponible><valor>0.00</valor></totalImpuesto></totalConImpuestos><propina>0.00</propina><importeTotal>0.05</importeTotal><moneda>USD</moneda></infoFactura><detalles><detalle><codigoPrincipal>IOS-SANDBOX-001</codigoPrincipal><descripcion>Servicio de prueba</descripcion><cantidad>1.000000</cantidad><precioUnitario>0.050000</precioUnitario><descuento>0.00</descuento><precioTotalSinImpuesto>0.05</precioTotalSinImpuesto><impuestos><impuesto><codigo>2</codigo><codigoPorcentaje>0</codigoPorcentaje><tarifa>0.00</tarifa><baseImponible>0.05</baseImponible><valor>0.00</valor></impuesto></impuestos></detalle></detalles><infoAdicional><campoAdicional nombre="RUC proveedor de facturación electrónica">9999999999001</campoAdicional></infoAdicional><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Id="Signature">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<ds:Reference URI="#comprobante">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<ds:Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>P6iOJVKeJISqkwAHOPFLWweNtL0=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference URI="#SignedProperties" Type="http://uri.etsi.org/01903#SignedProperties">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>+H9AH1IQ5ny1NJ6BY+yawqnqJNo=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>Ra9Bk1uWCEQipGD5XiQMx5/CpFyOKtPl4JHBiGYNUttCpXivqkPYtMY6TGX9/qjC
+g+kftd9akzQ+0bmGpK5NSJLgd0VIpl8SjrCU8H7E8xy+cutoqHwv5CYVzI4laMmj
+pYEKo+4WBJeelFrO8y6ysb4ktrpz5PzhCm3fytOdoTqcHMjZ8UBrWmZ1X9JEBM0o
+HGMsKhDHhRjo5458wro6IxZcESiCo0SnSCnIa5WL0sMcCdVId1/TdwLs7JOXJV1u
+2w+sO4lLmEiRJ4Py+03igyVSxmrdoAn6OgH0hKcaCQueZ7Gu2PT+x8PLM6wQpdzV
+eISpyRYAvymT+DIZZmj44Q==</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509Certificate>MIIDQDCCAiigAwIBAgIUWRXstMFoMaAbWaUroCBnOeZRxh0wDQYJKoZIhvcNAQEL
+BQAwSTELMAkGA1UEBhMCRUMxEjAQBgNVBAoMCUlBRVJQIERldjEmMCQGA1UEAwwd
+SUFFUlAgRGV2IFNpZ25pbmcgQ2VydGlmaWNhdGUwHhcNMjYwNzA0MjI0NjAyWhcN
+MjcwNzA0MjI1MTAyWjBJMQswCQYDVQQGEwJFQzESMBAGA1UECgwJSUFFUlAgRGV2
+MSYwJAYDVQQDDB1JQUVSUCBEZXYgU2lnbmluZyBDZXJ0aWZpY2F0ZTCCASIwDQYJ
+KoZIhvcNAQEBBQADggEPADCCAQoCggEBALomYLfiYa+wL+7FO4r8NnYBYC/CWTGb
+/Bx+kSMTu6Y3hV45RlThovlWr4QP2z4dBJ/t59G0BXKeIkAFcX0++np/7DJZ9RI4
+DYslL04YKBrYX6gf8Za3XGZu5fZV711E95/KUcFxhcxZQfE2yZ8i6w7LO0p0n49I
+pxlW/BJA3th7+1AI5IobPJJJ79uco1OrfYmBHuKyQesfSR/in3lYekYoPcLynC8X
+owFP9fIltFUDVR2Qe6zUs2CZe2bZhXVFpIIviOpTWdQB8zbHaMOmDV/q4hPpQSPQ
+klquERJzifFeZwmESvydIt8nNBo5jko93XZ9jZxHAjY/bOkEecsznMMCAwEAAaMg
+MB4wDAYDVR0TAQH/BAIwADAOBgNVHQ8BAf8EBAMCBsAwDQYJKoZIhvcNAQELBQAD
+ggEBABJ/hyL2UJf1yMjwylATYKhFhPk8BrdkET+RKRxTeCfbJJhE8RFVzHNuog0z
+CEqJ/Qx3kNTIccAjeoAKxt1NKUnuLN1puozaHBptI7gexpmr2l0oTTJglASFzhmR
+v4ZpoN9tBNUJjN4ypele/PcIomXMM1sZzCcE8Arc7lFIhoVs16Rs6lENszPOOvkc
+Fk+CDEshWlWlgUJang7QzVrnvBcHwUFz2J1qWZ4ldL2AYicj/0fSNiQ++ninO/YW
+up/1AnR8C7yFcEc9H6hesoZ1DMy+wkxvSz/0fVjPvUR9ouVn7DqHZ9g8hGo7kk1B
+7nDjas0BQlt9JnAZxbmAAw3IuHo=</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+<ds:Object><etsi:QualifyingProperties xmlns:etsi="http://uri.etsi.org/01903/v1.3.2#" Target="#Signature"><etsi:SignedProperties Id="SignedProperties"><etsi:SignedSignatureProperties><etsi:SigningTime>2026-11-19T11:10:52.128539</etsi:SigningTime><etsi:SigningCertificate><etsi:Cert><etsi:CertDigest><ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><ds:DigestValue>W6wEcR4d5C8AM+epMKNrldBpkTc=</ds:DigestValue></etsi:CertDigest><etsi:IssuerSerial><ds:X509IssuerName>CN=IAERP Dev Signing Certificate, O=IAERP Dev, C=EC</ds:X509IssuerName><ds:X509SerialNumber>508589114259878810512671518271744565461902280221</ds:X509SerialNumber></etsi:IssuerSerial></etsi:Cert></etsi:SigningCertificate><etsi:SignaturePolicyIdentifier><etsi:SignaturePolicyImplied/></etsi:SignaturePolicyIdentifier></etsi:SignedSignatureProperties></etsi:SignedProperties></etsi:QualifyingProperties></ds:Object></ds:Signature></factura>

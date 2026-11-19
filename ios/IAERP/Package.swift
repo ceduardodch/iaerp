@@ -15,7 +15,7 @@ let package = Package(
     targets: [
         .target(name: "IAERPDemo"),
         .testTarget(name: "IAERPDemoTests", dependencies: ["IAERPDemo"]),
-        .target(name: "IAERPClient"),
+        .target(name: "IAERPClient", resources: [.copy("Resources/BTOBTestInvoice")]),
         .testTarget(name: "IAERPClientTests", dependencies: ["IAERPClient"]),
         .target(name: "IAERPIdentity", dependencies: [
             .product(name: "AppAuth", package: "AppAuth-iOS", condition: .when(platforms: [.iOS])),

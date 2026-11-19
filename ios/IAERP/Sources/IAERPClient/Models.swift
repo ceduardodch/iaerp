@@ -26,6 +26,8 @@ public enum ERPClientError: Error, Equatable, Sendable, LocalizedError {
     case rateLimited(retryAfter: Int?)
     case server(Int)
     case invalidInput(String)
+    case customerIdentificationUnavailable, customerRegistrationConflict
+    case productCodeUnavailable, productRegistrationConflict
     case fixtureUnsupported
     case idempotencyConflict
     case unsupportedOverviewCurrency
@@ -40,6 +42,10 @@ public enum ERPClientError: Error, Equatable, Sendable, LocalizedError {
         case .rateLimited(let seconds): seconds.map { "Espera \($0) segundos antes de reintentar." } ?? "Espera antes de reintentar."
         case .server: "El servicio no está disponible. Inténtalo más tarde."
         case .invalidInput(let message): message
+        case .productCodeUnavailable: "El código corresponde a un producto inactivo."
+        case .productRegistrationConflict: "El producto ya existe o cambió la solicitud. Consulta el código para continuar."
+        case .customerIdentificationUnavailable: "Esta identificación ya existe y no está disponible como cliente."
+        case .customerRegistrationConflict: "El registro ya existe o cambió la solicitud. Consulta la identificación antes de continuar."
         case .fixtureUnsupported: "La demo admite los productos de ejemplo, cantidades 1, 2 o 3, sus precios originales y descuento cero."
         case .unsupportedOverviewCurrency: "La cartera incluye cuentas en otra moneda. El resumen está disponible para cartera en dólares."
         case .idempotencyConflict: "La operación cambió. Revisa el borrador antes de guardarlo otra vez."
@@ -237,10 +243,10 @@ public struct ERPSRITransmission: Codable, Equatable, Sendable {
 public struct ERPInvoice: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let type: String
-    public let status: String
+    public internal(set) var status: String
     public let sequential: String
     public let issueDate: String
-    public let accessKey: String?
+    public internal(set) var accessKey: String?
     @ERPDecimal public var subtotal: Decimal
     @ERPDecimal public var tax: Decimal
     @ERPDecimal public var total: Decimal
@@ -250,9 +256,9 @@ public struct ERPInvoice: Codable, Equatable, Identifiable, Sendable {
     public let emissionPointId: UUID
     public let fiscalPolicyVersion: String
     public let reason: String?
-    public let authorizationNumber: String?
-    public let authorizedAt: String?
-    public let sriTransmission: ERPSRITransmission?
+    public internal(set) var authorizationNumber: String?
+    public internal(set) var authorizedAt: String?
+    public internal(set) var sriTransmission: ERPSRITransmission?
     public let collectionStatus: String?
     public let collectionEnabled: Bool
     public let lines: [ERPInvoiceLine]
@@ -277,7 +283,7 @@ public struct ERPArtifactDownload: Codable, Equatable, Sendable {
     public let fileName: String
     public init(downloadUrl: String, expiresInSeconds: Int, fileName: String) { self.downloadUrl = downloadUrl; self.expiresInSeconds = expiresInSeconds; self.fileName = fileName }
 }
-public struct ERPDocument: Equatable, Sendable {
+public struct ERPDocument: Codable, Equatable, Sendable {
     public let data: Data
     public let fileName: String
     public let mimeType: String

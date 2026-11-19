@@ -7,29 +7,29 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- **Catálogos móviles · 19 de noviembre de 2026.** Candidatos de alta y consulta exacta de clientes y productos. Pasaron 41 pruebas del recorte en PostgreSQL. Negocio, UI/UX y QA revisaron el alcance. Pendientes CI, despliegue por Coolify y configuración del cliente nativo. La emisión fiscal y el buzón se prueban por separado en el Mac. [Decisión de catálogos](adrs/0028-ios-alta-catalogos.md).
+- **iOS 0.6.0 (8) · Candidato local del 19 de noviembre.** Incluye alta de cliente y producto desde la factura. El ensayo de emisión usa el simulador SRI y el buzón de captura. El producto AWS de BTOB-SAS debe elegirse en la sesión móvil y conservar su IVA en el comprobante de USD 0,05. En curso las revisiones, la prueba de interfaz y la instalación física. [Decisión de catálogos](adrs/0028-ios-alta-catalogos.md).
 
-- **iOS 0.5.0 (7) en revisión · 18 de noviembre de 2026.** Inicio muestra
-  cartera por cobrar, vencida y cobrada en el mes. Facturas consulta los meses
-  y sus filas por empresa y moneda. Negocio comprobó las definiciones de la
-  web. UI/UX revisó capturas con texto máximo y modo oscuro. QA devolvió a
-  desarrollo la posición al volver del detalle, la lectura de controles y el
-  foco al editar el plazo. El iPhone sigue con 0.4.2 hasta el cierre de QA,
-  CI y publicación del servidor. [Backlog y prueba física](backlog/ios-evaluacion-2026-11-18.md).
-  El candidato `1153c68` pasó 154 pruebas locales. En iOS 27.2 aparecieron
-  un nombre de empresa truncado, contraste bajo la barra de Facturas y una
-  espera agotada al cambiar de empresa. La revisión siguiente ajusta el área
-  visible de la lista, presenta la empresa a ancho completo y termina de
-  cerrar el selector antes de cambiar la empresa de prueba.
-  `32acbc1` pasó las 154 pruebas locales y las seis UI de Inicio en iOS
-  27.2. La [prueba remota](https://github.com/ceduardodch/iaerp/actions/runs/44372847670)
-  devolvió dos hallazgos, contraste en Cuenta y área táctil al elegir un
-  producto. La siguiente revisión conserva los controles de acceso y
-  contrasta los dos arreglos contra las mismas auditorías.
-  En `e4e1f93`, iOS 27.2 pasó las seis pruebas de Inicio y 24 de las 25 de
-  interfaz. En la restante, el formulario con letra máxima dejó de avanzar
-  antes de llegar a «Revisar importes». La corrección mantiene la acción en el
-  pie y exige otro toque para guardar tras ver el total. [Ejecución](https://github.com/ceduardodch/iaerp/actions/runs/44390354547).
+- **IAERP iPhone 0.5.0 (7) · 18 de noviembre de 2026.** Inicio presenta por cobrar,
+  vencido y cobrado este mes. Facturas muestra totales por mes y moneda y
+  conserva la posición al volver de un documento. El formulario permite revisar
+  importes desde el pie antes de guardar el borrador.
+  Negocio validó las reglas de cartera. UI/UX revisó texto máximo, contraste,
+  navegación y acciones. QA comprobó los arreglos de accesibilidad, cambios de
+  empresa, paginación y edición de cantidades. El candidato `37d7ea0` pasó
+  las 154 pruebas locales y en GitHub, incluidas 25 de interfaz. El simulador
+  registró tres avisos de geometría durante las auditorías. Las comprobaciones
+  del área visible y los controles táctiles pasaron en ambas versiones. El PR #108 se
+  integró en `main` como `c244d8d`. Coolify registró la publicación como
+  `finished` en la ejecución `g408lx6oi0eky1blfawbbed0`. El paso de espera de
+  GitHub recibió HTTP 520 mientras Coolify seguía trabajando. La web y
+  `/health/ready` volvieron a HTTP 200. El esquema público incluye las tres
+  consultas, que exigen autenticación (401). Se verificó la huella del backend
+  desplegado y el permiso `receivables:read` del cliente iOS. El 19 de noviembre se instaló la app en el iPhone 14 Pro
+  en modo desarrollador. CoreDevice confirmó la versión 0.5.0 (7) y la apertura.
+  Queda por probar el dashboard y comparar una factura con la web desde la sesión de Carlos.
+  [CI iOS](https://github.com/ceduardodch/iaerp/actions/runs/44399488616) ·
+  [Producción](https://github.com/ceduardodch/iaerp/actions/runs/44405591103) ·
+  [Backlog y prueba física](backlog/ios-evaluacion-2026-11-18.md).
 
 - iOS 0.4.2 (6), 2026-11-18. La solicitud interactiva de 0.4.1 combinaba
   el selector de organización con el permiso explícito `organization:read`.

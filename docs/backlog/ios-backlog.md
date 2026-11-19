@@ -1,7 +1,7 @@
 # IAERP para iPhone: backlog y avance
 
 - Fecha: 2026-11-18, America/Guayaquil.
-- **0.4.2 (6) instalada en el iPhone. Carlos confirma el ingreso.**
+- **0.5.0 (7) instalada y abierta en el iPhone 14 Pro el 19 de noviembre de 2026.**
 - [Evaluación de producto y UX, comparativa y próximas tres entregas](ios-evaluacion-2026-11-18.md).
 - Objetivo: instalar IAERP en el iPhone de Carlos y sumar funciones por entregas pequeñas.
 - Decisión de arquitectura: [ADR 0022, Accepted](../adrs/0022-native-ios-client.md).
@@ -340,3 +340,12 @@ instalación en el teléfono físico.
 
 Las versiones y condiciones se deben volver a comprobar al preparar la primera
 build. Los skills ayudan a escribir y revisar código; no sustituyen estas fuentes.
+
+## Entrega del ciclo de facturación móvil · 19 de noviembre
+
+| Historia | Criterio para cerrar |
+| --- | --- |
+| IOS-032 · Alta de cliente | Buscar RUC o cédula en la empresa, recuperar coincidencias y volver con el cliente seleccionado y las líneas intactas. |
+| IOS-033 · Alta de producto | Guardar código, nombre, precio sin IVA y categoría vigente. Usarlo en la misma factura. Un segundo intento con el mismo código recupera el registro. |
+| IOS-034 · Emisión y entrega de prueba | Revisar y confirmar USD 0,05 con el IVA de un servicio AWS del catálogo seleccionado en el iPhone. Abrir el RIDE y el XML de la web y verificar un solo correo en el buzón de captura. |
+| Aceptación física | Verificar en el iPhone el catálogo real de BTOB-SAS, la autorización simulada y los dos adjuntos. Registrar sólo resultados y datos sintéticos en el repositorio. |

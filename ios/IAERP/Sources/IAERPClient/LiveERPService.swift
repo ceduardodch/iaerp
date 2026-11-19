@@ -117,9 +117,7 @@ public struct LiveERPService: ERPService, ERPInvoiceDraftLookup, ERPSalesOvervie
 
     public func invoice(id: UUID) async throws -> ERPInvoice { try await get("invoices/\(id.uuidString)") }
     public func findDraft(idempotencyKey: String) async throws -> UUID? {
-        guard idempotencyKey.utf8.count == 36, UUID(uuidString: idempotencyKey) != nil else {
-            throw ERPClientError.invalidInput("La operación necesita una clave válida.")
-        }
+        try ERPInputValidation.validateUUIDKey(idempotencyKey)
         struct Result: Decodable, Sendable { let invoiceId: UUID }
         do {
             // The server treats the original key as opaque and case-sensitive.
@@ -220,11 +218,117 @@ public struct LiveERPService: ERPService, ERPInvoiceDraftLookup, ERPSalesOvervie
         }
     }
 }
+extension LiveERPService: ERPCatalogProductRegistrationService {
+    public func findProduct(code: String) async throws -> ERPProduct? {
+        struct Lookup: Encodable { let code: String }
+        let code = try ERPProductRegistrationInput.validatedCode(code)
+        do {
+            let item: ERPProduct = try await request("catalog-products/lookup", method: "POST",
+                                                     body: Self.encode(Lookup(code: code)), mayRefresh: true)
+            guard item.code == code else { throw ERPClientError.invalidResponse }
+            return item
+        } catch ERPClientError.notFound {
+            return nil
+        } catch ERPClientError.idempotencyConflict {
+            throw ERPClientError.productCodeUnavailable
+        }
+    }
+
+    public func createProduct(_ input: ERPProductRegistrationInput, idempotencyKey: String) async throws -> ERPProduct {
+        try ERPInputValidation.validateUUIDKey(idempotencyKey)
+        let input = try input.validated()
+        do {
+            let item: ERPProduct = try await request("catalog-products", method: "POST", body: Self.encode(input),
+                                                   idempotencyKey: idempotencyKey, mayRefresh: false)
+            guard item.code == input.code, item.taxCategoryId == input.taxCategoryId, item.unitPrice == input.unitPrice else {
+                throw ERPClientError.invalidResponse
+            }
+            return item
+        } catch ERPClientError.idempotencyConflict {
+            throw ERPClientError.productRegistrationConflict
+        }
+    }
+}
+
+extension LiveERPService: ERPCustomerRegistrationService {
+    public func findCustomer(identificationType: String, identificationNumber: String) async throws -> ERPParty? {
+        let id = try CustomerIdentification(type: identificationType, number: identificationNumber)
+        do {
+            // Read via a body so the identifier never appears in proxy access logs.
+            let party: ERPParty = try await request("customers/lookup", method: "POST", body: Self.encode(id), mayRefresh: true)
+            guard id.matches(party), party.roles.contains("CUSTOMER") else { throw ERPClientError.invalidResponse }
+            return party
+        } catch ERPClientError.notFound {
+            return nil
+        } catch ERPClientError.idempotencyConflict {
+            throw ERPClientError.customerIdentificationUnavailable
+        }
+    }
+
+    public func createCustomer(_ input: ERPCustomerRegistrationInput, idempotencyKey: String) async throws -> ERPParty {
+        try ERPInputValidation.validateUUIDKey(idempotencyKey)
+        let input = try input.validated()
+        do {
+            let party: ERPParty = try await request("customers", method: "POST", body: Self.encode(input),
+                                                   idempotencyKey: idempotencyKey, mayRefresh: false)
+            guard party.identificationType == input.identificationType,
+                  party.identificationNumber == input.identificationNumber, party.roles.contains("CUSTOMER") else {
+                throw ERPClientError.invalidResponse
+            }
+            return party
+        } catch ERPClientError.idempotencyConflict {
+            throw ERPClientError.customerRegistrationConflict
+        }
+    }
+}
+
+extension LiveERPService: ERPTestInvoiceService {
+    private func testDeliveryRoute(_ invoiceID: UUID) -> String {
+        "invoices/\(invoiceID.uuidString)/test-delivery"
+    }
+
+    public func testActions(invoiceID: UUID) async throws -> ERPTestInvoiceActions {
+        let actions: ERPTestInvoiceActions = try await get(testDeliveryRoute(invoiceID))
+        guard actions.environment == "TEST", actions.transmissionMode == "simulator",
+              actions.captureRecipient == TestDeliveryContract.mailbox else { throw ERPClientError.invalidResponse }
+        if let receipt = actions.emailReceipt { try TestDeliveryContract.checkReceipt(receipt) }
+        return actions
+    }
+
+    public func issueTestInvoice(invoiceID: UUID, idempotencyKey: String) async throws -> ERPTestIssueResult {
+        try ERPInputValidation.validateUUIDKey(idempotencyKey)
+        return try await request(testDeliveryRoute(invoiceID) + "/issue", method: "POST",
+                                 idempotencyKey: idempotencyKey, mayRefresh: false)
+    }
+
+    public func testEmailPreview(invoiceID: UUID) async throws -> ERPTestEmailPreview {
+        let preview: ERPTestEmailPreview = try await get(testDeliveryRoute(invoiceID) + "/email-preview")
+        try TestDeliveryContract.checkEnvelope(recipient: preview.recipient, names: preview.attachmentNames)
+        return preview
+    }
+
+    public func sendTestEmail(invoiceID: UUID, recipient: String, idempotencyKey: String) async throws -> ERPTestEmailReceipt {
+        struct Confirmation: Encodable { let recipient: String }
+        try ERPInputValidation.validateUUIDKey(idempotencyKey)
+        guard recipient == TestDeliveryContract.mailbox else { throw ERPClientError.forbidden }
+        let receipt: ERPTestEmailReceipt = try await request(testDeliveryRoute(invoiceID) + "/email", method: "POST",
+            body: Self.encode(Confirmation(recipient: recipient)), idempotencyKey: idempotencyKey, mayRefresh: false)
+        try TestDeliveryContract.checkReceipt(receipt)
+        return receipt
+    }
+}
+
 private extension Character {
     var isASCIIControl: Bool { unicodeScalars.contains { $0.value < 32 || $0.value == 127 } }
 }
 
 public enum ERPInputValidation {
+    static func validateUUIDKey(_ key: String) throws {
+        guard key.utf8.count == 36, UUID(uuidString: key) != nil else {
+            throw ERPClientError.invalidInput("La operación necesita una clave válida.")
+        }
+    }
+
     public static func isFiscalDate(_ text: String) -> Bool {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.calendar = Calendar(identifier: .gregorian)
@@ -242,7 +346,7 @@ public enum ERPInputValidation {
                   validDecimal(line.discount, positive: false, integerDigits: 14, fractionDigits: 2) else { throw ERPClientError.invalidInput("Revisa descripción, cantidad, precio, descuento e impuesto de cada línea.") }
         }
     }
-    private static func validDecimal(_ value: Decimal, positive: Bool, integerDigits: Int, fractionDigits: Int) -> Bool {
+    static func validDecimal(_ value: Decimal, positive: Bool, integerDigits: Int, fractionDigits: Int) -> Bool {
         guard !value.isNaN, positive ? value > 0 : value >= 0 else { return false }
         let text = NSDecimalNumber(decimal: value).stringValue
         let parts = text.split(separator: ".", omittingEmptySubsequences: false)

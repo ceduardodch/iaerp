@@ -30,7 +30,7 @@ struct WorkspaceInvoiceDetail: View {
     var body: some View {
         List {
             if loading { ProgressView("Cargando factura…") }
-            if let error { Section { ERPErrorState(message: error) { await load() } } }
+            if let error { Section { ERPErrorState(message: error) { _ = await load() } } }
             if let invoice {
                 Section {
                     summaryRow("Número", listedNumber ?? store.invoiceNumber(invoice))
@@ -51,6 +51,12 @@ struct WorkspaceInvoiceDetail: View {
                     if invoice.status == "DRAFT" { Text("Borrador guardado. No se ha emitido al SRI.").foregroundStyle(Color.primary) }
                     if invoice.status == "HISTORICAL_ISSUED" { Text("Documento histórico. No equivale a una autorización SRI verificada por esta app.").foregroundStyle(Color.primary) }
                 } header: { Text("Estado").foregroundStyle(Color.primary) }
+                if store.context?.permits("invoices:test-issue") == true || store.context?.permits("invoices:test-email") == true {
+                    InvoiceTestDeliverySection(store: store, invoice: invoice,
+                                               number: listedNumber ?? store.invoiceNumber(invoice),
+                                               artifacts: artifacts, reloadDocument: { await load(showProgress: false) })
+                        .id(invoice.id)
+                }
                 ForEach(invoice.lines) { line in
                     Section {
                         Text(line.description).font(.headline)
@@ -105,8 +111,8 @@ struct WorkspaceInvoiceDetail: View {
         .toolbarVisibility(listedNumber == nil ? .hidden : .visible, for: .tabBar)
         .toolbarBackground(Color(uiColor: .systemBackground), for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
-        .task { await load() }
-        .refreshable { await load() }
+        .task { _ = await load() }
+        .refreshable { _ = await load() }
         .sheet(item: $presentation) { DocumentViewer(presentation: $0) }
     }
 
@@ -118,20 +124,26 @@ struct WorkspaceInvoiceDetail: View {
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }
 
-    private func load() async {
-        guard let service = store.service else { return }
+    @discardableResult
+    private func load(showProgress: Bool = true) async -> ERPInvoice? {
+        guard let service = store.service else { return nil }
         let epoch = store.generation
-        loading = true; error = nil
+        if showProgress { loading = true }
+        defer { if epoch == store.generation { loading = false } }
+        error = nil
         do {
             let value = try await service.invoice(id: invoiceId)
-            guard epoch == store.generation, !Task.isCancelled else { return }
+            guard epoch == store.generation, !Task.isCancelled else { return nil }
+            let previous = invoice?.status
             invoice = value
             paymentSchedule = value.installments.map { InvoicePaymentRow(installment: $0) }
             await loadArtifacts()
+            await store.acceptInvoiceStatus(value, previousStatus: previous, generation: epoch)
+            return value
         } catch {
             if epoch == store.generation && !Task.isCancelled { self.error = friendlyError(error) }
+            return nil
         }
-        if epoch == store.generation { loading = false }
     }
     private func loadArtifacts() async {
         guard let service = store.service else { return }
@@ -142,7 +154,7 @@ struct WorkspaceInvoiceDetail: View {
             guard epoch == store.generation, !Task.isCancelled else { return }
             artifacts = result.filter { ["ride-pdf", "xml-signed"].contains($0.artifactType) }
         } catch {
-            if epoch == store.generation && !Task.isCancelled { documentError = friendlyError(error) }
+            if epoch == store.generation && !Task.isCancelled { artifacts = []; documentError = friendlyError(error) }
         }
     }
     private func open(_ artifact: ERPArtifact) async {

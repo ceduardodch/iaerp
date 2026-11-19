@@ -9,6 +9,7 @@ final class WorkspaceStore {
     var phase: Phase = .signedOut
     private(set) var generation = UUID()
     private(set) var isDemo = false
+    private(set) var persistsDemoDelivery = false
     private(set) var context: ERPContext?
     private(set) var customers: [ERPParty] = []
     private var customerNames: [UUID: ERPParty] = [:]
@@ -37,6 +38,8 @@ final class WorkspaceStore {
     var customerError: String?
     var invoiceError: String?
     var catalogError: String?
+    var preparedTrialInvoiceID: UUID?
+    private(set) var activeTrialStore: WorkspaceStore?
     var connectionError: String?
     var notice: String?
     var loadingCustomers = false
@@ -56,6 +59,8 @@ final class WorkspaceStore {
     private var productRequest = UUID()
     let authentication: AuthenticationController
     let documents: TemporaryDocuments
+    let testDeliveryJournal = InvoiceTestAttemptJournal()
+    let customerRegistrationJournal = CustomerRegistrationJournal()
     let invoiceRecoveryJournal: InvoiceRecoveryJournal
     @ObservationIgnored private let resetDocuments: @Sendable (UUID) async throws -> Void
 
@@ -204,6 +209,11 @@ final class WorkspaceStore {
     func clear(cancelAuthentication: Bool = true) {
         if cancelAuthentication { authentication.suspend() }
         generation = UUID()
+        testDeliveryJournal.clearDemo()
+        customerRegistrationJournal.clearEphemeral()
+        persistsDemoDelivery = false
+        closePrivateTrial()
+        preparedTrialInvoiceID = nil
         service = nil
         context = nil
         customers = []; invoices = []; products = []; memberships = []
@@ -227,7 +237,7 @@ final class WorkspaceStore {
         recoveryChecked = false
     }
 
-    func startDemo(secondary: Bool = false, readOnly: Bool = false) async {
+    func startDemo(secondary: Bool = false, readOnly: Bool = false, persistDelivery: Bool = false, company: DemoCompany? = nil) async {
         guard !connecting else { return }
         connecting = true
         clear()
@@ -240,8 +250,38 @@ final class WorkspaceStore {
         }
         guard epoch == generation, !Task.isCancelled else { return }
         isDemo = true
-        service = DemoERPService(company: secondary ? .secondary : .primary, readOnly: readOnly)
+        persistsDemoDelivery = persistDelivery
+        let directory = persistDelivery ? URL.applicationSupportDirectory.appending(path: company == .btobSandbox ? "IAERPPublicBTOBTrial" : "IAERPDemoDelivery", directoryHint: .isDirectory) : nil
+        service = DemoERPService(company: company ?? (secondary ? .secondary : .primary), readOnly: readOnly, testDeliveryDirectory: directory)
         await loadWorkspace()
+    }
+
+    func openPrivateTrial(_ api: LiveERPService, prepared: PreparedBTOBTrial, expectedGeneration: UUID) async throws {
+        guard !connecting, generation == expectedGeneration else { throw CancellationError() }
+        try Task.checkCancellation()
+        try await DeviceOwnerUnlock(reason: "Abre la factura privada de prueba de BTOB-SAS.").unlock()
+        guard generation == expectedGeneration, !Task.isCancelled else { throw CancellationError() }
+        let trialDocuments = TemporaryDocuments(root: FileManager.default.temporaryDirectory.appending(path: "IAERPTrialDocuments", directoryHint: .isDirectory))
+        let trial = WorkspaceStore(service: api, documents: trialDocuments)
+        try await trial.documents.reset(generation: trial.generation)
+        guard generation == expectedGeneration, !Task.isCancelled else { throw CancellationError() }
+        trial.isDemo = true
+        trial.phase = .ready
+        trial.context = prepared.context
+        trial.rememberCustomer(prepared.customer, generation: trial.generation)
+        trial.invoices = [prepared.draft]
+        activeTrialStore = trial
+        preparedTrialInvoiceID = prepared.invoiceID
+    }
+
+    func closePrivateTrial() {
+        if let trial = activeTrialStore {
+            trial.clear()
+            let epoch = trial.generation
+            Task { try? await trial.documents.reset(generation: epoch) }
+        }
+        activeTrialStore = nil
+        preparedTrialInvoiceID = nil
     }
 
     func connect(_ config: IdentityConfiguration) async {
@@ -472,12 +512,42 @@ final class WorkspaceStore {
         customerNames[id]?.name ?? "Cliente no cargado (\(id.uuidString.prefix(8)))"
     }
     func customer(_ id: UUID) -> ERPParty? { customerNames[id] }
+
+    func rememberProduct(_ product: ERPProduct) {
+        productRequest = UUID()
+        loadingProducts = false
+        catalogError = nil
+        products.removeAll { $0.id == product.id }
+        products.insert(product, at: 0)
+    }
+
+    func rememberCustomer(_ party: ERPParty, generation expected: UUID) {
+        guard generation == expected, party.roles.contains("CUSTOMER") else { return }
+        customerRequest = UUID()
+        loadingCustomers = false
+        customerError = nil
+        customerNames[party.id] = party
+        customers.removeAll { $0.id == party.id }
+        customers.insert(party, at: 0)
+    }
     func invoiceNumber(_ invoice: ERPInvoice) -> String {
         guard let establishment = setup?.establishments.first(where: { $0.id == invoice.establishmentId }),
               let point = setup?.emissionPoints.first(where: { $0.id == invoice.emissionPointId }) else {
             return "Secuencial \(invoice.sequential)"
         }
         return "\(establishment.code)-\(point.code)-\(invoice.sequential)"
+    }
+
+    func acceptInvoiceStatus(_ invoice: ERPInvoice, previousStatus: String?, generation expected: UUID) async {
+        guard expected == generation, !Task.isCancelled else { return }
+        let index = invoices.firstIndex { $0.id == invoice.id }
+        guard let earlier = previousStatus ?? index.map({ invoices[$0].status }), earlier != invoice.status else { return }
+        if let index {
+            invoices[index] = invoice
+            if index == 0 { notice = nil }
+        }
+        invoiceListRevision += 1
+        if canReadDashboard, !(isDemo && service is LiveERPService) { await loadDashboard() }
     }
 
     func acceptSaved(_ invoice: ERPInvoice, generation expected: UUID) {

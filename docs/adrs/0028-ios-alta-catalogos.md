@@ -8,4 +8,4 @@ El servidor obtiene la empresa y el usuario de la sesión autenticada. Los roles
 
 El cliente público de producción recibe sólo los permisos nuevos de alta. Para el ensayo fiscal BTOB-SAS se copia el cliente y el servicio elegido a un entorno privado de pruebas. El precio especial aplica a la línea de USD 0,05. El producto conserva su precio de catálogo. El RIDE y el XML proceden de los servicios de la web en modo simulador. El correo termina en el buzón de captura del ensayo.
 
-[Política de conexión iOS](0024-ios-production-connection-policy.md)
+[Política de conexión iOS](0024-ios-production-connection-policy.md) · [Emisión de prueba](0027-ios-test-invoice-delivery.md)

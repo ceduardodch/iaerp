@@ -1,0 +1,13 @@
+{
+  "recipient": "buzon@iaerp.example.org",
+  "senderAddress": null,
+  "senderName": null,
+  "subject": "Factura 001-001-000000001 · BTOB SAS · Pruebas",
+  "message": "Hola Cliente Facturable,\n\nAdjuntamos la factura 001-001-000000001, su RIDE en PDF y el XML firmado.\n\nFecha de emisión: 2026-11-19\nFecha límite de pago: 2026-12-19\nPlazo acordado: 30 días\nTotal: $0.05\n\nNota de pago: por favor realiza el pago hasta la fecha indicada.",
+  "attachmentNames": [
+    "FACTURA-001-001-000000001.xml",
+    "FACTURA-001-001-000000001.pdf"
+  ],
+  "dueDate": "2026-12-19",
+  "paymentTermsDays": 30
+}

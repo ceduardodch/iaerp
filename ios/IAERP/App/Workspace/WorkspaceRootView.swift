@@ -47,6 +47,18 @@ struct WorkspaceRootView: View {
                 .id(store.generation)
             }
         }
+        .sheet(isPresented: Binding(get: { store.preparedTrialInvoiceID != nil }, set: { if !$0 { store.closePrivateTrial() } })) {
+            if let id = store.preparedTrialInvoiceID {
+                NavigationStack {
+                    WorkspaceInvoiceDetail(store: store.activeTrialStore ?? store, invoiceId: id)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Cerrar") { store.closePrivateTrial() }
+                            }
+                        }
+                }
+            }
+        }
         .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-dark-mode") ? .dark : nil)
         .onChange(of: scenePhase) { _, phase in
             PrivacyShield.update(visible: phase != .active)
@@ -184,14 +196,7 @@ struct WorkspaceHomeView: View {
     @ViewBuilder private var balances: some View {
         companyTitle
         if let savedInvoice {
-            Text(savedInvoice.status == "DRAFT" ? "Borrador guardado. No se ha emitido al SRI." : "Guardado confirmado.")
-                .accessibilityIdentifier("workspace-notice")
-            NavigationLink {
-                WorkspaceInvoiceDetail(store: store, invoiceId: savedInvoice.id)
-            } label: {
-                Label(savedInvoice.status == "DRAFT" ? "Ver borrador" : "Ver factura", systemImage: "doc.text")
-            }
-            .accessibilityIdentifier("home-open-draft")
+            SavedInvoiceLink(store: store, saved: savedInvoice, linkIdentifier: "home-open-draft")
         }
         InvoiceRecoverySection(store: store)
         summaryContent
@@ -309,12 +314,22 @@ struct WelcomeView: View {
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("connect-company")
                         .disabled(store.connecting)
-                    Button("Probar demo", systemImage: "testtube.2") { Task { await store.startDemo() } }
+                    Button("Probar demo", systemImage: "testtube.2") {
+                        Task { await store.startDemo(persistDelivery: !ProcessInfo.processInfo.arguments.contains("-ephemeral-demo")) }
+                    }
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("start-demo")
                         .disabled(store.connecting)
+                    Button("BTOB-SAS · Factura de prueba de USD 0,05", systemImage: "doc.text") {
+                        Task {
+                            await store.startDemo(persistDelivery: !ProcessInfo.processInfo.arguments.contains("-ephemeral-demo"), company: .btobSandbox)
+                        }
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("start-btob-test")
+                    .disabled(store.connecting)
                 } footer: {
-                    Text("La demo usa datos ficticios. Los borradores de prueba se borran al salir.")
+                    Text("La demo usa datos ficticios. Las emisiones de prueba y los correos capturados se guardan en este iPhone.")
                         .foregroundStyle(Color.primary)
                 }
                 if let message = store.connectionError {
@@ -622,7 +637,8 @@ struct WorkspaceAccountView: View {
             nextDemoCompany = nil
             guard store.isDemo else { return }
             let readOnly = !store.canCreate
-            Task { await store.startDemo(secondary: company == .secondary, readOnly: readOnly) }
+            let persistDelivery = store.persistsDemoDelivery
+            Task { await store.startDemo(secondary: company == .secondary, readOnly: readOnly, persistDelivery: persistDelivery) }
         }) { route in
             CompanyProfileView(store: store, context: route.context) { company in
                 nextDemoCompany = company
