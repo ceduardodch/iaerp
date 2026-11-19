@@ -96,6 +96,10 @@ async function mockApi(page: Page) {
       json: currentReceivables,
     })
   })
+  await page.route('**/api/v1/receivables/overview', (route) => route.fulfill({
+    json: { asOf: '2026-07-05', currency: 'USD', outstanding: '270.00', overdue: '150.00',
+      openAccountCount: 2, overdueAccountCount: 1, collectedThisMonth: '500.00' },
+  }))
   await page.route('**/api/v1/receivables/collections', (route) =>
     route.fulfill({
       json: {
@@ -333,14 +337,10 @@ test('the list automatically reconciles registered retentions before collecting'
   let reconcileCount = 0
   let listCount = 0
   let reconciled = false
-  let collectionViewRequested = false
-  let initialListObserved!: () => void
-  const initialList = new Promise<void>((resolve) => { initialListObserved = resolve })
   let finishReconciliation!: () => void
   const reconciliationGate = new Promise<void>((resolve) => { finishReconciliation = resolve })
   await page.route('**/api/v1/receivables', (route) => {
-    if (collectionViewRequested) listCount += 1
-    else initialListObserved()
+    listCount += 1
     return route.fulfill({ json: [
       { ...overdueReceivable, openAmount: reconciled ? '136.50' : '150.00' }, partialReceivable,
     ] })
@@ -354,8 +354,6 @@ test('the list automatically reconciles registered retentions before collecting'
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
   await expect(page.getByRole('heading', { name: 'IAERP Demo' })).toBeVisible()
-  await initialList
-  collectionViewRequested = true
   await navigateToSection(page, 'Cartera')
   await expect(page.getByRole('heading', { name: 'Cartera', exact: true })).toBeVisible()
   await expect(page.getByRole('status')).toContainText('Cruzando retenciones')
