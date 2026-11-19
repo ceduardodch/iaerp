@@ -408,7 +408,7 @@ async def test_native_draft_issue_authorization_and_email_cycle(client, delivery
         }
         fiscal = await session.get(TenantFiscalSettings, TENANT_A)
         fiscal.certificate_object_key = "synthetic.p12"
-        fiscal.certificate_password_encrypted = "synthetic"
+        fiscal.certificate_password_encrypted = str(uuid.uuid4())
 
     password = b"synthetic"
     certificate = _p12_with_trust_chain(password)
