@@ -281,7 +281,7 @@ async def test_ios_direct_mutations_other_than_draft_never_enter_a_unit_of_work(
         json=body,
     )
     assert response.status_code == 403, response.text
-    assert response.json()["detail"] == "Native iOS access permits invoice drafts and preview only"
+    assert response.json()["detail"] == "Operation is not enabled for the native iOS client"
     async with SessionFactory() as session:
         assert await session.scalar(select(func.count()).select_from(IdempotencyRecord)) == 0
         assert await session.scalar(select(func.count()).select_from(AuditEvent)) == 0

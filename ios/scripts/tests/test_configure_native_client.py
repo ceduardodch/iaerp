@@ -76,6 +76,14 @@ class ConfigureNativeClientTests(unittest.TestCase):
         names = NATIVE.DEFAULT_SCOPES | {"organization", "unexpected"}
         scopes = [{"id": name, "name": name} for name in sorted(names)]
 
+        if mode == "customer-scope-absent":
+            scopes[:] = [scope for scope in scopes if scope["name"] not in {"customers:create", "products:create"}]
+        for scope in scopes:
+            if scope["name"] in {"customers:create", "products:create"}:
+                scope.update(protocol="openid-connect", attributes={"include.in.token.scope": "true"})
+                if mode == "invalid-customer-scope":
+                    scope["protocolMappers"] = [{"name": "unexpected"}]
+
         def handler(request):
             path, verb = request.url.path, request.method
 
@@ -87,6 +95,12 @@ class ConfigureNativeClientTests(unittest.TestCase):
                 return response({"access_token": "synthetic-never-printed"})
             path = path.split("/admin/realms/test")[-1]
             if path == "/client-scopes":
+                if verb == "POST":
+                    data = json.loads(request.content)
+                    self.assertIn(data["name"], {"customers:create", "products:create"})
+                    self.assertEqual(data, {"name": data["name"], "protocol": "openid-connect",
+                                            "attributes": {"include.in.token.scope": "true"}})
+                    scopes.append({**data, "id": data["name"]})
                 return response(scopes)
             if path == "/clients":
                 if verb == "POST":
@@ -157,6 +171,17 @@ class ConfigureNativeClientTests(unittest.TestCase):
         self.assertEqual(state["enableCalls"], 0)
         self.assertIs(state["registered"]["enabled"], False)
         self.assertNotIn("synthetic-never-printed", output)
+
+    def test_customer_scope_created_and_assigned_only_to_native_client(self):
+        state, error, _ = self.run_script(enable=True, mode="customer-scope-absent")
+        self.assertIsNone(error)
+        self.assertEqual(state["default"], NATIVE.DEFAULT_SCOPES)
+        self.assertNotIn("parties:write", state["default"])
+
+    def test_unexpected_scope_mapper_blocks_activation(self):
+        state, error, _ = self.run_script(enable=True, mode="invalid-customer-scope")
+        self.assertIsInstance(error, ValueError)
+        self.assertEqual(state["mutations"], [])
 
     def test_enable_is_last_mutation(self):
         state, error, _ = self.run_script(enable=True)

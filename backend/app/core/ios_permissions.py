@@ -7,6 +7,8 @@ gain invoice writes. Existing web and service-account policies stay unchanged.
 
 from collections.abc import Iterable
 
+IOS_PRODUCT_CREATE = "products:create"
+IOS_CUSTOMER_CREATE = "customers:create"
 IOS_CLIENT_ID = "iaerp-ios"
 IOS_READ_SCOPES = frozenset(
     {
@@ -53,7 +55,7 @@ def ios_effective_scopes(scopes: Iterable[str], membership_roles: Iterable[str])
     if IOS_OVERVIEW_ROLES.intersection(roles):
         allowed = allowed | {"receivables:read"}
     if IOS_INVOICE_WRITER_ROLES.intersection(roles):
-        allowed = allowed | {"invoices:write"}
+        allowed = allowed | {"invoices:write", IOS_CUSTOMER_CREATE, IOS_PRODUCT_CREATE}
     return frozenset(scopes).intersection(allowed)
 
 
@@ -61,8 +63,12 @@ def ios_request_permitted(method: str, route_path: str, *, api_prefix: str) -> b
     if method in {"GET", "HEAD", "OPTIONS"}:
         return True
     # invoices:write is shared by issue/email/void and draft in the legacy API.
-    # The native pilot permits only draft creation and the read-only preview.
+    # Native writes use the dedicated quick-entry routes below.
     return method == "POST" and route_path in {
         f"{api_prefix}/invoices",
         f"{api_prefix}/invoices/preview",
+        f"{api_prefix}/customers",
+        f"{api_prefix}/customers/lookup",
+        f"{api_prefix}/catalog-products",
+        f"{api_prefix}/catalog-products/lookup",
     }

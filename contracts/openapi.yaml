@@ -506,6 +506,114 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /customers:
+    post:
+      operationId: createNativeCustomer
+      security:
+      - oauth2:
+        - parties:read
+        - customers:create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCreate'
+      responses:
+        '201':
+          description: Registro del catálogo de la empresa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Registro ausente
+        '409':
+          description: Registro ya existente o inactivo
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /customers/lookup:
+    post:
+      operationId: lookupNativeCustomer
+      security:
+      - oauth2:
+        - parties:read
+        - customers:create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerLookup'
+      responses:
+        '200':
+          description: Registro del catálogo de la empresa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Registro ausente
+        '409':
+          description: Registro ya existente o inactivo
+  /catalog-products:
+    post:
+      operationId: createNativeProduct
+      security:
+      - oauth2:
+        - products:read
+        - products:create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NativeProductCreate'
+      responses:
+        '201':
+          description: Registro del catálogo de la empresa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Registro ausente
+        '409':
+          description: Registro ya existente o inactivo
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /catalog-products/lookup:
+    post:
+      operationId: lookupNativeProduct
+      security:
+      - oauth2:
+        - products:read
+        - products:create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductLookup'
+      responses:
+        '200':
+          description: Registro del catálogo de la empresa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Registro ausente
+        '409':
+          description: Registro ya existente o inactivo
   /parties:
     get:
       operationId: searchParties
@@ -1703,6 +1811,8 @@ components:
           tokenUrl: https://auth.example.invalid/token
           scopes:
             context:read: Leer contexto
+            customers:create: Crear clientes desde iOS
+            products:create: Crear productos desde iOS
             parties:read: Leer contactos
             parties:write: Gestionar contactos
             products:read: Leer productos
@@ -2164,6 +2274,108 @@ components:
         updatedAt:
           type: string
           format: date-time
+    CustomerCreate:
+      additionalProperties: false
+      properties:
+        identificationType:
+          enum:
+          - RUC
+          - CEDULA
+          - PASSPORT
+          - FINAL_CONSUMER
+          type: string
+        identificationNumber:
+          maxLength: 30
+          minLength: 1
+          type: string
+        name:
+          maxLength: 200
+          minLength: 1
+          type: string
+        email:
+          anyOf:
+          - format: email
+            type: string
+          - type: 'null'
+          default: null
+        address:
+          anyOf:
+          - maxLength: 500
+            type: string
+          - type: 'null'
+          default: null
+        phone:
+          anyOf:
+          - maxLength: 40
+            type: string
+          - type: 'null'
+          default: null
+        paymentTermsDays:
+          anyOf:
+          - maximum: 365
+            minimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+      required:
+      - identificationType
+      - identificationNumber
+      - name
+      type: object
+    CustomerLookup:
+      additionalProperties: false
+      properties:
+        identificationType:
+          enum:
+          - RUC
+          - CEDULA
+          - PASSPORT
+          - FINAL_CONSUMER
+          type: string
+        identificationNumber:
+          maxLength: 30
+          minLength: 1
+          type: string
+      required:
+      - identificationType
+      - identificationNumber
+      type: object
+    NativeProductCreate:
+      additionalProperties: false
+      properties:
+        name:
+          maxLength: 300
+          minLength: 1
+          type: string
+        code:
+          maxLength: 80
+          minLength: 1
+          type: string
+        unitPrice:
+          anyOf:
+          - minimum: 0.0
+            type: number
+          - pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,19}0*$)\d{0,12}\.\d{0,6}0*$)
+            type: string
+        taxCategoryId:
+          format: uuid
+          type: string
+      required:
+      - name
+      - code
+      - unitPrice
+      - taxCategoryId
+      type: object
+    ProductLookup:
+      additionalProperties: false
+      properties:
+        code:
+          maxLength: 80
+          minLength: 1
+          type: string
+      required:
+      - code
+      type: object
     PartyRole:
       type: string
       enum: [CUSTOMER, SUPPLIER]

@@ -7,6 +7,8 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- **Catálogos móviles · 19 de noviembre de 2026.** Candidatos de alta y consulta exacta de clientes y productos. Pasaron 41 pruebas del recorte en PostgreSQL. Negocio, UI/UX y QA revisaron el alcance. Pendientes CI, despliegue por Coolify y configuración del cliente nativo. La emisión fiscal y el buzón se prueban por separado en el Mac. [Decisión de catálogos](adrs/0028-ios-alta-catalogos.md).
+
 - **iOS 0.5.0 (7) en revisión · 18 de noviembre de 2026.** Inicio muestra
   cartera por cobrar, vencida y cobrada en el mes. Facturas consulta los meses
   y sus filas por empresa y moneda. Negocio comprobó las definiciones de la
