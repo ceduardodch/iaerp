@@ -56,6 +56,7 @@ import {
   type ReminderInput,
   type ReceivableDueDateUpdate,
   type ReceivableMovement,
+  type ReceivablesOverview,
   type RetentionInput,
   type RetentionBatch,
   type RetentionXmlPreview,
@@ -341,7 +342,7 @@ function Overview({
   const [invoicesQuery, receivablesQuery, leadsQuery, taxDashboardQuery, agingQuery, historyQuery] = useQueries({
     queries: [
       { queryKey: ['invoices', 'overview'], queryFn: () => apiRequest<SalesDocument[]>(token, '/invoices') },
-      { queryKey: ['receivables', 'overview'], queryFn: () => apiRequest<AccountItem[]>(token, '/receivables') },
+      { queryKey: ['receivables', 'overview', context.tenantId], queryFn: () => apiRequest<ReceivablesOverview>(token, '/receivables/overview') },
       { queryKey: ['crm', 'leads', 'overview'], queryFn: () => fetchAllLeads(token) },
       { queryKey: ['tax', 'dashboard', incomeTaxScenario], queryFn: () => apiRequest<DashboardTax>(token, `/tax/dashboard${incomeTaxScenario === '25' ? '?income_tax_rate=25' : ''}`), enabled: canReadTax },
       { queryKey: ['receivables', 'aging'], queryFn: () => apiRequest<AgingSummary>(token, '/receivables/aging') },
@@ -349,15 +350,13 @@ function Overview({
     ],
   })
   const invoices = invoicesQuery.data ?? []
-  const receivables = receivablesQuery.data ?? []
+  const portfolio = receivablesQuery.isError ? undefined : receivablesQuery.data
+  const balanceHint = receivablesQuery.isError ? 'No se pudo cargar el saldo de cartera.' : 'Cargando cartera…'
   const leads = leadsQuery.data ?? []
   const taxDashboard = taxDashboardQuery.data
   const months = historyQuery.data?.months ?? []
 
   const today = todayInFiscalTimezone().slice(0, 7)
-  const outstanding = receivables.reduce((sum, item) => sum + Number(item.openAmount), 0)
-  const overdueItems = receivables.filter((item) => item.status === 'OVERDUE')
-  const overdue = overdueItems.reduce((sum, item) => sum + Number(item.openAmount), 0)
   const monthlyInvoices = invoices.filter((invoice) =>
     invoice.issueDate.startsWith(today) && invoice.type === 'INVOICE' && invoice.status === 'AUTHORIZED',
   ).length
@@ -446,15 +445,15 @@ function Overview({
           {/* Cifra guía del tablero: una sola por vista, en la misma tipografía
               sans que el resto. Sin tabular-nums, que a este tamaño separa los
               dígitos y hace ver flojo el número. */}
-          <strong className="dash-hero-value">${formatAmount(outstanding)}</strong>
-          <p className="erp-stat-foot">{receivables.length} cuentas en cartera.</p>
+          <strong className="dash-hero-value">{portfolio ? `$${formatAmount(portfolio.outstanding)}` : '—'}</strong>
+          <p className="erp-stat-foot">{portfolio ? `${portfolio.openAccountCount} ${portfolio.openAccountCount === 1 ? 'cuenta pendiente' : 'cuentas pendientes'} de cobro.` : balanceHint}</p>
         </article>
         <div className="dash-tiles">
           <ErpStatTile
             label="Vencido"
-            value={`$${formatAmount(overdue)}`}
-            tone={overdue > 0 ? 'danger' : undefined}
-            footnote={`${overdueItems.length} cuenta(s) pasadas de fecha.`}
+            value={portfolio ? `$${formatAmount(portfolio.overdue)}` : '—'}
+            tone={portfolio && Number(portfolio.overdue) > 0 ? 'danger' : undefined}
+            footnote={portfolio ? `${portfolio.overdueAccountCount} ${portfolio.overdueAccountCount === 1 ? 'cuenta vencida' : 'cuentas vencidas'}.` : undefined}
           />
           <ErpStatTile
             label="Cobrado este mes"

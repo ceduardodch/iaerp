@@ -391,5 +391,7 @@ class ReceivablesOverviewRead(APIModel):
     as_of: date
     outstanding: Decimal
     overdue: Decimal
+    open_account_count: int = Field(ge=0)
+    overdue_account_count: int = Field(ge=0)
     collected_this_month: Decimal
     currency: Literal["USD"] = "USD"

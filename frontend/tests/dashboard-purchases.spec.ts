@@ -134,6 +134,9 @@ async function mockApi(page: Page) {
   for (const path of ['parties', 'products', 'tax-categories', 'establishments', 'emission-points', 'invoices', 'receivables', 'crm/leads']) {
     await page.route(`**/api/v1/${path}**`, (route) => route.fulfill({ json: [] }))
   }
+  await page.route('**/api/v1/receivables/overview', (route) => route.fulfill({
+    json: { outstanding: '825.35', overdue: '400.00', openAccountCount: 3, overdueAccountCount: 1 },
+  }))
   await page.route('**/api/v1/receivables/aging', (route) => route.fulfill({
     json: { asOf: '2026-08-15', buckets: aging, byParty: [] },
   }))
@@ -277,6 +280,24 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page)
   await page.goto('/')
   await page.getByRole('button', { name: 'Continuar' }).click()
+})
+
+test('Por cobrar muestra el mismo resumen que iPhone aunque la lista de cartera esté vacía', async ({ page }) => {
+  const card = page.locator('article').filter({ has: page.getByText('Por cobrar', { exact: true }) })
+  await expect(card).toContainText(/825[.,]35/)
+  await expect(card).toContainText('3 cuentas pendientes de cobro.')
+  await expect(page.getByText('1 cuenta vencida.', { exact: true })).toBeVisible()
+})
+
+test('Por cobrar distingue un saldo no disponible de una cartera en cero', async ({ page }) => {
+  await page.route('**/api/v1/receivables/overview', (route) =>
+    route.fulfill({ status: 503, json: { detail: 'Servicio temporalmente no disponible' } }),
+  )
+  await page.reload()
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  const card = page.locator('article').filter({ has: page.getByText('Por cobrar', { exact: true }) })
+  await expect(card).toContainText('No se pudo cargar el saldo de cartera.', { timeout: 15000 })
+  await expect(card.locator('strong')).toHaveText('—')
 })
 
 test('dashboard muestra evolución y corte mensual documentado', async ({ page }) => {

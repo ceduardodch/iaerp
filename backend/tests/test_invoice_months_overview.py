@@ -184,6 +184,8 @@ async def test_overview_matches_web_for_partial_overdue_and_reversed_payments(cl
     assert data == {
         "outstanding": "894.50",
         "overdue": "879.50",
+        "openAccountCount": 2,
+        "overdueAccountCount": 1,
         "collectedThisMonth": "100.00",
         "asOf": str(today),
         "currency": "USD",
@@ -202,6 +204,44 @@ async def test_overview_matches_web_for_partial_overdue_and_reversed_payments(cl
     assert {empty[k] for k in ("outstanding", "overdue", "collectedThisMonth")} == {"0.00"}
 
 
+async def test_overview_and_aging_exclude_cancelled_accounts_and_invoices(client):
+    today = date(2026, 9, 3)
+    movements = await _seed_movements(
+        suffix="live", entries=[("PAYMENT", Decimal("25.00"), today)]
+    )
+    async with SessionFactory() as session, session.begin():
+        active = await session.get(Receivable, movements[0].receivable_id)
+        active.status = "PARTIALLY_PAID"
+        party = await _create_party(session, tenant_id=TENANT_A, suffix="void")
+        for account_status, invoice_status in (
+            ("VOID", "AUTHORIZED"), ("VOIDED", "VOIDED"), ("OPEN", "VOIDED")
+        ):
+            document = await _create_authorized_invoice_stub(
+                session, tenant_id=TENANT_A, party_id=party.id, total=Decimal("60.00")
+            )
+            document.status = invoice_status
+            account, _ = await _create_receivable(
+                session, tenant_id=TENANT_A, party_id=party.id, sales_document_id=document.id,
+                original_amount=Decimal("60.00"), installment_amounts=[Decimal("60.00")],
+                due_date=today,
+            )
+            account.status = account_status
+
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:read"])
+    overview = await client.get("/api/v1/receivables/overview", headers=auth(token))
+    assert overview.status_code == 200, overview.text
+    assert overview.json()["outstanding"] == "975.00"
+    assert overview.json()["openAccountCount"] == 1
+    aging = await client.get("/api/v1/receivables/aging", headers=auth(token))
+    assert aging.status_code == 200, aging.text
+    assert sum(Decimal(b["total"]) for b in aging.json()["buckets"]) == Decimal("975")
+    # Administrative records and original balances remain available for reconciliation.
+    ledger = await client.get("/api/v1/receivables", headers=auth(token))
+    assert ledger.status_code == 200, ledger.text
+    assert len(ledger.json()) == 4
+    assert sum(Decimal(r["openAmount"]) for r in ledger.json()) == Decimal("1155")
+
+
 async def test_overview_with_foreign_currency_does_not_label_mixed_totals_usd(client):
     movements = await _seed_movements(
         suffix="fx", entries=[("PAYMENT", Decimal("10"), date(2026, 8, 1))]
@@ -213,6 +253,25 @@ async def test_overview_with_foreign_currency_does_not_label_mixed_totals_usd(cl
     response = await client.get("/api/v1/receivables/overview", headers=auth(token))
     assert response.status_code == 409
     assert "outstanding" not in response.json()
+
+
+@pytest.mark.parametrize("day,expected_status", [(date(2026, 8, 31), 200), (date(2026, 9, 1), 409)])
+async def test_closed_foreign_account_only_matters_for_actual_monthly_collections(
+    client, monkeypatch, day, expected_status
+):
+    monkeypatch.setattr(receivables, "today_in_fiscal_timezone", lambda: date(2026, 9, 3))
+    movement, = await _seed_movements(
+        suffix="fclosed", entries=[("PAYMENT", Decimal("1000.00"), day)]
+    )
+    async with SessionFactory() as session, session.begin():
+        account = await session.get(Receivable, movement.receivable_id)
+        account.currency = "EUR"
+        account.status = "PAID"
+    token = await token_for(client, "a@iaerp.local", TENANT_A, ["receivables:read"])
+    response = await client.get("/api/v1/receivables/overview", headers=auth(token))
+    assert response.status_code == expected_status, response.text
+    if expected_status == 200:
+        assert response.json()["outstanding"] == response.json()["collectedThisMonth"] == "0.00"
 
 
 @pytest.mark.parametrize(

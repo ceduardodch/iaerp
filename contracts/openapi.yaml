@@ -1117,6 +1117,25 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /receivables/overview:
+    get:
+      operationId: getReceivablesOverview
+      summary: Saldo pendiente de cobro y vencido para el inicio web y móvil
+      security:
+        - oauth2: ["receivables:read"]
+      responses:
+        "200":
+          description: Saldo positivo de cuentas vigentes, con el cobro del mes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceivablesOverview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Hay saldo cobrable o cobros del mes en una moneda distinta de USD
   /receivables/aging:
     get:
       operationId: getReceivablesAging
@@ -3237,6 +3256,28 @@ components:
         installmentCount:
           type: integer
           minimum: 0
+    ReceivablesOverview:
+      type: object
+      required: [asOf, currency, outstanding, overdue, openAccountCount, overdueAccountCount, collectedThisMonth]
+      properties:
+        asOf:
+          type: string
+          format: date
+        currency:
+          type: string
+          enum: [USD]
+        outstanding:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        overdue:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        openAccountCount:
+          type: integer
+          minimum: 0
+        overdueAccountCount:
+          type: integer
+          minimum: 0
+        collectedThisMonth:
+          $ref: "#/components/schemas/NonNegativeDecimal"
     AgingSummary:
       type: object
       additionalProperties: false
