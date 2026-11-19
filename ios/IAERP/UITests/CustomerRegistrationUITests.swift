@@ -22,8 +22,14 @@ final class CustomerRegistrationUITests: XCTestCase {
 
     private func enter(_ value: String, field: String, in app: XCUIApplication) {
         let input = app.textFields[field]
+        let focusedInput = app.textFields.matching(NSPredicate(
+            format: "identifier == %@ AND hasKeyboardFocus == true", field
+        )).firstMatch
         tap(input, in: app)
-        input.typeText(value)
+        if !focusedInput.waitForExistence(timeout: 3) { tap(input, in: app) }
+        XCTAssertTrue(focusedInput.waitForExistence(timeout: 8), "El teclado debe tener el foco en " + field)
+        focusedInput.typeText(value)
+        XCTAssertEqual(input.value as? String, value)
         if app.keyboards.firstMatch.exists {
             let done = app.buttons["Listo"].firstMatch
             if done.exists && done.isHittable { done.tap() }
