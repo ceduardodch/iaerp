@@ -34,6 +34,8 @@ public actor DemoERPService: ERPService, ERPSalesOverviewService, ERPTestInvoice
     public let company: DemoCompany
     public let readOnly: Bool
     private var drafts: [ERPInvoice] = []
+    private var collectionsFixture: [CollectionAccount]?
+    private var collectionRequests: [UUID: (UUID, CollectionAction, CollectionAccount)] = [:]
     private var savedRequests: [String: (Data, ERPInvoice)] = [:]
     private let btobFixture: Result<BTOBTestFixture, Error>?
     private let testDelivery: DemoTestDeliveryStore
@@ -66,7 +68,7 @@ public actor DemoERPService: ERPService, ERPSalesOverviewService, ERPTestInvoice
     public func context() throws -> ERPContext {
         let name = try btobFixture?.get().companyName ?? company.name
         return ERPContext(tenantId: company.tenantId, ruc: "DEMO-SIN-RUC", name: name,
-                   roles: [readOnly ? "READER" : "BILLING"], scopes: ["context:read", "memberships:read", "organization:read", "parties:read", "products:read", "invoices:read"] + (readOnly ? [] : ["invoices:write", "receivables:read", "invoices:test-issue", "invoices:test-email", "customers:create", "products:create"]))
+                   roles: [readOnly ? "READER" : "BILLING"], scopes: ["context:read", "memberships:read", "organization:read", "parties:read", "products:read", "invoices:read"] + (readOnly ? [] : ["invoices:write", "receivables:read", "collections:notify", "collections:terms", "invoices:test-issue", "invoices:test-email", "customers:create", "products:create"]))
     }
     public func memberships() throws -> [ERPMembership] {
         (company == .btobSandbox ? [DemoCompany.btobSandbox] : [.primary, .secondary]).map { ERPMembership(tenantId: $0.tenantId, organizationId: $0.alias, ruc: "DEMO-SIN-RUC", tenantName: $0.name, roles: [readOnly ? "READER" : "BILLING"], active: true) }
@@ -202,8 +204,8 @@ public actor DemoERPService: ERPService, ERPSalesOverviewService, ERPTestInvoice
         }
         let primary = company == .primary
         return ERPHomeSummary(asOf: "2026-11-18", currency: "USD",
-                              receivable: Self.decimal(primary ? "350.25" : "80.40"),
-                              overdue: Self.decimal(primary ? "100.50" : "0"),
+                              receivable: try collectionAccounts().reduce(0) { $0 + $1.openAmount },
+                              overdue: try collectionAccounts().filter(\.overdue).reduce(0) { $0 + $1.openAmount },
                               collectedThisMonth: Self.decimal(primary ? "230.75" : "40.20"))
     }
 
@@ -437,5 +439,78 @@ public actor DemoERPService: ERPService, ERPSalesOverviewService, ERPTestInvoice
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return values }
         return values.filter { value in fields(value).contains { $0.range(of: term, options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "es_EC")) != nil } }
+    }
+}
+
+extension DemoERPService: ERPCollectionsService {
+    public func collectionAccounts() throws -> [CollectionAccount] {
+        guard !readOnly else { throw ERPClientError.forbidden }
+        if let collectionsFixture { return collectionsFixture }
+        if company == .btobSandbox { return [] }
+        let parties = try customers(query: "")
+        let primary = company == .primary
+        let amounts = primary ? ["100.50", "249.75"] : ["80.40"]
+        let rows = try amounts.enumerated().map { index, amount in
+            let partyID = DemoCompany.uuid(company.offset + 101 + index)
+            guard let party = parties.first(where: { $0.id == partyID }) else { throw ERPClientError.invalidResponse }
+            let late = primary && index == 0
+            let due = late ? "2026-11-10" : "2026-12-05"
+            let identity = DemoCompany.uuid(company.offset + 901 + index * 2)
+            var installments = [CollectionInstallment(id: identity, sequence: 1, dueDate: due,
+                openAmount: Self.decimal(amount))]
+            if primary && index == 1 {
+                installments[0].openAmount = 100
+                installments.append(CollectionInstallment(id: DemoCompany.uuid(company.offset + 904), sequence: 2,
+                    dueDate: "2027-01-05", openAmount: Self.decimal(amount) - 100))
+            }
+            return CollectionAccount(
+                id: DemoCompany.uuid(company.offset + 801 + index), partyId: partyID, customerName: party.name,
+                invoiceNumber: "001-001-00000000\(index + 1)", currency: "USD", openAmount: Self.decimal(amount),
+                originalAmount: Self.decimal(amount) + 20, cashAmount: 18, retentionAmount: 2,
+                dueDate: due, overdue: late, installmentCount: installments.count, installments: installments,
+                promisedDate: nil, email: party.email, collectionEnabled: false, canEnableReminders: true,
+                reminderBlockedReason: "Habilita los avisos para esta factura.", lastReminderAt: nil,
+                lastReminderStatus: nil)
+        }
+        collectionsFixture = rows
+        return rows
+    }
+    public func collectionAccount(_ id: UUID) throws -> CollectionAccount {
+        guard let account = try collectionAccounts().first(where: { $0.id == id }) else { throw ERPClientError.notFound }
+        return account
+    }
+    public func changeCollectionAccount(_ id: UUID, action: CollectionAction, key: UUID) throws -> CollectionAccount {
+        if let previous = collectionRequests[key] {
+            guard previous.0 == id && previous.1 == action else { throw ERPClientError.idempotencyConflict }
+            return previous.2
+        }
+        var row = try collectionAccount(id)
+        switch action {
+        case let .promise(date, previous):
+            guard row.promisedDate == previous else { throw ERPClientError.idempotencyConflict }
+            row.promisedDate = date
+        case let .dueDate(id, date, previous, reason):
+            guard let index = row.installments.firstIndex(where: { $0.id == id && $0.dueDate == previous && $0.openAmount > 0 }),
+                  reason.count >= 3 else { throw ERPClientError.idempotencyConflict }
+            row.installments[index].dueDate = date
+            row.dueDate = row.installments.filter { $0.openAmount > 0 }.map(\.dueDate).min() ?? date
+            row.overdue = row.dueDate < "2026-11-18"
+        case .enableReminders:
+            row.collectionEnabled = true
+            row.canEnableReminders = false
+        case let .reminder(recipient, amount, date):
+            guard row.reminderBlockedReason == nil, row.email == recipient, row.openAmount == amount,
+                  row.dueDate == date else { throw ERPClientError.idempotencyConflict }
+            row.lastReminderStatus = "SENT"
+            row.lastReminderAt = Date.now.ISO8601Format()
+        }
+        if !row.collectionEnabled { row.reminderBlockedReason = "Habilita los avisos para esta factura." }
+        else if let date = row.promisedDate { row.reminderBlockedReason = "Los avisos están pausados hasta el \(date)." }
+        else if row.lastReminderStatus == "SENT" { row.reminderBlockedReason = "Ya se envió un recordatorio hoy." }
+        else { row.reminderBlockedReason = nil }
+        guard let index = collectionsFixture?.firstIndex(where: { $0.id == id }) else { throw ERPClientError.notFound }
+        collectionsFixture?[index] = row
+        collectionRequests[key] = (id, action, row)
+        return row
     }
 }

@@ -278,6 +278,7 @@ async def test_scheduled_manual_email_uses_receivable_context(
         )
         assert reminder.installment_id is None
         reminder_id = reminder.id
+        delivery_time = reminder.scheduled_at
 
     async with SessionFactory() as session, session.begin():
         await handle_collection_reminder_due(
@@ -292,6 +293,7 @@ async def test_scheduled_manual_email_uses_receivable_context(
                 correlation_id="scheduled-manual-test",
                 attempts=1,
             ),
+            now=delivery_time,
         )
 
     async with SessionFactory() as session:
@@ -351,6 +353,7 @@ async def test_scheduled_manual_email_uses_oldest_open_installment(
             ),
         )
         reminder_id = reminder.id
+        delivery_time = reminder.scheduled_at
 
     async with SessionFactory() as session, session.begin():
         await handle_collection_reminder_due(
@@ -365,6 +368,7 @@ async def test_scheduled_manual_email_uses_oldest_open_installment(
                 correlation_id="scheduled-open-installment-test",
                 attempts=1,
             ),
+            now=delivery_time,
         )
 
     assert len(sent_emails) == 1
@@ -421,6 +425,7 @@ async def test_scheduled_message_is_skipped_when_account_was_paid(
             )
         )
         reminder_id = reminder.id
+        delivery_time = reminder.scheduled_at
 
     async with SessionFactory() as session, session.begin():
         await handle_collection_reminder_due(
@@ -435,6 +440,7 @@ async def test_scheduled_message_is_skipped_when_account_was_paid(
                 correlation_id="scheduled-paid-account-test",
                 attempts=1,
             ),
+            now=delivery_time,
         )
 
     async with SessionFactory() as session:

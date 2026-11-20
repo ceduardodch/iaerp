@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
 from app.db.session import SessionFactory
+from app.models.billing import SalesDocument
 from app.models.masters import Party
 from app.models.platform import OutboxEvent, Tenant
 from app.models.receivables import (
@@ -20,7 +21,11 @@ from app.models.receivables import (
 )
 from app.services import crm_integrations
 from app.services.collection_email import render_collection_email
-from app.services.receivables import compute_installment_balance, compute_receivable_balance
+from app.services.receivables import (
+    compute_installment_balance,
+    compute_receivable_balance,
+    has_native_contact,
+)
 from app.workers.outbox import OutboxMessage
 
 FISCAL_TZ = ZoneInfo("America/Guayaquil")
@@ -91,6 +96,7 @@ async def dispatch_due_reminders_once() -> int:
             await session.scalars(
                 select(CollectionReminder)
                 .where(
+                    CollectionReminder.native_confirmation.is_(None),
                     CollectionReminder.scheduled_at <= now,
                     or_(
                         CollectionReminder.status == "PENDING",
@@ -130,29 +136,40 @@ async def dispatch_due_reminders_once() -> int:
 async def handle_collection_reminder_due(
     session: AsyncSession,
     message: OutboxMessage,
+    *,
+    now: datetime | None = None,
 ) -> None:
+    now = now or datetime.now(UTC)
     try:
         reminder_id = uuid.UUID(message.aggregate_id)
     except ValueError:
         return
+    rid = await session.scalar(
+        select(CollectionReminder.receivable_id).where(
+            CollectionReminder.id == reminder_id,
+            CollectionReminder.tenant_id == message.tenant_id,
+            CollectionReminder.native_confirmation.is_(None),
+        )
+    )
+    receivable = await session.scalar(
+        select(Receivable)
+        .where(Receivable.id == rid, Receivable.tenant_id == message.tenant_id)
+        .with_for_update()
+    )
     reminder = await session.scalar(
         select(CollectionReminder)
         .where(
             CollectionReminder.id == reminder_id,
             CollectionReminder.tenant_id == message.tenant_id,
+            CollectionReminder.native_confirmation.is_(None),
         )
         .with_for_update()
     )
-    if reminder is None or reminder.status == "SENT":
+    if reminder is None or reminder.status not in {"PENDING", "PROCESSING", "FAILED"}:
         return
-
+    if reminder.scheduled_at and reminder.scheduled_at.replace(tzinfo=UTC) > now:
+        return
     policy = await session.get(CollectionPolicy, reminder.tenant_id)
-    receivable = await session.scalar(
-        select(Receivable).where(
-            Receivable.id == reminder.receivable_id,
-            Receivable.tenant_id == reminder.tenant_id,
-        )
-    )
     party = await session.scalar(
         select(Party).where(
             Party.tenant_id == reminder.tenant_id,
@@ -169,6 +186,28 @@ async def handle_collection_reminder_due(
     ):
         reminder.status = "SKIPPED"
         reminder.error_message = "Collection messages are disabled"
+        return
+
+    doc = await session.get(SalesDocument, receivable.sales_document_id)
+    if (
+        receivable.status not in {"OPEN", "PARTIALLY_PAID"}
+        or doc is None
+        or doc.status == "VOIDED"
+        or (
+            receivable.promised_date
+            and receivable.promised_date >= now.astimezone(FISCAL_TZ).date()
+        )
+    ):
+        reminder.status = "SKIPPED"
+        reminder.error_message = (
+            "La cuenta o el destinatario cambió, o hay una promesa de pago vigente."
+        )
+        return
+    if reminder.channel == "EMAIL" and await has_native_contact(session, receivable):
+        reminder.status = "SKIPPED"
+        reminder.error_message = (
+            "Ya existe un correo de cobranza confirmado o pendiente para esta cuenta."
+        )
         return
 
     integration = await crm_integrations.google_integration_for_tenant(session, reminder.tenant_id)
@@ -198,6 +237,11 @@ async def handle_collection_reminder_due(
         if open_amount <= 0:
             reminder.status = "SKIPPED"
             reminder.error_message = "Receivable has no open balance"
+            return
+        current_recipient = party.email if reminder.channel == "EMAIL" else party.phone
+        if current_recipient != reminder.recipient:
+            reminder.status = "SKIPPED"
+            reminder.error_message = "El contacto de cobranza del cliente cambió."
             return
         if reminder.channel == "EMAIL":
             if integration is None:
@@ -244,7 +288,7 @@ async def handle_collection_reminder_due(
                 party_name=party.name,
                 open_amount=open_amount,
                 due_date=due_date,
-                as_of=datetime.now(FISCAL_TZ).date(),
+                as_of=now.astimezone(FISCAL_TZ).date(),
             )
             reminder.provider_message_id = await crm_integrations.send_google_email(
                 session,
@@ -271,7 +315,7 @@ async def handle_collection_reminder_due(
     else:
         reminder.status = "SENT"
         reminder.delivery_status = "SENT"
-        reminder.sent_at = datetime.now(UTC)
+        reminder.sent_at = now
         reminder.error_message = None
 
 

@@ -29,8 +29,10 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Date,
@@ -99,6 +101,7 @@ class Receivable(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     status: Mapped[str] = mapped_column(String(20), default="OPEN")
     collection_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    promised_date: Mapped[date | None] = mapped_column(Date)
 
 
 class ReceivableInstallment(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
@@ -308,6 +311,7 @@ class CollectionReminder(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin,
     error_message: Mapped[str | None] = mapped_column(String(1000))
     # El proveedor puede confirmar entrega o lectura. Nunca se infiere desde
     # un envío exitoso: UNKNOWN significa que el canal no lo reportó.
+    native_confirmation: Mapped[dict[str, Any] | None] = mapped_column(JSON(none_as_null=True))
     provider_message_id: Mapped[str | None] = mapped_column(String(200))
     delivery_status: Mapped[str] = mapped_column(String(20), default="UNKNOWN")
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

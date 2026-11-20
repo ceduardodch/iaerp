@@ -980,3 +980,76 @@ extension ProductionInvoiceDeliveryTests {
         #expect(ERPClientError.fiscalDeliveryError(.init(statusCode: 500, data: body)) == nil)
     }
 }
+
+struct CollectionClientTests {
+    let id = UUID(uuidString: "00000000-0000-4000-8000-000000000801")!
+    let fixture = Data(#"{"id":"00000000-0000-4000-8000-000000000801","partyId":"00000000-0000-4000-8000-000000000101","customerName":"Ejemplo","invoiceNumber":"001-001-000000001","currency":"USD","openAmount":"90.12","originalAmount":"100.12","cashAmount":"8.00","retentionAmount":"2.00","dueDate":"2026-12-02","overdue":false,"installmentCount":2,"installments":[{"id":"00000000-0000-4000-8000-000000000901","sequence":1,"dueDate":"2026-12-02","openAmount":"10.12"},{"id":"00000000-0000-4000-8000-000000000902","sequence":2,"dueDate":"2027-01-02","openAmount":"80.00"}],"collectionEnabled":false,"canEnableReminders":true,"email":"cliente@example.invalid"}"#.utf8)
+
+    @Test func individualRoutesPreserveReviewedAmountsDatesAndIntent() async throws {
+        let http = MockHTTP([ok(Data("[".utf8) + fixture + Data("]".utf8))] + Array(repeating: ok(fixture), count: 6))
+        let api = try service(http)
+        let rows = try await api.collectionAccounts()
+        let row = try await api.collectionAccount(id)
+        #expect(rows == [row])
+        let second = try #require(row.installments.last)
+        let key = UUID()
+        _ = try await api.changeCollectionAccount(id, action: .promise(date: "2026-12-10", previous: nil), key: key)
+        _ = try await api.changeCollectionAccount(id, action: .promise(date: nil, previous: "2026-12-10"), key: UUID())
+        _ = try await api.changeCollectionAccount(id, action: .dueDate(installment: second.id, date: "2027-01-01",
+                                  previous: second.dueDate, reason: "Plazo acordado"), key: UUID())
+        _ = try await api.changeCollectionAccount(id, action: .enableReminders, key: UUID())
+        _ = try await api.changeCollectionAccount(id, action: .reminder(recipient: "cliente@example.invalid",
+                                  amount: row.openAmount, dueDate: row.dueDate), key: UUID())
+        let requests = await http.captured()
+        #expect(requests.map(\.httpMethod) == ["GET","GET","PUT","PUT","PUT","PUT","POST"])
+        #expect(requests.allSatisfy { $0.url?.path.hasPrefix("/api/v1/collections/accounts") == true })
+        #expect(requests.dropFirst(2).map { $0.url?.lastPathComponent } == ["promise","promise","due-date","enable-reminders","reminder"])
+        #expect(requests[2].value(forHTTPHeaderField: "Idempotency-Key") == key.uuidString)
+        func body(_ index: Int) throws -> [String: Any] {
+            let data = try #require(requests[index].httpBody)
+            return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        }
+        #expect(try body(2)["previousPromisedDate"] is NSNull)
+        #expect(try body(3)["promisedDate"] is NSNull)
+        #expect(try body(4)["installmentId"] as? String == second.id.uuidString)
+        #expect(try body(4)["previousDueDate"] as? String == "2027-01-02")
+        #expect(try body(5).isEmpty)
+        #expect(try body(6)["expectedOpenAmount"] as? String == "90.12")
+        #expect(try body(6)["expectedRecipient"] as? String == "cliente@example.invalid")
+    }
+
+    @Test func collectionWriteNeverAutomaticallyRetriesOnTransportFailure() async throws {
+        let http = MockHTTP(events: [.lostConnection])
+        let api = try service(http)
+        await #expect(throws: URLError.self) {
+            try await api.changeCollectionAccount(id, action: .enableReminders, key: UUID())
+        }
+        #expect(await http.captured().count == 1)
+    }
+
+    @Test func reminderIsSeparateFromEnableAndPromiseAndAppliedOnce() async throws {
+        let api = DemoERPService()
+        let account = try #require(await api.collectionAccounts().first)
+        let enabled = try await api.changeCollectionAccount(account.id, action: .enableReminders, key: UUID())
+        #expect(enabled.lastReminderStatus == nil)
+        let promised = try await api.changeCollectionAccount(account.id, action: .promise(date: "2027-01-08", previous: nil), key: UUID())
+        #expect(promised.dueDate == account.dueDate)
+        #expect(promised.reminderBlockedReason != nil)
+        let resumed = try await api.changeCollectionAccount(account.id, action: .promise(date: nil, previous: "2027-01-08"), key: UUID())
+        let email = try #require(resumed.email)
+        let action = CollectionAction.reminder(recipient: email, amount: resumed.openAmount, dueDate: resumed.dueDate)
+        let key = UUID()
+        let sent = try await api.changeCollectionAccount(account.id, action: action, key: key)
+        #expect(sent.lastReminderStatus == "SENT")
+        #expect(try await api.changeCollectionAccount(account.id, action: action, key: key) == sent)
+        let other = try #require(await api.collectionAccounts().last)
+        #expect(!other.collectionEnabled)
+    }
+
+    @Test func mismatchedAccountResponseIsRejected() async throws {
+        let api = try service(MockHTTP([ok(fixture)]))
+        await #expect(throws: ERPClientError.invalidResponse) {
+            try await api.collectionAccount(UUID())
+        }
+    }
+}

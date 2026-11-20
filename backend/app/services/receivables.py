@@ -1178,8 +1178,9 @@ async def correct_receivable_due_date(
     reason: str,
     correlation_id: str,
     idempotency_key: str,
+    installment_id: uuid.UUID | None = None,
 ) -> ReceivableSummary:
-    """Corrige el vencimiento comercial de una cuenta de una sola cuota.
+    """Corrige el vencimiento comercial de la cuota seleccionada.
 
     No modifica el XML, autorización ni importes SRI. Ajusta en conjunto la
     cuota de cartera y el plan comercial mostrado en la factura, y conserva el
@@ -1198,22 +1199,31 @@ async def correct_receivable_due_date(
             .order_by(ReceivableInstallment.sequence)
         )
     )
-    if len(installments) != 1:
+    if installment_id is None and len(installments) != 1:
         raise HTTPException(
             status_code=409,
             detail="This account has multiple installments and needs a payment plan adjustment",
         )
+    selected = (
+        next((i for i in installments if i.id == installment_id), None)
+        if installment_id
+        else installments[0]
+    )
+    if selected is None:
+        raise HTTPException(404, "No se encontró la cuota en esta cuenta.")
     document_installment = await session.scalar(
         select(SalesDocumentInstallment).where(
             SalesDocumentInstallment.tenant_id == context.tenant_id,
             SalesDocumentInstallment.sales_document_id == locked.sales_document_id,
-            SalesDocumentInstallment.sequence == installments[0].sequence,
+            SalesDocumentInstallment.sequence == selected.sequence,
         )
     )
-    previous_due_date = installments[0].due_date
-    installments[0].due_date = due_date
+    previous_due_date = selected.due_date
+    selected.due_date = due_date
     if document_installment is not None:
         document_installment.due_date = due_date
+    if previous_due_date != due_date:
+        await _reschedule_after_term_change(session, locked, selected, due_date - previous_due_date)
     await append_audit(
         session,
         context=context,
@@ -1223,6 +1233,7 @@ async def correct_receivable_due_date(
         correlation_id=correlation_id,
         idempotency_key=idempotency_key,
         details={
+            "installment_id": str(selected.id),
             "previous_due_date": previous_due_date.isoformat(),
             "due_date": due_date.isoformat(),
             "reason": reason.strip(),
@@ -1235,6 +1246,43 @@ async def correct_receivable_due_date(
         receivable=locked,
         as_of=today_in_fiscal_timezone(),
     )
+
+
+async def _reschedule_after_term_change(
+    session: AsyncSession, account: Receivable, installment: ReceivableInstallment, delta: timedelta
+) -> None:
+    from datetime import UTC, datetime
+
+    reminders = list(
+        await session.scalars(
+            select(CollectionReminder)
+            .where(
+                CollectionReminder.tenant_id == account.tenant_id,
+                CollectionReminder.receivable_id == account.id,
+                CollectionReminder.installment_id == installment.id,
+                CollectionReminder.scheduled_at.is_not(None),
+            )
+            .with_for_update()
+        )
+    )
+    pending = [r for r in reminders if r.status in {"PENDING", "PROCESSING", "FAILED"}]
+    occupied = {(r.channel, r.scheduled_at) for r in reminders if r not in pending}
+    if not pending:
+        return
+    # Free old slots first; two offsets can exchange previously occupied dates.
+    plan = [(r, r.scheduled_at + delta) for r in pending if r.scheduled_at is not None]
+    for reminder, _ in plan:
+        reminder.scheduled_at = None
+    await session.flush()
+    now = datetime.now(UTC)
+    for reminder, new_date in plan:
+        if (reminder.channel, new_date) in occupied or new_date.replace(tzinfo=UTC) <= now:
+            reminder.status = "SKIPPED"
+            reminder.error_message = "Aviso cancelado tras el cambio del vencimiento."
+        else:
+            reminder.scheduled_at = new_date
+            reminder.status = "PENDING"
+            reminder.attempts = 0
 
 
 async def update_receivable_collection_policy(
@@ -2061,6 +2109,9 @@ async def send_reminder(
     if not receivable.collection_enabled:
         raise HTTPException(status_code=422, detail="Esta factura no permite mensajes de cobranza")
 
+    if receivable.promised_date and receivable.promised_date >= today_in_fiscal_timezone():
+        raise HTTPException(409, "Los avisos están pausados hasta la fecha prometida inclusive.")
+
     # Buscar party para validar consent_opt_out y obtener el destinatario
     from app.models.masters import Party
 
@@ -2164,6 +2215,29 @@ async def _render_receivable_email(
     )
 
 
+async def has_native_contact(session: AsyncSession, account: Receivable) -> bool:
+    """A pending native delivery or one accepted today excludes a duplicate on any surface."""
+    from datetime import time
+
+    from app.core.timezones import FISCAL_TIMEZONE
+
+    start = datetime.combine(today_in_fiscal_timezone(), time.min, FISCAL_TIMEZONE).astimezone(UTC)
+    return (
+        await session.scalar(
+            select(CollectionReminder.id)
+            .where(
+                CollectionReminder.tenant_id == account.tenant_id,
+                CollectionReminder.receivable_id == account.id,
+                CollectionReminder.native_confirmation.is_not(None),
+                CollectionReminder.channel == "EMAIL",
+                CollectionReminder.status.in_(("PENDING", "PROCESSING"))
+                | ((CollectionReminder.status == "SENT") & (CollectionReminder.sent_at >= start)),
+            )
+            .limit(1)
+        )
+    ) is not None
+
+
 async def send_real_reminder(
     session: AsyncSession,
     context: AuthContext,
@@ -2175,14 +2249,17 @@ async def send_real_reminder(
 
     from app.services import crm_integrations
 
-    receivable = await session.scalar(
-        select(Receivable).where(
-            Receivable.tenant_id == context.tenant_id,
-            Receivable.id == receivable_id,
-        )
+    receivable = await lock_receivable(
+        session, tenant_id=context.tenant_id, receivable_id=receivable_id
     )
-    if receivable is None:
-        raise HTTPException(status_code=404, detail="Receivable not found")
+    if receivable.promised_date and receivable.promised_date >= today_in_fiscal_timezone():
+        raise HTTPException(409, "Los avisos están pausados hasta la fecha prometida inclusive.")
+    if (reminder.channel or "EMAIL").upper() == "EMAIL" and await has_native_contact(
+        session, receivable
+    ):
+        raise HTTPException(
+            409, "Ya existe un correo de cobranza pendiente o enviado hoy desde el iPhone."
+        )
     policy = await session.get(CollectionPolicy, context.tenant_id)
     if policy is None or not policy.enabled:
         raise HTTPException(status_code=422, detail="La cobranza general está pausada")

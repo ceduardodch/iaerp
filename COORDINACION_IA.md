@@ -41,6 +41,8 @@
 
 | Sesión / IA | Estado | Área / archivos | Desde |
 | --- | --- | --- | --- |
+| Codex (Cobranza individual iOS) | Candidato 0.8.0 (11) | Recordatorio individual, promesa y vencimiento por cuota. Pruebas con PostgreSQL, buzón sintético e iPhone simulado. [Estado](docs/STATUS.md). | 2026-11-19 |
+| Codex (cartera web y móvil) | Publicado y verificado, PR #111 | Cuentas vigentes, importes y antigüedad contrastados en producción. [Estado](docs/STATUS.md). | 2026-11-19 |
 | Codex (iOS, emisión real y correo) | Probado en producción, PR #110 | Versión 0.7.0 (10) instalada y abierta en el iPhone. La prueba del usuario obtuvo autorización SRI y aceptación del correo con RIDE y XML. [Estado](docs/STATUS.md). | 2026-11-19 |
 | Codex (iOS, emisión y correo de pruebas) | Catálogos integrados en main, PR #109 | Negocio, UI/UX y QA aprobaron. Pasaron 186 pruebas iOS en el Mac y en GitHub. El ensayo por cable con datos sintéticos capturó un RIDE y un XML. Producción tiene los dos permisos de catálogo. 0.6.1 (9) instalada en el iPhone 14 Pro, con la bienvenida de producción y las ayudas de facturación revisadas. Carlos probará el recorrido en BTOB-SAS. [Estado](docs/STATUS.md). | 2026-11-19 |
 | Codex (iOS, conexión IAERP) | Inicio y facturas por mes revisados e integrados en main · PR #108 | 0.5.0 (7), 154 pruebas locales y 154 en CI. Coolify publicó el servidor y se verificó el permiso iOS. El 19 de noviembre se confirmó la instalación y apertura en el iPhone 14 Pro. Pendiente prueba funcional de Carlos. [Backlog y prueba física](docs/backlog/ios-evaluacion-2026-11-18.md). | 2026-11-18 |

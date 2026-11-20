@@ -7,7 +7,9 @@ alcance y las decisiones.
 
 ## Corte verificado
 
-- **Cartera, 19 de noviembre.** Se detectó que el saldo del inicio sumaba cuentas anuladas. La corrección unifica «Por cobrar» y «Vencido» de la web y el iPhone en la misma consulta y mantiene el historial disponible para conciliación. Pendiente de publicación y verificación en producción.
+- **Cobranza individual en iPhone.** La versión 0.8.0 (11) incluye recordatorio por factura, promesa de pago y cambio de vencimiento por cuota. En PostgreSQL pasaron 991 pruebas del servidor y las pruebas independientes con buzón de captura comprobaron un solo correo ante confirmaciones simultáneas. En iOS se comprobó la dirección completa con letra al máximo. El usuario hará el primer envío real desde el teléfono. [Criterios y alcance](adrs/0030-ios-cobranza-individual.md).
+
+- **Cartera publicada el 19 de noviembre.** Web e iPhone usan el mismo resumen de saldos positivos de cuentas vigentes. La corrección excluye la cartera anulada del importe y de la antigüedad y conserva su historial. Negocio, UI/UX y QA aprobaron el [PR 111](https://github.com/ceduardodch/iaerp/pull/111). Tras la [publicación](https://github.com/ceduardodch/iaerp/actions/runs/44590782732) se verificaron el sitio servido, el contrato y los cuatro valores del resumen contra cuotas y movimientos en una consulta independiente de solo lectura.
 
 - **iOS 0.7.0 (10), prueba en producción completada el 19 de noviembre.** Negocio, UI/UX y QA aprobaron el [PR 110](https://github.com/ceduardodch/iaerp/pull/110). Pasaron las [pruebas móviles](https://github.com/ceduardodch/iaerp/actions/runs/44567921435) y la [publicación del servidor](https://github.com/ceduardodch/iaerp/actions/runs/44578407936). Se verificaron la versión y la apertura en el iPhone físico. El usuario confirmó la emisión. El SRI autorizó el comprobante y el proveedor de correo aceptó un envío con el RIDE en PDF y el XML. [Decisión y criterios](adrs/0029-ios-emision-correo.md).
 

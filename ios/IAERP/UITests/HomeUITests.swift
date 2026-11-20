@@ -43,7 +43,7 @@ final class HomeUITests: XCTestCase {
                                         in app: XCUIApplication) {
         // Scope the AX query to the visible home content. An untyped query
         // across the replaced tab hierarchy can stall after switching company.
-        let metric = app.scrollViews.firstMatch.staticTexts[identifier]
+        let metric = identifier == "home-metric-collected" ? app.scrollViews.firstMatch.staticTexts[identifier] : app.scrollViews.firstMatch.buttons[identifier]
         XCTAssertTrue(metric.waitForExistence(timeout: 5))
         let top = app.navigationBars["Inicio"].frame.maxY
         let bottom = app.tabBars.firstMatch.frame.minY
@@ -110,7 +110,7 @@ final class HomeUITests: XCTestCase {
         assertMetric("home-metric-receivable", title: "Por cobrar", amount: "$80,40", in: app)
         assertMetric("home-metric-overdue", title: "Vencido", amount: "$0,00", in: app)
         assertMetric("home-metric-collected", title: "Cobrado este mes", amount: "$40,20", in: app)
-        XCTAssertFalse(app.staticTexts["home-metric-receivable"].label.contains("$350,25"))
+        XCTAssertFalse(app.buttons["home-metric-receivable"].label.contains("$350,25"))
         app.tabBars.buttons["Facturas"].tap()
         let secondCompanyInvoice = element("workspace-invoice-00000000-0000-4000-8000-000000001601", in: app)
         reveal(secondCompanyInvoice, in: app)

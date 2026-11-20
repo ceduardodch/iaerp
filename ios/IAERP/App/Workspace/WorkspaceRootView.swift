@@ -218,13 +218,39 @@ struct WorkspaceHomeView: View {
         } else if let error = store.dashboardError {
             ERPErrorState(message: error) { await store.loadDashboard() }
         } else if let summary = store.dashboard {
-            metric("Por cobrar", value: summary.receivable, currency: summary.currency,
-                   featured: true, identifier: "home-metric-receivable")
+            NavigationLink {
+                CollectionsView(store: store, filter: .all)
+            } label: {
+                HStack {
+                    metric("Por cobrar", value: summary.receivable, currency: summary.currency,
+                           featured: true, identifier: "home-amount-receivable")
+                    Spacer()
+                    Image(systemName: "chevron.right").accessibilityHidden(true)
+                }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(.white)
                 .background(Color("AccentColor"), in: RoundedRectangle(cornerRadius: 16))
-            metricCard("Vencido", amount: summary.overdue, currency: summary.currency, identifier: "home-metric-overdue")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Por cobrar, \(ERPDisplay.money(summary.receivable, currency: summary.currency))")
+            .accessibilityHint("Abre las cuentas pendientes por cliente.")
+            .accessibilityIdentifier("home-metric-receivable")
+            NavigationLink {
+                CollectionsView(store: store, filter: .overdue)
+            } label: {
+                HStack {
+                    metric("Vencido", value: summary.overdue, currency: summary.currency, identifier: "home-amount-overdue")
+                    Spacer()
+                    Image(systemName: "chevron.right").accessibilityHidden(true)
+                }
+                .padding(16)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Vencido, \(ERPDisplay.money(summary.overdue, currency: summary.currency))")
+            .accessibilityHint("Abre las cuentas vencidas.")
+            .accessibilityIdentifier("home-metric-overdue")
         } else {
             ProgressView("Consultando cartera…")
         }

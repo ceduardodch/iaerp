@@ -6,6 +6,7 @@ from celery.signals import worker_process_shutdown
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import engine
+from app.services.mobile_collections import NATIVE_REMINDER_EVENT
 from app.services.social_campaigns import (
     CAMPAIGN_ACTIVATION_EVENT,
     CAMPAIGN_PAUSE_EVENT,
@@ -28,6 +29,7 @@ from app.workers.collections import (
 from app.workers.collections import (
     CONSUMER_NAME as COLLECTIONS_CONSUMER,
 )
+from app.workers.mobile_collections import deliver as deliver_collection_email
 from app.workers.notifications import (
     CONSUMER_NAME as NOTIFICATIONS_CONSUMER,
 )
@@ -126,6 +128,8 @@ def consume_event(
         correlation_id=correlation_id,
         attempts=attempts,
     )
+    if event_type == NATIVE_REMINDER_EVENT:
+        return _run(deliver_collection_email(message.tenant_id, uuid.UUID(message.aggregate_id)))
     if event_type == RECOVERY_REQUESTED_EVENT:
         _run(handle_recovery_requested(message))
         return True
