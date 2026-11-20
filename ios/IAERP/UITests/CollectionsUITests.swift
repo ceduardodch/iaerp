@@ -39,6 +39,15 @@ final class CollectionsUITests: XCTestCase {
         let spoken = [row.label, row.value as? String ?? ""].joined(separator: " ")
         XCTAssertTrue(spoken.contains(expected), spoken, file: file, line: line)
     }
+    @MainActor private func assertSpokenPair(_ row: XCUIElement, _ label: String, _ value: String,
+                                            file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(row.waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertEqual(row.label, label, file: file, line: line)
+        XCTAssertEqual(row.value as? String, value, file: file, line: line)
+        let repeatedText = row.descendants(matching: .staticText).matching(
+            NSPredicate(format: "label IN %@", [label, value]))
+        XCTAssertEqual(repeatedText.count, 0, "VoiceOver debe leer la fila una sola vez.", file: file, line: line)
+    }
     @MainActor private func snapshot(_ name: String, _ app: XCUIApplication) {
         let image = XCTAttachment(screenshot: app.screenshot())
         image.name = name
@@ -48,6 +57,8 @@ final class CollectionsUITests: XCTestCase {
 
     @MainActor func testAccountAccessibilityAtLargestText() throws {
         let app = open("receivable", account: "801", largestText: true)
+        let invoice = app.descendants(matching: .any)["collection-invoice"].firstMatch
+        assertSpokenPair(invoice, "Factura", "001-001-000000001")
         try app.performAccessibilityAudit { issue in
             print("Auditoría de cobranza", issue.compactDescription, issue.element?.debugDescription ?? "")
             return false
@@ -64,6 +75,7 @@ final class CollectionsUITests: XCTestCase {
         XCTAssertTrue(recipient.isHittable)
         XCTAssertLessThan(recipient.frame.maxY, app.frame.height * 0.91)
         assertValue("collection-recipient", "cliente1@example.invalid", in: app)
+        assertSpokenPair(recipient, "Destinatario", "cliente1@example.invalid")
         snapshot("Ficha-texto-maximo", app)
         try app.performAccessibilityAudit { issue in
             print("Auditoría de cobranza", issue.compactDescription, issue.element?.debugDescription ?? "")

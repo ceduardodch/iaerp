@@ -99,19 +99,24 @@ struct CollectionValue: View {
     }
 
     var body: some View {
-        let layout = typeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
-        layout {
-            Text(title)
-            if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
-            Text(verbatim: value)
-                .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .trailing)
+        Group {
+            if typeSize.isAccessibilitySize {
+                // A single multiline text keeps the printed pair and VoiceOver on the same element.
+                Text(verbatim: "\(title)\n\(value)")
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(verbatim: title)
+                    Spacer(minLength: 0)
+                    Text(verbatim: value).multilineTextAlignment(.trailing)
+                }
+                .accessibilityElement(children: .ignore)
+            }
         }
         .foregroundStyle(Color.primary)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(verbatim: title))
+        .accessibilityValue(Text(verbatim: value))
     }
 }
 
@@ -167,6 +172,7 @@ struct CollectionAccountView: View {
         } else if let account {
             CollectionPanel(account.customerName) {
                 CollectionValue("Factura", value: account.invoiceNumber)
+                    .accessibilityIdentifier("collection-invoice")
                 CollectionValue("Saldo pendiente", value: money(account.openAmount, account))
                     .font(.headline)
                 CollectionValue(account.overdue ? "Vencida desde" : "Vencimiento",
