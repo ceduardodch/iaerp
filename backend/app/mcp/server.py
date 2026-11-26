@@ -22,7 +22,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext, decode_access_token, resolve_auth_context
 from app.core.config import get_settings
-from app.core.timezones import today_in_fiscal_timezone
 from app.db.session import SessionFactory
 from app.mcp.tool_fingerprints import EXPECTED_TOOL_FINGERPRINTS
 from app.models.platform import AutomationSettings, OperationRecord
@@ -889,21 +888,17 @@ async def receivables_list(
     ] = None,
     dueBefore: Annotated[date | None, Field(default=None)] = None,
 ) -> list[dict[str, object]]:
-    """Listar receivables (cartera) con filtros opcionales de estado y vencimiento.
+    """Consultar cartera por estado actual y por dueDate estrictamente anterior a dueBefore.
 
-    Solo lectura: no requiere ``_require_automation_writes`` (el kill switch de
-    automatizacion solo aplica a escrituras) y reutiliza exactamente el mismo caso
-    de uso que ``GET /receivables`` (REST), garantizando equivalencia total entre
-    ambas superficies. Incluye aging calculado cuando se filtra por vencimiento.
+    El estado y los días de mora se calculan al día de hoy en America/Guayaquil.
     """
     session, context = await _tool_context("receivables:read", "receivables.list")
     try:
-        as_of = today_in_fiscal_timezone() if dueBefore is not None else None
         entities = await receivables.list_receivables(
             session,
             tenant_id=context.tenant_id,
             status=status,
-            as_of=as_of,
+            due_before=dueBefore,
         )
         return [
             AccountItemRead.model_validate(entity).model_dump(mode="json", by_alias=True)

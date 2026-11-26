@@ -277,8 +277,9 @@ tools:
       properties:
         status:
           type: string
-          enum: [OPEN, PARTIAL, OVERDUE, SETTLED]
+          enum: [OPEN, PARTIAL, OVERDUE, SETTLED, VOIDED]
         dueBefore:
+          description: Incluye cuentas cuyo dueDate es estrictamente anterior a esta fecha.
           type: string
           format: date
     outputSchema:

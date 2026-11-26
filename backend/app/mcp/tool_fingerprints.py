@@ -29,7 +29,7 @@ EXPECTED_TOOL_FINGERPRINTS = {
         "5262d81451539c1d2c323df3ad2349de60b68c56e683a09f1a8338e8b3ec3dd0"  # pragma: allowlist secret
     ),
     "receivables.list": (
-        "fe5b1196696d09e7bc6e2e492ac07df084b3a63ad99a9074acbdab98f36db924"  # pragma: allowlist secret
+        "b7c11382a577a2f6d32c12c5d8435cb5bcf4c951ad2b618d90d2c3e718bfe2af"  # pragma: allowlist secret
     ),
     "receivables.record_payment": (
         "2edbcefd1d277d96e81214cfb39ec0ddb1e46c07e601ec5816d49bffb0bbfd4a"  # pragma: allowlist secret

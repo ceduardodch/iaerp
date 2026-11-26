@@ -210,6 +210,83 @@ async def test_mcp_receivables_list_is_tenant_scoped(client) -> None:
         assert receivable_b not in ids
 
 
+async def test_receivables_filters_match_visible_rows_in_rest_and_mcp(client, monkeypatch):
+    today = date(2026, 11, 25)
+    monkeypatch.setattr("app.services.receivables.today_in_fiscal_timezone", lambda: today)
+    open_id, masters = await _create_receivable(
+        client,
+        tenant_id=TENANT_A,
+        email="a@iaerp.local",
+        key_prefix="filter-masters",
+        sequential="000000970",
+        total=Decimal("50.00"),
+        issue_date=today,
+    )
+    token = await token_for(
+        client, "a@iaerp.local", TENANT_A, ["receivables:read", "receivables:write"]
+    )
+    expected_ids = {"OPEN": open_id}
+    for i, (status, due_date) in enumerate(
+        [
+            ("OVERDUE", date(2026, 11, 24)),
+            ("PARTIAL", date(2026, 11, 26)),
+            ("SETTLED", today),
+            ("VOIDED", today),
+        ],
+        start=971,
+    ):
+        document = await _insert_authorized_invoice(
+            tenant_id=TENANT_A,
+            establishment_id=uuid.UUID(masters["establishment_id"]),
+            emission_point_id=uuid.UUID(masters["emission_point_id"]),
+            party_id=uuid.UUID(masters["party_id"]),
+            product_id=uuid.UUID(masters["product_id"]),
+            sequential=f"{i:09d}",
+            total=Decimal("50.00"),
+            issue_date=due_date,
+        )
+        async with SessionFactory() as db, db.begin():
+            await handle_invoice_authorized(db, _message_for(document))
+            account = await db.scalar(
+                select(Receivable).where(Receivable.sales_document_id == document.id)
+            )
+            expected_ids[status] = str(account.id)
+            if status == "VOIDED":
+                account.status = "VOID"
+        if status in {"PARTIAL", "SETTLED"}:
+            paid = await client.post(
+                f"/api/v1/receivables/{expected_ids[status]}/payments",
+                headers=auth(token, f"filter-payment-{i:09d}"),
+                json=_payment_payload("50.00" if status == "SETTLED" else "10.00"),
+            )
+            assert paid.status_code == 201, paid.text
+
+    baseline = await client.get("/api/v1/receivables", headers=auth(token))
+    assert baseline.status_code == 200
+    rows = baseline.json()
+    assert {item["status"]: item["id"] for item in rows} == expected_ids
+    async with mcp_lifespan(), mcp_session(token) as session:
+        for status_filter in [None, *expected_ids]:
+            for cutoff in [None, "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"]:
+                params = {}
+                if status_filter:
+                    params["status"] = status_filter
+                if cutoff:
+                    params["dueBefore"] = cutoff
+                expected = [
+                    row
+                    for row in rows
+                    if (status_filter is None or row["status"] == status_filter)
+                    and (cutoff is None or row["dueDate"] < cutoff)
+                ]
+                rest = await client.get("/api/v1/receivables", headers=auth(token), params=params)
+                assert rest.status_code == 200
+                assert rest.json() == expected, params
+                result = await session.call_tool("receivables.list", params)
+                assert not result.isError, result.content
+                assert result.structuredContent["result"] == expected, params
+
+
 async def test_mcp_record_payment_equivalence_with_rest_same_balance_both_ways(client) -> None:
     """Un cobro por MCP se lee igual por REST, y uno por REST se lee igual por MCP."""
 
