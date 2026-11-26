@@ -1111,6 +1111,7 @@ async def list_receivables(
     tenant_id: uuid.UUID,
     party_id: uuid.UUID | None = None,
     status: str | None = None,
+    due_before: date | None = None,
     as_of: date | None = None,
 ) -> list[AccountItemRead]:
     """Lista receivables con filtros opcionales y aging calculado."""
@@ -1118,8 +1119,17 @@ async def list_receivables(
 
     if party_id is not None:
         stmt = stmt.where(Receivable.party_id == party_id)
-    if status is not None:
-        stmt = stmt.where(Receivable.status == status)
+    if due_before is not None:
+        # dueDate is the earliest installment date, including settled installments.
+        stmt = stmt.where(
+            select(ReceivableInstallment.id)
+            .where(
+                ReceivableInstallment.tenant_id == tenant_id,
+                ReceivableInstallment.receivable_id == Receivable.id,
+                ReceivableInstallment.due_date < due_before,
+            )
+            .exists()
+        )
 
     stmt = stmt.order_by(Receivable.created_at.desc())
     entities = await session.scalars(stmt)
@@ -1133,6 +1143,8 @@ async def list_receivables(
             receivable=entity,
             as_of=effective_as_of,
         )
+        if status is not None and summary.status != status:
+            continue
         aging = (
             AgingRead(bucket=summary.aging_bucket, days_overdue=summary.aging_days_overdue)
             if summary.aging_bucket is not None and summary.aging_days_overdue is not None

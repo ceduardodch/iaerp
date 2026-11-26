@@ -1098,8 +1098,9 @@ paths:
           in: query
           schema:
             type: string
-            enum: [OPEN, PARTIAL, OVERDUE, SETTLED]
+            enum: [OPEN, PARTIAL, OVERDUE, SETTLED, VOIDED]
         - name: dueBefore
+          description: Incluye cuentas cuyo dueDate es estrictamente anterior a esta fecha.
           in: query
           schema:
             type: string

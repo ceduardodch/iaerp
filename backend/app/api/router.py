@@ -2116,19 +2116,13 @@ async def get_receivables(
     due_before: Annotated[date | None, Query(alias="dueBefore")] = None,
     party_id: Annotated[uuid.UUID | None, Query(alias="partyId")] = None,
 ) -> list[dict[str, object]]:
-    """Consulta la cartera del tenant activo (Sprint 3, Fase 1: solo lectura).
-
-    ``status``/``dueBefore`` siguen el contrato ya publicado
-    (``contracts/openapi.yaml``); el ``Receivable`` solo existe si fue creado
-    por ``workers/receivables.py::handle_invoice_authorized`` -- no hay
-    endpoint de creacion manual. ``dueBefore`` presente activa el calculo de
-    aging (misma fecha se usa como ``as_of``), igual que en ``receivables.list``
-    (MCP).
-    """
-
-    as_of = due_before if due_before is not None else None
+    """Filtra por el estado visible actual y por vencimiento anterior a dueBefore."""
     items = await receivables.list_receivables(
-        session, tenant_id=context.tenant_id, status=status, as_of=as_of, party_id=party_id
+        session,
+        tenant_id=context.tenant_id,
+        status=status,
+        due_before=due_before,
+        party_id=party_id,
     )
     return [_account_item_response(item) for item in items]
 

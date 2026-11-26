@@ -7,6 +7,8 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- **Filtros de cartera (25 de noviembre).** REST y MCP filtran por el estado que se muestra en cada cuenta y por vencimiento estrictamente anterior a `dueBefore`. El corte de búsqueda conserva la mora calculada al día fiscal de Ecuador. Una prueba de contrato compara 30 combinaciones en ambos accesos con las filas de la consulta completa.
+
 - **Cobranza individual en iPhone.** La versión 0.8.0 (11) incluye recordatorio por factura, promesa de pago y cambio de vencimiento por cuota. En PostgreSQL pasaron 991 pruebas del servidor y las pruebas independientes con buzón de captura comprobaron un solo correo ante confirmaciones simultáneas. En iOS se comprobó la dirección completa con letra al máximo. El usuario hará el primer envío real desde el teléfono. [Criterios y alcance](adrs/0030-ios-cobranza-individual.md).
 
 - **Cartera publicada el 19 de noviembre.** Web e iPhone usan el mismo resumen de saldos positivos de cuentas vigentes. La corrección excluye la cartera anulada del importe y de la antigüedad y conserva su historial. Negocio, UI/UX y QA aprobaron el [PR 111](https://github.com/ceduardodch/iaerp/pull/111). Tras la [publicación](https://github.com/ceduardodch/iaerp/actions/runs/44590782732) se verificaron el sitio servido, el contrato y los cuatro valores del resumen contra cuotas y movimientos en una consulta independiente de solo lectura.
