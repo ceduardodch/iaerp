@@ -94,6 +94,7 @@ async def test_configured_invoice_sender_must_be_accepted(
     monkeypatch, alias, status, body, expected
 ):
     mailbox = SimpleNamespace(
+        id=uuid.uuid4(), refresh_token_encrypted=None, access_token_encrypted="synthetic",
         email="personal@example.com",
         scopes_granted=crm_integrations.GOOGLE_SCOPES.split(),
         token_expires_at=datetime.now(UTC) + timedelta(minutes=10),
@@ -116,11 +117,11 @@ async def test_configured_invoice_sender_must_be_accepted(
     monkeypatch.setattr(crm_integrations, "_google_access_token", token)
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)
     async with SessionFactory() as session:
+        sender = await crm_integrations.configured_google_sender(session, None, alias=alias)
         if expected:
             with pytest.raises(HTTPException) as caught:
-                await crm_integrations.configured_google_sender(session, None, alias=alias)
+                await crm_integrations.verify_google_sender_alias(session, None, sender)
             assert expected in caught.value.detail
         else:
-            assert await crm_integrations.configured_google_sender(
-                session, None, alias=alias
-            ) == mailbox.email
+            await crm_integrations.verify_google_sender_alias(session, None, sender)
+            assert sender.address.casefold() == mailbox.email.casefold()

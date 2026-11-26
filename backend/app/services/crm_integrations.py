@@ -432,10 +432,17 @@ def _google_token_current(entity: GmailIntegration) -> bool:
     return expires_at is not None and expires_at > datetime.now(UTC) + timedelta(seconds=30)
 
 
+@dataclass(frozen=True)
+class GoogleInvoiceSender:
+    mailbox: str
+    address: str
+    connection_fingerprint: str
+
+
 async def configured_google_sender(
     session: AsyncSession, context: AuthContext, *, alias: str | None = None
-) -> str:
-    """Check the company mailbox and any configured sending alias before signing."""
+) -> GoogleInvoiceSender:
+    """Read the sender and credentials bound to this actor in the active company."""
     entity = await _connected_google_integration(session, context)
     if not _google_token_current(entity) and (
         not entity.refresh_token_encrypted or not _google_configured()
@@ -449,23 +456,32 @@ async def configured_google_sender(
     }
     if not entity.email or send_scopes.isdisjoint(entity.scopes_granted):
         raise HTTPException(422, "Google Workspace sender or send permission is missing")
-    if not alias or alias.casefold() == entity.email.casefold():
-        return entity.email
-
-    # sendAs.get accepts the mailbox read scope already requested by IAERP.
-    if {
+    fingerprint = hashlib.sha256(json.dumps([
+        str(entity.id), sorted(entity.scopes_granted),
+        entity.refresh_token_encrypted or entity.access_token_encrypted,
+    ]).encode()).hexdigest()
+    sender = GoogleInvoiceSender(entity.email, alias or entity.email, fingerprint)
+    if sender.address.casefold() != sender.mailbox.casefold() and {
         "https://mail.google.com/",
         "https://www.googleapis.com/auth/gmail.modify",
         "https://www.googleapis.com/auth/gmail.readonly",
         "https://www.googleapis.com/auth/gmail.settings.basic",
     }.isdisjoint(entity.scopes_granted):
         raise HTTPException(422, "Reconnect Gmail to verify the configured send-as alias")
+    return sender
+
+
+async def verify_google_sender_alias(
+    session: AsyncSession, context: AuthContext, sender: GoogleInvoiceSender
+) -> None:
+    if sender.address.casefold() == sender.mailbox.casefold():
+        return
     try:
         _, token = await _google_access_token(session, context)
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(
                 "https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs/"
-                + quote(alias, safe=""),
+                + quote(sender.address, safe=""),
                 headers={"Authorization": f"Bearer {token}"},
                 params={"fields": "sendAsEmail,verificationStatus"},
             )
@@ -480,11 +496,10 @@ async def configured_google_sender(
     if (
         not isinstance(data, dict)
         or not isinstance(data.get("sendAsEmail"), str)
-        or data["sendAsEmail"].casefold() != alias.casefold()
+        or data["sendAsEmail"].casefold() != sender.address.casefold()
         or data.get("verificationStatus") != "accepted"
     ):
         raise HTTPException(422, "Configured send-as alias is not verified in Gmail")
-    return alias
 
 
 async def _google_access_token(

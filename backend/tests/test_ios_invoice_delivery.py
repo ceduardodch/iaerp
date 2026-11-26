@@ -459,7 +459,8 @@ async def test_draft_issue_authorization_and_email_cycle(
 
         from app.models.crm import GmailIntegration
         from app.models.masters import Party
-        from app.models.platform import AutomationSettings
+        from app.models.platform import AutomationSettings, Tenant
+        from app.services import invoice_issuance
         from tests.test_ios_permissions import USER_A
 
         sign = oidc_signer(monkeypatch)
@@ -528,27 +529,56 @@ async def test_draft_issue_authorization_and_email_cycle(
                 )
                 integration.access_token_encrypted = crm_integrations.encrypt_secret("synthetic")
 
-            def verified_alias(request):
+            alias_checks = []
+            in_unit_of_work = False
+            run = invoice_issuance.execute_idempotent
+
+            async def traced_unit_of_work(*params, **options):
+                nonlocal in_unit_of_work
+                in_unit_of_work = True
+                try:
+                    return await run(*params, **options)
+                finally:
+                    in_unit_of_work = False
+
+            async def verified_alias(request):
+                assert not in_unit_of_work
                 assert request.method == "GET"
-                path = request.url.raw_path.split(b"?")[0]
-                assert path.endswith(b"/settings/sendAs/billing%40example.com")
                 assert request.url.params["fields"] == "sendAsEmail,verificationStatus"
                 assert request.headers["Authorization"] == "Bearer synthetic"
+                alias = request.url.path.rsplit("/", 1)[1]
+                alias_checks.append(alias)
+                if len(alias_checks) == 1:
+                    # Another writer must acquire the same tenant lock while Gmail is pending.
+                    async with asyncio.timeout(2), SessionFactory() as other, other.begin():
+                        await other.scalar(select(Tenant.id).where(Tenant.id == TENANT_A)
+                                           .with_for_update())
+                        fiscal = await other.get(TenantFiscalSettings, TENANT_A)
+                        fiscal.invoice_email_from_address = "ventas@example.com"
                 return httpx.Response(200, json={
-                    "sendAsEmail": "billing@example.com", "verificationStatus": "accepted"
+                    "sendAsEmail": alias, "verificationStatus": "accepted"
                 })
 
+            make_client = httpx.AsyncClient
             with monkeypatch.context() as provider:
-                gmail = httpx.AsyncClient(transport=httpx.MockTransport(verified_alias))
-                provider.setattr(httpx, "AsyncClient", lambda **kwargs: gmail)
+                provider.setattr(invoice_issuance, "execute_idempotent", traced_unit_of_work)
+                provider.setattr(httpx, "AsyncClient", lambda **kwargs: make_client(
+                    transport=httpx.MockTransport(verified_alias)
+                ))
+                changed = await mcp.call_tool("invoices.issue", args)
+                assert changed.isError and "sender changed" in changed.content[0].text
+                async with SessionFactory() as audit:
+                    document = await audit.get(SalesDocument, uuid.UUID(identifier))
+                    assert document.status == "DRAFT" and document.access_key is None
                 first = await mcp.call_tool("invoices.issue", args)
-            assert not first.isError, first.content
-            assert first.structuredContent["status"] == "PROCESSING"
-            replay = await mcp.call_tool("invoices.issue", args)
-            assert replay.structuredContent == first.structuredContent
-            duplicate = await mcp.call_tool(
-                "invoices.issue", args | {"idempotencyKey": str(uuid.uuid4())}
-            )
+                assert not first.isError, first.content
+                assert first.structuredContent["status"] == "PROCESSING"
+                replay = await mcp.call_tool("invoices.issue", args)
+                assert replay.structuredContent == first.structuredContent
+                duplicate = await mcp.call_tool(
+                    "invoices.issue", args | {"idempotencyKey": str(uuid.uuid4())}
+                )
+            assert alias_checks == ["billing@example.com", "ventas@example.com"]
             assert duplicate.isError and "invoice_already_issued" in duplicate.content[0].text
     signed = (await client.get(url, headers=auth(native))).json()
     assert signed["status"] == "SIGNED" and signed["accessKey"][23] == "2"
@@ -634,7 +664,7 @@ async def test_draft_issue_authorization_and_email_cycle(
                 "invoices.email", {"invoiceId": identifier, "idempotencyKey": str(uuid.uuid4())}
             )
             assert not mail.isError, mail.content
-            assert sent[0]["sender_address"] == "billing@example.com"
+            assert sent[0]["sender_address"] == "ventas@example.com"
     assert len(sent) == 1
     assert b"SignatureValue" in sent[0]["attachments"][0][-1]
     assert sent[0]["attachments"][1][-1].startswith(b"%PDF")
