@@ -502,6 +502,14 @@ async def test_draft_issue_authorization_and_email_cycle(
                 party = await session.get(Party, document.party_id)
                 party.email = stored_email
                 fiscal = await session.get(TenantFiscalSettings, TENANT_A)
+                fiscal.invoice_email_from_address = "invalid-address"
+            invalid_alias = await mcp.call_tool("invoices.issue", args)
+            assert invalid_alias.isError
+            assert "sender address is invalid" in invalid_alias.content[0].text
+            async with SessionFactory() as session, session.begin():
+                document = await session.get(SalesDocument, uuid.UUID(identifier))
+                assert document.status == "DRAFT" and document.access_key is None
+                fiscal = await session.get(TenantFiscalSettings, TENANT_A)
                 fiscal.invoice_email_from_address = "billing@example.com"
             not_verifiable = await mcp.call_tool("invoices.issue", args)
             assert not_verifiable.isError and "verify" in not_verifiable.content[0].text
