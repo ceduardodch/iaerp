@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from email.utils import formataddr, parseaddr
 from typing import cast
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 from fastapi import HTTPException
@@ -410,9 +410,9 @@ async def _configure_evolution_instance(entity: EvolutionWhatsAppIntegration) ->
     return None
 
 
-async def _google_access_token(
+async def _connected_google_integration(
     session: AsyncSession, context: AuthContext
-) -> tuple[GmailIntegration, str]:
+) -> GmailIntegration:
     entity = await session.scalar(
         select(GmailIntegration).where(
             GmailIntegration.tenant_id == context.tenant_id,
@@ -422,13 +422,92 @@ async def _google_access_token(
     )
     if not entity or not entity.access_token_encrypted:
         raise HTTPException(status_code=422, detail="Google Workspace is not connected")
-    token = decrypt_secret(entity.access_token_encrypted)
-    now = datetime.now(UTC)
+    return entity
+
+
+def _google_token_current(entity: GmailIntegration) -> bool:
     expires_at = entity.token_expires_at
     if expires_at and expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=UTC)
-    if expires_at and expires_at > now + timedelta(seconds=30):
-        return entity, token
+    return expires_at is not None and expires_at > datetime.now(UTC) + timedelta(seconds=30)
+
+
+@dataclass(frozen=True)
+class GoogleInvoiceSender:
+    mailbox: str
+    address: str
+    connection_fingerprint: str
+
+
+async def configured_google_sender(
+    session: AsyncSession, context: AuthContext, *, alias: str | None = None
+) -> GoogleInvoiceSender:
+    """Read the sender and credentials bound to this actor in the active company."""
+    entity = await _connected_google_integration(session, context)
+    if not _google_token_current(entity) and (
+        not entity.refresh_token_encrypted or not _google_configured()
+    ):
+        raise HTTPException(422, "Google Workspace must be reconnected")
+    send_scopes = {
+        "https://mail.google.com/",
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.compose",
+    }
+    if not entity.email or send_scopes.isdisjoint(entity.scopes_granted):
+        raise HTTPException(422, "Google Workspace sender or send permission is missing")
+    fingerprint = hashlib.sha256(json.dumps([
+        str(entity.id), sorted(entity.scopes_granted),
+        entity.refresh_token_encrypted or entity.access_token_encrypted,
+    ]).encode()).hexdigest()
+    sender = GoogleInvoiceSender(entity.email, alias or entity.email, fingerprint)
+    if sender.address.casefold() != sender.mailbox.casefold() and {
+        "https://mail.google.com/",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.settings.basic",
+    }.isdisjoint(entity.scopes_granted):
+        raise HTTPException(422, "Reconnect Gmail to verify the configured send-as alias")
+    return sender
+
+
+async def verify_google_sender_alias(
+    session: AsyncSession, context: AuthContext, sender: GoogleInvoiceSender
+) -> None:
+    if sender.address.casefold() == sender.mailbox.casefold():
+        return
+    try:
+        _, token = await _google_access_token(session, context)
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                "https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs/"
+                + quote(sender.address, safe=""),
+                headers={"Authorization": f"Bearer {token}"},
+                params={"fields": "sendAsEmail,verificationStatus"},
+            )
+        if response.status_code in {401, 403}:
+            raise HTTPException(422, "Reconnect Gmail to verify the configured send-as alias")
+        if response.status_code == 404:
+            raise HTTPException(422, "Configured send-as alias was not found in Gmail")
+        response.raise_for_status()
+        data = response.json()
+    except (httpx.HTTPError, ValueError, KeyError, RuntimeError) as exc:
+        raise HTTPException(503, "Could not verify configured send-as alias with Gmail") from exc
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("sendAsEmail"), str)
+        or data["sendAsEmail"].casefold() != sender.address.casefold()
+        or data.get("verificationStatus") != "accepted"
+    ):
+        raise HTTPException(422, "Configured send-as alias is not verified in Gmail")
+
+
+async def _google_access_token(
+    session: AsyncSession, context: AuthContext
+) -> tuple[GmailIntegration, str]:
+    entity = await _connected_google_integration(session, context)
+    if _google_token_current(entity):
+        return entity, decrypt_secret(entity.access_token_encrypted or "")
     if not entity.refresh_token_encrypted or not _google_configured():
         raise HTTPException(status_code=422, detail="Google Workspace must be reconnected")
     client_secret = settings.GOOGLE_CLIENT_SECRET
@@ -449,7 +528,9 @@ async def _google_access_token(
     refreshed = response.json()
     token = refreshed["access_token"]
     entity.access_token_encrypted = encrypt_secret(token)
-    entity.token_expires_at = now + timedelta(seconds=int(refreshed.get("expires_in", 3600)))
+    entity.token_expires_at = datetime.now(UTC) + timedelta(
+        seconds=int(refreshed.get("expires_in", 3600))
+    )
     await session.flush()
     return entity, token
 

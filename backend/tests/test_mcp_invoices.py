@@ -98,11 +98,18 @@ async def mcp_lifespan() -> AsyncIterator[None]:
     tests del proceso y su session manager no se puede reutilizar entre
     tests.
     """
-    mcp._session_manager = None
-    fresh_mcp_app = mcp.streamable_http_app()
-    _replace_mcp_mount(fresh_mcp_app)
-    async with app.router.lifespan_context(app):
-        yield
+    original_manager = mcp._session_manager
+    original_mount = next(
+        route for route in app.router.routes if isinstance(route, Mount) and route.path == ""
+    )
+    try:
+        mcp._session_manager = None
+        _replace_mcp_mount(mcp.streamable_http_app())
+        async with app.router.lifespan_context(app):
+            yield
+    finally:
+        mcp._session_manager = original_manager
+        _replace_mcp_mount(original_mount.app)
 
 
 @asynccontextmanager

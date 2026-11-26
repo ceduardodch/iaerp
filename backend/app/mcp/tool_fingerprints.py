@@ -24,6 +24,8 @@ EXPECTED_TOOL_FINGERPRINTS = {
     "invoices.create_draft": (
         "f3bb8223f68e2cb147a392963a71c5ff24c8a1308a4ed5b158e8ec33ea26c69a"  # pragma: allowlist secret
     ),
+    "invoices.email": "06810103589e5a22841c5c19a925692ab2b8c6a09fd19232cfaf9adcdd9608d6",  # pragma: allowlist secret
+    "invoices.draft_options": "6050a6b0172456e3203d3cde9e8a3408845963947d7bafcb8cb12716b2b98fc5",  # pragma: allowlist secret
     "invoices.issue": "be890a3144a1697f0060411347128d938047382c3ae9fb66c435716c0817f2a7",  # pragma: allowlist secret
     "credit_notes.create_and_issue": (
         "5262d81451539c1d2c323df3ad2349de60b68c56e683a09f1a8338e8b3ec3dd0"  # pragma: allowlist secret

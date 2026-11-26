@@ -221,6 +221,41 @@ tools:
           format: uuid
     outputSchema:
       $ref: openapi.yaml#/components/schemas/SalesDocument
+  - name: invoices.draft_options
+    effect: read
+    scope: invoices:write
+    description: Consultar los puntos de emision e impuestos disponibles para preparar una factura.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [issueDate]
+      properties:
+        issueDate: {type: string, format: date}
+    outputSchema:
+      type: object
+      required: [emissionPoints, taxCategories]
+      properties:
+        emissionPoints:
+          type: array
+          items:
+            type: object
+            required: [id, code, establishmentId, establishmentCode, establishmentName]
+            properties:
+              id: {type: string, format: uuid}
+              code: {type: string}
+              establishmentId: {type: string, format: uuid}
+              establishmentCode: {type: string}
+              establishmentName: {type: string}
+        taxCategories:
+          type: array
+          items:
+            type: object
+            required: [id, sriCode, name, rate]
+            properties:
+              id: {type: string, format: uuid}
+              sriCode: {type: string}
+              name: {type: string}
+              rate: {type: string}
   - name: invoices.create_draft
     effect: write
     scope: invoices:write
@@ -252,6 +287,22 @@ tools:
           $ref: "#/$defs/idempotencyKey"
     outputSchema:
       $ref: openapi.yaml#/components/schemas/Operation
+  - name: invoices.email
+    effect: external-write
+    scope: invoices:email
+    description: Enviar el RIDE PDF y el XML al correo registrado del cliente de la factura autorizada.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [invoiceId, idempotencyKey]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        idempotencyKey:
+          $ref: "#/$defs/idempotencyKey"
+    outputSchema:
+      $ref: openapi.yaml#/components/schemas/InvoiceEmailReceipt
   - name: credit_notes.create_and_issue
     effect: external-write
     scope: credit-notes:issue

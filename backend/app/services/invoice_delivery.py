@@ -1,4 +1,4 @@
-"""Native human-confirmed fiscal delivery. Gmail never runs before the claim commits."""
+"""Fiscal invoice delivery. Gmail never runs before the durable claim commits."""
 
 import hashlib
 import uuid
@@ -18,7 +18,13 @@ from app.core.ios_permissions import IOS_CLIENT_ID
 from app.integrations.sri.soap import production_endpoints
 from app.models.billing import InvoiceEmailDispatch, SalesDocument
 from app.models.masters import Party
-from app.models.platform import IdempotencyRecord, OutboxEvent, Tenant, TenantFiscalSettings
+from app.models.platform import (
+    AutomationSettings,
+    IdempotencyRecord,
+    OutboxEvent,
+    Tenant,
+    TenantFiscalSettings,
+)
 from app.schemas.billing import InvoiceDeliveryStatus, InvoiceEmailPreviewRead, InvoiceEmailRead
 from app.services import billing, crm_integrations
 from app.services.unit_of_work import append_audit, canonical_hash
@@ -143,6 +149,51 @@ async def _web_receipt(
     return InvoiceEmailRead.model_validate(payload) if payload else None
 
 
+async def _historical_mcp_receipt(
+    session: AsyncSession, context: AuthContext, document_id: uuid.UUID
+) -> dict[str, object] | None:
+    completed = await session.scalar(
+        select(InvoiceEmailDispatch.provider_message_id).where(
+            InvoiceEmailDispatch.tenant_id == context.tenant_id,
+            InvoiceEmailDispatch.document_id == document_id,
+            InvoiceEmailDispatch.provider_message_id.is_not(None),
+        ).limit(1)
+    )
+    if completed is not None:
+        # Completed claims are permanent and will be checked again under the tenant lock.
+        return None
+
+    # The old receipt binds the invoice to its actual recipient only through a hash.
+    # Since the dispatch migration this operation no longer creates idempotency rows.
+    created_at = select(SalesDocument.created_at).where(
+        SalesDocument.tenant_id == context.tenant_id,
+        SalesDocument.id == document_id,
+    ).scalar_subquery()
+    receipts = await session.stream(
+        select(IdempotencyRecord.request_hash, IdempotencyRecord.response_body)
+        .where(
+            IdempotencyRecord.tenant_id == context.tenant_id,
+            IdempotencyRecord.operation == "invoices.email",
+            IdempotencyRecord.status == "COMPLETED",
+            IdempotencyRecord.created_at >= created_at,
+        )
+        .order_by(IdempotencyRecord.created_at.desc())
+        .execution_options(yield_per=128)
+    )
+    try:
+        async for request_hash, body in receipts:
+            if not isinstance(body, dict):
+                continue
+            recipient = body.get("recipient")
+            if recipient and request_hash == canonical_hash(
+                {"invoice_id": str(document_id), "recipient": recipient}
+            ):
+                return body
+        return None
+    finally:
+        await receipts.close()
+
+
 async def _audit(
     session: AsyncSession, context: AuthContext, row: InvoiceEmailDispatch, action: str
 ) -> None:
@@ -205,6 +256,18 @@ async def _finish(
     return result
 
 
+async def _reconcile_pending(
+    session: AsyncSession, context: AuthContext, reference: str
+) -> InvoiceEmailRead | None:
+    try:
+        message_id = await crm_integrations.find_sent_reference(session, context, reference)
+    except (httpx.HTTPError, HTTPException, ValueError):
+        return None
+    if not message_id:
+        return None
+    return await _finish(session, context, reference, message_id, reconciled=True)
+
+
 async def delivery_status(
     session: AsyncSession,
     context: AuthContext,
@@ -243,16 +306,8 @@ async def delivery_status(
             "invoices:email" if context.client_id == IOS_CLIENT_ID else "invoices:write"
         ) in context.scopes
         if not receipt and context.actor_id == row.actor_id and can_reconcile:
-            try:
-                message_id = await crm_integrations.find_sent_reference(
-                    session, context, row.provider_reference
-                )
-            except (httpx.HTTPError, HTTPException, ValueError):
-                message_id = None
-            if message_id:
-                receipt = await _finish(
-                    session, context, row.provider_reference, message_id, reconciled=True
-                )
+            receipt = await _reconcile_pending(session, context, row.provider_reference)
+            if receipt:
                 if (
                     context.client_id == IOS_CLIENT_ID or lookup_hash is not None
                 ) and row.recipient_hash != lookup_hash:
@@ -266,32 +321,85 @@ async def delivery_status(
     )
 
 
+async def send_registered_invoice(
+    session: AsyncSession, context: AuthContext, document_id: uuid.UUID, *, key: str
+) -> InvoiceEmailRead:
+    try:
+        return await send_email(
+            session, context, document_id, recipient=None, digest=None, key=key, mcp_delivery=True,
+        )
+    except HTTPException as exc:
+        if exc.detail != "invoice_email_pending":
+            raise
+        # Recover only this caller's MCP request. Gmail lookup never sends a message.
+        claim = await session.scalar(
+            select(InvoiceEmailDispatch).where(
+                InvoiceEmailDispatch.tenant_id == context.tenant_id,
+                InvoiceEmailDispatch.actor_id == context.actor_id,
+                InvoiceEmailDispatch.document_id == document_id,
+                InvoiceEmailDispatch.idempotency_key == key,
+                InvoiceEmailDispatch.request_hash == _mcp_email_hash(document_id),
+            )
+        )
+        if claim:
+            receipt = _receipt(claim) or await _reconcile_pending(
+                session, context, claim.provider_reference
+            )
+            if receipt:
+                return receipt
+        raise
+
+
+def _mcp_email_hash(document_id: uuid.UUID) -> str:
+    return canonical_hash({"invoice_id": str(document_id), "channel": "mcp"})
+
+
 async def send_email(
     session: AsyncSession,
     context: AuthContext,
     document_id: uuid.UUID,
     *,
-    recipient: str,
+    recipient: str | None,
     digest: str | None,
     key: str,
     resend: bool = False,
+    mcp_delivery: bool = False,
 ) -> InvoiceEmailRead:
     native = context.client_id == IOS_CLIENT_ID
-    if native:
+    restricted_delivery = native or mcp_delivery
+    if restricted_delivery:
         require_scope(context, "invoices:email")
+    if native:
         require_request_key(key)
         if not digest:
             raise HTTPException(409, "invoice_email_preview_changed")
         if resend:
             raise HTTPException(422, "Explicit resend is not available on iOS")
     payload = {"invoice_id": str(document_id), "recipient": recipient}
-    recipient_hash = hashlib.sha256(recipient.encode()).hexdigest()
     request_hash = canonical_hash({**payload, "resend": resend, "digest": digest, "native": native})
+    if mcp_delivery:
+        if recipient is not None or digest is not None or resend:
+            raise HTTPException(422, "MCP delivers only to the registered customer")
+        request_hash = _mcp_email_hash(document_id)
     if session.in_transaction():
         await session.rollback()
+    historical_receipt = None
+    if mcp_delivery:
+        # Legacy rows are immutable. Release this read transaction before serializing
+        # current dispatches, membership checks and the decision to send.
+        async with session.begin():
+            historical_receipt = await _historical_mcp_receipt(session, context, document_id)
     async with session.begin():
         await _lock_tenant(session, context)
-        if native:
+        if mcp_delivery:
+            enabled = await session.scalar(
+                select(AutomationSettings.writes_enabled)
+                .where(AutomationSettings.tenant_id == context.tenant_id)
+                .with_for_update()
+            )
+            if not enabled:
+                raise HTTPException(403, "Automation writes are disabled for this tenant")
+        if restricted_delivery:
             await check_billing_membership(session, context)
         await billing.get_sales_document(session, context, document_id)
         replay = await session.scalar(
@@ -318,7 +426,7 @@ async def send_email(
             )
         )
         if legacy:
-            if resend or legacy.request_hash != canonical_hash(payload):
+            if mcp_delivery or resend or legacy.request_hash != canonical_hash(payload):
                 raise HTTPException(409, "invoice_email_key_conflict")
             if legacy.status == "COMPLETED" and legacy.response_body:
                 return InvoiceEmailRead.model_validate(legacy.response_body)
@@ -332,27 +440,49 @@ async def send_email(
         )
         if pending:
             raise HTTPException(409, "invoice_email_pending")
-        if native:
+        if restricted_delivery:
             delivery, preview = await _prepare(session, context, document_id)
-            if preview.preview_digest != digest or preview.recipient != recipient:
+            if mcp_delivery:
+                if delivery.report_object_key:
+                    raise HTTPException(
+                        422, "Invoice includes a report requiring separate delivery"
+                    )
+                recipient = preview.recipient
+                digest = preview.preview_digest
+            elif preview.preview_digest != digest or preview.recipient != recipient:
                 raise HTTPException(409, "invoice_email_preview_changed")
         else:
             delivery = await billing.prepare_invoice_email(session, context, document_id)
             preview = billing.email_preview(delivery)
+        if not recipient:
+            raise HTTPException(422, "Invoice customer has no registered email")
+        recipient_hash = hashlib.sha256(recipient.encode()).hexdigest()
         if not resend:
+            matching_claims = (
+                invoice_claims if mcp_delivery
+                else invoice_claims.where(InvoiceEmailDispatch.recipient_hash == recipient_hash)
+            )
             delivered = await session.scalar(
-                invoice_claims.where(InvoiceEmailDispatch.recipient_hash == recipient_hash)
-                .order_by(InvoiceEmailDispatch.created_at.desc())
-                .limit(1)
+                matching_claims.order_by(InvoiceEmailDispatch.created_at.desc()).limit(1)
             )
-            existing_receipt = (
-                _receipt(delivered)
-                if delivered
-                else await _web_receipt(session, context, document_id, recipient)
-            )
+            if mcp_delivery and delivered and delivered.recipient_hash != recipient_hash:
+                raise HTTPException(409, "Invoice already delivered to a different address")
+            if delivered:
+                existing_receipt = _receipt(delivered)
+            elif mcp_delivery:
+                if historical_receipt and historical_receipt.get("recipient") != recipient:
+                    raise HTTPException(
+                        409, "Invoice previously delivered; review delivery history"
+                    )
+                existing_receipt = (
+                    InvoiceEmailRead.model_validate(historical_receipt)
+                    if historical_receipt else None
+                )
+            else:
+                existing_receipt = await _web_receipt(session, context, document_id, recipient)
             if existing_receipt:
                 return existing_receipt
-        attachments = await billing.load_invoice_attachments(delivery, verify=native)
+        attachments = await billing.load_invoice_attachments(delivery, verify=restricted_delivery)
         reference = f"{uuid.uuid4()}@iaerp.invalid"
         claim = InvoiceEmailDispatch(
             tenant_id=context.tenant_id,
