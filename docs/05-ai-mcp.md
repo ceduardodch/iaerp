@@ -31,6 +31,7 @@ u otro servicio.
 - `parties.search`: buscar clientes/proveedores.
 - `products.search`: buscar productos.
 - `invoices.get`: detalle y estado local/SRI.
+- `invoices.draft_options` devuelve los puntos de emisión activos y las categorías de impuesto disponibles para la fecha del borrador.
 - `receivables.list`: cartera vencida o por vencer.
 - `payables.list`: obligaciones y pagos programados.
 - `finance.summary`: ventas, cobros, pagos y flujo proyectado.
@@ -47,6 +48,7 @@ u otro servicio.
 - `products.create`
 - `invoices.create_draft`
 - `invoices.issue`
+- `invoices.email` entrega el RIDE y el XML autorizados a la dirección registrada del cliente.
 - `credit_notes.create_and_issue`
 - `receivables.record_payment`
 - `receivables.send_reminder`
@@ -64,6 +66,25 @@ Las herramientas de captación crean el lead en `NEW`, con origen `MCP`, sin
 dueño, valor, puntaje ni avance comercial. Los leads de Meta, LinkedIn o TikTok
 entran por sus conectores de captación para conservar campaña, anuncio y
 consentimiento; un agente no puede atribuirse esos orígenes.
+
+## Facturación delegada desde Grok
+
+El cliente `iaerp-grok-informes` opera con la identidad del usuario y una
+empresa por autorización OAuth. Para trabajar con otra empresa se selecciona
+su organización durante la autorización y se comprueba con `context.get`.
+El usuario requiere membresía activa tanto en Keycloak como en IAERP. En
+IAERP los roles `owner`, `admin` o `billing` habilitan la facturación dentro
+de los permisos concedidos al conector.
+
+Para una orden de facturación, comprobar empresa, cliente, detalle, importe e
+impuestos, y contrastarlos con el borrador calculado por IAERP. Ante datos
+incompletos o diferencias, conservar el borrador. Una orden expresa permite
+llamar a `invoices.issue`. El resultado `PROCESSING` indica que el trámite
+sigue en curso. Consultar el documento con `invoices.get` hasta que el SRI
+lo autorice antes de llamar a `invoices.email`. El servidor obtiene el
+destinatario y el remitente correspondiente a esa empresa. Conservar la
+misma clave de idempotencia al reintentar cada operación. El acuse de Gmail
+indica aceptación por el proveedor.
 
 ## Credencial de un agente
 

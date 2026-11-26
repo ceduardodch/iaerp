@@ -410,9 +410,9 @@ async def _configure_evolution_instance(entity: EvolutionWhatsAppIntegration) ->
     return None
 
 
-async def _google_access_token(
+async def _connected_google_integration(
     session: AsyncSession, context: AuthContext
-) -> tuple[GmailIntegration, str]:
+) -> GmailIntegration:
     entity = await session.scalar(
         select(GmailIntegration).where(
             GmailIntegration.tenant_id == context.tenant_id,
@@ -422,13 +422,40 @@ async def _google_access_token(
     )
     if not entity or not entity.access_token_encrypted:
         raise HTTPException(status_code=422, detail="Google Workspace is not connected")
-    token = decrypt_secret(entity.access_token_encrypted)
-    now = datetime.now(UTC)
+    return entity
+
+
+def _google_token_current(entity: GmailIntegration) -> bool:
     expires_at = entity.token_expires_at
     if expires_at and expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=UTC)
-    if expires_at and expires_at > now + timedelta(seconds=30):
-        return entity, token
+    return expires_at is not None and expires_at > datetime.now(UTC) + timedelta(seconds=30)
+
+
+async def configured_google_sender(session: AsyncSession, context: AuthContext) -> str:
+    """Check the actor's company mailbox locally before committing an invoice."""
+    entity = await _connected_google_integration(session, context)
+    if not _google_token_current(entity) and (
+        not entity.refresh_token_encrypted or not _google_configured()
+    ):
+        raise HTTPException(422, "Google Workspace must be reconnected")
+    send_scopes = {
+        "https://mail.google.com/",
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.compose",
+    }
+    if not entity.email or send_scopes.isdisjoint(entity.scopes_granted):
+        raise HTTPException(422, "Google Workspace sender or send permission is missing")
+    return entity.email
+
+
+async def _google_access_token(
+    session: AsyncSession, context: AuthContext
+) -> tuple[GmailIntegration, str]:
+    entity = await _connected_google_integration(session, context)
+    if _google_token_current(entity):
+        return entity, decrypt_secret(entity.access_token_encrypted or "")
     if not entity.refresh_token_encrypted or not _google_configured():
         raise HTTPException(status_code=422, detail="Google Workspace must be reconnected")
     client_secret = settings.GOOGLE_CLIENT_SECRET
@@ -449,7 +476,9 @@ async def _google_access_token(
     refreshed = response.json()
     token = refreshed["access_token"]
     entity.access_token_encrypted = encrypt_secret(token)
-    entity.token_expires_at = now + timedelta(seconds=int(refreshed.get("expires_in", 3600)))
+    entity.token_expires_at = datetime.now(UTC) + timedelta(
+        seconds=int(refreshed.get("expires_in", 3600))
+    )
     await session.flush()
     return entity, token
 

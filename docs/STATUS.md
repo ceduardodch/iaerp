@@ -7,6 +7,8 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- **Facturación desde Grok (26 de noviembre).** El conector prepara el borrador con el catálogo de la empresa activa, emite la factura y puede enviar el RIDE y el XML tras la autorización del SRI. La habilitación operativa por empresa requiere membresía en IAERP, rol de facturación, escrituras automatizadas, configuración fiscal productiva y remitente habilitado. [Flujo y permisos](05-ai-mcp.md#facturación-delegada-desde-grok).
+
 - **Filtros de cartera (25 de noviembre).** REST y MCP filtran por el estado que se muestra en cada cuenta y por vencimiento estrictamente anterior a `dueBefore`. El corte de búsqueda conserva la mora calculada al día fiscal de Ecuador. Una prueba de contrato compara 30 combinaciones en ambos accesos con las filas de la consulta completa.
 
 - **Cobranza individual en iPhone.** La versión 0.8.0 (11) incluye recordatorio por factura, promesa de pago y cambio de vencimiento por cuota. En PostgreSQL pasaron 991 pruebas del servidor y las pruebas independientes con buzón de captura comprobaron un solo correo ante confirmaciones simultáneas. En iOS se comprobó la dirección completa con letra al máximo. El usuario hará el primer envío real desde el teléfono. [Criterios y alcance](adrs/0030-ios-cobranza-individual.md).

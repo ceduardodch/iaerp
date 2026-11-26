@@ -385,19 +385,26 @@ async def test_web_acceptance_with_lost_response_blocks_mobile_retry(
     )
 
 
-async def test_native_draft_issue_authorization_and_email_cycle(client, delivery_case, monkeypatch):
+@pytest.mark.parametrize("issuer", ["ios", "grok"])
+async def test_draft_issue_authorization_and_email_cycle(
+    client, delivery_case, monkeypatch, issuer
+):
+    from app.core.grok_permissions import GROK_CLIENT_ID
     from app.integrations.sri.protocol import ReceptionResult
     from app.models.masters import Product
     from app.models.receivables import Receivable
     from app.services.storage import UploadResult
     from app.workers.receivables import handle_invoice_authorized
     from tests.test_billing_api import _invoice_payload
+    from tests.test_mcp_invoices import mcp_lifespan, mcp_session
     from tests.test_signing import _p12_with_trust_chain
 
     other_id, _, native, _, _, sent, content = delivery_case
     async with SessionFactory() as session, session.begin():
         other = await session.get(SalesDocument, other_id)
         other.sequential = "000000999"
+        if issuer == "grok":
+            other.document_type = "CREDIT_NOTE"
         product = await session.scalar(select(Product).where(Product.tenant_id == TENANT_A))
         masters = {
             "party_id": str(other.party_id),
@@ -436,12 +443,70 @@ async def test_native_draft_issue_authorization_and_email_cycle(client, delivery
     key = str(uuid.uuid4())
     denied_before_authorization = await client.get(url + "/email-preview", headers=auth(native))
     assert denied_before_authorization.status_code == 422
-    issued = await client.post(url + "/issue", headers=auth(native, key))
-    assert issued.status_code == 202, issued.text
-    assert (await client.post(url + "/issue", headers=auth(native, key))).json() == issued.json()
-    assert (
-        await client.post(url + "/issue", headers=auth(native, str(uuid.uuid4())))
-    ).status_code == 409
+    if issuer == "ios":
+        issued = await client.post(url + "/issue", headers=auth(native, key))
+        assert issued.status_code == 202, issued.text
+        replay = await client.post(url + "/issue", headers=auth(native, key))
+        assert replay.json() == issued.json()
+        assert (
+            await client.post(url + "/issue", headers=auth(native, str(uuid.uuid4())))
+        ).status_code == 409
+    else:
+        from datetime import timedelta
+
+        from app.models.crm import GmailIntegration
+        from app.models.masters import Party
+        from app.models.platform import AutomationSettings
+        from tests.test_ios_permissions import USER_A
+
+        sign = oidc_signer(monkeypatch)
+        scopes = "invoices:read invoices:write invoices:issue invoices:email"
+        native = sign(claims(scope=scopes))
+        grok = sign(claims(
+            scope=scopes, azp=GROK_CLIENT_ID, aud=get_settings().OIDC_MCP_AUDIENCE
+        ))
+        async with mcp_lifespan(), mcp_session(grok) as mcp:
+            args = {"invoiceId": identifier, "idempotencyKey": key}
+            blocked = await mcp.call_tool("invoices.issue", args)
+            assert blocked.isError and "Automation writes are disabled" in blocked.content[0].text
+            async with SessionFactory() as session, session.begin():
+                automation = await session.get(AutomationSettings, TENANT_A)
+                automation.writes_enabled = True
+            wrong_type = await mcp.call_tool(
+                "invoices.issue", args | {"invoiceId": str(other_id)}
+            )
+            assert wrong_type.isError and "Invoice not found" in wrong_type.content[0].text
+            missing_sender = await mcp.call_tool("invoices.issue", args)
+            assert missing_sender.isError and "not connected" in missing_sender.content[0].text
+            async with SessionFactory() as session, session.begin():
+                document = await session.get(SalesDocument, uuid.UUID(identifier))
+                assert document.status == "DRAFT" and document.access_key is None
+                party = await session.get(Party, document.party_id)
+                stored_email = party.email
+                party.email = None
+                session.add(GmailIntegration(
+                    tenant_id=TENANT_A, user_id=USER_A, email="sender@example.com",
+                    access_token_encrypted="synthetic",
+                    token_expires_at=datetime.now(UTC) + timedelta(minutes=30),
+                    scopes_granted=["https://www.googleapis.com/auth/gmail.send"],
+                ))
+            missing_recipient = await mcp.call_tool("invoices.issue", args)
+            assert missing_recipient.isError
+            assert "no valid registered email" in missing_recipient.content[0].text
+            async with SessionFactory() as session, session.begin():
+                document = await session.get(SalesDocument, uuid.UUID(identifier))
+                assert document.status == "DRAFT" and document.access_key is None
+                party = await session.get(Party, document.party_id)
+                party.email = stored_email
+            first = await mcp.call_tool("invoices.issue", args)
+            assert not first.isError, first.content
+            assert first.structuredContent["status"] == "PROCESSING"
+            replay = await mcp.call_tool("invoices.issue", args)
+            assert replay.structuredContent == first.structuredContent
+            duplicate = await mcp.call_tool(
+                "invoices.issue", args | {"idempotencyKey": str(uuid.uuid4())}
+            )
+            assert duplicate.isError and "invoice_already_issued" in duplicate.content[0].text
     signed = (await client.get(url, headers=auth(native))).json()
     assert signed["status"] == "SIGNED" and signed["accessKey"][23] == "2"
 
@@ -512,13 +577,21 @@ async def test_native_draft_issue_authorization_and_email_cycle(client, delivery
             )
             == 1
         )
-    preview = (await client.get(url + "/email-preview", headers=auth(native))).json()
-    mailed = await client.post(
-        url + "/email",
-        headers=auth(native, str(uuid.uuid4())),
-        json={"recipient": preview["recipient"], "previewDigest": preview["previewDigest"]},
-    )
-    assert mailed.status_code == 200 and len(sent) == 1
+    if issuer == "ios":
+        preview = (await client.get(url + "/email-preview", headers=auth(native))).json()
+        mailed = await client.post(
+            url + "/email",
+            headers=auth(native, str(uuid.uuid4())),
+            json={"recipient": preview["recipient"], "previewDigest": preview["previewDigest"]},
+        )
+        assert mailed.status_code == 200, mailed.text
+    else:
+        async with mcp_lifespan(), mcp_session(grok) as mcp:
+            mail = await mcp.call_tool(
+                "invoices.email", {"invoiceId": identifier, "idempotencyKey": str(uuid.uuid4())}
+            )
+            assert not mail.isError, mail.content
+    assert len(sent) == 1
     assert b"SignatureValue" in sent[0]["attachments"][0][-1]
     assert sent[0]["attachments"][1][-1].startswith(b"%PDF")
 

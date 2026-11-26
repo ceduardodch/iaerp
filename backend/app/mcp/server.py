@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthContext, decode_access_token, resolve_auth_context
 from app.core.config import get_settings
 from app.db.session import SessionFactory
+from app.mcp.invoice_options import InvoiceOptions, read_invoice_options
 from app.mcp.tool_fingerprints import EXPECTED_TOOL_FINGERPRINTS
 from app.models.platform import AutomationSettings, OperationRecord
 from app.schemas.billing import CreditNoteInput, InvoiceInput
@@ -47,6 +48,8 @@ from app.services import (
     automation_rate,
     billing,
     crm,
+    invoice_delivery,
+    invoice_issuance,
     masters,
     ops_failures,
     payables,
@@ -67,6 +70,7 @@ MCP_SCOPES = [
     "invoices:read",
     "invoices:write",
     "invoices:issue",
+    "invoices:email",
     "credit-notes:issue",
     "receivables:read",
     "receivables:write",
@@ -88,8 +92,10 @@ TOOL_REQUIRED_SCOPES = {
     "products.search": "products:read",
     "products.create": "products:write",
     "invoices.get": "invoices:read",
+    "invoices.draft_options": "invoices:write",
     "invoices.create_draft": "invoices:write",
     "invoices.issue": "invoices:issue",
+    "invoices.email": "invoices:email",
     "credit_notes.create_and_issue": "credit-notes:issue",
     "receivables.list": "receivables:read",
     "receivables.record_payment": "receivables:write",
@@ -686,6 +692,19 @@ async def invoices_get(invoiceId: uuid.UUID) -> dict[str, object]:
         await session.close()
 
 
+@mcp.tool(name="invoices.draft_options")
+async def invoices_draft_options(issueDate: date) -> InvoiceOptions:
+    """Consultar puntos de emision e impuestos de la empresa para la fecha de la factura."""
+    session, context = await _tool_context("invoices:write", "invoices.draft_options")
+    try:
+        return await read_invoice_options(session, context, issueDate)
+    finally:
+        await session.close()
+
+
+_forbid_extra_tool_arguments("invoices.draft_options")
+
+
 @mcp.tool(name="invoices.create_draft")
 async def invoices_create_draft(
     invoice: InvoiceInput,
@@ -748,52 +767,33 @@ async def invoices_issue(
     try:
         await _require_automation_writes(session, context)
 
-        async def issue() -> tuple[str, dict[str, object]]:
-            correlation_id = str(uuid.uuid4())
-            document = await billing.issue_document(
-                session,
-                context,
-                invoiceId,
-                idempotency_key=idempotencyKey,
-                correlation_id=correlation_id,
-            )
-            operation = OperationRecord(
-                tenant_id=context.tenant_id,
-                actor_id=context.actor_id,
-                operation_type="invoices.issue",
-                status="PROCESSING",
-                correlation_id=correlation_id,
-                result={"sales_document_id": str(document.id), "status": document.status},
-                expires_at=datetime.now(UTC) + timedelta(hours=24),
-            )
-            session.add(operation)
-            await session.flush()
-            response = OperationRead(
-                operation_id=operation.id,
-                status=operation.status,
-                correlation_id=operation.correlation_id,
-                created_at=operation.created_at,
-                expires_at=operation.expires_at,
-                result=operation.result,
-                error=operation.error,
-            ).model_dump(mode="json", by_alias=True)
-            return str(document.id), response
-
-        return await execute_idempotent(
-            session,
-            context=context,
-            operation="invoices.issue",
-            idempotency_key=idempotencyKey,
-            request_payload={"invoice_id": str(invoiceId)},
-            action="invoice.issued",
-            entity_type="sales_document",
-            callback=issue,
-            event_type="invoice.signed",
-        )
+        return await invoice_issuance.issue_invoice(session, context, invoiceId, idempotencyKey)
     except HTTPException as exc:
         raise ToolError(exc.detail if isinstance(exc.detail, str) else str(exc.detail)) from exc
     finally:
         await session.close()
+
+
+@mcp.tool(name="invoices.email")
+async def invoices_email(
+    invoiceId: uuid.UUID,
+    idempotencyKey: Annotated[str, Field(min_length=16, max_length=128)],
+) -> dict[str, object]:
+    """Enviar el RIDE PDF y el XML de una factura autorizada al correo registrado del cliente."""
+    session, context = await _tool_context("invoices:email", "invoices.email")
+    try:
+        await _require_automation_writes(session, context)
+        receipt = await invoice_delivery.send_registered_invoice(
+            session, context, invoiceId, key=idempotencyKey
+        )
+        return receipt.model_dump(mode="json", by_alias=True)
+    except HTTPException as exc:
+        raise ToolError(str(exc.detail)) from exc
+    finally:
+        await session.close()
+
+
+_forbid_extra_tool_arguments("invoices.email")
 
 
 @mcp.tool(name="credit_notes.create_and_issue")

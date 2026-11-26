@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.grok_permissions import GROK_CLIENT_ID, grok_effective_scopes, is_grok_client
 from app.core.ios_permissions import (
     IOS_CLIENT_ID,
     ios_effective_scopes,
@@ -122,6 +123,11 @@ async def resolve_auth_context(
     scopes = frozenset(str(payload.get("scope") or "").split())
     subject = payload.get("sub")
     client_id = payload.get("client_id") or payload.get("azp")
+    grok = is_grok_client(payload)
+    if grok and any(
+        name in payload and payload[name] != GROK_CLIENT_ID for name in ("azp", "client_id")
+    ):
+        raise HTTPException(status_code=403, detail="Inconsistent Grok client identity")
     native_ios = is_ios_client(payload)
     if native_ios:
         try:
@@ -133,7 +139,7 @@ async def resolve_auth_context(
         except ValueError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    if isinstance(client_id, str) and not native_ios:
+    if isinstance(client_id, str) and not native_ios and not grok:
         # client_id es unico globalmente (unique=True en service_accounts), por
         # lo que basta para ligar el token a su tenant sin filtro adicional.
         service_account = await session.scalar(
@@ -188,7 +194,11 @@ async def resolve_auth_context(
         if user_membership is None:
             raise HTTPException(status_code=404, detail="Membership not found")
         user, membership = user_membership
-        effective_scopes = ios_effective_scopes(scopes, membership.roles) if native_ios else scopes
+        effective_scopes = scopes
+        if native_ios:
+            effective_scopes = ios_effective_scopes(scopes, membership.roles)
+        elif grok:
+            effective_scopes = grok_effective_scopes(scopes, membership.roles)
         return AuthContext(
             actor_id=str(user.id),
             actor_type="USER",
@@ -217,6 +227,10 @@ async def get_auth_context(
             detail="Invalid access token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+    # This delegated connector uses MCP's tenant policy, rate limit and write switch.
+    # A misconfigured dual-audience token must never open the ordinary ERP routes.
+    if is_grok_client(payload):
+        raise HTTPException(status_code=403, detail="Grok connector requires the MCP endpoint")
     context = await resolve_auth_context(payload, session)
     # El handler global de excepciones en app/main.py lee esto de request.state
     # para loguear tenant/actor: no puede usar Depends(get_auth_context) porque
