@@ -2,11 +2,14 @@
 
 import base64
 import uuid
+from datetime import UTC, datetime, timedelta
 from email import policy
 from email.parser import BytesParser
 from types import SimpleNamespace
 
+import httpx
 import pytest
+from fastapi import HTTPException
 
 from app.core.auth import AuthContext
 from app.db.session import SessionFactory
@@ -72,3 +75,52 @@ async def test_google_email_uses_configured_sender_alias(monkeypatch) -> None:
     assert email["From"] == "Contabilidad B2B <contabilidad@b2b.com.ec>"
     assert email["Reply-To"] == "contabilidad@b2b.com.ec"
     assert "personal@b2b.com.ec" not in decoded.decode()
+
+@pytest.mark.parametrize(
+    "alias,status,body,expected",
+    [
+        (None, 0, {}, None),
+        ("PERSONAL@example.com", 0, {}, None),
+        ("billing@example.com", 404, {}, "not found"),
+        ("billing@example.com", 403, {}, "Reconnect"),
+        ("billing@example.com", 503, {}, "Could not verify"),
+        ("billing@example.com", 200, {"sendAsEmail": "billing@example.com",
+                                      "verificationStatus": "pending"}, "not verified"),
+        ("billing@example.com", 200, {"sendAsEmail": "other@example.com",
+                                      "verificationStatus": "accepted"}, "not verified"),
+    ],
+)
+async def test_configured_invoice_sender_must_be_accepted(
+    monkeypatch, alias, status, body, expected
+):
+    mailbox = SimpleNamespace(
+        email="personal@example.com",
+        scopes_granted=crm_integrations.GOOGLE_SCOPES.split(),
+        token_expires_at=datetime.now(UTC) + timedelta(minutes=10),
+    )
+
+    async def connected(session, context):
+        return mailbox
+
+    async def token(session, context):
+        assert status != 0, "A primary mailbox does not need alias verification"
+        return mailbox, "synthetic"
+
+    def get(request):
+        assert request.method == "GET"
+        return httpx.Response(status, json=body)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(get))
+
+    monkeypatch.setattr(crm_integrations, "_connected_google_integration", connected)
+    monkeypatch.setattr(crm_integrations, "_google_access_token", token)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)
+    async with SessionFactory() as session:
+        if expected:
+            with pytest.raises(HTTPException) as caught:
+                await crm_integrations.configured_google_sender(session, None, alias=alias)
+            assert expected in caught.value.detail
+        else:
+            assert await crm_integrations.configured_google_sender(
+                session, None, alias=alias
+            ) == mailbox.email

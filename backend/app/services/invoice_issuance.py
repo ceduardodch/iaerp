@@ -15,7 +15,7 @@ from app.core.ios_permissions import IOS_CLIENT_ID
 from app.models.billing import SalesDocument, SRITransmission
 from app.models.legal_commercial import BillingProposal
 from app.models.masters import Party
-from app.models.platform import AutomationSettings, OperationRecord
+from app.models.platform import AutomationSettings, OperationRecord, TenantFiscalSettings
 from app.schemas.platform import OperationRead
 from app.services import billing, crm_integrations, invoice_delivery
 from app.services.unit_of_work import execute_idempotent
@@ -37,8 +37,14 @@ async def _check_email_delivery(
         address.validate_python(recipient)
     except ValidationError as exc:
         raise HTTPException(422, "Invoice customer has no valid registered email") from exc
-    sender = await crm_integrations.configured_google_sender(session, context)
+    alias = await session.scalar(
+        select(TenantFiscalSettings.invoice_email_from_address)
+        .where(TenantFiscalSettings.tenant_id == context.tenant_id)
+    )
     try:
+        if alias and address.validate_python(alias).casefold() != alias.casefold():
+            raise HTTPException(422, "Google Workspace sender address is invalid")
+        sender = await crm_integrations.configured_google_sender(session, context, alias=alias)
         address.validate_python(sender)
     except ValidationError as exc:
         raise HTTPException(422, "Google Workspace sender address is invalid") from exc

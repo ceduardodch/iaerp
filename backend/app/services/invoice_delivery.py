@@ -149,30 +149,47 @@ async def _web_receipt(
     return InvoiceEmailRead.model_validate(payload) if payload else None
 
 
-async def _has_previous_web_delivery(
+async def _historical_mcp_receipt(
     session: AsyncSession, context: AuthContext, document_id: uuid.UUID
-) -> bool:
-    # Historical web receipts recorded the provider ID, not the invoice ID, in
-    # the audit. Their stored request hash binds the invoice to the actual recipient.
+) -> dict[str, object] | None:
+    completed = await session.scalar(
+        select(InvoiceEmailDispatch.provider_message_id).where(
+            InvoiceEmailDispatch.tenant_id == context.tenant_id,
+            InvoiceEmailDispatch.document_id == document_id,
+            InvoiceEmailDispatch.provider_message_id.is_not(None),
+        ).limit(1)
+    )
+    if completed is not None:
+        # Completed claims are permanent and will be checked again under the tenant lock.
+        return None
+
+    # The old receipt binds the invoice to its actual recipient only through a hash.
+    # Since the dispatch migration this operation no longer creates idempotency rows.
+    created_at = select(SalesDocument.created_at).where(
+        SalesDocument.tenant_id == context.tenant_id,
+        SalesDocument.id == document_id,
+    ).scalar_subquery()
     receipts = await session.stream(
-        select(
-            IdempotencyRecord.request_hash,
-            IdempotencyRecord.response_body["recipient"].as_string(),
-        )
+        select(IdempotencyRecord.request_hash, IdempotencyRecord.response_body)
         .where(
             IdempotencyRecord.tenant_id == context.tenant_id,
             IdempotencyRecord.operation == "invoices.email",
             IdempotencyRecord.status == "COMPLETED",
+            IdempotencyRecord.created_at >= created_at,
         )
+        .order_by(IdempotencyRecord.created_at.desc())
         .execution_options(yield_per=128)
     )
     try:
-        async for request_hash, recipient in receipts:
+        async for request_hash, body in receipts:
+            if not isinstance(body, dict):
+                continue
+            recipient = body.get("recipient")
             if recipient and request_hash == canonical_hash(
                 {"invoice_id": str(document_id), "recipient": recipient}
             ):
-                return True
-        return False
+                return body
+        return None
     finally:
         await receipts.close()
 
@@ -366,6 +383,12 @@ async def send_email(
         request_hash = _mcp_email_hash(document_id)
     if session.in_transaction():
         await session.rollback()
+    historical_receipt = None
+    if mcp_delivery:
+        # Legacy rows are immutable. Release this read transaction before serializing
+        # current dispatches, membership checks and the decision to send.
+        async with session.begin():
+            historical_receipt = await _historical_mcp_receipt(session, context, document_id)
     async with session.begin():
         await _lock_tenant(session, context)
         if mcp_delivery:
@@ -444,15 +467,21 @@ async def send_email(
             )
             if mcp_delivery and delivered and delivered.recipient_hash != recipient_hash:
                 raise HTTPException(409, "Invoice already delivered to a different address")
-            existing_receipt = (
-                _receipt(delivered)
-                if delivered
-                else await _web_receipt(session, context, document_id, recipient)
-            )
+            if delivered:
+                existing_receipt = _receipt(delivered)
+            elif mcp_delivery:
+                if historical_receipt and historical_receipt.get("recipient") != recipient:
+                    raise HTTPException(
+                        409, "Invoice previously delivered; review delivery history"
+                    )
+                existing_receipt = (
+                    InvoiceEmailRead.model_validate(historical_receipt)
+                    if historical_receipt else None
+                )
+            else:
+                existing_receipt = await _web_receipt(session, context, document_id, recipient)
             if existing_receipt:
                 return existing_receipt
-            if mcp_delivery and await _has_previous_web_delivery(session, context, document_id):
-                raise HTTPException(409, "Invoice previously delivered; review delivery history")
         attachments = await billing.load_invoice_attachments(delivery, verify=restricted_delivery)
         reference = f"{uuid.uuid4()}@iaerp.invalid"
         claim = InvoiceEmailDispatch(

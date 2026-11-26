@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import SessionFactory
@@ -12,7 +13,7 @@ from app.models.billing import InvoiceEmailDispatch, SalesDocument
 from app.models.legal_commercial import BillingProposal
 from app.models.masters import Party
 from app.models.platform import AuditEvent, AutomationSettings, IdempotencyRecord
-from app.services import crm_integrations
+from app.services import crm_integrations, invoice_delivery
 from app.services.unit_of_work import canonical_hash
 from tests.test_ios_invoice_delivery import delivery_case  # noqa: F401
 from tests.test_ios_permissions import TENANT_A, TENANT_B, claims, membership, oidc_signer
@@ -60,6 +61,11 @@ async def test_mcp_registered_invoice_email(client, delivery_case, monkeypatch):
             assert not sent
             first = await session.call_tool("invoices.email", params)
             assert not first.isError, first.content
+
+            async def unexpected_scan(*args, **kwargs):
+                raise AssertionError("A confirmed dispatch must skip the legacy receipt scan")
+
+            monkeypatch.setattr(AsyncSession, "stream", unexpected_scan)
             for key in (params["idempotencyKey"], str(uuid.uuid4())):
                 replay = await session.call_tool("invoices.email", params | {"idempotencyKey": key})
                 assert replay.structuredContent == first.structuredContent
@@ -190,13 +196,40 @@ async def test_mcp_recognizes_delivery_before_dispatch_migration(
                 request_hash=canonical_hash(
                     {"invoice_id": str(document_id), "recipient": old_recipient}
                 ),
-                response_body={"recipient": old_recipient, "messageId": "old-google-id"},
+                response_body={
+                    "recipient": old_recipient, "messageId": "old-google-id",
+                    "senderAddress": "billing@example.com", "senderName": "Synthetic",
+                    "attachmentNames": ["invoice.xml", "invoice.pdf"],
+                },
                 expires_at=datetime.now(UTC) + timedelta(days=1),
             )
         )
     async with mcp_lifespan(), mcp_session(token) as session:
+        observed = []
+        original_stream = AsyncSession.stream
+        original_lock = invoice_delivery._lock_tenant
+
+        async def observe_stream(db, *args, **kwargs):
+            observed.append(("scan", db.sync_session.get_transaction()))
+            return await original_stream(db, *args, **kwargs)
+
+        async def observe_lock(db, context):
+            observed.append(("lock", db.sync_session.get_transaction()))
+            await original_lock(db, context)
+
+        monkeypatch.setattr(AsyncSession, "stream", observe_stream)
+        monkeypatch.setattr(invoice_delivery, "_lock_tenant", observe_lock)
         blocked = await session.call_tool(
             "invoices.email", {"invoiceId": str(document_id), "idempotencyKey": str(uuid.uuid4())}
         )
         assert blocked.isError and "previously delivered" in blocked.content[0].text
+        assert [stage for stage, _ in observed] == ["scan", "lock"]
+        assert observed[0][1] is not observed[1][1] and not observed[0][1].is_active
+        async with SessionFactory() as db, db.begin():
+            doc = await db.get(SalesDocument, document_id)
+            (await db.get(Party, doc.party_id)).email = old_recipient
+        replay = await session.call_tool(
+            "invoices.email", {"invoiceId": str(document_id), "idempotencyKey": str(uuid.uuid4())}
+        )
+        assert not replay.isError and replay.structuredContent["messageId"] == "old-google-id"
         assert not sent

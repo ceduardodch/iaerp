@@ -454,6 +454,9 @@ async def test_draft_issue_authorization_and_email_cycle(
     else:
         from datetime import timedelta
 
+        from cryptography.fernet import Fernet
+        from pydantic import SecretStr
+
         from app.models.crm import GmailIntegration
         from app.models.masters import Party
         from app.models.platform import AutomationSettings
@@ -498,7 +501,39 @@ async def test_draft_issue_authorization_and_email_cycle(
                 assert document.status == "DRAFT" and document.access_key is None
                 party = await session.get(Party, document.party_id)
                 party.email = stored_email
-            first = await mcp.call_tool("invoices.issue", args)
+                fiscal = await session.get(TenantFiscalSettings, TENANT_A)
+                fiscal.invoice_email_from_address = "billing@example.com"
+            not_verifiable = await mcp.call_tool("invoices.issue", args)
+            assert not_verifiable.isError and "verify" in not_verifiable.content[0].text
+            async with SessionFactory() as session, session.begin():
+                document = await session.get(SalesDocument, uuid.UUID(identifier))
+                assert document.status == "DRAFT" and document.access_key is None
+                integration = await session.scalar(
+                    select(GmailIntegration).where(GmailIntegration.tenant_id == TENANT_A)
+                )
+                integration.scopes_granted = [
+                    *integration.scopes_granted, "https://www.googleapis.com/auth/gmail.readonly"
+                ]
+                monkeypatch.setattr(
+                    get_settings(), "IAERP_SECRETS_ENCRYPTION_KEY",
+                    SecretStr(Fernet.generate_key().decode("ascii")),
+                )
+                integration.access_token_encrypted = crm_integrations.encrypt_secret("synthetic")
+
+            def verified_alias(request):
+                assert request.method == "GET"
+                path = request.url.raw_path.split(b"?")[0]
+                assert path.endswith(b"/settings/sendAs/billing%40example.com")
+                assert request.url.params["fields"] == "sendAsEmail,verificationStatus"
+                assert request.headers["Authorization"] == "Bearer synthetic"
+                return httpx.Response(200, json={
+                    "sendAsEmail": "billing@example.com", "verificationStatus": "accepted"
+                })
+
+            with monkeypatch.context() as provider:
+                gmail = httpx.AsyncClient(transport=httpx.MockTransport(verified_alias))
+                provider.setattr(httpx, "AsyncClient", lambda **kwargs: gmail)
+                first = await mcp.call_tool("invoices.issue", args)
             assert not first.isError, first.content
             assert first.structuredContent["status"] == "PROCESSING"
             replay = await mcp.call_tool("invoices.issue", args)
@@ -591,6 +626,7 @@ async def test_draft_issue_authorization_and_email_cycle(
                 "invoices.email", {"invoiceId": identifier, "idempotencyKey": str(uuid.uuid4())}
             )
             assert not mail.isError, mail.content
+            assert sent[0]["sender_address"] == "billing@example.com"
     assert len(sent) == 1
     assert b"SignatureValue" in sent[0]["attachments"][0][-1]
     assert sent[0]["attachments"][1][-1].startswith(b"%PDF")
