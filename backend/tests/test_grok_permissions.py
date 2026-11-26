@@ -1,6 +1,7 @@
 """Synthetic tenant memberships and signed tokens for the Grok connector."""
 
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -60,7 +61,7 @@ async def test_grok_user_keeps_company_binding_after_service_account_collision(m
                 tenant_id=TENANT_B,
                 client_id=GROK_CLIENT_ID,
                 name="Synthetic collision",
-                secret_hash="unused",
+                secret_hash=uuid4().hex,
                 scopes=["invoices:issue"],
                 expires_at=datetime.now(UTC) + timedelta(days=1),
             )
