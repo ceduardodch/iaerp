@@ -34,6 +34,14 @@ _BANK_PREFIX = "BANCO "
 
 
 @dataclass
+class DossierIsdLine:
+    sri_code: str
+    base_amount: Decimal
+    percentage: Decimal
+    retained_amount: Decimal
+
+
+@dataclass
 class DossierRetention:
     """Retencion que respalda al comprobante."""
 
@@ -42,6 +50,7 @@ class DossierRetention:
     issuer_name: str | None
     iva_amount: Decimal = Decimal("0.00")
     income_tax_amount: Decimal = Decimal("0.00")
+    isd_lines: list[DossierIsdLine] = field(default_factory=list)
 
 
 @dataclass
@@ -65,6 +74,7 @@ class DocumentDossier:
     issue_date: date
     counterparty_name: str | None
     total: Decimal
+    is_issued_purchase: bool = False
     payment_methods: list[str] = field(default_factory=list)
     retentions: list[DossierRetention] = field(default_factory=list)
     movements: list[DossierMovement] = field(default_factory=list)
@@ -86,6 +96,13 @@ class DocumentDossier:
     @property
     def retained_income_tax(self) -> Decimal:
         return sum((item.income_tax_amount for item in self.retentions), Decimal("0.00"))
+
+    @property
+    def retained_isd(self) -> Decimal:
+        return sum(
+            (line.retained_amount for item in self.retentions for line in item.isd_lines),
+            Decimal("0.00"),
+        )
 
 
 def _bank_reference(support_reference: str | None) -> str | None:
@@ -124,8 +141,17 @@ async def _retentions_for(
         for row in rows:
             if row.kind == "IVA":
                 own_retention.iva_amount += row.retained_amount
-            else:
+            elif row.kind == "RENTA":
                 own_retention.income_tax_amount += row.retained_amount
+            elif row.kind == "ISD":
+                own_retention.isd_lines.append(
+                    DossierIsdLine(
+                        sri_code=row.sri_code,
+                        base_amount=row.base_amount,
+                        percentage=row.percentage,
+                        retained_amount=row.retained_amount,
+                    )
+                )
         return [own_retention]
 
     parts = [
@@ -139,10 +165,13 @@ async def _retentions_for(
     # El SRI tambien acepta el numero sin separadores.
     supporting_plain = "".join(part for part in parts if part)
 
+    # El ISD bancario pertenece a su comprobante incluso si su referencia
+    # coincide con el número de una factura de la empresa.
     rows = list(
         await session.scalars(
             select(FiscalRetention).where(
                 FiscalRetention.tenant_id == context.tenant_id,
+                FiscalRetention.kind.in_(("IVA", "RENTA")),
                 FiscalRetention.supporting_document_number.in_(
                     [supporting_number, supporting_plain]
                 ),
@@ -192,12 +221,20 @@ async def build_dossier(
         document_id=document.id,
         doc_type=document.doc_type,
         direction=document.direction,
+        is_issued_purchase=document.is_issued_purchase,
         access_key=document.access_key,
         issue_date=document.issue_date,
         counterparty_name=document.counterparty_name,
         total=document.total,
         payment_methods=list(document.payment_methods or []),
     )
+
+    if document.is_issued_purchase:
+        dossier.notes.append(
+            "La empresa actúa como compradora en este comprobante. "
+            "Concilia el pago en Compras y verifica las retenciones en sus comprobantes."
+        )
+        return dossier
 
     dossier.retentions = await _retentions_for(session, context, document=document)
 

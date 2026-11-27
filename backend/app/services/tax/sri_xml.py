@@ -49,9 +49,19 @@ _IVA_BRACKETS: dict[str, tuple[str, Decimal]] = {
     "10": ("GRAVADO", Decimal("13")),
 }
 
-# `codigo` dentro de <retencion>: 1 = renta, 2 = IVA (tabla 21 del SRI).
-# Se mantienen separadas porque el campo 609 del formulario 104 es SOLO IVA.
-_RETENTION_KINDS = {"1": "RENTA", "2": "IVA"}
+# Ficha técnica de comprobantes electrónicos 2.34 del SRI, tabla 19.
+_RETENTION_KINDS = {"1": "RENTA", "2": "IVA", "6": "ISD"}
+
+
+def retention_kind(code: str | None) -> str:
+    kind = _RETENTION_KINDS.get(code or "")
+    if kind is None:
+        raise HTTPException(
+            status_code=422,
+            detail="El XML contiene una categoría de retención no reconocida. "
+            "Revisa el comprobante completo antes de registrarlo.",
+        )
+    return kind
 
 
 @dataclass
@@ -98,6 +108,10 @@ class ParsedDocument:
     retentions: list[ParsedRetention] = field(default_factory=list)
     modified_document: str | None = None
     modified_document_type: str | None = None
+
+    @property
+    def receivable_retentions(self) -> list[ParsedRetention]:
+        return [item for item in self.retentions if item.kind in {"IVA", "RENTA"}]
 
 
 def _local(tag: str) -> str:
@@ -248,6 +262,7 @@ def _parse_invoice_like(
         )
     )
 
+    receiver_role = "Proveedor" if doc_type == "LIQUIDACION" else "Comprador"
     return ParsedDocument(
         doc_type=doc_type,
         access_key=_text(document, "infoTributaria/claveAcceso") or authorization_number,
@@ -256,8 +271,8 @@ def _parse_invoice_like(
         issue_date=issue_date,
         issuer_identification=_text(document, "infoTributaria/ruc") or "",
         issuer_name=_text(document, "infoTributaria/razonSocial") or "",
-        receiver_identification=_text(document, f"{info_tag}/identificacionComprador"),
-        receiver_name=_text(document, f"{info_tag}/razonSocialComprador"),
+        receiver_identification=_text(document, f"{info_tag}/identificacion{receiver_role}"),
+        receiver_name=_text(document, f"{info_tag}/razonSocial{receiver_role}"),
         establishment_code=_text(document, "infoTributaria/estab"),
         emission_point_code=_text(document, "infoTributaria/ptoEmi"),
         sequential=_text(document, "infoTributaria/secuencial"),
@@ -288,19 +303,27 @@ def _parse_retention(
     def append_retention(
         item: Element, supporting_number: str | None, supporting_type: str | None
     ) -> None:
-        code = _text(item, "codigo") or ""
-        kind = _RETENTION_KINDS.get(code)
-        if kind is None:
-            # Otros impuestos (p.ej. ISD) no entran al IVA mensual ni a la
-            # conciliacion de renta; se omiten en vez de clasificarlos mal.
-            return
+        kind = retention_kind(_text(item, "codigo"))
+        sri_code = _text(item, "codigoRetencion") or ""
+        # Para ISD un cero debe constar expresamente en la línea autorizada.
+        default = Decimal("NaN") if kind == "ISD" else Decimal("0.00")
+        percentage = _decimal(_text(item, "porcentajeRetener"), default=default)
+        base = _decimal(_text(item, "baseImponible"), default=default)
+        amount = _decimal(_text(item, "valorRetenido"), default=default)
+        if kind == "ISD" and (
+            not sri_code or any(not n.is_finite() or n < 0 for n in (percentage, base, amount))
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Revisa el código, la base, el porcentaje y el valor del ISD en el XML.",
+            )
         retentions.append(
             ParsedRetention(
                 kind=kind,
-                sri_code=_text(item, "codigoRetencion") or "",
-                percentage=_decimal(_text(item, "porcentajeRetener")),
-                base_amount=_decimal(_text(item, "baseImponible")),
-                retained_amount=_decimal(_text(item, "valorRetenido")),
+                sri_code=sri_code,
+                percentage=percentage,
+                base_amount=base,
+                retained_amount=amount,
                 supporting_document_number=supporting_number,
                 supporting_document_type=supporting_type,
             )
@@ -317,6 +340,11 @@ def _parse_retention(
     if not retentions:
         for item in _children(document, "impuestos/impuesto"):
             append_retention(item, _text(item, "numDocSustento"), _text(item, "codDocSustento"))
+
+    if not retentions:
+        raise HTTPException(
+            status_code=422, detail="El comprobante no contiene rubros de retención"
+        )
 
     total_retained = sum((item.retained_amount for item in retentions), Decimal("0.00"))
     return ParsedDocument(

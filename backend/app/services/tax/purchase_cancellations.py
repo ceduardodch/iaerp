@@ -131,6 +131,7 @@ async def cancel_purchase(
             )
             .where(
                 FiscalRetention.tenant_id == context.tenant_id,
+                FiscalRetention.kind.in_(("IVA", "RENTA")),
                 FiscalDocument.direction == "EMITIDO",
                 FiscalDocument.doc_type == "RETENCION",
                 FiscalDocument.counterparty_identification == document.counterparty_identification,

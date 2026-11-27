@@ -27,6 +27,7 @@ class PayableInstallmentInput(APIModel):
 
 
 class PayableCreate(APIModel):
+    foreign_digital_service: bool = False
     supplier_id: uuid.UUID | None = None
     supplier_name: str | None = Field(default=None, max_length=300)
     description: str = Field(min_length=2, max_length=500)
@@ -47,6 +48,13 @@ class PayableCreate(APIModel):
     payment_reference: str | None = Field(default=None, max_length=300)
     analytic_value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
 
+    def idempotency_payload(self) -> dict[str, object]:
+        # Existing manual purchases were hashed before the import flag was introduced.
+        return self.model_dump(
+            mode="json",
+            exclude=set() if self.foreign_digital_service else {"foreign_digital_service"},
+        )
+
     @model_validator(mode="after")
     def validate_plan(self) -> PayableCreate:
         if self.installments:
@@ -56,6 +64,12 @@ class PayableCreate(APIModel):
         if self.payment_timing == "PAID_NOW" and self.installments:
             raise ValueError("Paid-now expenses cannot define future installments")
         return self
+
+
+class PayableDueDateCorrection(APIModel):
+    previous_due_date: date | None
+    due_date: date
+    reason: str = Field(min_length=3, max_length=300, pattern=r"\S")
 
 
 class PayableFromDocumentCreate(APIModel):
@@ -132,7 +146,8 @@ class PayableDocumentBulkReviewRead(APIModel):
 
 
 class PayableClassificationUpdate(APIModel):
-    tax_classification: Literal["DEDUCTIBLE_CONFIRMED", "NON_DEDUCTIBLE"]
+    tax_classification: TaxClassification
+    foreign_digital_service: bool | None = None
     internal_classification: Literal["REAL", "DECLARATION_ONLY"] | None = None
     reason: str | None = Field(default=None, min_length=3, max_length=300)
     analytic_value_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
@@ -202,6 +217,7 @@ class PaymentScheduleCreate(APIModel):
 
 class PayableRead(APIModel):
     id: uuid.UUID
+    foreign_digital_service: bool = False
     supplier_id: uuid.UUID | None
     supplier_name: str | None
     fiscal_document_id: uuid.UUID | None

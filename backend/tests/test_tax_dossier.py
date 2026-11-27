@@ -207,9 +207,68 @@ async def test_dossier_requires_tax_read_scope(client) -> None:
     assert response.status_code == 403
 
 
+@pytest.mark.parametrize("support", [None, SUPPORTING_NUMBER])
+async def test_bank_isd_stays_on_its_own_receipt(client, support) -> None:
+    token = await token_for(client)
+    invoice_id = await seed_invoice_with_retention()
+    async with SessionFactory() as session, session.begin():
+        invoice = await session.get(FiscalDocument, invoice_id)
+        receipt = FiscalDocument(
+            tenant_id=TENANT_A, tax_period_id=invoice.tax_period_id,
+            direction="RECIBIDO", doc_type="RETENCION", issue_date=date(2025, 11, 21),
+            access_key="7" * 49, counterparty_name="BANCO DEMO", total=Decimal("25.13"),
+        )
+        session.add(receipt)
+        await session.flush()
+        session.add(FiscalRetention(
+            tenant_id=TENANT_A, fiscal_document_id=receipt.id, kind="ISD", sri_code="4580",
+            percentage=Decimal("5"), base_amount=Decimal("502.50"),
+            retained_amount=Decimal("25.13"), supporting_document_number=support,
+        ))
+        receipt_id = receipt.id
+
+    dossier = await get_dossier(client, token, receipt_id)
+    assert dossier["retainedIsd"] == dossier["total"] == "25.13"
+    assert dossier["retentions"][0]["isdLines"] == [{
+        "sriCode": "4580", "baseAmount": "502.50",
+        "percentage": "5.0000", "retainedAmount": "25.13",
+    }]
+    assert dossier["retainedIncomeTax"] == dossier["retainedIva"] == "0.00"
+    assert dossier["expectedNet"] == "0.00"
+    assert dossier["receivableId"] is None
+    assert dossier["movements"] == []
+    sale = await get_dossier(client, token, invoice_id)
+    assert sale["retainedIsd"] == "0.00"
+    assert len(sale["retentions"]) == 1
+    assert sale["expectedNet"] == "317.85"
+
+    dashboard = await client.get(
+        "/api/v1/tax/dashboard", params={"as_of": "2025-11-30"}, headers=auth(token)
+    )
+    assert dashboard.status_code == 200, dashboard.text
+    annual = dashboard.json()["annual"]
+    assert annual["isdWithheld"] == "25.13"
+    assert annual["incomeTaxWithheld"] == "8.59"
+    assert annual["ivaWithheld"] == "32.80"
+
+
 async def test_unknown_document_returns_404(client) -> None:
     token = await token_for(client)
     response = await client.get(
         f"/api/v1/tax/documents/{uuid.uuid4()}/dossier", headers=auth(token)
     )
     assert response.status_code == 404
+
+
+async def test_issued_purchase_liquidation_is_not_a_receivable(client, stored_objects):
+    token = await token_for(client)
+    invoice_id = await seed_invoice_with_retention()
+    async with SessionFactory.begin() as session:
+        document = await session.get(FiscalDocument, invoice_id)
+        document.doc_type = "LIQUIDACION"
+    body = await get_dossier(client, token, invoice_id)
+    assert body["expectedNet"] == "0.00"
+    assert not body["receivableId"]
+    assert not body["retentions"]  # Una retención de venta con el mismo número es ajena.
+    assert "Compras" in " ".join(body["notes"])
+    assert "Importar mis ventas" not in " ".join(body["notes"])

@@ -69,7 +69,10 @@ async def _resolve_related_access_key(
     *,
     document: FiscalDocument,
 ) -> None:
-    if document.doc_type != "NOTA_CREDITO" or not document.related_document_number:
+    if (
+        document.doc_type not in {"NOTA_CREDITO", "NOTA_DEBITO"}
+        or not document.related_document_number
+    ):
         return
     normalized = normalize_sri_document_number(document.related_document_number)
     document.related_document_number = normalized
@@ -121,6 +124,7 @@ async def _ensure_purchase_support_is_active(
             select(FiscalRetention.supporting_document_number).where(
                 FiscalRetention.tenant_id == context.tenant_id,
                 FiscalRetention.fiscal_document_id == document.id,
+                FiscalRetention.kind.in_(("IVA", "RENTA")),
             )
         ))
     normalized = {normalize_sri_document_number(number) for number in numbers if number}
@@ -159,7 +163,7 @@ async def _ensure_purchase_support_is_active(
             )
 
 
-async def _sync_related_credit_notes(
+async def _sync_related_notes(
     session: AsyncSession,
     context: AuthContext,
     *,
@@ -185,7 +189,7 @@ async def _sync_related_credit_notes(
             select(FiscalDocument).where(
                 FiscalDocument.tenant_id == context.tenant_id,
                 FiscalDocument.direction == source.direction,
-                FiscalDocument.doc_type == "NOTA_CREDITO",
+                FiscalDocument.doc_type.in_(("NOTA_CREDITO", "NOTA_DEBITO")),
                 FiscalDocument.counterparty_identification
                 == source.counterparty_identification,
                 FiscalDocument.related_document_number == number,
@@ -198,7 +202,7 @@ async def _sync_related_credit_notes(
 
     for note in notes:
         await _resolve_related_access_key(session, context, document=note)
-        if note.related_access_key == source.access_key:
+        if note.doc_type == "NOTA_CREDITO" and note.related_access_key == source.access_key:
             await payables.sync_fiscal_document(session, context, document=note)
 
 
@@ -351,7 +355,7 @@ async def upsert_parsed_document(
     await _resolve_related_access_key(session, context, document=document)
     await _ensure_purchase_support_is_active(session, context, document=document)
     await payables.sync_fiscal_document(session, context, document=document)
-    await _sync_related_credit_notes(session, context, source=document)
+    await _sync_related_notes(session, context, source=document)
     if document.doc_type == "RETENCION" and document.direction == "RECIBIDO":
         from app.services.tax.receivable_retentions import sync_ingested_retention
 
@@ -429,7 +433,7 @@ async def _upsert_txt_row(
     await _resolve_related_access_key(session, context, document=document)
     await _ensure_purchase_support_is_active(session, context, document=document)
     await payables.sync_fiscal_document(session, context, document=document)
-    await _sync_related_credit_notes(session, context, source=document)
+    await _sync_related_notes(session, context, source=document)
     return created, False
 
 

@@ -238,6 +238,8 @@ test('anula desde la fila sin abrir Pagar y cancelar conserva la clasificación 
   if (testInfo.project.name.includes('mobile')) expect(buttonBounds!.x + buttonBounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
   await page.screenshot({ path: `/tmp/iaerp-row-cancel-${testInfo.project.name}.png` })
   await row.getByRole('button', { name: 'Editar clasificación', exact: true }).click()
+  await expect(page.getByRole('radio', { name: 'Pendiente de revisión fiscal' })).toBeChecked()
+  await expect(page.getByLabel('Motivo del cambio')).not.toHaveAttribute('required')
   await page.getByLabel('Motivo del cambio').fill('Borrador sin guardar')
   await cancel.focus()
   await page.keyboard.press('Enter')

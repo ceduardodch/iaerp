@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthContext
 from app.models.tax import FiscalDocument, FiscalDocumentTax, FiscalRetention, TaxPeriod
 from app.services.tax.completeness import missing_tax_detail_document_ids
+from app.services.tax.external_purchases import external_payment_details, external_review_reasons
 from app.services.tax.formatting import format_amount, quantize_amount
 
 # Documentos que suman y que restan dentro de su grupo.
@@ -60,6 +61,7 @@ class IvaSummary:
     amounts: dict[str, TracedAmount]
     is_preliminary: bool
     preliminary_reasons: list[str]
+    requires_external_review: bool
     document_count: int
     pending_purchase_count: int
     pending_purchase_subtotal: Decimal
@@ -95,7 +97,9 @@ AMOUNT_KEYS = (
     "compras_totales_base",
     "iva_credito_tributario",
     "retenciones_iva_recibidas",
+    "retenciones_iva_100_efectuadas",
     "retenciones_renta_recibidas",
+    "retenciones_isd_recibidas",
     "impuesto_causado",
     "saldo_a_pagar",
     "credito_a_favor",
@@ -129,7 +133,11 @@ async def compute_iva(
     documents = [document for document in source_documents if document.cancelled_at is None]
     documents_by_id = {document.id: document for document in documents}
 
-    preliminary_reasons: list[str] = []
+    payments = await external_payment_details(
+        session, tenant_id=context.tenant_id, year=period.year, month=period.month
+    )
+    preliminary_reasons = external_review_reasons(payments, documents)
+    requires_external_review = bool(preliminary_reasons)
 
     if not documents_by_id:
         # Periodo sin comprobantes: todo queda en cero y se reporta el faltante,
@@ -144,6 +152,7 @@ async def compute_iva(
             amounts=amounts,
             is_preliminary=bool(preliminary_reasons),
             preliminary_reasons=preliminary_reasons,
+            requires_external_review=requires_external_review,
             document_count=0,
             pending_purchase_count=0,
             pending_purchase_subtotal=Decimal("0.00"),
@@ -209,6 +218,8 @@ async def compute_iva(
         else:
             continue
 
+        if document.is_issued_purchase:
+            continue
         side = "ventas" if document.direction == "EMITIDO" else "compras"
         bracket_key = _BRACKET_KEYS.get(tax.tax_bracket)
         if bracket_key is None:
@@ -256,15 +267,23 @@ async def compute_iva(
     )
     for retention in retentions:
         document = documents_by_id.get(retention.fiscal_document_id)
-        # Solo cuentan las retenciones que le hicieron a la entidad, es decir las
-        # que llegan en comprobantes RECIBIDOS.
-        if document is None or document.direction != "RECIBIDO":
+        if document is None:
             continue
-        key = (
-            "retenciones_iva_recibidas"
-            if retention.kind == "IVA"
-            else "retenciones_renta_recibidas"
-        )
+        if document.direction == "EMITIDO":
+            if (
+                document.doc_type == "RETENCION"
+                and not document.is_preliminary
+                and document.authorization_number
+                and retention.kind == "IVA"
+                and retention.percentage == Decimal("100")
+            ):
+                amounts["retenciones_iva_100_efectuadas"].add(
+                    retention.retained_amount, document.id
+                )
+            continue
+        if document.direction != "RECIBIDO":
+            continue
+        key = f"retenciones_{retention.kind.lower()}_recibidas"
         amounts[key].add(retention.retained_amount, document.id)
 
     causado = amounts["iva_generado"].value - amounts["iva_credito_tributario"].value
@@ -286,6 +305,7 @@ async def compute_iva(
         amounts=amounts,
         is_preliminary=bool(preliminary_reasons),
         preliminary_reasons=preliminary_reasons,
+        requires_external_review=requires_external_review,
         document_count=len(documents),
         pending_purchase_count=len(pending_purchases),
         pending_purchase_subtotal=quantize_amount(pending_purchase_subtotal),

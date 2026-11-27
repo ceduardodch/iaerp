@@ -1004,3 +1004,39 @@ test('tablero de Compras clasifica, edita etiquetas y guarda la regla por provee
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewportWidth)
   expect((await new AxeBuilder({ page }).include('.purchase-board').analyze()).violations).toEqual([])
 })
+
+test('la compra ya pagada conserva el vencimiento y permite rectificarlo en Historial', async ({ page }) => {
+  let row: Record<string, unknown> | undefined
+  await page.route('**/api/v1/payables', async (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: row ? [row] : [] })
+    const input = route.request().postDataJSON()
+    expect(input).toMatchObject({
+      issueDate: '2026-04-01', dueDate: '2026-04-29', paymentDate: '2026-05-03', paymentTiming: 'PAID_NOW',
+    })
+    row = { ...input, id: '91fc8f53-e218-4304-a857-aaace008fb21', status: 'SETTLED', openAmount: '0.00', fiscalDocumentId: null }
+    return route.fulfill({ status: 201, json: row })
+  })
+  await page.route('**/api/v1/payables/*/due-date', async (route) => {
+    const input = route.request().postDataJSON()
+    expect(input).toEqual({ previousDueDate: '2026-04-29', dueDate: '2026-04-30', reason: 'Según la factura' })
+    row = { ...row, dueDate: input.dueDate }
+    return route.fulfill({ json: row })
+  })
+  await navigateToSection(page, 'Compras')
+  await page.getByRole('button', { name: 'Nueva compra manual' }).click()
+  await page.getByLabel('Descripción', { exact: true }).fill('Servicio de ejemplo')
+  await page.getByLabel('Fecha', { exact: true }).fill('2026-04-01')
+  await page.getByLabel('Total', { exact: true }).fill('42.00')
+  await page.getByLabel('Vencimiento', { exact: true }).fill('2026-04-29')
+  await page.getByLabel('Fecha de pago', { exact: true }).fill('2026-05-03')
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await page.getByRole('tab', { name: 'Compras', exact: true }).click()
+  await expect(page.getByText('Vence 2026-04-29')).toBeVisible()
+  await page.getByRole('button', { name: 'Historial' }).click()
+  await page.getByRole('button', { name: 'Editar vencimiento' }).click()
+  await page.getByLabel('Vencimiento acordado').fill('2026-04-30')
+  await page.getByLabel('Motivo de la corrección').fill('Según la factura')
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click()
+  await expect(page.getByText('Vence 2026-04-30')).toBeVisible()
+  await expect(page.getByText('Esta cuenta está pagada.')).toBeVisible()
+})

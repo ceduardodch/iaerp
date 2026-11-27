@@ -40,6 +40,7 @@ from app.schemas.tax import (
     CurrentMonthTaxRead,
     DashboardTaxRead,
     DocumentDossierRead,
+    DossierIsdLineRead,
     DossierMovementRead,
     DossierRetentionRead,
     FiscalDocumentRead,
@@ -169,6 +170,7 @@ async def get_tax_dashboard(
                 result_before_adjustments=format_amount(annual.result_before_adjustments),
             income_tax_withheld=format_amount(annual.income_tax_withheld),
             iva_withheld=format_amount(annual.iva_withheld),
+            isd_withheld=format_amount(annual.isd_withheld),
             declared_sales_base=format_amount(annual.declared_sales_base),
             declared_deductible_purchases_base=format_amount(
                 annual.declared_deductible_purchases_base
@@ -388,6 +390,7 @@ async def post_period_status(
             period_id=period_id,
             target_status=data.target_status,
             confirmed=data.confirmed,
+            external_filing_evidence_id=data.external_filing_evidence_id,
         )
         return (
             str(period.id),
@@ -399,8 +402,14 @@ async def post_period_status(
         context=context,
         operation="tax.period.status.update",
         idempotency_key=idempotency_key,
-        request_payload={"periodId": str(period_id), **data.model_dump(mode="json")},
+        request_payload={
+            "periodId": str(period_id), **data.model_dump(mode="json", exclude_none=True)
+        },
         action="tax.period.status.updated",
+        audit_details=(
+            {"externalIvaFilingEvidenceId": str(data.external_filing_evidence_id)}
+            if data.external_filing_evidence_id else None
+        ),
         entity_type="tax_period",
         callback=update,
     )
@@ -460,9 +469,15 @@ async def post_evidence(
         request_payload={
             "filename": file.filename,
             "size": len(payload),
+            **({"origin": origin, "taxPeriodId": str(tax_period_id)}
+               if origin == "ACUSE_IVA_SRI" else {}),
             "sha256": hashlib.sha256(payload).hexdigest(),
         },
         action="tax.evidence.uploaded",
+        audit_details=(
+            {"origin": origin, "taxPeriodId": str(tax_period_id)}
+            if origin == "ACUSE_IVA_SRI" else None
+        ),
         entity_type="tax_evidence",
         callback=upload,
     )
@@ -947,6 +962,7 @@ async def get_document_dossier(
     """Historia del comprobante: retenciones, cobros con su referencia y saldo."""
     record = await dossier_service.build_dossier(session, context, document_id=document_id)
     return DocumentDossierRead(
+        is_issued_purchase=record.is_issued_purchase,
         document_id=record.document_id,
         doc_type=record.doc_type,
         direction=record.direction,
@@ -962,6 +978,7 @@ async def get_document_dossier(
                 issuer_name=item.issuer_name,
                 iva_amount=item.iva_amount,
                 income_tax_amount=item.income_tax_amount,
+                isd_lines=[DossierIsdLineRead.model_validate(line) for line in item.isd_lines],
             )
             for item in record.retentions
         ],
@@ -979,6 +996,7 @@ async def get_document_dossier(
         receivable_status=record.receivable_status,
         retained_iva=record.retained_iva,
         retained_income_tax=record.retained_income_tax,
+        retained_isd=record.retained_isd,
         collected_amount=record.collected_amount,
         outstanding_amount=record.outstanding_amount,
         expected_net=record.expected_net,
@@ -1020,6 +1038,7 @@ async def get_period_iva(
     ]
 
     return IvaSummaryRead(
+        requires_external_review=summary.requires_external_review,
         period_id=period.id,
         year=period.year,
         month=period.month,

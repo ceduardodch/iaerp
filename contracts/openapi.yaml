@@ -1916,6 +1916,68 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /payables/{payableId}/due-date:
+    put:
+      operationId: correctPayableDueDate
+      summary: Corregir el vencimiento documentado de una compra manual
+      security:
+        - oauth2: ["payables:write"]
+      parameters:
+        - $ref: "#/components/parameters/PayableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [previousDueDate, dueDate, reason]
+              properties:
+                previousDueDate: { type: [string, "null"], format: date }
+                dueDate: { type: string, format: date }
+                reason: { type: string, minLength: 3, maxLength: 300 }
+      responses:
+        "200":
+          description: Vencimiento actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payable"
+        "409":
+          description: Compra modificada o sin una sola cuota manual editable
+  /payables/{payableId}/classification:
+    put:
+      operationId: updatePayableClassification
+      summary: Revisar el origen y uso de una compra
+      security:
+        - oauth2: ["payables:write"]
+      parameters:
+        - $ref: "#/components/parameters/PayableId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [taxClassification]
+              properties:
+                taxClassification:
+                  type: string
+                  enum: [DEDUCTIBLE_PENDING_REVIEW, DEDUCTIBLE_CONFIRMED, NON_DEDUCTIBLE]
+                foreignDigitalService: { type: [boolean, "null"] }
+                internalClassification: { type: [string, "null"], enum: [REAL, DECLARATION_ONLY, null] }
+                analyticValueIds: { type: array, maxItems: 20, items: {type: string, format: uuid} }
+                reason: { type: [string, "null"], minLength: 3, maxLength: 300 }
+      responses:
+        "200":
+          description: Clasificación guardada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payable"
   /payables/{payableId}/schedule:
     post:
       operationId: scheduleSupplierPayment
@@ -3756,6 +3818,10 @@ components:
       additionalProperties: false
       required: [description, issueDate, total]
       properties:
+        foreignDigitalService:
+          type: boolean
+          default: false
+          description: Servicio digital importado sujeto a revisión por el mes del pago.
         supplierId:
           type: [string, "null"]
           format: uuid
@@ -3973,6 +4039,10 @@ components:
       additionalProperties: false
       required: [id, description, category, documentType, issueDate, dueDate, total, openAmount, currency, status, taxClassification, evidenceStatus]
       properties:
+        foreignDigitalService:
+          type: boolean
+          default: false
+          description: Servicio digital importado sujeto a revisión por el mes del pago.
         id:
           type: string
           format: uuid

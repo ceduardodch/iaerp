@@ -38,6 +38,7 @@ async def remember_customer_types(
         if document.tenant_id == context.tenant_id
         and document.tax_period_id == period.id
         and document.direction == "EMITIDO"
+        and not document.is_issued_purchase
         and document.doc_type in {"FACTURA", "NOTA_CREDITO", "NOTA_DEBITO"}
         and ats_identification_type(document.counterparty_identification, sale=True) == "06"
     }

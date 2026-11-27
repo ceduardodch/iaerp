@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import SessionFactory
 from app.models.tax import FiscalDocument, FiscalDocumentTax, TaxPeriod, TaxTask
 from app.services.tax.completeness import missing_tax_detail_document_ids
+from app.services.tax.external_purchases import external_payment_details, external_review_reasons
 
 _OPEN = ("PENDIENTE", "EN_PROCESO")
 
@@ -81,6 +82,17 @@ async def generate_tax_tasks_once() -> int:
                 else set()
             )
             label = f"{period.month:02d}/{period.year}"
+            payments = await external_payment_details(
+                session, tenant_id=period.tenant_id, year=period.year, month=period.month
+            )
+            if external_review_reasons(payments, documents):
+                created += await _ensure_task(
+                    session, period=period, task_type="CONCILIAR_COMPRA_EXTERNA",
+                    title=f"Conciliar compras y retenciones {label}",
+                    detail="Revisa las operaciones identificadas en el resumen mensual de IVA "
+                    "y prepara el ATS con sus respaldos.",
+                )
+                continue
             if not documents:
                 created += await _ensure_task(
                     session,

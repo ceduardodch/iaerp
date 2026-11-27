@@ -125,7 +125,7 @@ def _item_from_parsed(
         total=parsed.total,
         # Una retencion RECIBIDA es la que le hicieron a la entidad: es la que
         # puede aplicarse a la cartera de su factura.
-        is_retention=parsed.doc_type == "RETENCION" and direction == "RECIBIDO",
+        is_retention=direction == "RECIBIDO" and bool(parsed.receivable_retentions),
     )
 
 
@@ -372,7 +372,7 @@ def retention_files(files: list[tuple[str, bytes]]) -> list[tuple[str, bytes]]:
                 parsed = parse_authorized_document(content)
             except HTTPException:
                 continue
-            if parsed.doc_type == "RETENCION":
+            if parsed.receivable_retentions:
                 selected.append((filename, content))
     return selected
 

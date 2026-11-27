@@ -26,11 +26,13 @@ from app.schemas.payables import (
     PayableCreate,
     PayableDocumentBulkReviewCreate,
     PayableDocumentReviewCreate,
+    PayableDueDateCorrection,
     PayablePaymentCreate,
     PayableRead,
     PaymentScheduleCreate,
 )
 from app.services import analytics
+from app.services.tax.periods import get_or_create_period, refresh_period_statuses
 
 
 def _reversed_movement_ids(tenant_id: uuid.UUID) -> Select[tuple[uuid.UUID | None]]:
@@ -117,6 +119,7 @@ async def to_read(session: AsyncSession, *, tenant_id: uuid.UUID, payable: Payab
         supplier_id=payable.supplier_id,
         supplier_name=payable.supplier_name,
         fiscal_document_id=payable.fiscal_document_id,
+        foreign_digital_service=payable.foreign_digital_service,
         description=payable.description,
         category=payable.category,
         document_type=payable.document_type,
@@ -217,9 +220,11 @@ async def create_payable(
         description=data.description,
         category=data.category,
         document_type=data.document_type,
+        foreign_digital_service=data.foreign_digital_service,
         document_number=data.document_number,
         issue_date=data.issue_date,
         due_date=due_date,
+        due_date_known=data.due_date is not None or bool(data.installments),
         total=data.total,
         currency="USD",
         status="OPEN",
@@ -270,6 +275,30 @@ async def create_payable(
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
 
 
+async def correct_manual_due_date(
+    session: AsyncSession, context: AuthContext, *, payable_id: uuid.UUID,
+    data: PayableDueDateCorrection,
+) -> PayableRead:
+    payable = await lock_payable(session, tenant_id=context.tenant_id, payable_id=payable_id)
+    if payable.fiscal_document_id is not None or payable.status == "VOID":
+        raise HTTPException(
+            409, "Solo se puede corregir el vencimiento de una compra manual vigente"
+        )
+    current_due_date = payable.due_date if payable.due_date_known else None
+    if current_due_date != data.previous_due_date:
+        raise HTTPException(409, "El vencimiento cambió. Actualiza la compra y revisa la fecha")
+    installments = await _installments(session, tenant_id=context.tenant_id, payable_id=payable.id)
+    if len(installments) != 1:
+        raise HTTPException(
+            409, "Esta compra tiene un plan de cuotas con vencimientos individuales"
+        )
+    payable.due_date = data.due_date
+    installments[0].due_date = data.due_date
+    payable.due_date_known = True
+    await session.flush()
+    return await to_read(session, tenant_id=context.tenant_id, payable=payable)
+
+
 async def update_payable_analytic_assignments(
     session: AsyncSession,
     context: AuthContext,
@@ -296,6 +325,17 @@ async def update_payable_analytic_assignments(
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
 
 
+async def _sync_foreign_payment_period(
+    session: AsyncSession, context: AuthContext, year: int, month: int, *, removing: bool = False
+) -> None:
+    period = await get_or_create_period(
+        session, context, year=year, month=month, obligation_type="IVA"
+    )
+    if removing and period.status == "DECLARADO":
+        raise HTTPException(409, "El pago pertenece a un período de IVA declarado.")
+    await refresh_period_statuses(session, context, period_id=period.id)
+
+
 async def update_payable_classification(
     session: AsyncSession,
     context: AuthContext,
@@ -313,8 +353,28 @@ async def update_payable_classification(
             ),
         )
     classification_changed = payable.tax_classification != data.tax_classification
-    if classification_changed and not data.reason:
+    origin_changed = (
+        data.foreign_digital_service is not None
+        and data.foreign_digital_service != payable.foreign_digital_service
+    )
+    if (classification_changed or origin_changed) and not data.reason:
         raise HTTPException(status_code=422, detail="Indica por qué cambias el uso fiscal")
+    if origin_changed:
+        if payable.fiscal_document_id is not None:
+            raise HTTPException(422, "El origen solo se edita en compras manuales.")
+        movements = await _active_movements(
+            session, tenant_id=context.tenant_id, payable_id=payable.id
+        )
+        months = sorted({
+            (m.effective_date.year, m.effective_date.month)
+            for m in movements if m.movement_type == "PAYMENT"
+        })
+        payable.foreign_digital_service = bool(data.foreign_digital_service)
+        await session.flush()
+        for year, month in months:
+            await _sync_foreign_payment_period(
+                session, context, year, month, removing=not payable.foreign_digital_service
+            )
     if classification_changed:
         await _ensure_fiscal_use_can_change(session, context, payable=payable)
     payable.tax_classification = data.tax_classification
@@ -739,6 +799,10 @@ async def record_payment(
         method=data.method,
         reference=data.reference,
     )
+    if payable.foreign_digital_service:
+        await _sync_foreign_payment_period(
+            session, context, data.payment_date.year, data.payment_date.month
+        )
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
 
 
@@ -824,6 +888,9 @@ async def reverse_movement(
     await session.flush()
     open_amount = await compute_open_amount(session, tenant_id=context.tenant_id, payable=payable)
     payable.status = "OPEN" if open_amount == payable.total else "PARTIALLY_PAID"
+    if payable.foreign_digital_service and movement.movement_type == "PAYMENT":
+        paid_on = movement.effective_date
+        await _sync_foreign_payment_period(session, context, paid_on.year, paid_on.month)
     return await to_read(session, tenant_id=context.tenant_id, payable=payable)
 
 

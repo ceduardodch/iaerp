@@ -17,6 +17,7 @@ from app.services.tax import ats_customers
 from app.services.tax.ats import ats_filename, build_ats_xml, build_ats_zip
 from app.services.tax.ats_builder import build_ats_input
 from app.services.tax.ats_validation import validate_ats_xml
+from app.services.tax.external_purchases import external_payment_details, external_review_reasons
 
 
 def _object_key(*, tenant_id: uuid.UUID, period_id: uuid.UUID, version: int, filename: str) -> str:
@@ -44,6 +45,12 @@ async def generate_ats(
             )
         )
     )
+    payments = await external_payment_details(
+        session, tenant_id=context.tenant_id, year=period.year, month=period.month
+    )
+    external_reasons = external_review_reasons(payments, documents)
+    if external_reasons:
+        raise HTTPException(status_code=422, detail=" ".join(external_reasons))
     document_ids = [document.id for document in documents]
     related_keys = {
         document.related_access_key

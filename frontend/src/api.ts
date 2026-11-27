@@ -490,6 +490,7 @@ export type PayableStatus = 'OPEN' | 'PARTIAL' | 'SETTLED' | 'VOIDED'
 
 export type Payable = {
   id: string
+  foreignDigitalService?: boolean
   supplierId?: string | null
   supplierName?: string | null
   fiscalDocumentId?: string | null
@@ -498,7 +499,7 @@ export type Payable = {
   documentType: 'INVOICE' | 'LIQUIDATION' | 'DEBIT_NOTE' | 'OTHER'
   documentNumber?: string | null
   issueDate: string
-  dueDate: string
+  dueDate: string | null
   total: string
   openAmount: string
   currency: 'USD'
@@ -1381,6 +1382,7 @@ export type TaxXmlRecoveryJob = {
 }
 
 export type TaxFiscalDocument = {
+  isIssuedPurchase?: boolean
   id: string
   direction: 'EMITIDO' | 'RECIBIDO'
   docType: string
@@ -1488,6 +1490,7 @@ export type AnnualFiscalTax = {
   resultBeforeAdjustments: string
   incomeTaxWithheld: string
   ivaWithheld: string
+  isdWithheld: string
   declaredSalesBase: string
   declaredDeductiblePurchasesBase: string
   declaredResultBeforeAdjustments: string
@@ -1522,6 +1525,7 @@ export type TaxFormField = {
 }
 
 export type TaxIvaSummary = {
+  requiresExternalReview: boolean
   periodId: string
   year: number
   month: number
@@ -1593,6 +1597,12 @@ export type TaxDossierRetention = {
   issuerName?: string | null
   ivaAmount: string
   incomeTaxAmount: string
+  isdLines: Array<{
+    sriCode: string
+    baseAmount: string
+    percentage: string
+    retainedAmount: string
+  }>
 }
 
 export type TaxDossierMovement = {
@@ -1606,6 +1616,7 @@ export type TaxDossierMovement = {
 
 /** Historia del comprobante: retenciones, cobros y saldo. */
 export type TaxDocumentDossier = {
+  isIssuedPurchase?: boolean
   documentId: string
   docType: string
   direction: 'EMITIDO' | 'RECIBIDO'
@@ -1620,6 +1631,7 @@ export type TaxDocumentDossier = {
   receivableStatus?: string | null
   retainedIva: string
   retainedIncomeTax: string
+  retainedIsd: string
   collectedAmount: string
   outstandingAmount: string
   /** total − retención IVA − retención renta */

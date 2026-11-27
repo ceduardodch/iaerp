@@ -17,6 +17,7 @@ from app.models.payables import Payable
 from app.models.tax import FiscalDocument, FiscalDocumentTax, FiscalRetention, TaxPeriod
 from app.schemas.tax import PurchaseCancellationRead
 from app.services.tax.completeness import missing_tax_detail_document_ids
+from app.services.tax.external_purchases import external_payment_details, external_review_reasons
 from app.services.tax.iva import compute_iva
 
 _PURCHASE_DOCUMENT_TYPES = ("FACTURA", "NOTA_CREDITO", "NOTA_DEBITO", "LIQUIDACION")
@@ -107,6 +108,7 @@ class AnnualFiscalSnapshot:
     result_before_adjustments: Decimal
     income_tax_withheld: Decimal
     iva_withheld: Decimal
+    isd_withheld: Decimal
     declared_sales_base: Decimal
     declared_deductible_purchases_base: Decimal
     declared_result_before_adjustments: Decimal
@@ -219,6 +221,7 @@ async def _annual_fiscal_snapshot(
                     FiscalDocument.tenant_id == context.tenant_id,
                     FiscalDocument.direction == "EMITIDO",
                     FiscalDocument.doc_type != "RETENCION",
+                    ~FiscalDocument.is_issued_purchase,
                     FiscalDocument.tax_period_id.in_(declared_period_ids),
                 )
             )
@@ -364,6 +367,10 @@ async def _annual_fiscal_snapshot(
         (retention.retained_amount for retention, _ in retention_rows if retention.kind == "IVA"),
         Decimal("0.00"),
     )
+    isd_withheld = sum(
+        (retention.retained_amount for retention, _ in retention_rows if retention.kind == "ISD"),
+        Decimal("0.00"),
+    )
     deductible = purchase_totals["DEDUCTIBLE_CONFIRMED"]
     sales_base = sum(
         (
@@ -475,6 +482,11 @@ async def _annual_fiscal_snapshot(
         "depreciaciones ni otros ajustes contables.",
         estimate_reason,
     ]
+    if any(payable.foreign_digital_service for payable in annual_operational_payables):
+        limitations.append(
+            "El cálculo anual con documentos de IAERP requiere conciliar los servicios "
+            "digitales del exterior con las declaraciones presentadas y sus sustentos."
+        )
     if pending_count:
         limitations.insert(
             0,
@@ -515,6 +527,7 @@ async def _annual_fiscal_snapshot(
         result_before_adjustments=projected_result,
         income_tax_withheld=income_tax_withheld,
         iva_withheld=iva_withheld,
+        isd_withheld=isd_withheld,
         declared_sales_base=declared_sales_base,
         declared_deductible_purchases_base=declared_deductible,
         declared_result_before_adjustments=declared_result,
@@ -664,6 +677,12 @@ async def dashboard_tax_report(
             select(SalesDocument).where(
                 SalesDocument.tenant_id == context.tenant_id,
                 SalesDocument.status.in_(("AUTHORIZED", "HISTORICAL_ISSUED")),
+                ~select(FiscalDocument.id).where(
+                    FiscalDocument.tenant_id == context.tenant_id,
+                    FiscalDocument.is_issued_purchase,
+                    (FiscalDocument.sales_document_id == SalesDocument.id)
+                    | (FiscalDocument.access_key == SalesDocument.access_key),
+                ).exists(),
                 SalesDocument.issue_date >= sales_range_start,
                 SalesDocument.issue_date < sales_range_end,
             )
@@ -745,6 +764,9 @@ async def dashboard_tax_report(
         )
     )
     if period is None:
+        payments = await external_payment_details(
+            session, tenant_id=context.tenant_id, year=as_of.year, month=as_of.month
+        )
         current = CurrentMonthSnapshot(
             year=as_of.year,
             month=as_of.month,
@@ -761,7 +783,8 @@ async def dashboard_tax_report(
             iva_credit_balance=Decimal("0.00"),
             is_preliminary=True,
             preliminary_reasons=[
-                "El mes no tiene un periodo IVA con evidencia cargada."
+                "El mes no tiene un periodo IVA con evidencia cargada.",
+                *external_review_reasons(payments, []),
             ],
             needs_accounting_review=False,
         )
@@ -781,6 +804,7 @@ async def dashboard_tax_report(
         document
         for document in fiscal_documents
         if document.direction == "EMITIDO" and document.doc_type != "RETENCION"
+        and not document.is_issued_purchase
     ]
     purchases = [
         document

@@ -15,6 +15,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -68,6 +69,9 @@ class Payable(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
     supplier_id: Mapped[uuid.UUID | None]
     supplier_name: Mapped[str | None] = mapped_column(String(300))
     fiscal_document_id: Mapped[uuid.UUID | None]
+    foreign_digital_service: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
     description: Mapped[str] = mapped_column(String(500))
     category: Mapped[str] = mapped_column(String(120), default="Sin clasificar")
     document_type: Mapped[str] = mapped_column(String(30), default="OTHER")

@@ -7,6 +7,10 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- **Compras y revisión del IVA de servicios digitales, 27 de noviembre, validación local.** La compra manual conserva el vencimiento contractual y permite rectificar una sola cuota con motivo e historial. La marca de servicio digital exterior se puede aplicar a compras históricas. Tributario presenta los pagos en el mes efectivo, muestra la retención de IVA emitida del 100 % con respaldo y descarta liquidaciones emitidas de las ventas. El 104 admite acuse de presentación externa y el ATS con estos pagos requiere preparación externa. Migración `d219c2a57e41` después de `6f04a29d8b37` (ISD). Al publicar, revisar las compras históricas con sus documentos antes de marcar el origen o corregir las fechas. [Criterio fiscal](adrs/0012-tax-module-scope.md).
+
+- **ISD bancario recibido, 26 de noviembre, validación local.** Tributario reconoce el impuesto 6 en XML de retenciones 1.0 y 2.0, conserva el valor retenido y muestra el detalle por comprobante, mes y año. La reingesta por clave corrige un histórico en cero con su XML guardado. Se verificaron casos sintéticos de ISD puro y mixto, el casillero 609, la renta anual y los saldos de cartera. La migración `6f04a29d8b37` parte del head de `release`. Pendientes la publicación y la comprobación con el XML autorizado del banco. [Regla fiscal](adrs/0012-tax-module-scope.md).
+
 - **Facturación desde Grok (26 de noviembre).** El conector prepara el borrador con el catálogo de la empresa activa, emite la factura y puede enviar el RIDE y el XML tras la autorización del SRI. La habilitación operativa por empresa requiere membresía en IAERP, rol de facturación, escrituras automatizadas, configuración fiscal productiva y remitente habilitado. [Flujo y permisos](05-ai-mcp.md#facturación-delegada-desde-grok).
 
 - **Filtros de cartera (25 de noviembre).** REST y MCP filtran por el estado que se muestra en cada cuenta y por vencimiento estrictamente anterior a `dueBefore`. El corte de búsqueda conserva la mora calculada al día fiscal de Ecuador. Una prueba de contrato compara 30 combinaciones en ambos accesos con las filas de la consulta completa.

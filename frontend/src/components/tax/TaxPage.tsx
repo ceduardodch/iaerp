@@ -6,6 +6,7 @@ import {
   idempotencyKey,
   type DashboardTax,
   type TaxBulkResult,
+  type TaxEvidence,
   type AnalyticClassification,
   type TaxDocumentDossier,
   type TaxAnnex,
@@ -89,6 +90,7 @@ type HistoricalTaxCandidate = {
  * su referencia bancaria si vinieron del extracto) y cuánto falta.
  */
 function DossierView({ dossier }: { dossier: TaxDocumentDossier }) {
+  const issuedPurchase = dossier.isIssuedPurchase ?? (dossier.docType === 'LIQUIDACION' && dossier.direction === 'EMITIDO')
   return (
     <div className="tax-dossier">
       <ul className="tax-dossier-tree">
@@ -101,9 +103,14 @@ function DossierView({ dossier }: { dossier: TaxDocumentDossier }) {
             <span className="tax-dossier-label">Retención</span> {retention.issueDate}
             {retention.issuerName ? ` · ${retention.issuerName}` : ''}
             <br />
-            <small>
-              IVA ${retention.ivaAmount} · Renta ${retention.incomeTaxAmount}
-            </small>
+            {(!retention.isdLines?.length || Number(retention.ivaAmount) > 0 || Number(retention.incomeTaxAmount) > 0) && (
+              <small>IVA ${retention.ivaAmount} · Renta ${retention.incomeTaxAmount}</small>
+            )}
+            {retention.isdLines?.map((line, index) => (
+              <div key={index}>
+                <small>ISD {line.sriCode} · Base ${line.baseAmount} · {Number(line.percentage)} % · Retenido ${line.retainedAmount}</small>
+              </div>
+            ))}
           </li>
         ))}
 
@@ -128,13 +135,16 @@ function DossierView({ dossier }: { dossier: TaxDocumentDossier }) {
         ))}
       </ul>
 
-      <dl className="tax-dossier-summary">
+      {!issuedPurchase && <dl className="tax-dossier-summary">
         <div>
           <dt>Retención IVA</dt><dd>${dossier.retainedIva}</dd>
         </div>
         <div>
           <dt>Retención renta</dt><dd>${dossier.retainedIncomeTax}</dd>
         </div>
+        {dossier.retentions.some((retention) => retention.isdLines?.length) && (
+          <div><dt>Retención de ISD</dt><dd>${dossier.retainedIsd}</dd></div>
+        )}
         {dossier.docType !== 'RETENCION' ? (
           <div className="tax-dossier-net">
             <dt>Neto esperado</dt><dd>${dossier.expectedNet}</dd>
@@ -146,7 +156,7 @@ function DossierView({ dossier }: { dossier: TaxDocumentDossier }) {
             <div><dt>Pendiente</dt><dd>${dossier.outstandingAmount}</dd></div>
           </>
         ) : null}
-      </dl>
+      </dl>}
 
       {dossier.notes.map((note) => (
         <p key={note} className="fine-print">{note}</p>
@@ -174,6 +184,7 @@ export function TaxPage({
   const [atsForeignChoices, setAtsForeignChoices] = useState<Record<string, string>>({})
   const [generatedAnnex, setGeneratedAnnex] = useState<TaxAnnex | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [filingReceipt, setFilingReceipt] = useState<File | null>(null)
   const [applyRetentions, setApplyRetentions] = useState(false)
   const [openDossierId, setOpenDossierId] = useState<string | null>(null)
   const [exceptionEvidence, setExceptionEvidence] = useState<Record<string, string>>({})
@@ -196,6 +207,7 @@ export function TaxPage({
     setAtsPaymentMethod('20')
     setAtsForeignChoices({})
     setGeneratedAnnex(null)
+    setFilingReceipt(null)
   }, [activePeriodId, token])
 
   const dashboardAsOf = activePeriod
@@ -242,7 +254,7 @@ export function TaxPage({
   const foreignCustomers = useMemo(() => {
     const customers = new Map<string, string>()
     for (const document of documentsQuery.data ?? []) {
-      if (document.direction !== 'EMITIDO' || document.docType === 'RETENCION') continue
+      if (document.direction !== 'EMITIDO' || document.isIssuedPurchase || ['RETENCION', 'LIQUIDACION'].includes(document.docType)) continue
       const id = (document.counterpartyIdentification ?? '').replace(/[ -]/g, '')
       if (!/^[A-Za-z0-9]{3,13}$/.test(id) || /^\d{10}$|^\d{13}$/.test(id)) continue
       customers.set(id, document.counterpartyName ?? id)
@@ -410,24 +422,44 @@ export function TaxPage({
   })
 
   const updatePeriodStatus = useMutation({
-    mutationFn: ({ periodId, targetStatus }: { periodId: string; targetStatus: 'LISTO_DECLARAR' | 'DECLARADO' }) =>
-      apiRequest<TaxPeriod>(token, `/tax/periods/${periodId}/status`, {
+    mutationFn: async ({ periodId, targetStatus, receipt }: {
+      periodId: string
+      targetStatus: 'LISTO_DECLARAR' | 'DECLARADO'
+      receipt?: File
+    }) => {
+      let externalFilingEvidenceId: string | undefined
+      if (receipt) {
+        const body = new FormData()
+        body.append('file', receipt)
+        body.append('taxPeriodId', periodId)
+        body.append('origin', 'ACUSE_IVA_SRI')
+        const evidence = await apiRequest<TaxEvidence>(token, '/tax/evidence', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': idempotencyKey('tax-iva-receipt') },
+          body,
+        })
+        externalFilingEvidenceId = evidence.id
+      }
+      return apiRequest<TaxPeriod>(token, `/tax/periods/${periodId}/status`, {
         method: 'POST',
         headers: { 'Idempotency-Key': idempotencyKey('tax-period-status') },
-        body: JSON.stringify({ targetStatus, confirmed: true }),
-      }),
+        body: JSON.stringify({ targetStatus, confirmed: true, externalFilingEvidenceId }),
+      })
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['tax'] })
     },
   })
 
-  function confirmPeriodStatus(targetStatus: 'LISTO_DECLARAR' | 'DECLARADO') {
-    if (!activePeriodId) return
-    const message = targetStatus === 'DECLARADO'
+  function confirmPeriodStatus(targetStatus: 'LISTO_DECLARAR' | 'DECLARADO', receipt?: File) {
+    if (!activePeriodId || !activePeriod) return
+    const message = receipt
+      ? `¿Confirmas que el PDF es el acuse de IVA presentado al SRI para ${monthName(activePeriod.month)} de ${activePeriod.year} e incluye las operaciones revisadas?`
+      : targetStatus === 'DECLARADO'
       ? '¿Confirmas que esta declaración ya fue presentada al SRI?'
       : '¿Confirmas que revisaste la evidencia y los valores del periodo?'
     if (window.confirm(message)) {
-      updatePeriodStatus.mutate({ periodId: activePeriodId, targetStatus })
+      updatePeriodStatus.mutate({ periodId: activePeriodId, targetStatus, receipt })
     }
   }
 
@@ -479,7 +511,13 @@ export function TaxPage({
         key: 'sales',
         title: 'Ventas emitidas',
         description: 'Facturas y notas emitidas por la empresa.',
-        matches: (document: TaxFiscalDocument) => document.direction === 'EMITIDO' && document.docType !== 'RETENCION',
+        matches: (document: TaxFiscalDocument) => document.direction === 'EMITIDO' && !document.isIssuedPurchase && !['RETENCION', 'LIQUIDACION'].includes(document.docType),
+      },
+      {
+        key: 'issued-purchase-settlements',
+        title: 'Liquidaciones de compra emitidas y sus notas',
+        description: 'Sustentos de compra por conciliar con el formulario 104 y el ATS.',
+        matches: (document: TaxFiscalDocument) => document.isIssuedPurchase ?? (document.direction === 'EMITIDO' && document.docType === 'LIQUIDACION'),
       },
       {
         key: 'purchases',
@@ -490,7 +528,7 @@ export function TaxPage({
       {
         key: 'retentions',
         title: 'Retenciones recibidas',
-        description: 'Retención de IVA y retención de renta, siempre separadas en el detalle.',
+        description: 'Retenciones de IVA, renta e ISD con el detalle de cada comprobante.',
         matches: (document: TaxFiscalDocument) => document.direction === 'RECIBIDO' && document.docType === 'RETENCION',
       },
     ]
@@ -791,11 +829,10 @@ export function TaxPage({
           {summary.isPreliminary ? (
             <div className="tax-readiness tax-readiness-pending" role="alert">
               <div>
-                <strong>Aún no está listo para declarar.</strong>
-                <p>
-                  El listado TXT sirve para comprobar el total, pero solo los XML autorizados
-                  separan la base con IVA, tarifa 0 %, exenta y no objeto.
-                </p>
+                <strong>{summary.status === 'DECLARADO' ? 'Declaración registrada. El cálculo interno sigue parcial.' : 'Aún no está listo para declarar.'}</strong>
+                {summary.pendingPurchaseCount > 0 ? <p>
+                  Carga los XML autorizados para separar las bases por tarifa.
+                </p> : null}
                 <ul>
                   {summary.preliminaryReasons.map((reason) => (
                     <li key={reason}>{reason}</li>
@@ -955,7 +992,7 @@ export function TaxPage({
               </ErpButton>
               <ErpButton
                 variant="secondary"
-                disabled={generateAts.isPending || !activePeriodId}
+                disabled={generateAts.isPending || !activePeriodId || summary.requiresExternalReview}
                 onClick={() => activePeriodId && generateAts.mutate(activePeriodId)}
               >
                 {generateAts.isPending ? 'Generando ATS…' : 'Generar ATS'}
@@ -964,7 +1001,7 @@ export function TaxPage({
           >
             <p className="fine-print">
               {summary.isPreliminary
-                ? 'Valores parciales de control. Completa los XML antes de copiar al formulario.'
+                ? 'Valores parciales de control. Revisa los pendientes antes de copiar al formulario.'
                 : 'Valores con punto decimal y dos decimales, listos para copiar al formulario.'}
             </p>
             <label className="form-field">
@@ -1005,7 +1042,20 @@ export function TaxPage({
             {updatePeriodStatus.error ? (
               <p className="form-error" role="alert">{updatePeriodStatus.error.message}</p>
             ) : null}
-            {activePeriod?.status === 'LISTO_REVISAR' ? (
+            {summary.requiresExternalReview && activePeriod?.status !== 'DECLARADO' ? (
+              <div>
+                <label className="form-field">
+                  Acuse de la declaración de IVA presentada al SRI (PDF)
+                  <input key={activePeriodId} type="file" accept="application/pdf,.pdf"
+                    onChange={(event) => setFilingReceipt(event.target.files?.[0] ?? null)} />
+                </label>
+                <ErpButton variant="secondary" disabled={!filingReceipt || updatePeriodStatus.isPending}
+                  onClick={() => filingReceipt && confirmPeriodStatus('DECLARADO', filingReceipt)}>
+                  Registrar IVA presentado fuera de IAERP
+                </ErpButton>
+              </div>
+            ) : null}
+            {!summary.requiresExternalReview && activePeriod?.status === 'LISTO_REVISAR' ? (
               <ErpButton
                 variant="primary"
                 disabled={updatePeriodStatus.isPending}
@@ -1014,7 +1064,7 @@ export function TaxPage({
                 Marcar listo para declarar
               </ErpButton>
             ) : null}
-            {activePeriod?.status === 'LISTO_DECLARAR' ? (
+            {!summary.requiresExternalReview && activePeriod?.status === 'LISTO_DECLARAR' ? (
               <ErpButton
                 variant="primary"
                 disabled={updatePeriodStatus.isPending}
@@ -1023,7 +1073,7 @@ export function TaxPage({
                 Confirmar como declarado
               </ErpButton>
             ) : null}
-            {generatedAnnex ? (
+            {generatedAnnex && !summary.requiresExternalReview ? (
               <div className="tax-ingest-result" role="status">
                 <p>
                   ATS v{generatedAnnex.version} generado.{' '}
@@ -1107,13 +1157,23 @@ export function TaxPage({
                   <dd>${summary.pendingPurchaseTotal}</dd>
                 </div>
               ) : null}
-              <div><dt>Retenciones de IVA</dt><dd>${summary.amounts.retencionesIvaRecibidas ?? '0.00'}</dd></div>
+              <div><dt>Retenciones de IVA recibidas</dt><dd>${summary.amounts.retencionesIvaRecibidas ?? '0.00'}</dd></div>
               <div className="tax-apart">
                 <dt>Retenciones de renta (no entran al IVA)</dt>
                 <dd>${summary.amounts.retencionesRentaRecibidas ?? '0.00'}</dd>
               </div>
+              {summary.amounts.retencionesIsdRecibidas !== undefined && (
+                <div className="tax-apart">
+                  <dt>Impuesto a la salida de divisas (ISD) retenido</dt>
+                  <dd>${summary.amounts.retencionesIsdRecibidas}</dd>
+                </div>
+              )}
+              {summary.amounts.retencionesIva100Efectuadas !== undefined && (
+                <div><dt>IVA retenido como agente al 100 % · campo 731</dt>
+                  <dd>${summary.amounts.retencionesIva100Efectuadas}</dd></div>
+              )}
               <div className="tax-total">
-                <dt>{Number(summary.amounts.creditoAFavor ?? '0') > 0 ? 'Crédito a favor' : 'Saldo a pagar'}</dt>
+                <dt>{Number(summary.amounts.creditoAFavor ?? '0') > 0 ? 'Crédito a favor por IVA propio' : 'Saldo a pagar por IVA propio'}</dt>
                 <dd>
                   $
                   {Number(summary.amounts.creditoAFavor ?? '0') > 0
@@ -1282,6 +1342,9 @@ export function TaxPage({
                 <ErpMetricGrid ariaLabel="Retenciones acumuladas">
                   <article className="metric-card"><span>Retenciones de renta registradas en el año</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.incomeTaxWithheld)}</strong></article>
                   <article className="metric-card"><span>Retenciones de IVA acumuladas</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.ivaWithheld)}</strong></article>
+                  {dashboardQuery.data.annual.isdWithheld !== undefined && (
+                    <article className="metric-card"><span>ISD retenido en el año</span><strong>{formatDashboardCurrency(dashboardQuery.data.annual.isdWithheld)}</strong></article>
+                  )}
                 </ErpMetricGrid>
                 <div className="tax-refund-guidance" role="status">
                   <ErpStatusBadge tone={dashboardQuery.data.annual.refundStatus === 'REVIEW_AT_ANNUAL_CLOSE' ? 'warning' : 'neutral'}>

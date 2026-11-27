@@ -108,6 +108,8 @@ FORM_104_SEED: tuple[FieldSeed, ...] = (
     ),
     # Confirmado por el usuario: el 609 es SOLO retencion de IVA recibida.
     FieldSeed("609", "Retenciones de IVA que le efectuaron", "retenciones_iva_recibidas", True),
+    FieldSeed("731", "Retenciones de IVA del 100% efectuadas",
+              "retenciones_iva_100_efectuadas", True),
 )
 
 

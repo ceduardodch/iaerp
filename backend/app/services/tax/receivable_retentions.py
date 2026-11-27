@@ -77,7 +77,7 @@ async def _apply_parsed(
         result.review("RETENTION_AUTHORIZATION_INVALID")
         return result
     groups: dict[str, list[ParsedRetention]] = defaultdict(list)
-    for item in parsed.retentions:
+    for item in parsed.receivable_retentions:
         number = _support(item.supporting_document_number)
         if number is None:
             result.review("RETENTION_SUPPORT_INVALID")

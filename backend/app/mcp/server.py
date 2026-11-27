@@ -1093,7 +1093,7 @@ async def payables_create(
             context=context,
             operation="payables.create",
             idempotency_key=idempotencyKey,
-            request_payload=payable.model_dump(mode="json"),
+            request_payload=payable.idempotency_payload(),
             action="payable.created",
             entity_type="payable",
             callback=create,

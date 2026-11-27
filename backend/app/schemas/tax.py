@@ -33,6 +33,7 @@ class TaxPeriodCreate(APIModel):
 class TaxPeriodStatusUpdate(APIModel):
     target_status: str = Field(pattern="^(LISTO_DECLARAR|DECLARADO)$")
     confirmed: bool
+    external_filing_evidence_id: uuid.UUID | None = None
 
 
 class TaxEvidenceRead(APIModel):
@@ -118,12 +119,20 @@ class TaxXmlRecoveryJobRead(APIModel):
     completed_at: datetime | None = None
 
 
+class DossierIsdLineRead(APIModel):
+    sri_code: str
+    base_amount: Decimal
+    percentage: Decimal
+    retained_amount: Decimal
+
+
 class DossierRetentionRead(APIModel):
     access_key: str | None = None
     issue_date: date
     issuer_name: str | None = None
     iva_amount: Decimal
     income_tax_amount: Decimal
+    isd_lines: list[DossierIsdLineRead]
 
 
 class DossierMovementRead(APIModel):
@@ -141,6 +150,7 @@ class DocumentDossierRead(APIModel):
     document_id: uuid.UUID
     doc_type: str
     direction: str
+    is_issued_purchase: bool = False
     access_key: str | None = None
     issue_date: date
     counterparty_name: str | None = None
@@ -152,6 +162,7 @@ class DocumentDossierRead(APIModel):
     receivable_status: str | None = None
     retained_iva: Decimal
     retained_income_tax: Decimal
+    retained_isd: Decimal
     collected_amount: Decimal
     outstanding_amount: Decimal
     # total − retención IVA − retención renta
@@ -228,6 +239,7 @@ class HistoricalTaxExceptionApprove(APIModel):
 
 
 class FiscalDocumentRead(APIModel):
+    is_issued_purchase: bool = False
     id: uuid.UUID
     direction: str
     doc_type: str
@@ -344,6 +356,7 @@ class AnnualFiscalRead(APIModel):
     result_before_adjustments: str
     income_tax_withheld: str
     iva_withheld: str
+    isd_withheld: str
     declared_sales_base: str
     declared_deductible_purchases_base: str
     declared_result_before_adjustments: str
@@ -385,6 +398,7 @@ class TaxFormFieldRead(APIModel):
 
 
 class IvaSummaryRead(APIModel):
+    requires_external_review: bool
     period_id: uuid.UUID
     year: int
     month: int

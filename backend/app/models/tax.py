@@ -9,12 +9,13 @@ explicitas:
 - Los comprobantes **recibidos** (compras) no existian en IAERP: se construyen
   desde la evidencia importada. Los emitidos propios se enlazan a su
   ``SalesDocument`` sin duplicar la fuente.
-- Retencion de IVA y de renta se guardan SIEMPRE como conceptos distintos
+- Las retenciones de IVA, renta e ISD se guardan como conceptos distintos
   (``FiscalRetention.kind``): el campo 609 del formulario 104 es solo IVA.
 - Ninguna clave se persiste: ``TenantTaxProfile.vault_ref`` es una referencia a
   1Password/Bitwarden o variable segura (coherente con el ADR 0005).
 """
 
+import re
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -33,14 +34,20 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.masters import TenantEntityMixin
 
 # Obligaciones soportadas. RDEP y ADI se modelan desde ya para no migrar la
 # tabla despues, pero su generacion esta fuera del alcance actual (ADR 0012).
+# En la clave SRI de 49 dígitos, el tipo ocupa las posiciones 9 y 10.
+_LIQUIDATION_ACCESS_KEY = r"^[0-9]{8}03[0-9]{39}$"
+
 OBLIGATION_TYPES = ("IVA", "ATS", "RDEP", "RENTA", "ADI")
 
 # Ciclo de vida de un periodo, tal como lo ve el usuario en pantalla.
@@ -311,6 +318,33 @@ class FiscalDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Bas
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_by_actor_id: Mapped[str | None] = mapped_column(String(200))
 
+    @hybrid_property
+    def is_issued_purchase(self) -> bool:
+        """La liquidación y sus notas corresponden al comprador que las emite."""
+        if self.direction != "EMITIDO":
+            return False
+        if self.doc_type == "LIQUIDACION":
+            return True
+        return self.doc_type in ("NOTA_CREDITO", "NOTA_DEBITO") and (
+            self.related_document_type == "LIQUIDACION"
+            or re.fullmatch(_LIQUIDATION_ACCESS_KEY, self.related_access_key or "") is not None
+        )
+
+    @is_issued_purchase.inplace.expression
+    @classmethod
+    def _issued_purchase_expression(cls) -> ColumnElement[bool]:
+        source_is_liquidation = func.coalesce(cls.related_access_key, "").regexp_match(
+            _LIQUIDATION_ACCESS_KEY
+        )
+        return (cls.direction == "EMITIDO") & (
+            (cls.doc_type == "LIQUIDACION") | (
+                cls.doc_type.in_(("NOTA_CREDITO", "NOTA_DEBITO")) & (
+                    (func.coalesce(cls.related_document_type, "") == "LIQUIDACION")
+                    | source_is_liquidation
+                )
+            )
+        )
+
 
 class FiscalDocumentTax(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):
     """Desglose de impuestos de un comprobante.
@@ -348,11 +382,7 @@ class FiscalDocumentTax(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):
 
 
 class FiscalRetention(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
-    """Retencion de IVA o de renta.
-
-    ``kind`` las mantiene separadas a proposito: la retencion de IVA alimenta el
-    campo 609 del IVA mensual y la de renta se reserva para renta anual.
-    """
+    """Retención documentada por impuesto: IVA, renta o salida de divisas."""
 
     __tablename__ = "fiscal_retentions"
     __table_args__ = (
@@ -362,7 +392,7 @@ class FiscalRetention(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Ba
             name="fk_fiscal_retentions_tenant_fiscal_document",
         ),
         UniqueConstraint("tenant_id", "id", name="uq_fiscal_retentions_tenant_id"),
-        CheckConstraint("kind IN ('IVA', 'RENTA')", name="kind_valid"),
+        CheckConstraint("kind IN ('IVA', 'RENTA', 'ISD')", name="kind_valid"),
         Index("ix_fiscal_retentions_tenant_document", "tenant_id", "fiscal_document_id"),
     )
 

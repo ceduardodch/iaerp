@@ -66,6 +66,21 @@ que hoy estan fuera del alcance del producto.
 
 ## Consecuencias
 
+### Retención bancaria de ISD (2026-11-26)
+
+Un comprobante autorizado de tipo 07 puede incluir el impuesto a la salida de
+divisas (código de impuesto 6). Tributario registra su código de retención, base,
+porcentaje y valor según cada línea del XML, incluso cuando el sustento es
+«OTROS» y carece de número de factura. El total documental incluye el ISD. El
+resumen lo presenta por separado de los importes de IVA y de renta. Su registro
+no genera automáticamente un crédito fiscal, una compra ni un abono de cartera.
+En comprobantes mixtos, solo las líneas de IVA y renta respaldadas por una
+factura pueden aplicarse a su saldo. Una categoría desconocida requiere revisión
+del documento completo. La reingesta de su XML autorizado permite corregir el
+detalle de un registro histórico usando la misma clave de acceso.
+
+Referencia: [ficha técnica SRI 2.34, tablas 19 y 20](https://www.sri.gob.ec/o/sri-portlet-biblioteca-alfresco-internet/descargar/f8d9bb36-5632-4f96-b463-b9265b55338c/FICHA%20TE%CC%81CNICA%20COMPROBANTES%20ELECTRO%CC%81NICOS%20ESQUEMA%20OFFLINE%20Versio%CC%81n%202.34.pdf).
+
 ### Cruce documental de retenciones con Cartera (2026-10-13)
 
 El XML autorizado de una retención recibida también respalda un movimiento
@@ -109,3 +124,11 @@ de importes ni modificar el XML autorizado.
 - **Calcular la declaracion desde los datos internos de facturacion**: rechazada
   como fuente unica; los emitidos propios se reconcilian contra su XML
   autorizado, y las compras solo existen como evidencia recibida.
+
+### Compras de servicios digitales al exterior
+
+Compras conserva por separado emisión, vencimiento y pagos. El usuario identifica el servicio importado al crear la compra o al revisar una existente. Los registros anteriores requieren clasificación expresa. La fecha efectiva y el importe de cada pago vigente determinan el mes y la base comercial que Tributario muestra para revisión. La factura extranjera y una transferencia acreditan la operación comercial. Para sustentar el tratamiento del IVA se revisan la liquidación, el comprobante de retención o percepción y el derecho a crédito que corresponda.
+
+El formulario 104 muestra en el casillero 731 las retenciones de IVA del 100 % respaldadas por XML autorizado que emitió el contribuyente. Un ISD recibido se conserva en su propio comprobante. La liquidación emitida como comprador queda fuera de ventas y de cartera. Mientras se requiera conciliar la importación, el 104 interno es parcial y el ATS se prepara externamente. Al archivar el acuse de IVA del período se conserva la evidencia del cierre externo. La presentación del ATS se verifica por separado.
+
+Fuentes: [Reglamento, artículo 146.1](https://www.sri.gob.ec/o/sri-portlet-biblioteca-alfresco-internet/descargar/03995ac1-408a-4694-b24c-447d93774c52/3.1%20REGLAMENTO%20A%20LA%20LRTI.pdf), [servicios digitales, SRI](https://www.sri.gob.ec/ley-organica-de-simplificacion-y-progresividad-tributaria), [guía de la declaración de IVA](https://www.sri.gob.ec/o/sri-portlet-biblioteca-alfresco-internet/descargar/e084fae5-9677-450c-8161-21e7c3a9f65b/Gu%C3%ADa%20para%20el%20llenado%20del%20Formulario%20Impuesto%20al%20Valor%20Agregado%20IVA.PDF).

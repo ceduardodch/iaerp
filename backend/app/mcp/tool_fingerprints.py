@@ -40,7 +40,7 @@ EXPECTED_TOOL_FINGERPRINTS = {
         "7e39f766623d5c0036563e89582d457d350996c9f028b045dfe76155e2f0d6f6"  # pragma: allowlist secret
     ),
     "payables.list": "3a8cbe25d75289f2e3af8fb9d32b22417bf4ead5f8f39ec0f9dcbc8030c23ba1",  # pragma: allowlist secret
-    "payables.create": "c00038903e25d55e8dceac9aa76185c96a146366da853e671dc8b9bc49713d60",  # pragma: allowlist secret
+    "payables.create": "2701792bf8e04d95dbc3fd82ae18015b2e1a95c04336a9615d4e25f9b958b3ca",  # pragma: allowlist secret
     "payables.create_from_document": (
         "60bfa0cd7445562f1bf9581cda5e970ac3b2d8573f7863690774f380fd41c1c5"  # pragma: allowlist secret
     ),
