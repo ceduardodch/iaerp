@@ -1,5 +1,6 @@
 """Resumen de solo lectura del expediente de IVA por período fiscal."""
 
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import case, func, select
@@ -7,9 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
 from app.models.tax import FiscalDocument, TaxEvidence, TaxPeriod
-from app.schemas.tax_monthly_summary import RecordedTaxAmounts, TaxMonthlySummary, TaxSummaryMonth
+from app.schemas.tax_monthly_summary import (
+    ClassifiedPurchases,
+    RecordedTaxAmounts,
+    TaxMonthlySummary,
+    TaxSummaryMonth,
+)
+from app.services.tax.due_dates import declaration_month
 from app.services.tax.external_purchases import external_payment_details
 from app.services.tax.iva import compute_iva
+from app.services.tax.reporting import classified_purchase_bases
 
 _ZERO = Decimal("0.00")
 
@@ -72,6 +80,30 @@ async def read_monthly_summary(
         period_id: (Decimal(sales).quantize(_ZERO), Decimal(purchases).quantize(_ZERO))
         for period_id, sales, purchases in rows
     }
+    classified_bases = await classified_purchase_bases(
+        session,
+        context,
+        from_date=date(year, start_month, 1),
+        until_date=date(*declaration_month(year=year, month=end_month), 1),
+    )
+    classified_by_month: dict[int, ClassifiedPurchases] = {}
+    empty = ClassifiedPurchases(
+        deductible_purchases_base=_ZERO,
+        non_deductible_purchases_base=_ZERO,
+        pending_review_purchases_base=_ZERO,
+    )
+    for purchase_base in classified_bases:
+        monthly = classified_by_month.get(purchase_base.month)
+        if monthly is None:
+            monthly = empty.model_copy()
+            classified_by_month[purchase_base.month] = monthly
+        if purchase_base.classification == "DEDUCTIBLE_CONFIRMED":
+            monthly.deductible_purchases_base += purchase_base.base
+        elif purchase_base.classification == "NON_DEDUCTIBLE":
+            monthly.non_deductible_purchases_base += purchase_base.base
+        else:
+            monthly.pending_review_purchases_base += purchase_base.base
+
     months = []
     recorded_months = []
     for month in range(start_month, end_month + 1):
@@ -88,6 +120,7 @@ async def read_monthly_summary(
                     document_count=0,
                     preliminary=True,
                     requires_external_review=bool(external),
+                    classified_purchases=classified_by_month.get(month),
                     recorded=None,
                     filed_amounts=None,
                 )
@@ -116,6 +149,9 @@ async def read_monthly_summary(
                 document_count=iva.document_count,
                 preliminary=iva.is_preliminary,
                 requires_external_review=iva.requires_external_review,
+                classified_purchases=classified_by_month.get(
+                    month, empty if iva.document_count else None
+                ),
                 recorded=recorded,
                 filed_amounts=None,
             )
@@ -129,24 +165,38 @@ async def read_monthly_summary(
                 for key in RecordedTaxAmounts.model_fields
             }
         )
+    classifications = [m.classified_purchases for m in months if m.classified_purchases is not None]
+    classified_totals = None
+    if classifications:
+        classified_totals = ClassifiedPurchases(
+            **{
+                key: sum((getattr(item, key) for item in classifications), _ZERO)
+                for key in ClassifiedPurchases.model_fields
+            }
+        )
     return TaxMonthlySummary(
         year=year,
         start_month=start_month,
         end_month=end_month,
         months=months,
         recorded_totals=totals,
+        classified_purchases_totals=classified_totals,
         months_with_document_data=len(recorded_months),
         limitations=[
             "Los subtotales son los de los comprobantes fiscales activos vinculados al período, "
             "netos de notas de crédito y sin IVA. Las compras incluyen liquidaciones emitidas "
             "y sus notas.",
+            "Las ventas documentales son las evidenciadas en Tributario. El avance mensual "
+            "de ventas operativo usa las facturas y notas autorizadas o históricas por emisión.",
             "Las bases de IVA se calculan con el desglose de los comprobantes. "
             "Los períodos preliminares y los servicios del exterior pueden requerir conciliación.",
+            "Las compras clasificadas son las del avance fiscal anual por mes de emisión. "
+            "Las notas de crédito restan y pueden heredar la clasificación de la compra original.",
             "Los totales suman solo los meses con comprobantes. La falta de documentos "
             "no acredita un mes sin actividad.",
             "El estado de IVA y la existencia de un acuse PDF se informan por separado. "
             "Los importes presentados en el 104 requieren cotejar el formulario del SRI.",
-            "Estos datos no determinan la utilidad contable, la deducibilidad de las compras "
-            "ni el impuesto a la renta anual.",
+            "La clasificación refleja el criterio registrado. Para determinar la utilidad contable "
+            "y el impuesto a la renta anual se requiere la conciliación de cierre.",
         ],
     )

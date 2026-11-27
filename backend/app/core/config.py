@@ -1,8 +1,9 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     OIDC_JWKS_URL: str | None = None
     OIDC_API_AUDIENCE: str = "iaerp-api"
     OIDC_MCP_AUDIENCE: str = "http://localhost:8000/mcp"
+    GROK_ANALYSIS_TENANT_IDS: Annotated[frozenset[UUID], NoDecode] = frozenset()
     MCP_SERVER_URL: str = "http://localhost:8000/mcp"
     OIDC_ADMIN_URL: str | None = None
     OIDC_ADMIN_REALM: str = "iaerp"
@@ -125,6 +127,13 @@ class Settings(BaseSettings):
     MINIO_SECURE: bool = False
     MINIO_REGION: str = "us-east-1"
     MINIO_DOCUMENTS_BUCKET: str = "iaerp-documents"
+
+    @field_validator("GROK_ANALYSIS_TENANT_IDS", mode="before")
+    @classmethod
+    def parse_grok_analysis_tenants(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",")] if value.strip() else []
+        return value
 
     @field_validator("ELECTRONIC_INVOICING_PROVIDER_NAME")
     @classmethod

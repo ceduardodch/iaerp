@@ -141,6 +141,7 @@ router.include_router(ios_product_router)
 settings = get_settings()
 
 ALL_DEV_SCOPES = {
+    "reports:read",
     "context:read",
     "memberships:read",
     "service-accounts:read",

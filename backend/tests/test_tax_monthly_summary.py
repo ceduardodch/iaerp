@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import event
 
 from app.db.session import SessionFactory, engine
+from app.models.payables import Payable
 from app.models.tax import (
     FiscalDocument,
     FiscalDocumentTax,
@@ -15,6 +16,7 @@ from app.models.tax import (
     TaxPeriod,
 )
 from app.services.tax.monthly_summary import read_monthly_summary
+from app.services.tax.reporting import dashboard_tax_report
 from tests.conftest import TENANT_A, TENANT_B
 from tests.test_tax_due_dates import context_for
 
@@ -129,6 +131,12 @@ async def test_monthly_summary_distinguishes_filing_from_evidence_and_performs_o
             report = await read_monthly_summary(
                 session, context_for(TENANT_A), year=2026, start_month=1, end_month=3
             )
+            dashboard = await dashboard_tax_report(
+                session,
+                context_for(TENANT_A),
+                as_of=date(2026, 1, 31),
+                months=1,
+            )
             missing_report = await read_monthly_summary(
                 session, context_for(TENANT_A), year=2026, start_month=3, end_month=3
             )
@@ -152,6 +160,9 @@ async def test_monthly_summary_distinguishes_filing_from_evidence_and_performs_o
         "receivedIvaWithheld": "2.22",
         "receivedIsdWithheld": "3.33",
     }
+    # Las ventas de este fixture son evidencia fiscal sin copia en facturación operativa.
+    assert a.recorded.document_sales_subtotal == dashboard.annual.declared_sales_base
+    assert dashboard.annual.months[0].sales_base == Decimal("0.00")
     assert (b.iva_period_status, b.filing_receipt_on_file, b.recorded, b.filed_amounts) == (
         "PENDIENTE_DESCARGA",
         True,
@@ -231,3 +242,67 @@ async def test_summary_excludes_cancelled_purchase_and_uses_the_requested_period
     assert report.recorded_totals
     assert report.recorded_totals.document_purchases_subtotal == Decimal("109.23")
     assert report.recorded_totals.iva_purchases_base == Decimal("0.00")
+
+
+async def test_classified_purchases_match_annual_progress_with_cross_month_credit():
+    async with SessionFactory() as session, session.begin():
+
+        def doc(month, kind, base, **extra):
+            return FiscalDocument(
+                tenant_id=TENANT_A,
+                direction="RECIBIDO",
+                doc_type=kind,
+                issue_date=date(2026, month, 5),
+                subtotal=Decimal(base),
+                **extra,
+            )
+
+        key = "7" * 49
+        original = doc(1, "FACTURA", "21.43", access_key=key)
+        credit = doc(2, "NOTA_CREDITO", "2.13", related_access_key=key)
+        pending = doc(2, "FACTURA", "8.13")
+        non_deductible = doc(2, "FACTURA", "9.12")
+        session.add_all([original, credit, pending, non_deductible])
+        await session.flush()
+        for purchase, classification in [
+            (original, "DEDUCTIBLE_CONFIRMED"),
+            (non_deductible, "NON_DEDUCTIBLE"),
+        ]:
+            session.add(
+                Payable(
+                    tenant_id=TENANT_A,
+                    fiscal_document_id=purchase.id,
+                    issue_date=purchase.issue_date,
+                    due_date=purchase.issue_date,
+                    description="Compra sintética",
+                    total=purchase.subtotal,
+                    tax_classification=classification,
+                )
+            )
+    async with SessionFactory() as session:
+        context = context_for(TENANT_A)
+        dashboard = await dashboard_tax_report(session, context, as_of=date(2026, 2, 28), months=2)
+        summary = await read_monthly_summary(
+            session, context, year=2026, start_month=2, end_month=2
+        )
+        annual_to_date = await read_monthly_summary(
+            session, context, year=2026, start_month=1, end_month=2
+        )
+    february = summary.months[0]
+    # El avance por emisión puede existir aunque todavía falte el período de IVA.
+    assert february.iva_period_status is None and february.recorded is None
+    assert february.classified_purchases
+    assert february.classified_purchases == summary.classified_purchases_totals
+    assert february.classified_purchases.model_dump(mode="json") == {
+        "deductiblePurchasesBase": "-2.13",
+        "nonDeductiblePurchasesBase": "9.12",
+        "pendingReviewPurchasesBase": "8.13",
+    }
+    annual = dashboard.annual
+    assert february.classified_purchases.deductible_purchases_base == (
+        annual.months[1].deductible_purchases_base
+    )
+    combined = annual_to_date.classified_purchases_totals
+    assert combined and combined.deductible_purchases_base == annual.deductible_purchases_base
+    assert combined.non_deductible_purchases_base == annual.non_deductible_purchases_base
+    assert combined.pending_review_purchases_base == annual.pending_review_purchases_base

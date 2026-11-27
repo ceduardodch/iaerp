@@ -1,10 +1,14 @@
 """Contrato MCP del flujo diario de reportes recibidos del SRI."""
 
+from datetime import date
+from decimal import Decimal
+
 import pytest
 from sqlalchemy import func, select
 
 from app.db.session import SessionFactory
-from app.models.tax import TaxPeriod
+from app.models.payables import Payable
+from app.models.tax import FiscalDocument, TaxPeriod
 from app.services import storage
 from app.services.tax import evidence as evidence_service
 from tests.conftest import TENANT_B
@@ -150,12 +154,22 @@ async def test_mcp_tax_read_scope_excludes_writes_and_other_tenants(client) -> N
     arguments = {"year": 2026, "startMonth": 1, "endMonth": 2}
     name = "tax.get_period_summary"
     async with SessionFactory.begin() as db:
-        db.add(
-            TaxPeriod(
-                tenant_id=TENANT_A, year=2026, month=1,
-                obligation_type="IVA", status="LISTO_REVISAR",
-            )
+        period = TaxPeriod(
+            tenant_id=TENANT_A, year=2026, month=1, obligation_type="IVA", status="LISTO_REVISAR",
         )
+        db.add(period)
+        await db.flush()
+        invoice = FiscalDocument(
+            tenant_id=TENANT_A, tax_period_id=period.id, direction="RECIBIDO",
+            doc_type="FACTURA", issue_date=date(2026, 1, 8), subtotal=Decimal("91.25"),
+        )
+        db.add(invoice)
+        await db.flush()
+        db.add(Payable(
+            tenant_id=TENANT_A, fiscal_document_id=invoice.id, description="Compra sintética",
+            issue_date=invoice.issue_date, due_date=invoice.issue_date, total=Decimal("104.94"),
+            tax_classification="DEDUCTIBLE_CONFIRMED",
+        ))
     token_a = await token_for(client, "a@iaerp.local", TENANT_A, ["tax:read"])
     token_b = await token_for(client, "b@iaerp.local", TENANT_B, ["tax:read"])
     async with mcp_lifespan():
@@ -172,6 +186,13 @@ async def test_mcp_tax_read_scope_excludes_writes_and_other_tenants(client) -> N
             assert not report_a.isError
             assert report_a.structuredContent["months"][0]["ivaPeriodStatus"] == "LISTO_REVISAR"
             assert report_a.structuredContent["months"][0]["filedAmounts"] is None
+            expected = {
+                "deductiblePurchasesBase": "91.25",
+                "nonDeductiblePurchasesBase": "0.00",
+                "pendingReviewPurchasesBase": "0.00",
+            }
+            assert report_a.structuredContent["classifiedPurchasesTotals"] == expected
+            assert report_a.structuredContent["months"][0]["classifiedPurchases"] == expected
             for update in (
                 {"tenantId": str(TENANT_B)}, {"startMonth": 2, "endMonth": 1},
                 {"endMonth": 13}, {"startMonth": 0}, {"year": 1999},
@@ -181,6 +202,7 @@ async def test_mcp_tax_read_scope_excludes_writes_and_other_tenants(client) -> N
         async with mcp_session(token_b) as session:
             report_b = await session.call_tool(name, arguments)
             assert not report_b.isError
+            assert report_b.structuredContent["classifiedPurchasesTotals"] is None
             assert [month["month"] for month in report_b.structuredContent["months"]] == [1, 2]
             assert all(
                 month["ivaPeriodStatus"] is None and month["filedAmounts"] is None

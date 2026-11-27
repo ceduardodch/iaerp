@@ -137,3 +137,27 @@ secretos de Coolify, y no se escriben en el repo.
   oficiales; usa el simulador).
 - No es el destino de la migracion de datos reales de skyfranquicias (eso se
   planifica aparte, ver `docs/migration/`).
+
+### Lectura tributaria y análisis empresarial desde Grok
+
+En producción, `GROK_ANALYSIS_TENANT_IDS` enumera los UUID internos de las
+conexiones autorizadas de BTOB SAS, DATA-CLIP, LEXCODE AUDIT S.A.S. y
+ANA KARINA DIAZ CHAVEZ. Para reconocer una empresa, contrastar el nombre y el
+`tenantId` devueltos por `context.get` con la cuenta seleccionada en Grok.
+La variable admite UUID separados por comas. Un valor vacío deshabilita ambas
+consultas para Grok. La API resuelve cada empresa por la organización firmada
+y comprueba que la empresa, la membresía y el usuario estén activos.
+
+Al arrancar, `keycloak-config` vincula al cliente existente
+`iaerp-grok-informes` dos permisos predeterminados. El permiso
+`grok:tax-summary:read` habilita el resumen tributario a propietarios,
+administradores, contadores y auditores. El permiso
+`grok:business-analysis:read` habilita `erp.read_report` a propietarios y
+administradores. Cada consulta requiere su propio permiso. La configuración
+también conserva el permiso opcional `tax:read` para el resumen tributario.
+Versiones anteriores de la API ignoran los dos permisos específicos de Grok.
+
+Tras un despliegue, reconectar la cuenta en Grok para obtener un token nuevo y
+actualizar su catálogo de herramientas. Verificar con `context.get` que el
+usuario tiene `tax:read` y, cuando corresponda, `reports:read`. Para la
+aceptación, ejecutar una consulta de solo lectura en cada conexión autorizada.

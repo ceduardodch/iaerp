@@ -198,7 +198,12 @@ async def resolve_auth_context(
         if native_ios:
             effective_scopes = ios_effective_scopes(scopes, membership.roles)
         elif grok:
-            effective_scopes = grok_effective_scopes(scopes, membership.roles)
+            effective_scopes = grok_effective_scopes(
+                scopes,
+                membership.roles,
+                analysis_enabled=settings.AUTH_MODE == "oidc"
+                and tenant_id in settings.GROK_ANALYSIS_TENANT_IDS,
+            )
         return AuthContext(
             actor_id=str(user.id),
             actor_type="USER",

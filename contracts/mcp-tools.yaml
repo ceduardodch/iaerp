@@ -20,6 +20,22 @@ tools:
       additionalProperties: false
     outputSchema:
       $ref: openapi.yaml#/components/schemas/TenantContext
+  - name: erp.read_report
+    effect: read
+    scope: reports:read
+    description: Consultar el catálogo o una página de un informe de la empresa autenticada.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [report]
+      properties:
+        report: {$ref: "#/$defs/erpReportName"}
+        startDate: {type: [string, "null"], format: date, default: null}
+        endDate: {type: [string, "null"], format: date, default: null}
+        limit: {type: integer, minimum: 1, maximum: 100, default: 50}
+        offset: {type: integer, minimum: 0, default: 0}
+    outputSchema:
+      $ref: "#/$defs/erpReportPage"
   - name: ops.list_failures
     effect: read
     scope: operations:read
@@ -477,10 +493,39 @@ $defs:
     type: string
     minLength: 16
     maxLength: 128
+  erpReportName:
+    type: string
+    enum: [catalog, sales, purchases, receivables, collections, payments, customers, suppliers, products, classifications, contracts, proposals, aws_cuts, crm, campaigns, inbox, notifications, payroll, company, establishments, bank_transactions, credit_notes]
+  erpReportPage:
+    type: object
+    additionalProperties: false
+    required: [report, organizationAlias, companyName, description, dateBasis, startDate, endDate, columns, rows, limit, offset, nextOffset]
+    properties:
+      report: {$ref: "#/$defs/erpReportName"}
+      organizationAlias: {type: [string, "null"]}
+      companyName: {type: string}
+      description: {type: string}
+      dateBasis: {type: [string, "null"]}
+      startDate: {type: [string, "null"], format: date}
+      endDate: {type: [string, "null"], format: date}
+      columns:
+        type: array
+        minItems: 1
+        maxItems: 32
+        items: {type: string}
+      rows:
+        type: array
+        maxItems: 100
+        items:
+          type: array
+          items: {type: [string, integer, boolean, "null"]}
+      limit: {type: integer, minimum: 1, maximum: 100}
+      offset: {type: integer, minimum: 0}
+      nextOffset: {type: [integer, "null"]}
   taxMonthlySummary:
     type: object
     additionalProperties: false
-    required: [year, startMonth, endMonth, months, recordedTotals, monthsWithDocumentData, limitations]
+    required: [year, startMonth, endMonth, months, classifiedPurchasesTotals, recordedTotals, monthsWithDocumentData, limitations]
     properties:
       year: {type: integer}
       startMonth: {type: integer}
@@ -491,6 +536,10 @@ $defs:
         minItems: 1
         maxItems: 12
         items: {$ref: "#/$defs/taxSummaryMonth"}
+      classifiedPurchasesTotals:
+        anyOf:
+          - {$ref: "#/$defs/classifiedPurchases"}
+          - {type: "null"}
       recordedTotals:
         anyOf:
           - {$ref: "#/$defs/recordedTaxAmounts"}
@@ -500,7 +549,7 @@ $defs:
   taxSummaryMonth:
     type: object
     additionalProperties: false
-    required: [month, ivaPeriodStatus, filingReceiptOnFile, documentCount, preliminary, requiresExternalReview, recorded, filedAmounts]
+    required: [month, ivaPeriodStatus, filingReceiptOnFile, documentCount, preliminary, requiresExternalReview, classifiedPurchases, recorded, filedAmounts]
     properties:
       month: {type: integer}
       ivaPeriodStatus: {type: [string, "null"]}
@@ -508,11 +557,23 @@ $defs:
       documentCount: {type: integer}
       preliminary: {type: boolean}
       requiresExternalReview: {type: boolean}
+      classifiedPurchases:
+        anyOf:
+          - {$ref: "#/$defs/classifiedPurchases"}
+          - {type: "null"}
       recorded:
         anyOf:
           - {$ref: "#/$defs/recordedTaxAmounts"}
           - {type: "null"}
       filedAmounts: {type: "null"}
+  classifiedPurchases:
+    type: object
+    additionalProperties: false
+    required: [deductiblePurchasesBase, nonDeductiblePurchasesBase, pendingReviewPurchasesBase]
+    properties:
+      deductiblePurchasesBase: {type: string}
+      nonDeductiblePurchasesBase: {type: string}
+      pendingReviewPurchasesBase: {type: string}
   recordedTaxAmounts:
     type: object
     additionalProperties: false

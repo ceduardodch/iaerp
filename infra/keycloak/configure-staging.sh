@@ -89,6 +89,22 @@ if [ -n "$grok_client_id" ]; then
   tax_read_scope_id=$(ensure_client_scope "tax:read")
   "$KCADM" update "clients/$grok_client_id/optional-client-scopes/$tax_read_scope_id" \
     -r iaerp -n >/dev/null
+  # Grok Desktop no puede solicitar scopes adicionales. Versiones anteriores
+  # de la API ignoran este permiso específico al calcular los permisos efectivos.
+  grok_read_scopes=(grok:tax-summary:read grok:business-analysis:read)
+  for grok_scope in "${grok_read_scopes[@]}"; do
+    grok_scope_id=$(ensure_client_scope "$grok_scope")
+    "$KCADM" update "clients/$grok_client_id/default-client-scopes/$grok_scope_id" \
+      -r iaerp -n >/dev/null
+  done
+  assigned_scopes=$("$KCADM" get "clients/$grok_client_id/default-client-scopes" -r iaerp \
+    --fields name --format csv --noquotes)
+  for grok_scope in "${grok_read_scopes[@]}"; do
+    if ! grep -Fxq "$grok_scope" <<< "$assigned_scopes"; then
+      echo "Falta el scope $grok_scope en el cliente iaerp-grok-informes" >&2
+      exit 1
+    fi
+  done
 fi
 
 # Los conectores de campañas lo reciben de forma explícita; el cliente web y

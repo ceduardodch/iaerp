@@ -7,6 +7,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 from app.main import app
+from tests.test_mcp_receivables import mcp_lifespan
 
 TENANT_A = uuid.UUID("11111111-1111-4111-8111-111111111111")
 
@@ -63,7 +64,7 @@ async def test_mcp_transport_scopes_kill_switch_and_idempotency(client):
         ],
     )
 
-    async with app.router.lifespan_context(app):
+    async with mcp_lifespan():
         async with mcp_session(read_token) as session:
             tools = await session.list_tools()
             assert {tool.name for tool in tools.tools} == {

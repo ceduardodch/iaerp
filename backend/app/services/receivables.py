@@ -40,6 +40,7 @@ from defusedxml.ElementTree import fromstring as safe_fromstring  # type: ignore
 from fastapi import HTTPException
 from sqlalchemy import Select, case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import Subquery
 
 from app.core.auth import AuthContext
 from app.core.timezones import today_in_fiscal_timezone
@@ -1048,10 +1049,8 @@ async def get_receivable(
     return entity
 
 
-async def compute_overview(session: AsyncSession, context: AuthContext) -> ReceivablesOverviewRead:
-    """Dashboard totals using the web's balance, arrears and collection definitions."""
-    tenant_id = context.tenant_id
-    as_of = today_in_fiscal_timezone()
+def open_balances_by_receivable(tenant_id: uuid.UUID) -> Subquery:
+    """Saldo y primer vencimiento abierto de cada cuenta, con sus reversiones aplicadas."""
     applied = (
         select(Movement.installment_id, func.sum(Movement.amount).label("amount"))
         .where(
@@ -1064,7 +1063,7 @@ async def compute_overview(session: AsyncSession, context: AuthContext) -> Recei
     )
     installment = ReceivableInstallment
     balance = installment.amount - func.coalesce(applied.c.amount, Decimal("0.00"))
-    balances = (
+    return (
         select(
             installment.receivable_id,
             func.sum(balance).label("balance"),
@@ -1075,6 +1074,13 @@ async def compute_overview(session: AsyncSession, context: AuthContext) -> Recei
         .group_by(installment.receivable_id)
         .subquery()
     )
+
+
+async def compute_overview(session: AsyncSession, context: AuthContext) -> ReceivablesOverviewRead:
+    """Dashboard totals using the web's balance, arrears and collection definitions."""
+    tenant_id = context.tenant_id
+    as_of = today_in_fiscal_timezone()
+    balances = open_balances_by_receivable(tenant_id)
     collectible = _collectible_accounts(tenant_id).subquery()
     accounts = await session.execute(
         select(balances.c.balance, balances.c.earliest_open_due, collectible.c.currency)

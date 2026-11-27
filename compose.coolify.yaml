@@ -8,6 +8,8 @@ x-backend-environment: &backend-environment
   OIDC_JWKS_URL: http://iaerp-staging-keycloak:8080/realms/iaerp/protocol/openid-connect/certs
   OIDC_API_AUDIENCE: iaerp-api
   OIDC_MCP_AUDIENCE: http://localhost:8000/mcp
+  # UUID IAERP verificados con context.get en las cuatro conexiones autorizadas de Grok.
+  GROK_ANALYSIS_TENANT_IDS: "${GROK_ANALYSIS_TENANT_IDS-433836cb-0d2a-4215-ad38-f57b7e012ec5,fdca7a27-a5fa-428e-b4a6-72bc2235648d,db36f0e8-b5a1-4b54-8327-af6cc2c0fe8e,914aae19-fbd9-4f23-b36b-4abaf8f792c2}"
   MCP_SERVER_URL: https://iaerp.b2b.com.ec/mcp
   OIDC_ADMIN_URL: http://iaerp-staging-keycloak:8080
   OIDC_ADMIN_REALM: iaerp
