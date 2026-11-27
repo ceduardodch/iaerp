@@ -7,6 +7,8 @@ alcance y las decisiones.
 
 ## Corte verificado
 
+- **MCP de lectura de Tributario, 27 de noviembre.** Resumen mensual por empresa de ventas, compras y retenciones, con cobertura de documentos y acuse del 104. [Consulta y permisos](05-ai-mcp.md#consulta-mensual-de-tributario).
+
 - **Compras y revisión del IVA de servicios digitales, 27 de noviembre, validación local.** La compra manual conserva el vencimiento contractual y permite rectificar una sola cuota con motivo e historial. La marca de servicio digital exterior se puede aplicar a compras históricas. Tributario presenta los pagos en el mes efectivo, muestra la retención de IVA emitida del 100 % con respaldo y descarta liquidaciones emitidas de las ventas. El 104 admite acuse de presentación externa y el ATS con estos pagos requiere preparación externa. Migración `d219c2a57e41` después de `6f04a29d8b37` (ISD). Al publicar, revisar las compras históricas con sus documentos antes de marcar el origen o corregir las fechas. [Criterio fiscal](adrs/0012-tax-module-scope.md).
 
 - **ISD bancario recibido, 26 de noviembre, validación local.** Tributario reconoce el impuesto 6 en XML de retenciones 1.0 y 2.0, conserva el valor retenido y muestra el detalle por comprobante, mes y año. La reingesta por clave corrige un histórico en cero con su XML guardado. Se verificaron casos sintéticos de ISD puro y mixto, el casillero 609, la renta anual y los saldos de cartera. La migración `6f04a29d8b37` parte del head de `release`. Pendientes la publicación y la comprobación con el XML autorizado del banco. [Regla fiscal](adrs/0012-tax-module-scope.md).

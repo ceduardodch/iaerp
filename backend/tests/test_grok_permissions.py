@@ -18,7 +18,11 @@ READ = {"context:read", "invoices:read", "parties:read", "products:read", "recei
 PROTOCOL = {"openid", "organization", "offline_access"}
 BILLING = {"invoices:write", "invoices:issue", "invoices:email"}
 COLLECTIONS = {"receivables:write"}
-SCOPES = " ".join(READ | PROTOCOL | BILLING | COLLECTIONS | {"credit-notes:issue", "roles:write"})
+TAX_READ = {"tax:read"}
+SCOPES = " ".join(
+    READ | PROTOCOL | BILLING | COLLECTIONS | TAX_READ
+    | {"tax:write", "credit-notes:issue", "roles:write"}
+)
 
 
 def grok_claims(alias="tenant-a", **overrides):
@@ -30,8 +34,10 @@ def grok_claims(alias="tenant-a", **overrides):
 @pytest.mark.parametrize(
     "role,expected",
     [
-        ("owner", BILLING | COLLECTIONS),
-        ("admin", BILLING | COLLECTIONS),
+        ("owner", BILLING | COLLECTIONS | TAX_READ),
+        ("admin", BILLING | COLLECTIONS | TAX_READ),
+        ("accountant", TAX_READ),
+        ("auditor", TAX_READ),
         ("billing", BILLING),
         ("collections", COLLECTIONS),
         ("viewer", set()),

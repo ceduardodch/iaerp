@@ -14,7 +14,7 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import ContentBlock
+from mcp.types import ContentBlock, ToolAnnotations
 from mcp.types import Tool as MCPTool
 from pydantic import Field
 from sqlalchemy.exc import IntegrityError
@@ -44,6 +44,7 @@ from app.schemas.payables import (
 from app.schemas.platform import OperationRead, TenantContextRead
 from app.schemas.receivables import AccountItemRead, AgingRead, PaymentInput, ReminderInput
 from app.schemas.tax import ReceivedReportsProcessRead, TaxXmlRecoveryJobRead
+from app.schemas.tax_monthly_summary import TaxMonthlySummary
 from app.services import (
     automation_rate,
     billing,
@@ -55,7 +56,7 @@ from app.services import (
     payables,
     receivables,
 )
-from app.services.tax import received_reports, xml_recovery
+from app.services.tax import monthly_summary, received_reports, xml_recovery
 from app.services.unit_of_work import append_audit, execute_idempotent
 
 settings = get_settings()
@@ -81,11 +82,13 @@ MCP_SCOPES = [
     "leads:read",
     "leads:write",
     "operations:read",
+    "tax:read",
     "tax:write",
 ]
 TOOL_REQUIRED_SCOPES = {
     "context.get": "context:read",
     "ops.list_failures": "operations:read",
+    "tax.get_period_summary": "tax:read",
     "tax.process_received_reports": "tax:write",
     "parties.search": "parties:read",
     "parties.create": "parties:write",
@@ -370,6 +373,36 @@ async def ops_list_failures(
         return [entity.model_dump(mode="json", by_alias=True) for entity in entities]
     finally:
         await session.close()
+
+
+@mcp.tool(
+    name="tax.get_period_summary",
+    structured_output=True,
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False),
+)
+async def tax_get_period_summary(
+    year: Annotated[int, Field(ge=2000, le=2100)],
+    startMonth: Annotated[int, Field(ge=1, le=12)],
+    endMonth: Annotated[int, Field(ge=1, le=12)],
+) -> TaxMonthlySummary:
+    """Consultar compras, ventas y retenciones recibidas del tenant activo por mes.
+
+    Incluye ambos meses del año indicado. Devuelve importes registrados por
+    IAERP, el estado del IVA y si existe un acuse del formulario 104. Los
+    importes presentados al SRI pueden no estar disponibles.
+    """
+    session, context = await _tool_context("tax:read", "tax.get_period_summary")
+    try:
+        if startMonth > endMonth:
+            raise ToolError("startMonth must not exceed endMonth")
+        return await monthly_summary.read_monthly_summary(
+            session, context, year=year, start_month=startMonth, end_month=endMonth
+        )
+    finally:
+        await session.close()
+
+
+_forbid_extra_tool_arguments("tax.get_period_summary")
 
 
 @mcp.tool(name="tax.process_received_reports", structured_output=True)
