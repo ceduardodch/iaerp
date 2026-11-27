@@ -24,6 +24,14 @@ class RecordedTaxAmounts(_TaxReadModel):
     received_isd_withheld: Decimal
 
 
+class ClassifiedPurchases(_TaxReadModel):
+    """Bases por fecha de emisión según la clasificación del avance fiscal anual."""
+
+    deductible_purchases_base: Decimal
+    non_deductible_purchases_base: Decimal
+    pending_review_purchases_base: Decimal
+
+
 class TaxSummaryMonth(_TaxReadModel):
     month: int = Field(ge=1, le=12)
     iva_period_status: str | None
@@ -31,6 +39,7 @@ class TaxSummaryMonth(_TaxReadModel):
     document_count: int
     preliminary: bool
     requires_external_review: bool
+    classified_purchases: ClassifiedPurchases | None
     recorded: RecordedTaxAmounts | None
     filed_amounts: None = Field(
         description=(
@@ -45,6 +54,7 @@ class TaxMonthlySummary(_TaxReadModel):
     end_month: int = Field(ge=1, le=12)
     currency: Literal["USD"] = "USD"
     months: list[TaxSummaryMonth] = Field(min_length=1, max_length=12)
+    classified_purchases_totals: ClassifiedPurchases | None
     recorded_totals: RecordedTaxAmounts | None
     months_with_document_data: int
     limitations: list[str]

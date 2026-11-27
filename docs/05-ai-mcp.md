@@ -67,6 +67,21 @@ dueño, valor, puntaje ni avance comercial. Los leads de Meta, LinkedIn o TikTok
 entran por sus conectores de captación para conservar campaña, anuncio y
 consentimiento; un agente no puede atribuirse esos orígenes.
 
+## Informes operativos de Grok
+
+El bot puede consultar cada empresa conectada en IAERP. Primero llama a
+`context.get` en esa cuenta y comprueba la razón social. Con
+`erp.read_report({"report":"catalog"})` obtiene los informes disponibles,
+sus columnas y los filtros de fecha aplicables. Para comparar empresas consulta
+cada cuenta por separado y conserva su nombre junto a los resultados.
+
+`erp.read_report` acepta un informe del catálogo, un rango de fechas y
+paginación con `limit` y `offset`. Cuando se devuelve `nextOffset`, quedan
+filas por leer. El permiso efectivo `reports:read` requiere membresía activa
+como administrador o propietario en una de las empresas configuradas para
+análisis. La nómina se consulta por período. La conciliación bancaria muestra
+los movimientos y su estado.
+
 ## Consulta mensual de Tributario
 
 `tax.get_period_summary` recibe `year`, `startMonth` y `endMonth` (ambos inclusive).
@@ -78,9 +93,11 @@ qué declaraciones requieren cotejo con los formularios presentados al SRI.
 
 La herramienta requiere `tax:read`. El conector delegado de Grok requiere
 además membresía activa con rol de propietario, administrador, contador o
-auditor de la organización elegida. En la autorización OAuth del conector
-existente se solicita el scope adicional y se conserva el nombre de la
-organización. Antes de consultar cifras, verificar en `context.get` que
+auditor de la organización elegida. Grok Bot de escritorio renueva el acceso
+con un permiso de lectura del resumen asignado a su cliente OAuth. IAERP lo
+habilita para las empresas configuradas por el operador y comprueba la membresía
+al consultar. Los clientes que admiten selección explícita de scopes pueden
+solicitar `tax:read`. Antes de consultar cifras, verificar en `context.get` que
 el RUC corresponde a la empresa del cierre. El nombre visible del conector
 puede diferir de la empresa autenticada.
 
