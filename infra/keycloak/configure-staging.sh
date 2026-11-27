@@ -82,6 +82,15 @@ ensure_default_scope() {
   "$KCADM" update "clients/$web_client_id/default-client-scopes/$scope_id" -r iaerp >/dev/null
 }
 
+# Este cliente delegado se provisiona fuera del realm semilla. Vincular el
+# permiso como opcional conserva los grants que no solicitan lectura fiscal.
+grok_client_id=$(resource_id clients clientId iaerp-grok-informes)
+if [ -n "$grok_client_id" ]; then
+  tax_read_scope_id=$(ensure_client_scope "tax:read")
+  "$KCADM" update "clients/$grok_client_id/optional-client-scopes/$tax_read_scope_id" \
+    -r iaerp -n >/dev/null
+fi
+
 # Los conectores de campañas lo reciben de forma explícita; el cliente web y
 # las cuentas CRM normales no deben poder atribuir capturas de redes.
 ensure_client_scope "leads:capture" >/dev/null

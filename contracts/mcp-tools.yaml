@@ -45,6 +45,20 @@ tools:
       type: array
       items:
         $ref: "#/$defs/opsFailure"
+  - name: tax.get_period_summary
+    effect: read
+    scope: tax:read
+    description: Resumen mensual de compras, ventas y retenciones recibidas de la empresa autenticada, con la evidencia disponible del formulario 104.
+    inputSchema:
+      type: object
+      additionalProperties: false
+      required: [year, startMonth, endMonth]
+      properties:
+        year: {type: integer, minimum: 2000, maximum: 2100}
+        startMonth: {type: integer, minimum: 1, maximum: 12}
+        endMonth: {type: integer, minimum: 1, maximum: 12}
+    outputSchema:
+      $ref: "#/$defs/taxMonthlySummary"
   - name: tax.process_received_reports
     effect: external-write
     scope: tax:write
@@ -463,6 +477,54 @@ $defs:
     type: string
     minLength: 16
     maxLength: 128
+  taxMonthlySummary:
+    type: object
+    additionalProperties: false
+    required: [year, startMonth, endMonth, months, recordedTotals, monthsWithDocumentData, limitations]
+    properties:
+      year: {type: integer}
+      startMonth: {type: integer}
+      endMonth: {type: integer}
+      currency: {type: string, const: USD, default: USD}
+      months:
+        type: array
+        minItems: 1
+        maxItems: 12
+        items: {$ref: "#/$defs/taxSummaryMonth"}
+      recordedTotals:
+        anyOf:
+          - {$ref: "#/$defs/recordedTaxAmounts"}
+          - {type: "null"}
+      monthsWithDocumentData: {type: integer}
+      limitations: {type: array, items: {type: string}}
+  taxSummaryMonth:
+    type: object
+    additionalProperties: false
+    required: [month, ivaPeriodStatus, filingReceiptOnFile, documentCount, preliminary, requiresExternalReview, recorded, filedAmounts]
+    properties:
+      month: {type: integer}
+      ivaPeriodStatus: {type: [string, "null"]}
+      filingReceiptOnFile: {type: boolean}
+      documentCount: {type: integer}
+      preliminary: {type: boolean}
+      requiresExternalReview: {type: boolean}
+      recorded:
+        anyOf:
+          - {$ref: "#/$defs/recordedTaxAmounts"}
+          - {type: "null"}
+      filedAmounts: {type: "null"}
+  recordedTaxAmounts:
+    type: object
+    additionalProperties: false
+    required: [documentSalesSubtotal, documentPurchasesSubtotal, ivaSalesBase, ivaPurchasesBase, receivedIncomeTaxWithheld, receivedIvaWithheld, receivedIsdWithheld]
+    properties:
+      documentSalesSubtotal: {type: string}
+      documentPurchasesSubtotal: {type: string}
+      ivaSalesBase: {type: string}
+      ivaPurchasesBase: {type: string}
+      receivedIncomeTaxWithheld: {type: string}
+      receivedIvaWithheld: {type: string}
+      receivedIsdWithheld: {type: string}
   opsFailure:
     type: object
     additionalProperties: false

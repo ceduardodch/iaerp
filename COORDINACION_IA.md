@@ -41,6 +41,7 @@
 
 | Sesión / IA | Estado | Área / archivos | Desde |
 | --- | --- | --- | --- |
+| Codex (MCP de Tributario) | Validación de entrega | Resumen mensual de solo lectura, control de empresa y permiso fiscal delegado. | 2026-11-27 |
 | Codex (Compras y servicios digitales del exterior) | Validado localmente | Compras, vencimiento manual, Tributario y prueba del período de pago. Pendientes la publicación y la revisión del registro en producción. | 2026-11-27 |
 | Codex (ISD recibido) | Validado localmente | Tributario, Cartera y expediente web. Migración `6f04a29d8b37` sobre `b43a137c928f`. Revisión fiscal, de plataforma y de QA. Pendiente publicación. | 2026-11-26 |
 | Codex (Cobranza individual iOS) | Candidato 0.8.0 (11) | Recordatorio individual, promesa y vencimiento por cuota. Pruebas con PostgreSQL, buzón sintético e iPhone simulado. [Estado](docs/STATUS.md). | 2026-11-19 |

@@ -1,9 +1,13 @@
 """Contrato MCP del flujo diario de reportes recibidos del SRI."""
 
 import pytest
+from sqlalchemy import func, select
 
+from app.db.session import SessionFactory
+from app.models.tax import TaxPeriod
 from app.services import storage
 from app.services.tax import evidence as evidence_service
+from tests.conftest import TENANT_B
 from tests.test_billing_api import TENANT_A, token_for
 from tests.test_mcp_receivables import (
     _enable_automation_writes,
@@ -140,3 +144,62 @@ async def test_mcp_tax_contract_is_closed_and_rejects_tenant_override(client) ->
     assert "fiscal_document_id" not in item_schema["properties"]
     assert result.isError is True
     assert "Extra inputs are not permitted" in result.content[0].text
+
+
+async def test_mcp_tax_read_scope_excludes_writes_and_other_tenants(client) -> None:
+    arguments = {"year": 2026, "startMonth": 1, "endMonth": 2}
+    name = "tax.get_period_summary"
+    async with SessionFactory.begin() as db:
+        db.add(
+            TaxPeriod(
+                tenant_id=TENANT_A, year=2026, month=1,
+                obligation_type="IVA", status="LISTO_REVISAR",
+            )
+        )
+    token_a = await token_for(client, "a@iaerp.local", TENANT_A, ["tax:read"])
+    token_b = await token_for(client, "b@iaerp.local", TENANT_B, ["tax:read"])
+    async with mcp_lifespan():
+        async with mcp_session(token_a) as session:
+            catalog = (await session.list_tools()).tools
+            assert {tool.name for tool in catalog} == {name}
+            tool = catalog[0]
+            assert tool.annotations.readOnlyHint is True
+            assert tool.annotations.openWorldHint is False
+            assert tool.inputSchema["additionalProperties"] is False
+            assert tool.outputSchema["additionalProperties"] is False
+            assert tool.outputSchema["$defs"]["TaxSummaryMonth"]["additionalProperties"] is False
+            report_a = await session.call_tool(name, arguments)
+            assert not report_a.isError
+            assert report_a.structuredContent["months"][0]["ivaPeriodStatus"] == "LISTO_REVISAR"
+            assert report_a.structuredContent["months"][0]["filedAmounts"] is None
+            for update in (
+                {"tenantId": str(TENANT_B)}, {"startMonth": 2, "endMonth": 1},
+                {"endMonth": 13}, {"startMonth": 0}, {"year": 1999},
+            ):
+                assert (await session.call_tool(name, arguments | update)).isError
+
+        async with mcp_session(token_b) as session:
+            report_b = await session.call_tool(name, arguments)
+            assert not report_b.isError
+            assert [month["month"] for month in report_b.structuredContent["months"]] == [1, 2]
+            assert all(
+                month["ivaPeriodStatus"] is None and month["filedAmounts"] is None
+                for month in report_b.structuredContent["months"]
+            )
+
+    async with SessionFactory() as db:
+        assert await db.scalar(select(func.count()).select_from(TaxPeriod)) == 1
+
+
+async def test_mcp_tax_summary_rejects_write_only_and_non_fiscal_tokens(client) -> None:
+    name = "tax.get_period_summary"
+    async with mcp_lifespan():
+        for scopes in (["context:read", "invoices:read"], ["tax:write"]):
+            token = await token_for(client, "a@iaerp.local", TENANT_A, scopes)
+            async with mcp_session(token) as session:
+                assert name not in {tool.name for tool in (await session.list_tools()).tools}
+                result = await session.call_tool(
+                    name, {"year": 2026, "startMonth": 1, "endMonth": 1}
+                )
+                assert result.isError
+                assert "missing scope tax:read" in result.content[0].text

@@ -5,6 +5,9 @@ EXPECTED_TOOL_FINGERPRINTS = {
     "ops.list_failures": (
         "7a557c1fd6602406bf776272aeff6382833c8a6e768c82dc14907490ef60dbee"  # pragma: allowlist secret
     ),
+    "tax.get_period_summary": (
+        "f3a8c5ef0820c04b6e049c579d93c3e78b56f5cf66209a262d2c58cf8206da17"  # pragma: allowlist secret
+    ),
     "tax.process_received_reports": (
         "cd1bf0660631bba901893e654253a231b813b85edcb23424c16341fde8c99b47"  # pragma: allowlist secret
     ),

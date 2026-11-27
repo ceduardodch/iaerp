@@ -67,6 +67,23 @@ dueño, valor, puntaje ni avance comercial. Los leads de Meta, LinkedIn o TikTok
 entran por sus conectores de captación para conservar campaña, anuncio y
 consentimiento; un agente no puede atribuirse esos orígenes.
 
+## Consulta mensual de Tributario
+
+`tax.get_period_summary` recibe `year`, `startMonth` y `endMonth` (ambos inclusive).
+Con `{"year":2026,"startMonth":1,"endMonth":11}` entrega una fila por mes en USD,
+con ventas, compras, bases de IVA y retenciones recibidas de renta, IVA e ISD.
+El total indica cuántos meses aportaron comprobantes. Un mes sin documentos
+queda sin importes. El estado del período y el acuse del 104 permiten identificar
+qué declaraciones requieren cotejo con los formularios presentados al SRI.
+
+La herramienta requiere `tax:read`. El conector delegado de Grok requiere
+además membresía activa con rol de propietario, administrador, contador o
+auditor de la organización elegida. En la autorización OAuth del conector
+existente se solicita el scope adicional y se conserva el nombre de la
+organización. Antes de consultar cifras, verificar en `context.get` que
+el RUC corresponde a la empresa del cierre. El nombre visible del conector
+puede diferir de la empresa autenticada.
+
 ## Facturación delegada desde Grok
 
 El cliente `iaerp-grok-informes` opera con la identidad del usuario y una
