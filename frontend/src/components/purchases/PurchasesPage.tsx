@@ -522,11 +522,7 @@ function PayableClassificationEditor({ token, payable, onSaved }: {
   onSaved: () => void
 }) {
   const [valueIds, setValueIds] = useState((payable.analyticAssignments ?? []).map((item) => item.valueId))
-  const [taxClassification, setTaxClassification] = useState<Payable['taxClassification']>(
-    payable.fiscalDocumentId && payable.taxClassification === 'DEDUCTIBLE_PENDING_REVIEW'
-      ? 'DEDUCTIBLE_CONFIRMED'
-      : payable.taxClassification,
-  )
+  const [taxClassification, setTaxClassification] = useState(payable.taxClassification)
   const [foreignDigitalService, setForeignDigitalService] = useState(Boolean(payable.foreignDigitalService))
   const [internalClassification, setInternalClassification] = useState<
     '' | 'REAL' | 'DECLARATION_ONLY'
@@ -542,7 +538,7 @@ function PayableClassificationEditor({ token, payable, onSaved }: {
         taxClassification,
         internalClassification: internalClassification || null,
         foreignDigitalService: payable.fiscalDocumentId ? undefined : foreignDigitalService,
-        reason: fiscalUseChanged ? reason : null,
+        reason: reason.trim() || null,
         analyticValueIds: valueIds,
       }),
     }),
@@ -558,7 +554,7 @@ function PayableClassificationEditor({ token, payable, onSaved }: {
       <label><input type="radio" name={`taxClassification-${payable.id}`} checked={taxClassification === 'DEDUCTIBLE_CONFIRMED'} onChange={() => setTaxClassification('DEDUCTIBLE_CONFIRMED')} /><span><strong>Para declaración · deducible</strong><small>Entra al cálculo tributario con su respaldo fiscal</small></span></label>
       <label><input type="radio" name={`taxClassification-${payable.id}`} checked={taxClassification === 'NON_DEDUCTIBLE'} onChange={() => setTaxClassification('NON_DEDUCTIBLE')} /><span><strong>No deducible</strong><small>Se declara cuando corresponda, pero no reduce el resultado fiscal</small></span></label>
     </fieldset>
-    {fiscalUseChanged ? <label>Motivo del cambio<input value={reason} onChange={(event) => setReason(event.target.value)} required minLength={3} maxLength={300} placeholder="Ej. Se confirmó que corresponde al servicio contratado" /></label> : null}
+    <label>Motivo del cambio<input value={reason} onChange={(event) => setReason(event.target.value)} required={fiscalUseChanged} minLength={3} maxLength={300} placeholder={fiscalUseChanged ? 'Explica el cambio de uso fiscal' : 'Opcional'} /></label>
     <fieldset className="purchase-review-options">
       <legend>Control interno</legend>
       <p className="fine-print">Esta marca no cambia IVA, ATS ni renta. Sirve para costos y proyectos internos.</p>
