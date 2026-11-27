@@ -962,6 +962,7 @@ async def get_document_dossier(
     """Historia del comprobante: retenciones, cobros con su referencia y saldo."""
     record = await dossier_service.build_dossier(session, context, document_id=document_id)
     return DocumentDossierRead(
+        is_issued_purchase=record.is_issued_purchase,
         document_id=record.document_id,
         doc_type=record.doc_type,
         direction=record.direction,

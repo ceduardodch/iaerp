@@ -218,7 +218,7 @@ async def compute_iva(
         else:
             continue
 
-        if document.doc_type == "LIQUIDACION" and document.direction == "EMITIDO":
+        if document.is_issued_purchase:
             continue
         side = "ventas" if document.direction == "EMITIDO" else "compras"
         bracket_key = _BRACKET_KEYS.get(tax.tax_bracket)

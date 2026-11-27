@@ -74,6 +74,7 @@ class DocumentDossier:
     issue_date: date
     counterparty_name: str | None
     total: Decimal
+    is_issued_purchase: bool = False
     payment_methods: list[str] = field(default_factory=list)
     retentions: list[DossierRetention] = field(default_factory=list)
     movements: list[DossierMovement] = field(default_factory=list)
@@ -220,6 +221,7 @@ async def build_dossier(
         document_id=document.id,
         doc_type=document.doc_type,
         direction=document.direction,
+        is_issued_purchase=document.is_issued_purchase,
         access_key=document.access_key,
         issue_date=document.issue_date,
         counterparty_name=document.counterparty_name,
@@ -227,9 +229,9 @@ async def build_dossier(
         payment_methods=list(document.payment_methods or []),
     )
 
-    if document.doc_type == "LIQUIDACION" and document.direction == "EMITIDO":
+    if document.is_issued_purchase:
         dossier.notes.append(
-            "Liquidación emitida por la empresa como compradora. "
+            "La empresa actúa como compradora en este comprobante. "
             "Concilia el pago en Compras y verifica las retenciones en sus comprobantes."
         )
         return dossier

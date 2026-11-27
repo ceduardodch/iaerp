@@ -1382,6 +1382,7 @@ export type TaxXmlRecoveryJob = {
 }
 
 export type TaxFiscalDocument = {
+  isIssuedPurchase?: boolean
   id: string
   direction: 'EMITIDO' | 'RECIBIDO'
   docType: string
@@ -1615,6 +1616,7 @@ export type TaxDossierMovement = {
 
 /** Historia del comprobante: retenciones, cobros y saldo. */
 export type TaxDocumentDossier = {
+  isIssuedPurchase?: boolean
   documentId: string
   docType: string
   direction: 'EMITIDO' | 'RECIBIDO'

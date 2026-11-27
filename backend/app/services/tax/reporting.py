@@ -220,7 +220,8 @@ async def _annual_fiscal_snapshot(
                 select(FiscalDocument).where(
                     FiscalDocument.tenant_id == context.tenant_id,
                     FiscalDocument.direction == "EMITIDO",
-                    FiscalDocument.doc_type.not_in(("RETENCION", "LIQUIDACION")),
+                    FiscalDocument.doc_type != "RETENCION",
+                    ~FiscalDocument.is_issued_purchase,
                     FiscalDocument.tax_period_id.in_(declared_period_ids),
                 )
             )
@@ -676,6 +677,12 @@ async def dashboard_tax_report(
             select(SalesDocument).where(
                 SalesDocument.tenant_id == context.tenant_id,
                 SalesDocument.status.in_(("AUTHORIZED", "HISTORICAL_ISSUED")),
+                ~select(FiscalDocument.id).where(
+                    FiscalDocument.tenant_id == context.tenant_id,
+                    FiscalDocument.is_issued_purchase,
+                    (FiscalDocument.sales_document_id == SalesDocument.id)
+                    | (FiscalDocument.access_key == SalesDocument.access_key),
+                ).exists(),
                 SalesDocument.issue_date >= sales_range_start,
                 SalesDocument.issue_date < sales_range_end,
             )
@@ -796,7 +803,8 @@ async def dashboard_tax_report(
     evidenced_sales = [
         document
         for document in fiscal_documents
-        if document.direction == "EMITIDO" and document.doc_type not in {"RETENCION", "LIQUIDACION"}
+        if document.direction == "EMITIDO" and document.doc_type != "RETENCION"
+        and not document.is_issued_purchase
     ]
     purchases = [
         document

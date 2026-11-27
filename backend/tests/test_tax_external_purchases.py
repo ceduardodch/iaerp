@@ -2,6 +2,11 @@
 
 import uuid
 
+import pytest
+from sqlalchemy import select
+
+from app.db.session import SessionFactory
+from app.models.tax import FiscalDocument, TaxPeriod
 from tests.test_billing_api import TENANT_B
 from tests.test_billing_api import token_for as tenant_token
 from tests.test_tax_iva import FIXTURES, find_period, token_for, upload_and_ingest
@@ -193,3 +198,83 @@ async def test_731_uses_issued_authorized_iva_retention_once(client, stored_obje
     assert summary["amounts"]["ivaCreditoTributario"] == "0.00"
     assert summary["amounts"]["saldoAPagar"] == "0.00"
     assert summary["amounts"]["creditoAFavor"] == "32.80"
+
+
+@pytest.mark.parametrize(
+    "note_code,note_tag,info_tag",
+    [("04", "notaCredito", "infoNotaCredito"), ("05", "notaDebito", "infoNotaDebito")],
+)
+@pytest.mark.parametrize("legacy_key_only", [False, True])
+async def test_issued_notes_of_prior_liquidation_are_not_sales(
+    client, stored_objects, note_code, note_tag, info_tag, legacy_key_only
+):
+    token = await token_for(client)
+    template = (
+        (FIXTURES / "factura_recibida_iva15.xml")
+        .read_text()
+        .replace("0888888888001", "1799999999001")
+    )
+    template_key = "1111202501098888888800120010020000198772795212911"
+    source_key = "1110202503" + "1" * 39
+    note_key = "11112025" + note_code + "2" * 39
+    source = (
+        template.replace("factura>", "liquidacionCompra>")
+        .replace("infoFactura", "infoLiquidacionCompra")
+        .replace("Comprador", "Proveedor")
+        .replace("11/11/2025", "11/10/2025")
+        .replace("<codDoc>01", "<codDoc>03")
+        .replace(template_key, source_key)
+    )
+    note = (
+        template.replace("factura>", note_tag + ">")
+        .replace("infoFactura", info_tag)
+        .replace("<codDoc>01", "<codDoc>" + note_code)
+        .replace(template_key, note_key)
+        .replace("000019877</secuencial>", "000019878</secuencial>")
+        .replace(
+            "<fechaEmision>",
+            "<codDocModificado>03</codDocModificado>"
+            "<numDocModificado>001-002-000019877</numDocModificado><fechaEmision>",
+        )
+    )
+    await upload_and_ingest(client, token, "nota.xml", content=note.encode())
+    november = await find_period(client, token, 2025, 11)
+    path = "/api/v1/tax/periods/" + november["id"]
+    # El tipo del sustento basta aunque la liquidación todavía no se haya importado.
+    assert (await client.get(path + "/iva", headers=auth(token))).json()["requiresExternalReview"]
+    await upload_and_ingest(client, token, "liquidacion.xml", content=source.encode())
+    async with SessionFactory.begin() as session:
+        row = (
+            await session.scalars(
+                select(FiscalDocument).where(FiscalDocument.access_key == note_key)
+            )
+        ).one()
+        assert row.related_access_key == source_key
+        if legacy_key_only:
+            row.related_document_type = None
+        # Simula noviembre histórico ya presentado.
+        stored_period = await session.get(TaxPeriod, uuid.UUID(november["id"]))
+        stored_period.status = "DECLARADO"
+    summary = (await client.get(path + "/iva", headers=auth(token))).json()
+    assert summary["requiresExternalReview"]
+    assert summary["amounts"]["ivaGenerado"] == summary["amounts"]["ventasNetas"] == "0.00"
+    [document] = (await client.get(path + "/documents", headers=auth(token))).json()
+    assert document["isIssuedPurchase"]
+    dossier = (
+        await client.get(
+            "/api/v1/tax/documents/" + document["id"] + "/dossier", headers=auth(token)
+        )
+    ).json()
+    assert dossier["isIssuedPurchase"]
+    assert dossier["expectedNet"] == "0.00"
+    assert dossier["receivableId"] is None
+    ats = await client.post(path + "/ats", headers=auth(token, "ats-nov"), json={})
+    assert ats.status_code == 422
+    assert "liquidaciones" in ats.json()["detail"]
+    dashboard = (
+        await client.get(
+            "/api/v1/tax/dashboard", headers=auth(token), params={"as_of": "2025-11-30"}
+        )
+    ).json()
+    assert dashboard["annual"]["declaredSalesBase"] == "0.00"
+    assert dashboard["currentMonth"]["evidencedSalesCount"] == 0

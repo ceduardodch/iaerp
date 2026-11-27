@@ -90,7 +90,7 @@ type HistoricalTaxCandidate = {
  * su referencia bancaria si vinieron del extracto) y cuánto falta.
  */
 function DossierView({ dossier }: { dossier: TaxDocumentDossier }) {
-  const issuedPurchase = dossier.docType === 'LIQUIDACION' && dossier.direction === 'EMITIDO'
+  const issuedPurchase = dossier.isIssuedPurchase ?? (dossier.docType === 'LIQUIDACION' && dossier.direction === 'EMITIDO')
   return (
     <div className="tax-dossier">
       <ul className="tax-dossier-tree">
@@ -254,7 +254,7 @@ export function TaxPage({
   const foreignCustomers = useMemo(() => {
     const customers = new Map<string, string>()
     for (const document of documentsQuery.data ?? []) {
-      if (document.direction !== 'EMITIDO' || ['RETENCION', 'LIQUIDACION'].includes(document.docType)) continue
+      if (document.direction !== 'EMITIDO' || document.isIssuedPurchase || ['RETENCION', 'LIQUIDACION'].includes(document.docType)) continue
       const id = (document.counterpartyIdentification ?? '').replace(/[ -]/g, '')
       if (!/^[A-Za-z0-9]{3,13}$/.test(id) || /^\d{10}$|^\d{13}$/.test(id)) continue
       customers.set(id, document.counterpartyName ?? id)
@@ -511,13 +511,13 @@ export function TaxPage({
         key: 'sales',
         title: 'Ventas emitidas',
         description: 'Facturas y notas emitidas por la empresa.',
-        matches: (document: TaxFiscalDocument) => document.direction === 'EMITIDO' && !['RETENCION', 'LIQUIDACION'].includes(document.docType),
+        matches: (document: TaxFiscalDocument) => document.direction === 'EMITIDO' && !document.isIssuedPurchase && !['RETENCION', 'LIQUIDACION'].includes(document.docType),
       },
       {
         key: 'issued-purchase-settlements',
-        title: 'Liquidaciones de compra emitidas',
+        title: 'Liquidaciones de compra emitidas y sus notas',
         description: 'Sustentos de compra por conciliar con el formulario 104 y el ATS.',
-        matches: (document: TaxFiscalDocument) => document.direction === 'EMITIDO' && document.docType === 'LIQUIDACION',
+        matches: (document: TaxFiscalDocument) => document.isIssuedPurchase ?? (document.direction === 'EMITIDO' && document.docType === 'LIQUIDACION'),
       },
       {
         key: 'purchases',

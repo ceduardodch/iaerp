@@ -123,6 +123,9 @@ def build_ats_input(
     for document in documents:
         if document.doc_type not in _ADD | _CREDIT_NOTES:
             continue
+        if document.is_issued_purchase:
+            missing.append("La liquidación de compra emitida o su nota requiere conciliar el ATS.")
+            continue
         if document.is_preliminary:
             missing.append(
                 f"{document.doc_type} del {_date(document.issue_date)} está preliminar; "

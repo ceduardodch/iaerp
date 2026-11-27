@@ -15,6 +15,7 @@ explicitas:
   1Password/Bitwarden o variable segura (coherente con el ADR 0005).
 """
 
+import re
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -33,14 +34,20 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.masters import TenantEntityMixin
 
 # Obligaciones soportadas. RDEP y ADI se modelan desde ya para no migrar la
 # tabla despues, pero su generacion esta fuera del alcance actual (ADR 0012).
+# En la clave SRI de 49 dígitos, el tipo ocupa las posiciones 9 y 10.
+_LIQUIDATION_ACCESS_KEY = r"^[0-9]{8}03[0-9]{39}$"
+
 OBLIGATION_TYPES = ("IVA", "ATS", "RDEP", "RENTA", "ADI")
 
 # Ciclo de vida de un periodo, tal como lo ve el usuario en pantalla.
@@ -310,6 +317,33 @@ class FiscalDocument(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Bas
     cancellation_evidence_id: Mapped[uuid.UUID | None]
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_by_actor_id: Mapped[str | None] = mapped_column(String(200))
+
+    @hybrid_property
+    def is_issued_purchase(self) -> bool:
+        """La liquidación y sus notas corresponden al comprador que las emite."""
+        if self.direction != "EMITIDO":
+            return False
+        if self.doc_type == "LIQUIDACION":
+            return True
+        return self.doc_type in ("NOTA_CREDITO", "NOTA_DEBITO") and (
+            self.related_document_type == "LIQUIDACION"
+            or re.fullmatch(_LIQUIDATION_ACCESS_KEY, self.related_access_key or "") is not None
+        )
+
+    @is_issued_purchase.inplace.expression
+    @classmethod
+    def _issued_purchase_expression(cls) -> ColumnElement[bool]:
+        source_is_liquidation = func.coalesce(cls.related_access_key, "").regexp_match(
+            _LIQUIDATION_ACCESS_KEY
+        )
+        return (cls.direction == "EMITIDO") & (
+            (cls.doc_type == "LIQUIDACION") | (
+                cls.doc_type.in_(("NOTA_CREDITO", "NOTA_DEBITO")) & (
+                    (func.coalesce(cls.related_document_type, "") == "LIQUIDACION")
+                    | source_is_liquidation
+                )
+            )
+        )
 
 
 class FiscalDocumentTax(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):

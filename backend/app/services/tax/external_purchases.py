@@ -74,11 +74,11 @@ def external_review_reasons(payments: list[str], documents: Iterable[FiscalDocum
             "retenciones efectuadas. Concilia el 104 y prepara el ATS fuera de IAERP."
         )
     if any(
-        d.doc_type == "LIQUIDACION" and d.direction == "EMITIDO" and d.cancelled_at is None
+        d.is_issued_purchase and d.cancelled_at is None
         for d in documents
     ):
         reasons.append(
-            "Hay liquidaciones de compra emitidas por la empresa. Revisa sus bases, "
+            "Hay liquidaciones de compra emitidas o notas que las modifican. Revisa sus bases, "
             "crédito y retenciones en el 104 y el ATS fuera de IAERP."
         )
     return reasons

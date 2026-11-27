@@ -522,7 +522,11 @@ function PayableClassificationEditor({ token, payable, onSaved }: {
   onSaved: () => void
 }) {
   const [valueIds, setValueIds] = useState((payable.analyticAssignments ?? []).map((item) => item.valueId))
-  const [taxClassification, setTaxClassification] = useState(payable.taxClassification)
+  const [taxClassification, setTaxClassification] = useState<Payable['taxClassification']>(
+    payable.fiscalDocumentId && payable.taxClassification === 'DEDUCTIBLE_PENDING_REVIEW'
+      ? 'DEDUCTIBLE_CONFIRMED'
+      : payable.taxClassification,
+  )
   const [foreignDigitalService, setForeignDigitalService] = useState(Boolean(payable.foreignDigitalService))
   const [internalClassification, setInternalClassification] = useState<
     '' | 'REAL' | 'DECLARATION_ONLY'

@@ -150,6 +150,7 @@ class DocumentDossierRead(APIModel):
     document_id: uuid.UUID
     doc_type: str
     direction: str
+    is_issued_purchase: bool = False
     access_key: str | None = None
     issue_date: date
     counterparty_name: str | None = None
@@ -238,6 +239,7 @@ class HistoricalTaxExceptionApprove(APIModel):
 
 
 class FiscalDocumentRead(APIModel):
+    is_issued_purchase: bool = False
     id: uuid.UUID
     direction: str
     doc_type: str
