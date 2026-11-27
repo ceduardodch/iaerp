@@ -7,13 +7,16 @@ from datetime import date
 
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthContext
 from app.models.platform import Tenant
-from app.models.tax import FiscalDocument, FiscalDocumentTax, TaxPeriod
+from app.models.tax import FiscalDocument, FiscalDocumentTax, TaxEvidence, TaxPeriod
 from app.services.tax import due_dates
 from app.services.tax.completeness import missing_tax_detail_document_ids
+from app.services.tax.external_purchases import external_payment_details, external_review_reasons
+from app.services.tax.iva import compute_iva
 
 
 async def _computed_due_date(
@@ -84,14 +87,13 @@ async def get_or_create_period(
     la regla general no cubre (regimen especial, prorroga) y el calculo no debe
     pisarla.
     """
-    existing = await session.scalar(
-        select(TaxPeriod).where(
-            TaxPeriod.tenant_id == context.tenant_id,
-            TaxPeriod.year == year,
-            TaxPeriod.month == month,
-            TaxPeriod.obligation_type == obligation_type,
-        )
+    lookup = select(TaxPeriod).where(
+        TaxPeriod.tenant_id == context.tenant_id,
+        TaxPeriod.year == year,
+        TaxPeriod.month == month,
+        TaxPeriod.obligation_type == obligation_type,
     )
+    existing: TaxPeriod | None = await session.scalar(lookup.with_for_update())
     if existing is not None:
         return existing
 
@@ -113,8 +115,15 @@ async def get_or_create_period(
         due_date=due_date,
         notes=notes,
     )
-    session.add(period)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            session.add(period)
+            await session.flush()
+    except IntegrityError:
+        existing = await session.scalar(lookup.with_for_update())
+        if existing is None:
+            raise
+        return existing
     return period
 
 
@@ -173,7 +182,15 @@ async def refresh_period_statuses(
             if document_ids
             else set()
         )
-        if not documents:
+        manual_review = False
+        if period.obligation_type in {"IVA", "ATS"}:
+            payments = await external_payment_details(
+                session, tenant_id=context.tenant_id, year=period.year, month=period.month
+            )
+            manual_review = bool(external_review_reasons(payments, documents))
+        if manual_review:
+            period.status = "EVIDENCIA_INCOMPLETA"
+        elif not documents:
             period.status = "PENDIENTE_DESCARGA"
         elif any(
                 document.is_preliminary and document.cancelled_at is None
@@ -195,12 +212,42 @@ async def set_manual_status(
     period_id: uuid.UUID,
     target_status: str,
     confirmed: bool,
+    external_filing_evidence_id: uuid.UUID | None = None,
 ) -> TaxPeriod:
     """Avanza el cierre fiscal únicamente tras una confirmación humana."""
     if not confirmed:
         raise HTTPException(status_code=422, detail="Human confirmation is required")
-    period = await get_period(session, context, period_id=period_id)
-    await refresh_period_statuses(session, context)
+    period = await session.scalar(
+        select(TaxPeriod).where(TaxPeriod.id == period_id, TaxPeriod.tenant_id == context.tenant_id)
+        .with_for_update()
+    )
+    if period is None:
+        raise HTTPException(status_code=404, detail="Tax period not found")
+    if external_filing_evidence_id is not None:
+        if period.obligation_type != "IVA" or target_status != "DECLARADO":
+            raise HTTPException(status_code=422, detail="El acuse acredita la declaración de IVA.")
+        evidence = await session.scalar(
+            select(TaxEvidence.id).where(
+                TaxEvidence.id == external_filing_evidence_id,
+                TaxEvidence.tenant_id == context.tenant_id,
+                TaxEvidence.tax_period_id == period.id,
+                TaxEvidence.origin == "ACUSE_IVA_SRI",
+                TaxEvidence.file_type == "PDF",
+            )
+        )
+        if evidence is None:
+            raise HTTPException(status_code=422, detail="Adjunta el acuse de IVA de este período.")
+        if period.status == "DECLARADO":
+            raise HTTPException(status_code=409, detail="Este período ya consta como declarado.")
+        summary = await compute_iva(session, context, period=period)
+        if not summary.requires_external_review:
+            raise HTTPException(
+                status_code=409, detail="Este período admite la revisión ordinaria del formulario."
+            )
+        period.status = "DECLARADO"
+        await session.flush()
+        return period
+    await refresh_period_statuses(session, context, period_id=period.id)
     if target_status == "LISTO_DECLARAR":
         if period.status != "LISTO_REVISAR":
             raise HTTPException(

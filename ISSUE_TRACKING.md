@@ -1,5 +1,9 @@
 # Issue Tracking - Sesión por Sesión
 
+> 2026-11-27 · Compras y Tributario admiten revisar servicios digitales pagados al exterior. Pendientes publicación, corrección documental del vencimiento histórico y conciliación del 104 y ATS del período. [Estado](docs/STATUS.md).
+
+> 2026-11-26 · ISD recibido implementado y probado con datos sintéticos. Tras la publicación, verificar el expediente contra el XML autorizado del banco. Si ya existe un registro anterior en cero, reprocesar su evidencia con una nueva clave de idempotencia para actualizar la misma fila. [Estado](docs/STATUS.md).
+
 > 2026-11-18 · iOS 0.4.2 (6) instalada. Carlos confirma el ingreso. Siguen abiertos el guardado físico de prueba y la validación de «Revisar importes» con letra máxima en iOS 27.2. Las mejoras IOS-027 a IOS-035 quedan propuestas en el [backlog móvil](docs/backlog/ios-evaluacion-2026-11-18.md).
 
 > 2026-11-18, corte 0.4.1 (5): PR #107 publicada como 2bcd013, CI/Coolify y

@@ -84,18 +84,11 @@ async def upload_evidence(
     if len(data) > MAX_EVIDENCE_SIZE:
         raise HTTPException(status_code=422, detail="Evidence file exceeds 25 MB")
 
-    sha256 = hashlib.sha256(data).hexdigest()
-
-    existing = await session.scalar(
-        select(TaxEvidence).where(
-            TaxEvidence.tenant_id == context.tenant_id,
-            TaxEvidence.sha256 == sha256,
-        )
-    )
-    if existing is not None:
-        # Mismo archivo ya cargado: no se vuelve a subir ni se altera el estado.
-        return existing, True
-
+    if origin == "ACUSE_IVA_SRI" and (
+        tax_period_id is None or classify_file_type(filename) != "PDF"
+        or not data.startswith(b"%PDF-")
+    ):
+        raise HTTPException(status_code=422, detail="Se requiere el acuse PDF del período de IVA.")
     if tax_period_id is not None:
         period = await session.scalar(
             select(TaxPeriod).where(
@@ -105,6 +98,31 @@ async def upload_evidence(
         )
         if period is None:
             raise HTTPException(status_code=404, detail="Tax period not found")
+        if origin == "ACUSE_IVA_SRI" and period.obligation_type != "IVA":
+            raise HTTPException(status_code=422, detail="Selecciona el período del IVA presentado.")
+
+    sha256 = hashlib.sha256(data).hexdigest()
+    existing_query = select(TaxEvidence).where(
+        TaxEvidence.tenant_id == context.tenant_id, TaxEvidence.sha256 == sha256
+    )
+    if origin == "ACUSE_IVA_SRI":
+        existing_query = existing_query.with_for_update()
+    existing = await session.scalar(existing_query)
+    if existing is not None:
+        if origin == "ACUSE_IVA_SRI":
+            if (
+                existing.file_type != "PDF"
+                or existing.tax_period_id not in (None, tax_period_id)
+                or existing.origin not in ("MANUAL", "PORTAL_SRI", origin)
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Este PDF ya figura con otro período o uso. "
+                    "Selecciona el acuse de IVA de este período.",
+                )
+            existing.tax_period_id = tax_period_id
+            existing.origin = origin
+        return existing, True
 
     file_type = classify_file_type(filename)
     object_key = evidence_object_key(

@@ -34,6 +34,7 @@ const summary = {
     ivaCreditoTributario: '1.97',
     retencionesIvaRecibidas: '32.80',
     retencionesRentaRecibidas: '8.59',
+    retencionesIsdRecibidas: '25.13',
     saldoAPagar: '240.63',
     creditoAFavor: '0.00',
   },
@@ -106,6 +107,7 @@ const annualDashboard = {
     resultBeforeAdjustments: '7700.00',
     incomeTaxWithheld: '860.25',
     ivaWithheld: '320.80',
+    isdWithheld: '52.25',
     declaredSalesBase: '10000.00',
     declaredDeductiblePurchasesBase: '3500.00',
     declaredResultBeforeAdjustments: '6500.00',
@@ -340,6 +342,7 @@ test('explica el posible saldo a favor sin afirmar que ya procede una devolució
   const panel = page.locator('#tax-section-retentions')
   await expect(panel).toContainText('Retenciones de renta registradas en el año')
   await expect(panel).toContainText('$860,25')
+  await expect(panel.getByText('ISD retenido en el año').locator('..')).toContainText('$52,25')
   await expect(panel).toContainText('Revisar al cierre anual')
   await expect(panel).toContainText('posible saldo a favor')
   await expect(panel.getByRole('alert')).toContainText('1 comprobante(s)')
@@ -721,6 +724,32 @@ test('despliega la historia del comprobante con retención y cobro', async ({ pa
   await expect(dossier).toContainText('$317.85')
 })
 
+test('muestra el ISD bancario en el mes y su expediente sin neto a cobrar', async ({ page }) => {
+  await expect(page.getByText('Impuesto a la salida de divisas (ISD) retenido')
+    .locator('..')).toContainText('$25.13')
+  await page.route('**/api/v1/tax/documents/*/dossier', (route) => route.fulfill({
+    json: {
+      docType: 'RETENCION', direction: 'RECIBIDO', total: '25.13',
+      retainedIva: '0.00', retainedIncomeTax: '0.00', retainedIsd: '25.13',
+      retentions: [{
+        issueDate: '2025-11-21', issuerName: 'BANCO DEMO', ivaAmount: '0.00',
+        incomeTaxAmount: '0.00', isdLines: [{
+          sriCode: '4580', baseAmount: '502.50', percentage: '5.0000', retainedAmount: '25.13',
+        }],
+      }],
+      movements: [], receivableId: null, notes: [],
+    },
+  }))
+  const group = page.locator('details').filter({ hasText: 'Retenciones recibidas' })
+  await group.locator('summary').click()
+  await group.getByRole('button', { name: /Ver historia del comprobante/ }).click()
+  const dossier = page.locator('.tax-dossier')
+  await expect(dossier).toContainText('ISD 4580 · Base $502.50 · 5 % · Retenido $25.13')
+  await expect(dossier.getByText('Retención de ISD').locator('..')).toContainText('$25.13')
+  await expect(dossier).not.toContainText('Neto esperado')
+  await expect(dossier).not.toContainText('Cobrado')
+})
+
 
 test('usa 20 por defecto al generar ATS sin pedir selección', async ({ page }) => {
   const choice = page.getByRole('combobox', { name: /Forma de pago para ventas sin dato/ })
@@ -775,4 +804,38 @@ test('recuerda la clasificación del cliente extranjero para generar el ATS', as
   await navigateToSection(page, 'Tributario')
   await expect(page.getByRole('combobox', { name: /Tipo de cliente extranjero/ })).toHaveValue('01')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('exige acuse de IVA para registrar la declaración externa sin generar ATS', async ({ page }) => {
+  await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/iva`, (route) => route.fulfill({
+    json: {
+      ...summary, requiresExternalReview: true, pendingPurchaseCount: 0,
+      preliminaryReasons: ['Servicio digital del exterior · Demo · REF-DEMO · USD 240.00.'],
+    },
+  }))
+  let filingBody
+  await page.route('**/api/v1/tax/evidence', async (route) => {
+    expect(route.request().method()).toBe('POST')
+    const form = route.request().postDataBuffer()?.toString() ?? ''
+    for (const value of ['ACUSE_IVA_SRI', PERIOD_ID, 'acuse-iva.pdf']) expect(form).toContain(value)
+    await route.fulfill({ status: 201, json: { id: 'demo-evidence' } })
+  })
+  await page.route(`**/api/v1/tax/periods/${PERIOD_ID}/status`, async (route) => {
+    filingBody = route.request().postDataJSON()
+    await route.fulfill({ json: { id: PERIOD_ID, status: 'DECLARADO' } })
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await navigateToSection(page, 'Tributario')
+  await expect(page.getByRole('button', { name: 'Generar ATS' })).toBeDisabled()
+  const register = page.getByRole('button', { name: 'Registrar IVA presentado fuera de IAERP' })
+  await expect(register).toBeDisabled()
+  await page.getByLabel('Acuse de la declaración de IVA presentada al SRI (PDF)').setInputFiles({
+    name: 'acuse-iva.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-demo'),
+  })
+  page.once('dialog', (dialog) => dialog.accept())
+  await register.click()
+  await expect.poll(() => filingBody).toEqual({
+    confirmed: true, targetStatus: 'DECLARADO', externalFilingEvidenceId: 'demo-evidence',
+  })
 })

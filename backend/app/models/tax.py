@@ -9,7 +9,7 @@ explicitas:
 - Los comprobantes **recibidos** (compras) no existian en IAERP: se construyen
   desde la evidencia importada. Los emitidos propios se enlazan a su
   ``SalesDocument`` sin duplicar la fuente.
-- Retencion de IVA y de renta se guardan SIEMPRE como conceptos distintos
+- Las retenciones de IVA, renta e ISD se guardan como conceptos distintos
   (``FiscalRetention.kind``): el campo 609 del formulario 104 es solo IVA.
 - Ninguna clave se persiste: ``TenantTaxProfile.vault_ref`` es una referencia a
   1Password/Bitwarden o variable segura (coherente con el ADR 0005).
@@ -348,11 +348,7 @@ class FiscalDocumentTax(UUIDPrimaryKeyMixin, TenantEntityMixin, Base):
 
 
 class FiscalRetention(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Base):
-    """Retencion de IVA o de renta.
-
-    ``kind`` las mantiene separadas a proposito: la retencion de IVA alimenta el
-    campo 609 del IVA mensual y la de renta se reserva para renta anual.
-    """
+    """Retención documentada por impuesto: IVA, renta o salida de divisas."""
 
     __tablename__ = "fiscal_retentions"
     __table_args__ = (
@@ -362,7 +358,7 @@ class FiscalRetention(UUIDPrimaryKeyMixin, TimestampMixin, TenantEntityMixin, Ba
             name="fk_fiscal_retentions_tenant_fiscal_document",
         ),
         UniqueConstraint("tenant_id", "id", name="uq_fiscal_retentions_tenant_id"),
-        CheckConstraint("kind IN ('IVA', 'RENTA')", name="kind_valid"),
+        CheckConstraint("kind IN ('IVA', 'RENTA', 'ISD')", name="kind_valid"),
         Index("ix_fiscal_retentions_tenant_document", "tenant_id", "fiscal_document_id"),
     )
 

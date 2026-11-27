@@ -28,6 +28,7 @@ from app.schemas.payables import (
     PayableDocumentBulkReviewItemRead,
     PayableDocumentBulkReviewRead,
     PayableDocumentReviewCreate,
+    PayableDueDateCorrection,
     PayableFromDocumentCreate,
     PayableMovementRead,
     PayablePaymentCreate,
@@ -117,6 +118,38 @@ async def put_payable_analytic_assignments(
 
 
 @router.put(
+    "/payables/{payable_id}/due-date",
+    response_model=PayableRead,
+    summary="Corregir el vencimiento de una compra manual de una cuota",
+)
+async def put_payable_due_date(
+    payable_id: uuid.UUID,
+    data: PayableDueDateCorrection,
+    idempotency_key: IdempotencyKey,
+    session: Session,
+    context: Annotated[AuthContext, Depends(require_scopes("payables:write"))],
+) -> dict[str, object]:
+    async def update() -> tuple[str, dict[str, object]]:
+        item = await payables.correct_manual_due_date(
+            session, context, payable_id=payable_id, data=data
+        )
+        return str(item.id), item.model_dump(mode="json", by_alias=True)
+
+    dates_and_reason = data.model_dump(mode="json", by_alias=False)
+    return await execute_idempotent(
+        session,
+        context=context,
+        operation="payables.due_date.correct",
+        idempotency_key=idempotency_key,
+        request_payload={"payable_id": str(payable_id), **dates_and_reason},
+        action="payable.due_date_corrected",
+        entity_type="payable",
+        callback=update,
+        audit_details=dates_and_reason,
+    )
+
+
+@router.put(
     "/payables/{payable_id}/classification",
     response_model=PayableRead,
     summary="Corregir el uso fiscal y las clasificaciones de una CxP",
@@ -137,16 +170,20 @@ async def put_payable_classification(
         )
         return str(item.id), item.model_dump(mode="json", by_alias=True)
 
+    payload = data.model_dump(mode="json")
+    if data.foreign_digital_service is None:
+        payload.pop("foreignDigitalService")
     return await execute_idempotent(
         session,
         context=context,
         operation="payables.classification.update",
         idempotency_key=idempotency_key,
-        request_payload={"payable_id": str(payable_id), **data.model_dump(mode="json")},
+        request_payload={"payable_id": str(payable_id), **payload},
         action="payable.classification_updated",
         entity_type="payable",
         callback=update,
         audit_details={
+            "foreign_digital_service": data.foreign_digital_service,
             "reason": data.reason,
             "tax_classification": data.tax_classification,
             "internal_classification": data.internal_classification,
@@ -277,7 +314,7 @@ async def post_payable(
         context=context,
         operation="payables.create",
         idempotency_key=idempotency_key,
-        request_payload=data.model_dump(mode="json"),
+        request_payload=data.idempotency_payload(),
         action="payable.created",
         entity_type="payable",
         callback=create,

@@ -105,6 +105,39 @@ def test_parses_retention_separating_iva_from_renta() -> None:
     assert document.total == Decimal("41.39")
 
 
+@pytest.mark.parametrize(
+    "field,valid,invalid",
+    [
+        ("codigoRetencion", "4580", ""),
+        ("baseImponible", "312.36", "NaN"),
+        ("porcentajeRetener", "5.00", "-1"),
+        ("valorRetenido", "15.62", "x"),
+    ],
+)
+def test_incomplete_isd_line_does_not_produce_a_partial_total(
+    field: str, valid: str, invalid: str
+) -> None:
+    xml = read_fixture("retencion_recibida_autorizada.xml")
+    xml = xml.replace(b"<codigo>1</codigo>", b"<codigo>6</codigo>")
+    xml = xml.replace(b">3440<", b">4580<").replace(b">2.75<", b">5.00<")
+    xml = xml.replace(b">8.59<", b">15.62<")
+    xml = xml.replace(
+        f"<{field}>{valid}</{field}>".encode(), f"<{field}>{invalid}</{field}>".encode()
+    )
+    with pytest.raises(HTTPException, match="ISD") as error:
+        parse_authorized_document(xml)
+    assert error.value.status_code == 422
+
+
+def test_unknown_category_with_renta_rejects_whole_receipt() -> None:
+    xml = read_fixture("retencion_recibida_autorizada.xml").replace(
+        b"<codigo>2</codigo>", b"<codigo>99</codigo>"
+    )
+    with pytest.raises(HTTPException, match="categoría de retención") as error:
+        parse_authorized_document(xml)
+    assert error.value.status_code == 422
+
+
 def test_parses_legacy_retention_v1_without_losing_iva_or_renta() -> None:
     xml = b"""<?xml version="1.0" encoding="UTF-8"?>
 <autorizacion>

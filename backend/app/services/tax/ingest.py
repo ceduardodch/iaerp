@@ -121,6 +121,7 @@ async def _ensure_purchase_support_is_active(
             select(FiscalRetention.supporting_document_number).where(
                 FiscalRetention.tenant_id == context.tenant_id,
                 FiscalRetention.fiscal_document_id == document.id,
+                FiscalRetention.kind.in_(("IVA", "RENTA")),
             )
         ))
     normalized = {normalize_sri_document_number(number) for number in numbers if number}

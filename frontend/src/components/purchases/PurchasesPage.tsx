@@ -107,10 +107,11 @@ function PurchaseForm({ token, draft, onSaved, onCancel }: PurchaseFormProps) {
       supplierName: String(form.get('supplierName') || '') || null,
       description: String(form.get('description')),
       category: String(form.get('category')),
+      foreignDigitalService: form.has('foreignDigitalService'),
       documentType: String(form.get('documentType')),
       documentNumber: String(form.get('documentNumber') || '') || null,
       issueDate,
-      dueDate: paymentTiming === 'PAY_LATER' ? String(form.get('dueDate')) : issueDate,
+      dueDate: form.get('dueDate') || null,
       total: String(form.get('total')),
       paymentTiming,
       paymentDate: paymentTiming === 'PAID_NOW' ? String(form.get('paymentDate')) : null,
@@ -149,18 +150,20 @@ function PurchaseForm({ token, draft, onSaved, onCancel }: PurchaseFormProps) {
         <label>Control interno<select name="internalClassification" defaultValue="PENDING_REVIEW"><option value="PENDING_REVIEW">Pendiente de revisar</option><option value="REAL">Gasto real del negocio</option><option value="DECLARATION_ONLY">Solo tributario</option></select></label>
         <label>Soporte o referencia opcional<input name="supportReference" placeholder="Recibo, URL o referencia interna" /></label>
       </div>
+      <label><input type="checkbox" name="foreignDigitalService" /> Servicio digital contratado en el exterior</label>
       <fieldset className="purchase-payment-choice">
         <legend>¿Cómo queda el pago?</legend>
         <label><input type="radio" name="paymentTiming" checked={paymentTiming === 'PAID_NOW'} onChange={() => setPaymentTiming('PAID_NOW')} /> Pagado ahora</label>
         <label><input type="radio" name="paymentTiming" checked={paymentTiming === 'PAY_LATER'} onChange={() => setPaymentTiming('PAY_LATER')} /> Pagar después</label>
       </fieldset>
+      <label>Vencimiento<input name="dueDate" type="date" required={paymentTiming === 'PAY_LATER'} /></label>
       {paymentTiming === 'PAID_NOW' ? (
         <div className="purchase-form-grid">
           <label>Fecha de pago<input name="paymentDate" type="date" required defaultValue={draft?.issueDate ?? today()} /></label>
           <label>Medio<select name="paymentMethod" defaultValue="TRANSFER"><option value="TRANSFER">Transferencia</option><option value="CARD">Tarjeta</option><option value="CASH">Efectivo</option><option value="CHECK">Cheque</option><option value="OTHER">Otro</option></select></label>
           <label className="purchase-grid-wide">Referencia opcional<input name="paymentReference" defaultValue={draft?.paymentReference ?? ''} /></label>
         </div>
-      ) : <label>Vencimiento<input name="dueDate" type="date" required defaultValue={today()} /></label>}
+      ) : null}
     </ErpFormPanel>
   )
 }
@@ -475,6 +478,7 @@ function BankReconciliation({ token, payables, onCreateExpense }: BankReconcilia
       setPreview(result)
       void queryClient.invalidateQueries({ queryKey: ['payables'] })
       void queryClient.invalidateQueries({ queryKey: ['receivables'] })
+      void queryClient.invalidateQueries({ queryKey: ['tax'] })
     },
   })
   const bankRequestPending = review.isPending || applyMatches.isPending
@@ -518,21 +522,22 @@ function PayableClassificationEditor({ token, payable, onSaved }: {
   onSaved: () => void
 }) {
   const [valueIds, setValueIds] = useState((payable.analyticAssignments ?? []).map((item) => item.valueId))
-  const [taxClassification, setTaxClassification] = useState<
-    'DEDUCTIBLE_CONFIRMED' | 'NON_DEDUCTIBLE'
-  >(payable.taxClassification === 'NON_DEDUCTIBLE' ? 'NON_DEDUCTIBLE' : 'DEDUCTIBLE_CONFIRMED')
+  const [taxClassification, setTaxClassification] = useState(payable.taxClassification)
+  const [foreignDigitalService, setForeignDigitalService] = useState(Boolean(payable.foreignDigitalService))
   const [internalClassification, setInternalClassification] = useState<
     '' | 'REAL' | 'DECLARATION_ONLY'
   >(payable.internalClassification === 'PENDING_REVIEW' ? '' : payable.internalClassification)
   const [reason, setReason] = useState('')
   const fiscalUseChanged = taxClassification !== payable.taxClassification
+    || foreignDigitalService !== Boolean(payable.foreignDigitalService)
   const save = useMutation({
     mutationFn: () => apiRequest<Payable>(token, `/payables/${payable.id}/classification`, {
       method: 'PUT',
       headers: { 'Idempotency-Key': idempotencyKey('web-payable-classification') },
       body: JSON.stringify({
         taxClassification,
-        internalClassification,
+        internalClassification: internalClassification || null,
+        foreignDigitalService: payable.fiscalDocumentId ? undefined : foreignDigitalService,
         reason: fiscalUseChanged ? reason : null,
         analyticValueIds: valueIds,
       }),
@@ -543,6 +548,8 @@ function PayableClassificationEditor({ token, payable, onSaved }: {
   return <form className="purchase-tag-editor" onSubmit={(event) => { event.preventDefault(); save.mutate() }}>
     <fieldset className="purchase-review-options">
       <legend>Uso fiscal</legend>
+      {!payable.fiscalDocumentId ? <label><input type="checkbox" checked={foreignDigitalService} onChange={(event) => setForeignDigitalService(event.target.checked)} /> Servicio digital contratado en el exterior</label> : null}
+      <label><input type="radio" name={`taxClassification-${payable.id}`} checked={taxClassification === 'DEDUCTIBLE_PENDING_REVIEW'} onChange={() => setTaxClassification('DEDUCTIBLE_PENDING_REVIEW')} /><span>Pendiente de revisión fiscal</span></label>
       <p className="fine-print">La clasificación define qué entra al cálculo anual; no cambia el XML recibido.</p>
       <label><input type="radio" name={`taxClassification-${payable.id}`} checked={taxClassification === 'DEDUCTIBLE_CONFIRMED'} onChange={() => setTaxClassification('DEDUCTIBLE_CONFIRMED')} /><span><strong>Para declaración · deducible</strong><small>Entra al cálculo tributario con su respaldo fiscal</small></span></label>
       <label><input type="radio" name={`taxClassification-${payable.id}`} checked={taxClassification === 'NON_DEDUCTIBLE'} onChange={() => setTaxClassification('NON_DEDUCTIBLE')} /><span><strong>No deducible</strong><small>Se declara cuando corresponda, pero no reduce el resultado fiscal</small></span></label>
@@ -557,7 +564,7 @@ function PayableClassificationEditor({ token, payable, onSaved }: {
     <AnalyticClassificationPicker token={token} valueIds={valueIds} onChange={setValueIds} />
     {save.error ? <p className="form-error" role="alert">{save.error.message}</p> : null}
     <p className="fine-print">Si el periodo ya fue declarado, IAERP pedirá corregir primero esa declaración.</p>
-    <ErpButton variant="primary" type="submit" disabled={save.isPending || !internalClassification || (fiscalUseChanged && reason.trim().length < 3)}>{save.isPending ? 'Guardando…' : 'Guardar clasificación'}</ErpButton>
+    <ErpButton variant="primary" type="submit" disabled={save.isPending || (fiscalUseChanged && reason.trim().length < 3)}>{save.isPending ? 'Guardando…' : 'Guardar clasificación'}</ErpButton>
   </form>
 }
 
@@ -623,7 +630,40 @@ function PayableBulkClassificationEditor({ token, payables, requestKey, onSaved,
   </div>
 }
 
-function PayableDetail({ token, payable, document, canCancel, onCancellation, onClose }: { token: string; payable: Payable; document?: PurchaseDocument; canCancel: boolean; onCancellation: (document: PurchaseDocument) => void; onClose: () => void }) {
+function DueDateCorrection({ token, payable }: { token: string; payable: Payable }) {
+  const queryClient = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [previousDate, setPreviousDate] = useState(payable.dueDate)
+  const save = useMutation({
+    mutationFn: (values: FormData) => apiRequest<Payable>(token, `/payables/${payable.id}/due-date`, {
+      method: 'PUT',
+      headers: { 'Idempotency-Key': idempotencyKey('web-payable-due-date') },
+      body: JSON.stringify({
+        previousDueDate: previousDate,
+        dueDate: values.get('dueDate'),
+        reason: String(values.get('reason') || '').trim(),
+      }),
+    }),
+    onSuccess: () => {
+      setEditing(false)
+      void queryClient.invalidateQueries({ queryKey: ['payables'] })
+    },
+  })
+  if (!editing) return <ErpPanel title="Vencimiento">
+    <p>{payable.dueDate || 'Sin fecha acordada'}</p>
+    <ErpButton variant="secondary" onClick={() => { setPreviousDate(payable.dueDate); save.reset(); setEditing(true) }}>Editar vencimiento</ErpButton>
+  </ErpPanel>
+  return <ErpFormPanel eyebrow="Compra manual" title="Editar vencimiento" pending={save.isPending} error={save.error?.message}
+    onCancel={() => setEditing(false)} onSubmit={(event) => {
+      event.preventDefault()
+      save.mutate(new FormData(event.currentTarget))
+    }}>
+    <label>Vencimiento acordado<input name="dueDate" type="date" defaultValue={previousDate ?? ''} required /></label>
+    <label>Motivo de la corrección<input name="reason" required minLength={3} maxLength={300} /></label>
+  </ErpFormPanel>
+}
+
+function PayableDetail({ token, payable, document, canEdit, canCancel, onCancellation, onClose }: { token: string; payable: Payable; document?: PurchaseDocument; canEdit: boolean; canCancel: boolean; onCancellation: (document: PurchaseDocument) => void; onClose: () => void }) {
   const queryClient = useQueryClient()
   const [reversingMovementId, setReversingMovementId] = useState<string | null>(null)
   const movementsQuery = useQuery({
@@ -639,6 +679,7 @@ function PayableDetail({ token, payable, document, canCancel, onCancellation, on
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['payables'] })
       void queryClient.invalidateQueries({ queryKey: ['payables', payable.id, 'movements'] })
+      if (payable.foreignDigitalService) void queryClient.invalidateQueries({ queryKey: ['tax'] })
     },
   })
   const adjustment = useMutation({
@@ -650,6 +691,7 @@ function PayableDetail({ token, payable, document, canCancel, onCancellation, on
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['payables'] })
       void queryClient.invalidateQueries({ queryKey: ['payables', payable.id, 'movements'] })
+      if (payable.foreignDigitalService) void queryClient.invalidateQueries({ queryKey: ['tax'] })
     },
   })
   const reversal = useMutation({
@@ -662,6 +704,7 @@ function PayableDetail({ token, payable, document, canCancel, onCancellation, on
       setReversingMovementId(null)
       void queryClient.invalidateQueries({ queryKey: ['payables'] })
       void queryClient.invalidateQueries({ queryKey: ['payables', payable.id, 'movements'] })
+      if (payable.foreignDigitalService) void queryClient.invalidateQueries({ queryKey: ['tax'] })
     },
   })
 
@@ -698,6 +741,7 @@ function PayableDetail({ token, payable, document, canCancel, onCancellation, on
   return (
     <div className="purchase-detail-layout">
       <div className="purchase-detail-stack">
+        {canEdit && payable.status !== 'VOIDED' && !payable.fiscalDocumentId ? <DueDateCorrection token={token} payable={payable} /> : null}
         {payable.status === 'VOIDED' && document ? <ErpPanel title="Anulación de compra"><PurchaseCancellationDetails token={token} document={document} /></ErpPanel> : payable.status !== 'VOIDED' && canCancel ? <ErpPanel title="Anulación de compra">
           {document?.docType === 'FACTURA' ? <><p>Si la factura consta anulada en el SRI y también se canceló la compra, registra aquí la fecha y su respaldo. Si hay refacturación pendiente, primero requiere conciliación.</p><ErpButton variant="danger" onClick={() => onCancellation(document)}>Registrar anulación</ErpButton></> : <p className="fine-print">Esta acción requiere una factura recibida del SRI vinculada. Revisa el respaldo o el tipo de documento antes de registrar su anulación.</p>}
         </ErpPanel> : null}
@@ -827,7 +871,7 @@ export function PurchasesPage({
         items,
       ] as [string, Payable[]])
 
-  if (isCreating) return <PurchaseForm token={token} draft={draft} onCancel={() => { setIsCreating(false); setDraft(undefined) }} onSaved={() => { setIsCreating(false); setDraft(undefined); void queryClient.invalidateQueries({ queryKey: ['payables'] }) }} />
+  if (isCreating) return <PurchaseForm token={token} draft={draft} onCancel={() => { setIsCreating(false); setDraft(undefined) }} onSaved={() => { setIsCreating(false); setDraft(undefined); void queryClient.invalidateQueries({ queryKey: ['payables'] }); void queryClient.invalidateQueries({ queryKey: ['tax'] }) }} />
 
   function clearFiscalSelection() {
     setSelectedFiscalIds([])
@@ -886,7 +930,7 @@ export function PurchasesPage({
     // La clave actual queda reservada al request que acaba de responder.
     bulkClassificationKeyRef.current = idempotencyKey('web-payable-bulk-classification')
     void queryClient.invalidateQueries({ queryKey: ['payables'] })
-    void queryClient.invalidateQueries({ queryKey: ['tax', 'dashboard'] })
+    void queryClient.invalidateQueries({ queryKey: ['tax'] })
   }
 
   return (
@@ -988,7 +1032,7 @@ export function PurchasesPage({
         <ErpPanel title={selectedClassification ? `Compras por ${selectedClassification.name}` : 'Cuentas por pagar'} count={payables.length}>
           {payablesQuery.isPending ? <p aria-busy="true">Cargando compras…</p> : null}
           {payablesQuery.error ? <p className="form-error" role="alert">{payablesQuery.error.message}</p> : null}
-          {payables.length ? <><div className="purchase-sri-select-all"><label className="purchase-sri-checkbox"><input ref={selectAllPayableRef} type="checkbox" disabled={!selectablePayables.length} checked={selectablePayables.length > 0 && selectablePayables.every((item) => selectedPayableIds.includes(item.id))} onChange={(event) => setSelectedPayableIds(event.target.checked ? selectablePayables.map((item) => item.id) : [])} aria-label={`Seleccionar las ${selectablePayables.length} compras visibles`} /></label><span>Seleccionar visibles para editar en lote</span></div><div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table purchase-list-table"><thead><tr><th className="purchase-sri-select-cell" scope="col"><span className="sr-only">Selección</span></th><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Tributario</th><th>Interno</th><th>Clasificaciones</th><th>Acciones</th></tr></thead>{payableGroups.map(([group, items]) => <tbody key={group}><tr><th colSpan={12} scope="colgroup" className="purchase-group-heading">{group} · {items.length} compra{items.length === 1 ? '' : 's'} · ${formatAmount(items.filter((item) => item.status !== 'VOIDED').reduce((total, item) => total + Number(item.total), 0))} vigentes{items.some((item) => item.status === 'VOIDED') ? ` · ${items.filter((item) => item.status === 'VOIDED').length} ${items.filter((item) => item.status === 'VOIDED').length === 1 ? 'anulada' : 'anuladas'}` : ''}</th></tr>{items.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; const assignments = item.analyticAssignments ?? []; const editing = editingTagsFor === item.id; const selected = selectedPayableIds.includes(item.id); const selectable = item.status !== 'VOIDED' && (selected || selectedPayableIds.length < 100); const fiscalLabel = item.status === 'VOIDED' ? 'Fuera del cálculo' : item.taxClassification === 'DEDUCTIBLE_CONFIRMED' ? 'Para declaración' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Pendiente de revisar'; const internalLabel = item.status === 'VOIDED' ? 'Histórico' : item.internalClassification === 'REAL' ? 'Gasto real' : item.internalClassification === 'DECLARATION_ONLY' ? 'Solo tributario' : 'Pendiente de revisar'; return <Fragment key={item.id}><tr aria-selected={selected}><td className="purchase-sri-select-cell"><label className="purchase-sri-checkbox"><input type="checkbox" checked={selected} disabled={!selectable} onChange={() => togglePayableSelection(item.id)} aria-label={`Seleccionar compra ${item.documentNumber ?? item.description}`} /></label></td><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small>{canCancelPurchase && item.status !== 'VOIDED' && fiscal?.docType === 'FACTURA' && fiscal.lifecycleStatus !== 'CANCELLED' ? <ErpButton variant="danger" className="purchase-row-cancel" aria-label={`Anular compra ${item.documentNumber ?? item.description}`} onClick={() => setCancellingDocument(fiscal)}>Anular</ErpButton> : null}</td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>{item.dueDate ? `Vence ${item.dueDate}` : 'Sin fecha acordada'}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.status === 'VOIDED' ? 'neutral' : item.taxClassification === 'DEDUCTIBLE_CONFIRMED' ? 'success' : 'warning'}>{fiscalLabel}</ErpStatusBadge></td><td><ErpStatusBadge tone={item.status === 'VOIDED' ? 'neutral' : item.internalClassification === 'REAL' ? 'success' : 'warning'}>{internalLabel}</ErpStatusBadge></td><td>{assignments.length ? assignments.map((assignment) => <small key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td><td><ErpButton variant="secondary" disabled={item.status === 'VOIDED'} onClick={() => setEditingTagsFor(editing ? null : item.id)}>{editing ? 'Cerrar edición' : 'Editar clasificación'}</ErpButton><ErpButton variant="ghost" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr>{editing ? <tr><td colSpan={12}><PayableClassificationEditor token={token} payable={item} onSaved={() => { setEditingTagsFor(null); setReviewNotice('Clasificación de la compra actualizada.'); void queryClient.invalidateQueries({ queryKey: ['payables'] }); void queryClient.invalidateQueries({ queryKey: ['tax', 'dashboard'] }) }} /></td></tr> : null}</Fragment> })}</tbody>)}</table></div></> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Cambia los filtros o registra una nueva compra." /> : null}
+          {payables.length ? <><div className="purchase-sri-select-all"><label className="purchase-sri-checkbox"><input ref={selectAllPayableRef} type="checkbox" disabled={!selectablePayables.length} checked={selectablePayables.length > 0 && selectablePayables.every((item) => selectedPayableIds.includes(item.id))} onChange={(event) => setSelectedPayableIds(event.target.checked ? selectablePayables.map((item) => item.id) : [])} aria-label={`Seleccionar las ${selectablePayables.length} compras visibles`} /></label><span>Seleccionar visibles para editar en lote</span></div><div className="table-wrap" tabIndex={0} aria-label="Listado de compras y cuentas por pagar"><table className="erp-responsive-table purchase-table purchase-list-table"><thead><tr><th className="purchase-sri-select-cell" scope="col"><span className="sr-only">Selección</span></th><th>Compra</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Saldo</th><th>Desglose IVA</th><th>Estado</th><th>Tributario</th><th>Interno</th><th>Clasificaciones</th><th>Acciones</th></tr></thead>{payableGroups.map(([group, items]) => <tbody key={group}><tr><th colSpan={12} scope="colgroup" className="purchase-group-heading">{group} · {items.length} compra{items.length === 1 ? '' : 's'} · ${formatAmount(items.filter((item) => item.status !== 'VOIDED').reduce((total, item) => total + Number(item.total), 0))} vigentes{items.some((item) => item.status === 'VOIDED') ? ` · ${items.filter((item) => item.status === 'VOIDED').length} ${items.filter((item) => item.status === 'VOIDED').length === 1 ? 'anulada' : 'anuladas'}` : ''}</th></tr>{items.map((item) => { const fiscal = item.fiscalDocumentId ? fiscalById.get(item.fiscalDocumentId) : undefined; const assignments = item.analyticAssignments ?? []; const editing = editingTagsFor === item.id; const selected = selectedPayableIds.includes(item.id); const selectable = item.status !== 'VOIDED' && (selected || selectedPayableIds.length < 100); const fiscalLabel = item.status === 'VOIDED' ? 'Fuera del cálculo' : item.taxClassification === 'DEDUCTIBLE_CONFIRMED' ? 'Para declaración' : item.taxClassification === 'NON_DEDUCTIBLE' ? 'No deducible' : 'Pendiente de revisar'; const internalLabel = item.status === 'VOIDED' ? 'Histórico' : item.internalClassification === 'REAL' ? 'Gasto real' : item.internalClassification === 'DECLARATION_ONLY' ? 'Solo tributario' : 'Pendiente de revisar'; return <Fragment key={item.id}><tr aria-selected={selected}><td className="purchase-sri-select-cell"><label className="purchase-sri-checkbox"><input type="checkbox" checked={selected} disabled={!selectable} onChange={() => togglePayableSelection(item.id)} aria-label={`Seleccionar compra ${item.documentNumber ?? item.description}`} /></label></td><td><strong>{item.description}</strong><small>{item.category} · {item.documentNumber ?? 'Sin factura'}</small>{canCancelPurchase && item.status !== 'VOIDED' && fiscal?.docType === 'FACTURA' && fiscal.lifecycleStatus !== 'CANCELLED' ? <ErpButton variant="danger" className="purchase-row-cancel" aria-label={`Anular compra ${item.documentNumber ?? item.description}`} onClick={() => setCancellingDocument(fiscal)}>Anular</ErpButton> : null}</td><td>{item.supplierName ?? 'Sin proveedor'}</td><td>{item.issueDate}<small>{item.dueDate ? `Vence ${item.dueDate}` : 'Sin fecha acordada'}</small></td><td>${formatAmount(item.total)}</td><td>${formatAmount(item.openAmount)}</td><td>{fiscal?.taxes.length ? <ul className="purchase-tax-breakdown">{fiscal.taxes.map((tax, index) => <li key={`${tax.sriTaxCode}-${index}`}><span>{tax.taxBracket === 'GRAVADO' ? 'Gravado' : tax.taxBracket} {formatAmount(tax.rate)}%</span><strong>${formatAmount(tax.taxAmount)}</strong><small>Base ${formatAmount(tax.baseAmount)}</small></li>)}</ul> : 'Sin desglose confirmado'}</td><td>{statusBadge(item)}</td><td><ErpStatusBadge tone={item.status === 'VOIDED' ? 'neutral' : item.taxClassification === 'DEDUCTIBLE_CONFIRMED' ? 'success' : 'warning'}>{fiscalLabel}</ErpStatusBadge></td><td><ErpStatusBadge tone={item.status === 'VOIDED' ? 'neutral' : item.internalClassification === 'REAL' ? 'success' : 'warning'}>{internalLabel}</ErpStatusBadge></td><td>{assignments.length ? assignments.map((assignment) => <small key={assignment.classificationId}>{assignment.classificationName}: {assignment.path.map((part) => part.name).join(' / ')}</small>) : '—'}</td><td><ErpButton variant="secondary" disabled={item.status === 'VOIDED'} onClick={() => setEditingTagsFor(editing ? null : item.id)}>{editing ? 'Cerrar edición' : 'Editar clasificación'}</ErpButton><ErpButton variant="ghost" onClick={() => setSelectedPayableId(item.id)}>{item.status === 'OPEN' || item.status === 'PARTIAL' ? 'Pagar' : 'Historial'}</ErpButton></td></tr>{editing ? <tr><td colSpan={12}><PayableClassificationEditor token={token} payable={item} onSaved={() => { setEditingTagsFor(null); setReviewNotice('Clasificación de la compra actualizada.'); void queryClient.invalidateQueries({ queryKey: ['payables'] }); void queryClient.invalidateQueries({ queryKey: ['tax'] }) }} /></td></tr> : null}</Fragment> })}</tbody>)}</table></div></> : !payablesQuery.isPending ? <ErpEmptyState title="No hay compras en esta vista" description="Cambia los filtros o registra una nueva compra." /> : null}
         </ErpPanel>
       ) : null}
       {view === 'LIST' && (statusFilter === 'ALL' || statusFilter === 'VOIDED') && cancelledUnlinkedFiscal.length ? <ErpPanel title="Anuladas sin cuenta por pagar" count={cancelledUnlinkedFiscal.length}>
@@ -1000,7 +1044,7 @@ export function PurchasesPage({
           <PurchaseCancellationDetails token={token} document={document} />
         </li>)}</ul>
       </ErpPanel> : null}
-      {selectedPayable && view === 'LIST' ? <PayableDetail key={selectedPayable.id} token={token} payable={selectedPayable} document={selectedPayable.fiscalDocumentId ? fiscalById.get(selectedPayable.fiscalDocumentId) : undefined} canCancel={canCancelPurchase} onCancellation={setCancellingDocument} onClose={() => setSelectedPayableId(null)} /> : null}
+      {selectedPayable && view === 'LIST' ? <PayableDetail key={selectedPayable.id} token={token} payable={selectedPayable} document={selectedPayable.fiscalDocumentId ? fiscalById.get(selectedPayable.fiscalDocumentId) : undefined} canEdit={context.scopes.includes('payables:write')} canCancel={canCancelPurchase} onCancellation={setCancellingDocument} onClose={() => setSelectedPayableId(null)} /> : null}
       {cancellingDocument ? <PurchaseCancellationDialog token={token} document={cancellingDocument} onClose={() => setCancellingDocument(null)} onSaved={() => { setCancellingDocument(null); setEditingTagsFor(null); setReviewNotice('Anulación registrada. La compra se conserva en el historial y queda fuera de las vigentes.'); clearPayableSelection(); clearFiscalSelection() }} /> : null}
     </>
   )
